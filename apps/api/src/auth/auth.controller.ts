@@ -40,8 +40,7 @@ export class AuthController {
         @Res({ passthrough: true }) res: Response,
     ) {
         const oldRefreshPayload = req.signedCookies['refresh'] as
-            | string
-            | undefined;
+            string | undefined;
 
         if (!oldRefreshPayload)
             throw new InternalError('Missing Refresh Cookie');
@@ -79,8 +78,7 @@ export class AuthController {
         @Req() req: Request,
     ) {
         const refreshPayload = req.signedCookies['refresh'] as
-            | string
-            | undefined;
+            string | undefined;
 
         if (!refreshPayload) throw new InternalError('Missing Refresh Cookie');
 

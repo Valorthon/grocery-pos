@@ -1,6 +1,6 @@
 import * as z from 'zod';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
-import { newProductFieldsSchema } from './product';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants.js';
+import { newProductFieldsSchema } from './product.js';
 
 export const restockGetDetailsParamSchema = z.object({
     restock: z.string(),
@@ -37,8 +37,12 @@ export const restockGetAllSchema = z.object({
     limit: z.coerce.number().positive(),
 });
 
-export type RestockGetDetailsParamDto = z.infer<typeof restockGetDetailsParamSchema>;
-export type RestockGetDetailsQueryDto = z.infer<typeof restockGetDetailsQuerySchema>;
+export type RestockGetDetailsParamDto = z.infer<
+    typeof restockGetDetailsParamSchema
+>;
+export type RestockGetDetailsQueryDto = z.infer<
+    typeof restockGetDetailsQuerySchema
+>;
 export type RestockGetDetailsDto = RestockGetDetailsParamDto &
     RestockGetDetailsQueryDto;
 export type RestockFields = z.infer<typeof restockFieldsSchema>;

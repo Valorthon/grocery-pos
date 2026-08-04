@@ -1,6 +1,6 @@
 import * as z from 'zod';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
-import { PaymentType } from '../enums';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants.js';
+import { PaymentType } from '../enums.js';
 
 export const salesGetDetailsSchema = z.object({
     sale: z.string(),

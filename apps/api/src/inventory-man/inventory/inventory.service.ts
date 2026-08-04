@@ -91,12 +91,10 @@ export class InventoryService {
         const updatedRestockDetails = [];
 
         for (const [index, details] of restockDetails.entries()) {
-            if (
-                !(
-                    details.product ||
-                    (details.newProduct?.EAN && EANMap[details.newProduct.EAN])
-                )
-            ) {
+            if (!(
+                details.product ||
+                (details.newProduct?.EAN && EANMap[details.newProduct.EAN])
+            )) {
                 missingProducts.push({
                     index,
                     EAN: details.newProduct?.EAN,

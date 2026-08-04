@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import { STRING_LIMITS } from '../constants';
+import { STRING_LIMITS } from '../constants.js';
 
 export const inventoryGetAllSchema = z.object({
     maxStock: z.coerce.number().optional(),

@@ -7,9 +7,7 @@ import { createVuetify } from 'vuetify';
 import * as components from 'vuetify/components';
 import * as directives from 'vuetify/directives';
 
-// Labs components
-import { VDateInput } from 'vuetify/labs/VDateInput';
-import { VFileUpload } from 'vuetify/labs/VFileUpload';
+import { VDateInput, VFileUpload } from 'vuetify/components';
 
 // Load Poppins from Google Fonts + keep your local SF Pro
 const fontStyle = document.createElement('style');

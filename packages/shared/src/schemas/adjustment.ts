@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import { STRING_LIMITS, VALIDATION } from '../constants';
+import { STRING_LIMITS, VALIDATION } from '../constants.js';
 
 export const adjustmentGetDetailsParamSchema = z.object({
     adjustment: z.string(),
@@ -19,9 +19,11 @@ export const adjustmentGetDetailsQuerySchema = z.object({
 
 export const adjustFieldsSchema = z.object({
     product: z.string(),
-    change: z.coerce.number().refine((val) => val !== VALIDATION.CHANGE_NOT_ZERO, {
-        message: 'Change must not be 0',
-    }),
+    change: z.coerce
+        .number()
+        .refine((val) => val !== VALIDATION.CHANGE_NOT_ZERO, {
+            message: 'Change must not be 0',
+        }),
     reason: z.string().trim().max(STRING_LIMITS.REASON).optional(),
 });
 
@@ -37,8 +39,12 @@ export const adjustmentGetAllSchema = z.object({
     limit: z.coerce.number().positive(),
 });
 
-export type AdjustmentGetDetailsParamDto = z.infer<typeof adjustmentGetDetailsParamSchema>;
-export type AdjustmentGetDetailsQueryDto = z.infer<typeof adjustmentGetDetailsQuerySchema>;
+export type AdjustmentGetDetailsParamDto = z.infer<
+    typeof adjustmentGetDetailsParamSchema
+>;
+export type AdjustmentGetDetailsQueryDto = z.infer<
+    typeof adjustmentGetDetailsQuerySchema
+>;
 export type AdjustmentGetDetailsDto = AdjustmentGetDetailsParamDto &
     AdjustmentGetDetailsQueryDto;
 export type AdjustFields = z.infer<typeof adjustFieldsSchema>;

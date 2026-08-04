@@ -12,26 +12,30 @@ export default tseslint.config(
             '**/node_modules/**',
             '**/coverage/**',
             'eslint.config.mjs',
+            '**/*.config.{js,mjs}',
         ],
     },
     eslint.configs.recommended,
     ...tseslint.configs.recommended,
     eslintPluginPrettierRecommended,
-    ...tseslint.configs.recommendedTypeChecked.map((config) => ({
-        ...config,
+    {
         files: ['apps/api/**/*.ts'],
         languageOptions: {
-            ...config.languageOptions,
             globals: {
                 ...globals.node,
                 ...globals.jest,
             },
-            parserOptions: {
-                projectService: true,
-                tsconfigRootDir: import.meta.dirname,
-            },
         },
-    })),
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'warn',
+        },
+    },
+    {
+        files: ['apps/client/**/*.ts'],
+        rules: {
+            '@typescript-eslint/no-explicit-any': 'warn',
+        },
+    },
     {
         files: ['apps/client/**/*.vue'],
         plugins: {
@@ -63,9 +67,6 @@ export default tseslint.config(
     },
     {
         rules: {
-            '@typescript-eslint/no-explicit-any': 'warn',
-            '@typescript-eslint/no-floating-promises': 'warn',
-            '@typescript-eslint/no-unsafe-argument': 'warn',
             'prettier/prettier': ['error', { endOfLine: 'auto' }],
         },
     },

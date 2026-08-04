@@ -1,6 +1,6 @@
 import * as z from 'zod';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
-import { Category } from '../enums';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants.js';
+import { Category } from '../enums.js';
 
 export const ensureValidSchema = z.object({
     EAN: z.string().trim().max(STRING_LIMITS.EAN).optional(),
@@ -15,11 +15,7 @@ export const ensureValidSchema = z.object({
 
 export const newProductFieldsSchema = z.object({
     EAN: z.string().trim().max(STRING_LIMITS.EAN).optional(),
-    name: z
-        .string()
-        .trim()
-        .toLowerCase()
-        .max(STRING_LIMITS.PRODUCT_NAME),
+    name: z.string().trim().toLowerCase().max(STRING_LIMITS.PRODUCT_NAME),
     category: z.nativeEnum(Category).optional(),
     price: z.coerce.number().min(NUMERIC_LIMITS.PRICE_MIN),
 });
@@ -80,5 +76,7 @@ export type ProductGetDto = z.infer<typeof productGetSchema>;
 export type ProductMatchesDto = z.infer<typeof productMatchesSchema>;
 export type ProductGetAllDto = z.infer<typeof productGetAllSchema>;
 export type ProductUpdateFields = z.infer<typeof productUpdateFieldsSchema>;
-export type ProductUpdateBulkFields = z.infer<typeof productUpdateBulkFieldsSchema>;
+export type ProductUpdateBulkFields = z.infer<
+    typeof productUpdateBulkFieldsSchema
+>;
 export type ProductUpdateBulkDto = z.infer<typeof productUpdateBulkSchema>;

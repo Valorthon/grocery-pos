@@ -5,7 +5,7 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "outDir": "./dist",
-    "rootDir": "./src",
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": ["seed.ts", "seed.js", "node_modules", "dist"]
 }

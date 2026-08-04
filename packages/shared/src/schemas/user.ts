@@ -1,13 +1,9 @@
 import * as z from 'zod';
-import { STRING_LIMITS } from '../constants';
-import { Role } from '../enums';
+import { STRING_LIMITS } from '../constants.js';
+import { Role } from '../enums.js';
 
 const createFieldsSchema = z.object({
-    name: z
-        .string()
-        .trim()
-        .toLowerCase()
-        .max(STRING_LIMITS.USERNAME),
+    name: z.string().trim().toLowerCase().max(STRING_LIMITS.USERNAME),
     password: z.string().max(STRING_LIMITS.PASSWORD),
     roles: z.array(z.nativeEnum(Role)).min(1),
 });
