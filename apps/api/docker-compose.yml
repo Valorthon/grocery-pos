@@ -1,0 +1,20 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: grocery-mongodb
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:27017:27017'
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.sh:/mongo-init.sh:Z,ro
+    entrypoint: ["/bin/bash", "/mongo-init.sh"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--host", "localhost", "--port", "27017", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mongodb_data:

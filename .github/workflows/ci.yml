@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: ["master", "dev"]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint Code
+        run: pnpm lint
+
+      - name: Build Shared + Apps
+        run: pnpm build
+        env:
+          VITE_NODE_ENV: prod
+          VITE_API_URL: https://api.ci-test.com
+          VITE_DOMAIN: ci-test.com
+          VITE_API_TIMEOUT: 5000
+
+      - name: Test API
+        run: pnpm test
