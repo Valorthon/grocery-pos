@@ -6,6 +6,7 @@ import {
     MemoryHealthIndicator,
     MongooseHealthIndicator,
 } from '@nestjs/terminus';
+import { Public } from '../auth/auth.decorator';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 
 @Controller('health')
@@ -18,6 +19,7 @@ export class HealthController {
         private readonly config: TypedConfigService,
     ) {}
 
+    @Public()
     @Get('live')
     @HealthCheck()
     checkLiveness() {
@@ -40,6 +42,7 @@ export class HealthController {
         ]);
     }
 
+    @Public()
     @Get('ready')
     @HealthCheck()
     checkReadiness() {

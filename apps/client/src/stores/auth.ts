@@ -31,11 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     const user = ref<User | null>(initialUser);
 
-    const isAuthenticated = computed(
-        () =>
-            !!user.value &&
-            document.cookie.split('; ').some((row) => row.startsWith('dummy')),
-    );
+    const isAuthenticated = computed(() => !!user.value);
 
     const login = async (
         username: string,

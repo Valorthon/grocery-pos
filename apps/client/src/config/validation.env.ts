@@ -23,27 +23,18 @@ export const envSchema = zod
     .refine(
         (data) => {
             const domain = data.VITE_DOMAIN;
-            const isLocal =
-                data.VITE_NODE_ENV === 'dev' || data.VITE_NODE_ENV === 'test';
 
-            if (!isLocal && !domain) {
+            if (!domain) return true;
+
+            if (domain.startsWith('http://') || domain.startsWith('https://'))
                 return false;
-            }
-
-            if (domain) {
-                if (
-                    domain.startsWith('http://') ||
-                    domain.startsWith('https://')
-                )
-                    return false;
-                if (domain.includes('/')) return false;
-            }
+            if (domain.includes('/')) return false;
 
             return true;
         },
         {
             message:
-                'VITE_DOMAIN is required in prod/stage. It must be a raw hostname (no http:// or slashes). In dev, you can leave it blank.',
+                'VITE_DOMAIN must be a raw hostname (no http:// or slashes) when provided.',
             path: ['VITE_DOMAIN'],
         },
     );

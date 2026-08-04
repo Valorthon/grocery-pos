@@ -44,26 +44,18 @@ export const envSchema = zod
     .refine(
         (data) => {
             const domain = data.DOMAIN;
-            const isLocal = data.NODE_ENV === 'dev' || data.NODE_ENV === 'test';
 
-            if (!isLocal && !domain) {
+            if (!domain) return true;
+
+            if (domain.startsWith('http://') || domain.startsWith('https://'))
                 return false;
-            }
-
-            if (domain) {
-                if (
-                    domain.startsWith('http://') ||
-                    domain.startsWith('https://')
-                )
-                    return false;
-                if (domain.includes('/')) return false;
-            }
+            if (domain.includes('/')) return false;
 
             return true;
         },
         {
             message:
-                'DOMAIN is required in prod/stage. It must be a raw hostname (no http:// or slashes). In dev, you can leave it blank.',
+                'DOMAIN must be a raw hostname (no http:// or slashes) when provided.',
             path: ['DOMAIN'],
         },
     );

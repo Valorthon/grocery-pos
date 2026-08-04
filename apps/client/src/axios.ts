@@ -98,11 +98,6 @@ api.interceptors.response.use(
             } catch (refreshError) {
                 console.error('Token refresh failed:', refreshError);
 
-                const domainString = env.VITE_DOMAIN
-                    ? `; domain=${env.VITE_DOMAIN}`
-                    : '';
-                document.cookie = `dummy=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domainString}`;
-
                 processQueue(refreshError as AxiosError);
                 isRefreshing = false;
 
