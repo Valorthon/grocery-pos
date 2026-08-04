@@ -1,5 +1,7 @@
 # Grocery POS API
 
+This is the API application for the grocery POS monorepo.
+
 ## Setup
 
 ```bash
