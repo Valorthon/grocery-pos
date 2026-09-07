@@ -129,21 +129,4 @@ export class UserService {
             isActive: user.isActive,
         };
     }
-
-    async checkActivated(username: string): Promise<boolean> {
-        const user = await this.model
-            .findOne({ name: username, isActive: true })
-            .lean();
-
-        return !!user;
-    }
-
-    async getName(user: Types.ObjectId) {
-        const found = await this.model
-            .findById({ _id: user })
-            .select('name')
-            .lean();
-
-        return found?.name ?? 'N/A';
-    }
 }

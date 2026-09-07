@@ -13,7 +13,6 @@ import {
 import { ProductService } from '../product/product.service';
 import { runInTransaction } from '../common/utils/db';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
-import { UserService } from '../user/user.service';
 import { AuthUser } from '../auth/types';
 import { ErrorCode, ValidationError } from '../common/errors';
 
@@ -26,7 +25,6 @@ export class SalesService {
         private modelDetails: Model<SalesDetails>,
         private productService: ProductService,
         private inventoryService: InventoryService,
-        private userService: UserService,
     ) {}
 
     async getAll(
