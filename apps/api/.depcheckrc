@@ -1,2 +1,5 @@
 ignores:
+    # transitive via @nestjs/platform-express
     - express
+    # types-only package, consumed implicitly by the TS compiler
+    - '@types/jest'
