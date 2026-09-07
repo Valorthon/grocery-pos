@@ -158,12 +158,65 @@ export class InventoryService {
 
         const updates = sellDetails.map(({ product, quantity }) => ({
             updateOne: {
-                filter: { product },
+                // The $gte guard belongs in the filter: Mongoose's `min` validator
+                // does not run on update operators, so an unguarded $inc will
+                // happily drive stock negative when a sale oversells.
+                filter: { product, stock: { $gte: quantity } },
                 update: { $inc: { stock: -quantity } },
             },
         }));
 
-        await this.model.bulkWrite(updates, { session });
+        const result = await this.model.bulkWrite(updates, { session });
+
+        if (result.matchedCount !== updates.length) {
+            await this.throwInsufficientStock(sellDetails, session);
+        }
+    }
+
+    /**
+     * Called when a guarded sell matched fewer rows than it tried to update.
+     * Re-reads the affected inventory inside the same transaction to report
+     * exactly which products were short, rather than a bare count mismatch.
+     */
+    private async throwInsufficientStock(
+        sellDetails: SellDto['sellDetails'],
+        session: ClientSession,
+    ): Promise<never> {
+        const rows = await this.model
+            .find({ product: { $in: sellDetails.map((d) => d.product) } })
+            .populate<{ product: { _id: Types.ObjectId; name: string } }>({
+                path: 'product',
+                select: 'name',
+            })
+            .session(session)
+            .lean();
+
+        const stockByProduct = new Map(
+            rows
+                .filter((row) => row.product?._id)
+                .map((row) => [
+                    row.product._id.toString(),
+                    { name: row.product.name, stock: row.stock },
+                ]),
+        );
+
+        const shortfalls = sellDetails
+            .map(({ product, quantity }) => {
+                const current = stockByProduct.get(product.toString());
+                return {
+                    product: product.toString(),
+                    name: current?.name,
+                    requested: quantity,
+                    available: current?.stock ?? 0,
+                };
+            })
+            .filter((item) => item.available < item.requested);
+
+        throw new ValidationError(
+            ErrorCode.VALIDATION_INVALID_INPUT,
+            'Insufficient stock for one or more products',
+            shortfalls,
+        );
     }
 
     async createMany(

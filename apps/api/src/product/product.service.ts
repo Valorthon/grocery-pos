@@ -59,12 +59,13 @@ export class ProductService {
         );
     }
 
-    async getMany(products: string[]) {
+    async getMany(products: string[], session?: ClientSession) {
         const unique_ids = [...new Set(products)];
 
         const found = await this.model
             .find({ _id: { $in: unique_ids } })
             .select('price name')
+            .session(session ?? null)
             .lean();
 
         return new Map(found.map((item) => [item._id.toString(), item]));

@@ -51,7 +51,6 @@ api.interceptors.response.use(
         const originalRequest = error.config as InternalAxiosRequestConfig & {
             _retry?: boolean;
         };
-        console.log({ error });
         // Check if error is 401 and we haven't tried to refresh yet
         if (error.response?.status === 401 && !originalRequest._retry) {
             // If already refreshing, queue this request
@@ -80,8 +79,6 @@ api.interceptors.response.use(
                     },
                 );
 
-                console.log('REFRESH');
-                console.log({ response });
                 if (response.status !== 201) {
                     throw new Error('Refresh failed');
                 }

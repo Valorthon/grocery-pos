@@ -1,5 +1,5 @@
 import { ClientSession, Connection } from 'mongoose';
-import { InternalError } from '../errors';
+import { AppError, InternalError } from '../errors';
 
 export async function runInTransaction<T>(
     fn: (session: ClientSession) => Promise<T>,
@@ -21,6 +21,11 @@ export async function runInTransaction<T>(
 
         return result!;
     } catch (err) {
+        // Domain errors already carry their own status code and ErrorCode.
+        // Wrapping them turned every validation failure inside a transaction
+        // (insufficient stock, unknown product) into an opaque 500.
+        if (err instanceof AppError) throw err;
+
         throw new InternalError('Transaction failed', err);
     } finally {
         await newSession.endSession();

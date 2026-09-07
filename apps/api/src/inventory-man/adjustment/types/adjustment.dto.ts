@@ -55,13 +55,13 @@ class AdjustFields {
     @NotEquals(VALIDATION.CHANGE_NOT_ZERO, { message: 'Change must not be 0' })
     change!: number;
 
-    @IsOptional()
+    @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.REASON)
     @Transform(({ value }) =>
         typeof value === 'string' ? value.trim() : (value as unknown),
     )
-    reason?: string;
+    reason!: string;
 }
 
 export class AdjustDto {

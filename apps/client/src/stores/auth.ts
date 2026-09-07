@@ -34,7 +34,6 @@ export const useAuthStore = defineStore('auth', () => {
     ): Promise<unknown> => {
         const response = await api.post('/auth/login', { username, password });
         const data = response.data;
-        console.log({ data });
         // Immediately fetch full profile so roles are available
         await fetchMe();
         return data;
@@ -43,9 +42,8 @@ export const useAuthStore = defineStore('auth', () => {
     const logout = async (): Promise<void> => {
         try {
             await api.post('/auth/logout');
-        } catch (e) {
-            console.log(e);
-            // silent fail - still clear local state
+        } catch {
+            // logout is best-effort; local state is cleared either way
         } finally {
             user.value = null;
             localStorage.removeItem('user');
@@ -58,7 +56,6 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const response = await api.get('/users/profile');
             user.value = response.data;
-            console.log(user.value);
             localStorage.setItem('user', JSON.stringify(user.value));
             return user.value;
         } catch (err) {

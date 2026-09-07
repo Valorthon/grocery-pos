@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Sales } from './sales.schema';
 import { ClientSession, Connection, Model } from 'mongoose';
@@ -15,6 +15,7 @@ import { runInTransaction } from '../common/utils/db';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
 import { UserService } from '../user/user.service';
 import { AuthUser } from '../auth/types';
+import { ErrorCode, ValidationError } from '../common/errors';
 
 @Injectable()
 export class SalesService {
@@ -57,10 +58,10 @@ export class SalesService {
     }
 
     async getDetails(dto: GetDetailsDto): Promise<SalesDetails[]> {
-        const { sale } = dto;
+        const { sales } = dto;
 
         return await this.modelDetails
-            .find({ sale })
+            .find({ sales })
             .populate({
                 path: 'product',
                 select: 'name',
@@ -71,10 +72,13 @@ export class SalesService {
     async sell(user: AuthUser, dto: SellDto, session?: ClientSession) {
         const { paymentType, referenceNumber } = dto;
 
-        const { totalAmount, fullSellDetails } = await this.prepareSell(dto);
-
-        await runInTransaction(
+        const { totalAmount, fullSellDetails } = await runInTransaction(
             async (session) => {
+                const { totalAmount, fullSellDetails } = await this.prepareSell(
+                    dto,
+                    session,
+                );
+
                 const [created] = await this.model.create(
                     [
                         {
@@ -102,6 +106,8 @@ export class SalesService {
 
                 await this.modelDetails.bulkWrite(inserts, { session });
                 await this.inventoryService.sell(dto, session);
+
+                return { totalAmount, fullSellDetails };
             },
             this.connection,
             session,
@@ -130,14 +136,13 @@ export class SalesService {
         };
     }
 
-    private async prepareSell(dto: SellDto) {
+    private async prepareSell(dto: SellDto, session?: ClientSession) {
         const { sellDetails } = dto;
 
         const productsMap = await this.productService.getMany(
             sellDetails.map((detail) => detail.product),
+            session,
         );
-
-        Logger.log({ sellDetails, productsMap });
         let totalAmount = 0;
 
         const unknownProducts: string[] = [];
@@ -168,10 +173,11 @@ export class SalesService {
         }
 
         if (unknownProducts.length > 0) {
-            throw new BadRequestException({
-                message: 'Unknown products',
-                errors: unknownProducts,
-            });
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Unknown products',
+                unknownProducts,
+            );
         }
 
         return { totalAmount, fullSellDetails };

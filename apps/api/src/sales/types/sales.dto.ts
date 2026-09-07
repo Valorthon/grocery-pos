@@ -19,7 +19,7 @@ import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
 export class GetDetailsDto {
     @IsNotEmpty()
     @IsMongoId()
-    sale!: string;
+    sales!: string;
 }
 class SellDetailsFields {
     @IsNotEmpty()

@@ -166,7 +166,7 @@ const showPassword = ref(false);
 const rememberMe = ref(false);
 const errorMsg = ref('');
 
-const form = reactive({ username: 'admin', password: 'a' });
+const form = reactive({ username: '', password: '' });
 
 const handleLogin = async () => {
     if (!form.username || !form.password) {

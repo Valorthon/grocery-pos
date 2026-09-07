@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Role } from '../auth/types/auth.types';
 import { STRING_LIMITS } from '../constants';
 
-@Schema()
+@Schema({ timestamps: true })
 export class User {
     @Prop({
         type: String,

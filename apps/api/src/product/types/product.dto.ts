@@ -63,7 +63,7 @@ export class NewProductFields {
 
     @IsNotEmpty()
     @IsString()
-    @MaxLength(50)
+    @MaxLength(STRING_LIMITS.PRODUCT_NAME)
     @Transform(({ value }) =>
         typeof value === 'string'
             ? value.trim().toLowerCase()
@@ -87,12 +87,13 @@ export class NewProductFields {
 export class NewProductsDto {
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
+    @Type(() => NewProductFields)
     newProducts!: NewProductFields[];
 }
 export class GetDto {
     @IsNotEmpty()
     @IsString()
-    @MaxLength(50)
+    @MaxLength(STRING_LIMITS.PRODUCT_NAME)
     @Transform(({ value }) =>
         typeof value === 'string' ? value.trim() : (value as unknown),
     )
