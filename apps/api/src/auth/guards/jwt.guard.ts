@@ -1,4 +1,4 @@
-import { ExecutionContext, Injectable, Logger } from '@nestjs/common';
+import { ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import { IS_PUBLIC_KEY } from '../auth.decorator';
@@ -20,8 +20,6 @@ export class JWTAuthGuard extends AuthGuard('jwt') {
             IS_PUBLIC_KEY,
             [context.getHandler(), context.getClass()],
         );
-
-        Logger.log({ isPublic, err, user });
 
         if (err || !user) {
             if (isPublic) return { roles: Role.Unauthenticated } as TUser;

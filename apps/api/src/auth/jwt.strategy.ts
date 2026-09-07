@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Request } from 'express';
 import { Strategy } from 'passport-jwt';
@@ -18,7 +18,6 @@ export class JWTStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
 
     validate(payload: JWTPayload): JWTPayload {
-        Logger.log({ payload });
         return payload;
     }
 }

@@ -5,6 +5,7 @@ import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { JWTPayload, Role } from '../types';
 import { AuthError, ErrorCode } from '../../common/errors';
+import { MS_PER_SECOND } from '../../constants';
 
 type FoundRefresh = Omit<RefreshToken, 'user'> & {
     user: {
@@ -28,7 +29,11 @@ export class RefreshTokenService {
         session?: ClientSession,
     ): Promise<string> {
         const newExpiry =
-            expiry ?? new Date(Date.now() + this.config.get('REFRESH_EXPIRY'));
+            expiry ??
+            new Date(
+                Date.now() +
+                    this.config.get('REFRESH_EXPIRY_S') * MS_PER_SECOND,
+            );
 
         const [created] = await this.model.create(
             [

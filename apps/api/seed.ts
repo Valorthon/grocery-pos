@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import { Role } from './src/auth/types/auth.types';
 import { User, UserSchema } from './src/user/user.schema';
@@ -55,27 +56,39 @@ const salesDetails = mongoose.model(SalesDetails.name, SalesDetailsSchema);
 seedAll()
     .then(() => {
         console.log('Seeding complete...');
+        process.exit(0);
     })
     .catch((err) => {
-        console.log('Error in seeding: ', err);
-    })
-    .finally(() => {
-        process.exit(0);
+        console.error('Error in seeding: ', err);
+        process.exit(1);
     });
 
+/** Drops a collection, tolerating the case where it was never created. */
+async function dropIfExists(model: { collection: mongoose.Collection }) {
+    try {
+        await model.collection.drop();
+    } catch (err) {
+        const code = (err as { codeName?: string; code?: number }).codeName;
+        if (code === 'NamespaceNotFound') return;
+        throw err;
+    }
+}
+
 async function seedAll() {
-    await mongoose.connect('mongodb://127.0.0.1:27017/grocery');
+    const databaseUrl =
+        process.env.DATABASE_URL ?? 'mongodb://127.0.0.1:27017/grocery';
+    await mongoose.connect(databaseUrl);
 
     await Promise.all([
         seedUser(),
         seedProduct(),
-        restock.collection.drop(),
-        restockDetails.collection.drop(),
-        adjustment.collection.drop(),
-        adjustmentDetails.collection.drop(),
-        sales.collection.drop(),
-        salesDetails.collection.drop(),
-        refreshToken.collection.drop(),
+        dropIfExists(restock),
+        dropIfExists(restockDetails),
+        dropIfExists(adjustment),
+        dropIfExists(adjustmentDetails),
+        dropIfExists(sales),
+        dropIfExists(salesDetails),
+        dropIfExists(refreshToken),
     ]);
 
     //must run after seedProduct()
@@ -284,7 +297,7 @@ async function seedAdjustment() {
                 product: randomProduct._id,
                 change,
                 reason,
-            } as AdjustmentDetails);
+            });
         }
     }
 

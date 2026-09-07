@@ -28,7 +28,6 @@ export class AuthController {
         this.cookieService.createRefresh(res, refreshPayload);
         this.cookieService.createDummy(res);
 
-        Logger.log({ jwtPayload });
         return { user };
     }
 

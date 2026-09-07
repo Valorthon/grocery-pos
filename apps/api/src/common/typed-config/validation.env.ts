@@ -12,14 +12,18 @@ export const envSchema = zod
         FRONTEND_URL: zod.url(
             'Frontend URL must be a valid URL including http:// or https://',
         ),
-        DATABASE_URL: zod.url(
-            'Database URL must be a valid URL including http:// or https://',
-        ),
+        DATABASE_URL: zod
+            .string()
+            .trim()
+            .regex(
+                /^mongodb(\+srv)?:\/\/.+/,
+                'Database URL must be a MongoDB connection string starting with mongodb:// or mongodb+srv://',
+            ),
         DOMAIN: zod.string().trim().optional(),
         COOKIE_SECRET: zod.string(),
         JWT_SECRET: zod.string(),
-        JWT_EXPIRY: zod.coerce.number().positive(),
-        REFRESH_EXPIRY: zod.coerce.number().positive(),
+        JWT_EXPIRY_S: zod.coerce.number().int().positive(),
+        REFRESH_EXPIRY_S: zod.coerce.number().int().positive(),
         EAN_COUNTER_ID: zod.string(),
         EAN_COUNTER_DIGITS: zod.coerce.number(),
         SANITATION_EXCLUDES: zod
@@ -38,8 +42,16 @@ export const envSchema = zod
             ),
         HEALTH_HEAP_THRESHOLD: zod.coerce.number().positive(),
         HEALTH_RSS_THRESHOLD: zod.coerce.number().positive(),
-        HEALTH_DISK_THRESHOLD: zod.coerce.number().positive(),
+        HEALTH_DISK_THRESHOLD_PERCENT: zod.coerce
+            .number()
+            .gt(0)
+            .lte(1, 'Disk threshold must be a fraction between 0 and 1'),
         HEALTH_DISK_PATH: zod.string(),
+    })
+    .refine((data) => data.REFRESH_EXPIRY_S > data.JWT_EXPIRY_S, {
+        message:
+            'REFRESH_EXPIRY_S must be greater than JWT_EXPIRY_S, otherwise the refresh token expires before the access token it renews.',
+        path: ['REFRESH_EXPIRY_S'],
     })
     .refine(
         (data) => {

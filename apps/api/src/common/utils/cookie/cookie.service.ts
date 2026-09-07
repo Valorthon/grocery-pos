@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import { TypedConfigService } from '../../typed-config/typed-config.service';
+import { MS_PER_SECOND, REFRESH_ROUTE } from '../../../constants';
 
 @Injectable()
 export class CookieService {
@@ -46,17 +47,22 @@ export class CookieService {
             res,
             'refresh',
             payload,
-            this.config.get('REFRESH_EXPIRY'),
-            '/api/auth/refresh',
+            this.config.get('REFRESH_EXPIRY_S') * MS_PER_SECOND,
+            REFRESH_ROUTE,
         );
     }
 
     removeRefresh(res: Response) {
-        this.removeSecure(res, 'refresh', '/api/auth/refresh');
+        this.removeSecure(res, 'refresh', REFRESH_ROUTE);
     }
 
     createJwt(res: Response, payload: string) {
-        this.createSecure(res, 'jwt', payload, this.config.get('JWT_EXPIRY'));
+        this.createSecure(
+            res,
+            'jwt',
+            payload,
+            this.config.get('JWT_EXPIRY_S') * MS_PER_SECOND,
+        );
     }
 
     removeJwt(res: Response) {
@@ -69,7 +75,7 @@ export class CookieService {
             secure: this.isProd,
             sameSite: this.isProd && !this.isDomainSet ? 'none' : 'lax',
             signed: false,
-            maxAge: this.config.get('REFRESH_EXPIRY'),
+            maxAge: this.config.get('REFRESH_EXPIRY_S') * MS_PER_SECOND,
             path: '/',
             domain: this.config.get('DOMAIN') || undefined,
         });

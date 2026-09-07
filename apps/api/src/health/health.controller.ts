@@ -7,7 +7,9 @@ import {
     MongooseHealthIndicator,
 } from '@nestjs/terminus';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
+import { Public } from '../auth/auth.decorator';
 
+@Public()
 @Controller('health')
 export class HealthController {
     constructor(
@@ -35,7 +37,9 @@ export class HealthController {
             () =>
                 this.disk.checkStorage('storage', {
                     path: this.config.get('HEALTH_DISK_PATH'),
-                    threshold: this.config.get('HEALTH_DISK_THRESHOLD'),
+                    thresholdPercent: this.config.get(
+                        'HEALTH_DISK_THRESHOLD_PERCENT',
+                    ),
                 }),
         ]);
     }

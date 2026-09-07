@@ -79,7 +79,7 @@ export class AuthService {
 
     signJWT(payload: JWTPayload): string {
         return this.jwtService.sign(payload, {
-            expiresIn: this.config.get('JWT_EXPIRY'),
+            expiresIn: this.config.get('JWT_EXPIRY_S'),
             secret: this.config.get('JWT_SECRET'),
         });
     }
