@@ -1,0 +1,3 @@
+ignores:
+    # loaded via `@import 'tailwindcss'` in src/assets/main.css, which depcheck cannot see
+    - tailwindcss

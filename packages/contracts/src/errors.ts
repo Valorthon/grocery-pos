@@ -1,0 +1,34 @@
+export enum ErrorCode {
+    AUTH_INVALID_CREDENTIALS = 'AUTH_001',
+    AUTH_TOKEN_EXPIRED = 'AUTH_002',
+    AUTH_MISSING_REFRESH_TOKEN = 'AUTH_003',
+    AUTH_INVALID_TOKEN = 'AUTH_004',
+
+    VALIDATION_INVALID_INPUT = 'VALIDATION_001',
+    VALIDATION_EAN_INVALID = 'VALIDATION_002',
+
+    NOT_FOUND = 'NOT_FOUND_001',
+    PRODUCT_NOT_FOUND = 'PRODUCT_001',
+    PRODUCT_DUPLICATE = 'PRODUCT_002',
+
+    DB_DUPLICATE_KEY = 'DB_002',
+    DB_VALIDATION_ERROR = 'DB_003',
+
+    INTERNAL_ERROR = 'INTERNAL_001',
+}
+
+/** Body returned by the API's GlobalFilter for every error response. */
+export interface AppErrorResponse {
+    statusCode: number;
+    error: string;
+    message: string;
+    timestamp: string;
+    path: string;
+    details: unknown;
+}
+
+/** Shape of every paginated list endpoint. */
+export interface Paginated<T> {
+    data: T[];
+    totalItems: number;
+}

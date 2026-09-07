@@ -1,0 +1,53 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: ['master', 'dev']
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        # version comes from the root package.json "packageManager" field
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22.x'
+          cache: 'pnpm'
+
+      - name: Install Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Security Audit
+        run: pnpm audit --audit-level high
+
+      - name: Dependency Hygiene (Depcheck)
+        run: pnpm -r exec depcheck
+
+      - name: License Compliance Check
+        run: pnpm dlx license-checker --summary --failOn "GPL-2.0;GPL-3.0;AGPL-3.0"
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Build
+        run: pnpm -r build
+        env:
+          VITE_NODE_ENV: prod
+          VITE_API_URL: https://api.ci-test.com
+          VITE_DOMAIN: ci-test.com
+          VITE_API_TIMEOUT: 5000

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60">
+  <g transform="translate(10,10)">
+    <rect width="40" height="40" rx="10" fill="white"/>
+    <path d="M12 28 L28 28 L26 36 Q25 38 22 38 L18 38 Q15 38 14 36 Z" fill="#075BAB"/>
+    <path d="M18 28 L18 22 Q18 18 20 18 Q22 18 22 22 L22 28" stroke="#075BAB" stroke-width="3" fill="none" stroke-linecap="round"/>
+  </g>
+  <text x="58" y="38" font-family="Poppins, Arial, sans-serif" font-size="20" font-weight="700" fill="white">Grocery</text>
+  <text x="148" y="38" font-family="Poppins, Arial, sans-serif" font-size="20" font-weight="400" fill="white">POS</text>
+</svg>

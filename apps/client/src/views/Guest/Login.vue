@@ -1,0 +1,193 @@
+<template>
+    <div class="min-h-screen grid grid-cols-1 md:grid-cols-2">
+        <!-- Left: image panel -->
+        <div
+            class="hidden md:flex items-start relative bg-cover bg-center"
+            style="
+                background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200');
+            "
+        >
+            <div
+                class="absolute inset-0"
+                style="
+                    background: linear-gradient(
+                        160deg,
+                        rgba(10, 48, 60, 0.55) 0%,
+                        rgba(10, 48, 60, 0.3) 100%
+                    );
+                "
+            />
+            <div class="relative z-10 p-10 pb-14 text-white text-start">
+                <div
+                    class="font-bold mb-3"
+                    style="
+                        line-height: 1.5;
+                        font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+                        text-shadow: 2px 4px 12px rgba(0, 0, 0, 0.5);
+                    "
+                >
+                    Smart Grocery<br />Management
+                </div>
+                <p
+                    class="font-medium"
+                    style="text-shadow: 1px 2px 8px rgba(0, 0, 0, 0.4)"
+                >
+                    Efficient POS solutions for your store.
+                </p>
+            </div>
+        </div>
+
+        <!-- Right: form panel -->
+        <div
+            class="flex items-center justify-center p-6 relative"
+            style="background-color: #f3f7ff"
+        >
+            <router-link to="/" class="absolute top-6 right-6">
+                <img
+                    :src="logo"
+                    alt="Grocery POS Logo"
+                    class="h-14 w-auto cursor-pointer"
+                />
+            </router-link>
+
+            <div class="w-full max-w-md">
+                <div class="mb-8">
+                    <h1 class="text-2xl font-bold text-slate-800">
+                        Welcome Back!
+                    </h1>
+                    <p class="mt-1 text-slate-500 font-medium">
+                        Sign in to your account.
+                    </p>
+                    <hr class="mt-4" />
+                </div>
+
+                <form @submit.prevent="handleLogin">
+                    <div class="relative mb-3">
+                        <span
+                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                        >
+                            <Mail class="w-5 h-5" />
+                        </span>
+                        <input
+                            v-model="form.username"
+                            type="text"
+                            placeholder="you@example.com"
+                            :disabled="loading"
+                            class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
+                        />
+                    </div>
+
+                    <div class="relative mb-1">
+                        <span
+                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                        >
+                            <Lock class="w-5 h-5" />
+                        </span>
+                        <input
+                            v-model="form.password"
+                            :type="showPassword ? 'text' : 'password'"
+                            placeholder="••••••••"
+                            :disabled="loading"
+                            class="w-full pl-11 pr-11 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
+                        />
+                        <button
+                            type="button"
+                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            @click="showPassword = !showPassword"
+                        >
+                            <EyeOff v-if="showPassword" class="w-5 h-5" />
+                            <Eye v-else class="w-5 h-5" />
+                        </button>
+                    </div>
+
+                    <div class="flex items-center justify-between mb-5">
+                        <BaseCheckbox
+                            v-model="rememberMe"
+                            label="Remember me"
+                        />
+                        <button
+                            type="button"
+                            class="text-sm text-primary-600 font-medium hover:underline"
+                        >
+                            Forgot password?
+                        </button>
+                    </div>
+
+                    <div
+                        v-if="errorMsg"
+                        class="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium"
+                    >
+                        {{ errorMsg }}
+                    </div>
+
+                    <BaseButton
+                        type="submit"
+                        block
+                        size="lg"
+                        :loading="loading"
+                    >
+                        Login
+                        <ArrowRight class="w-4 h-4" />
+                    </BaseButton>
+                </form>
+            </div>
+
+            <div class="absolute bottom-6 flex gap-8">
+                <button
+                    type="button"
+                    class="text-slate-500 text-sm hover:text-slate-700"
+                >
+                    Privacy
+                </button>
+                <button
+                    type="button"
+                    class="text-slate-500 text-sm hover:text-slate-700"
+                >
+                    Terms
+                </button>
+            </div>
+        </div>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { ref, reactive } from 'vue';
+import { useRouter } from 'vue-router';
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from '@lucide/vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
+import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
+import { useAuthStore, Role } from '@/stores/auth';
+import logo from '@/assets/logo-icon.svg';
+
+const router = useRouter();
+const authStore = useAuthStore();
+const loading = ref(false);
+const showPassword = ref(false);
+const rememberMe = ref(false);
+const errorMsg = ref('');
+
+const form = reactive({ username: 'admin', password: 'a' });
+
+const handleLogin = async () => {
+    if (!form.username || !form.password) {
+        errorMsg.value = 'Username and password are required.';
+        return;
+    }
+
+    loading.value = true;
+    errorMsg.value = '';
+
+    try {
+        await authStore.login(form.username, form.password);
+        const isSeller = authStore.hasRole(Role.Seller) && !authStore.isAdmin;
+        router.push({ name: isSeller ? 'SellerDashboard' : 'Dashboard' });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (err: any) {
+        errorMsg.value =
+            err?.response?.data?.error ??
+            'Invalid credentials. Please try again.';
+    } finally {
+        loading.value = false;
+    }
+};
+</script>
