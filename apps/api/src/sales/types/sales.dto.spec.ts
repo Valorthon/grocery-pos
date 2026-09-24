@@ -4,13 +4,15 @@ import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
 import { ReverseSaleDto, SellDto } from './sales.dto';
 import { DiscountType, PaymentType, TenderType } from './sales.types';
-import { STRING_LIMITS } from '../../constants';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
 
 const SELL_DETAILS = [{ product: '507f1f77bcf86cd799439011', quantity: 1 }];
 const CASH_TENDER = [{ type: TenderType.CASH, amount: 10000 }];
+const KEY = '3f2b8c1e-9d4a-4e6b-8f7c-2a1d0e9b8c7d';
 
 async function validateDiscount(discount: unknown) {
     const dto = plainToInstance(SellDto, {
+        idempotencyKey: KEY,
         paymentType: PaymentType.CASH,
         tenders: CASH_TENDER,
         sellDetails: SELL_DETAILS,
@@ -151,8 +153,11 @@ describe('SellDto through the global ValidationPipe', () => {
         transformOptions: { enableImplicitConversion: true },
     });
 
-    function run(body: unknown) {
-        return pipe.transform(body, { type: 'body', metatype: SellDto });
+    function run(body: Record<string, unknown>) {
+        return pipe.transform(
+            { idempotencyKey: KEY, ...body },
+            { type: 'body', metatype: SellDto },
+        );
     }
 
     const discount = { type: DiscountType.PERCENT, value: 20, reason: 'x' };
@@ -193,6 +198,7 @@ describe('SellDto payment', () => {
 
     async function errorsFor(body: Record<string, unknown>) {
         const dto = plainToInstance(SellDto, {
+            idempotencyKey: KEY,
             sellDetails: SELL_DETAILS,
             ...body,
         });
@@ -289,6 +295,79 @@ describe('SellDto payment', () => {
         });
 
         expect(errors.find((e) => e.property === 'tenders')).toBeDefined();
+    });
+});
+
+describe('SellDto.idempotencyKey', () => {
+    const pipe = new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transformOptions: { enableImplicitConversion: true },
+    });
+
+    const body = {
+        paymentType: PaymentType.CASH,
+        tenders: CASH_TENDER,
+        sellDetails: SELL_DETAILS,
+    };
+
+    function run(extra: Record<string, unknown>) {
+        return pipe.transform(
+            { ...body, ...extra },
+            { type: 'body', metatype: SellDto },
+        ) as Promise<SellDto>;
+    }
+
+    it('accepts a UUID and lower-cases it', async () => {
+        const dto = await run({ idempotencyKey: KEY.toUpperCase() });
+
+        expect(dto.idempotencyKey).toBe(KEY);
+    });
+
+    it.each([
+        ['missing', undefined],
+        ['empty', ''],
+        ['not a UUID', 'retry-1'],
+        ['a number', 12345],
+    ])('rejects a key that is %s with a 400', async (_, idempotencyKey) => {
+        await expect(run({ idempotencyKey })).rejects.toBeInstanceOf(
+            BadRequestException,
+        );
+    });
+});
+
+describe('money upper bound', () => {
+    async function tenderErrors(amount: number) {
+        const dto = plainToInstance(SellDto, {
+            idempotencyKey: KEY,
+            paymentType: PaymentType.CASH,
+            tenders: [{ type: TenderType.CASH, amount }],
+            sellDetails: SELL_DETAILS,
+        });
+        return (await validate(dto)).find((e) => e.property === 'tenders');
+    }
+
+    it('accepts a tender of exactly AMOUNT_MAX', async () => {
+        expect(await tenderErrors(NUMERIC_LIMITS.AMOUNT_MAX)).toBeUndefined();
+    });
+
+    it('rejects a tender above AMOUNT_MAX', async () => {
+        const error = await tenderErrors(NUMERIC_LIMITS.AMOUNT_MAX + 1);
+
+        expect(error?.children?.[0]?.children?.[0]?.constraints).toHaveProperty(
+            'max',
+        );
+    });
+
+    it('rejects a fixed discount above AMOUNT_MAX', async () => {
+        const errors = await discountErrors({
+            type: DiscountType.FIXED,
+            value: NUMERIC_LIMITS.AMOUNT_MAX + 1,
+            reason: 'x',
+        });
+
+        expect(constraintsOf(errors, 'value')).toHaveProperty('max');
     });
 });
 

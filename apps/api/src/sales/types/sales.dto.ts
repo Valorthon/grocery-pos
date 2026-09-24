@@ -13,7 +13,9 @@ import {
     IsOptional,
     IsPositive,
     IsString,
+    IsUUID,
     Matches,
+    Max,
     MaxLength,
     Min,
     MinLength,
@@ -87,6 +89,7 @@ export class DiscountFields {
     @IsInt()
     // PERCENT_MIN and FIXED_MIN are both 1: one lower bound serves both types.
     @Min(DISCOUNT_LIMITS.PERCENT_MIN)
+    @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     @IsPercentInRange()
     value!: number;
 
@@ -108,6 +111,7 @@ export class TenderFields {
     @IsNotEmpty()
     @IsInt()
     @Min(NUMERIC_LIMITS.AMOUNT_MIN)
+    @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     amount!: number;
 }
 
@@ -137,6 +141,19 @@ function IsNotOnCashSale() {
 }
 
 export class SellDto {
+    /**
+     * Client-generated UUID, one per checkout attempt of a ticket and reused
+     * on every retry of that attempt. A second request with a key that
+     * already recorded a sale gets that sale's receipt back instead of a new
+     * sale (see `SalesService.sell`).
+     */
+    @IsNotEmpty()
+    @IsUUID()
+    @Transform(({ value }) =>
+        typeof value === 'string' ? value.toLowerCase() : (value as unknown),
+    )
+    idempotencyKey!: string;
+
     @IsNotEmpty()
     @IsEnum(PaymentType)
     paymentType!: PaymentType;

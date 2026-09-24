@@ -8,6 +8,7 @@ import { ProductService } from '../product/product.service';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
 import {
     ConflictError,
+    ErrorCode,
     NotFoundError,
     ValidationError,
 } from '../common/errors';
@@ -31,6 +32,8 @@ const CASHIER: AuthUser = {
 /** Cash large enough to cover any basket in these tests. */
 const PLENTY_OF_CASH = [{ type: TenderType.CASH, amount: 100_000_000 }];
 
+const KEY = '3f2b8c1e-9d4a-4e6b-8f7c-2a1d0e9b8c7d';
+
 function sellDto(
     details: { product: string; quantity: number }[],
     discount?: SellDto['discount'],
@@ -40,10 +43,25 @@ function sellDto(
     },
 ): SellDto {
     return {
+        idempotencyKey: KEY,
         ...payment,
         sellDetails: details,
         discount,
     } as SellDto;
+}
+
+/**
+ * A chainable stand-in for a Mongoose query: `populate`, `sort` and
+ * `session` return the query, `lean` resolves to `value`.
+ */
+function query(value: unknown) {
+    const q = {
+        populate: () => q,
+        sort: () => q,
+        session: () => q,
+        lean: () => Promise.resolve(value),
+    };
+    return q;
 }
 
 const CREATED_AT = new Date('2026-09-24T02:00:00.000Z');
@@ -78,9 +96,14 @@ describe('SalesService.sell', () => {
     let inventorySell: jest.Mock;
     let create: jest.Mock;
     let detailsBulkWrite: jest.Mock;
+    let findOne: jest.Mock;
+    let detailsFind: jest.Mock;
 
     beforeEach(async () => {
         getMany = jest.fn();
+        // No sale recorded under the key yet, unless a test says otherwise.
+        findOne = jest.fn().mockReturnValue(query(null));
+        detailsFind = jest.fn().mockReturnValue(query([]));
         inventorySell = jest.fn().mockResolvedValue(undefined);
         create = jest
             .fn()
@@ -100,10 +123,16 @@ describe('SalesService.sell', () => {
                     provide: getConnectionToken(),
                     useValue: { startSession: () => Promise.resolve(session) },
                 },
-                { provide: getModelToken(Sales.name), useValue: { create } },
+                {
+                    provide: getModelToken(Sales.name),
+                    useValue: { create, findOne },
+                },
                 {
                     provide: getModelToken(SalesDetails.name),
-                    useValue: { bulkWrite: detailsBulkWrite },
+                    useValue: {
+                        bulkWrite: detailsBulkWrite,
+                        find: detailsFind,
+                    },
                 },
                 { provide: ProductService, useValue: { getMany } },
                 {
@@ -513,6 +542,301 @@ describe('SalesService.sell', () => {
                 details: { referenceNumber: REF },
             });
             expect(inventorySell).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('idempotency', () => {
+        const PRODUCT = '507f1f77bcf86cd799439011';
+        const REF = '1234567890123';
+        const basket = [{ product: PRODUCT, quantity: 1 }];
+        const discount = {
+            type: DiscountType.PERCENT,
+            value: 20,
+            reason: 'loyalty',
+        };
+        const gcash = {
+            paymentType: PaymentType.GCASH,
+            referenceNumber: REF,
+            tenders: [{ type: TenderType.GCASH, amount: 100000 }],
+        };
+
+        function duplicateKey(field: string) {
+            return Object.assign(new Error('E11000 duplicate key'), {
+                name: 'MongoServerError',
+                code: 11000,
+                keyPattern: { [field]: 1 },
+            });
+        }
+
+        // A one-sale in-memory collection behind the model mocks. `winner`
+        // lets a test commit a sale "concurrently", from inside create().
+        let stored: Record<string, unknown> | null;
+        let lines: Record<string, unknown>[];
+
+        function commit(doc: Record<string, unknown>, id = 'sale1') {
+            stored = {
+                ...doc,
+                _id: id,
+                createdAt: CREATED_AT,
+            };
+            return stored;
+        }
+
+        beforeEach(() => {
+            getMany.mockResolvedValue(
+                new Map([[PRODUCT, { name: 'basket', price: 100000 }]]),
+            );
+            stored = null;
+            lines = [];
+
+            create.mockImplementation(([doc]: [Record<string, unknown>]) => {
+                if (stored?.idempotencyKey === doc.idempotencyKey) {
+                    return Promise.reject(duplicateKey('idempotencyKey'));
+                }
+                return Promise.resolve([commit(doc)]);
+            });
+            findOne.mockImplementation((filter: { idempotencyKey: string }) =>
+                query(
+                    stored?.idempotencyKey === filter.idempotencyKey
+                        ? stored
+                        : null,
+                ),
+            );
+            detailsBulkWrite.mockImplementation(
+                (
+                    ops: { insertOne: { document: Record<string, unknown> } }[],
+                ) => {
+                    lines = ops.map(({ insertOne }) => ({
+                        ...insertOne.document,
+                        product: { name: 'basket' },
+                    }));
+                    return Promise.resolve(undefined);
+                },
+            );
+            detailsFind.mockImplementation(() => query(lines));
+        });
+
+        it('records one sale for a key sent twice and replays the original receipt', async () => {
+            const dto = sellDto(basket, discount, {
+                paymentType: PaymentType.CASH,
+                tenders: [{ type: TenderType.CASH, amount: 150000 }],
+            });
+
+            const first = await service.sell(CASHIER, dto);
+            const second = await service.sell(CASHIER, { ...dto });
+
+            expect(create).toHaveBeenCalledTimes(1);
+            expect(inventorySell).toHaveBeenCalledTimes(1);
+            expect(detailsBulkWrite).toHaveBeenCalledTimes(1);
+            expect(second._id).toBe(first._id);
+            // Same shape and figures as the fresh response, not a new sale.
+            expect(second).toEqual(first);
+            expect(second).toMatchObject({
+                subtotal: 100000,
+                totalAmount: 80000,
+                changeGiven: 70000,
+                discount: { amount: 20000 },
+            });
+        });
+
+        it('stores the key and a request fingerprint on the sale', async () => {
+            await service.sell(CASHIER, sellDto(basket));
+
+            const [[[doc]]] = create.mock.calls as [
+                [Record<string, unknown>],
+            ][];
+            expect(doc.idempotencyKey).toBe(KEY);
+            expect(doc.requestHash).toMatch(/^[0-9a-f]{64}$/);
+        });
+
+        it('treats a reordered request as the same request', async () => {
+            const lines2 = [
+                { product: PRODUCT, quantity: 1 },
+                { product: '507f1f77bcf86cd799439012', quantity: 2 },
+            ];
+            getMany.mockResolvedValue(
+                new Map([
+                    [PRODUCT, { name: 'basket', price: 100000 }],
+                    ['507f1f77bcf86cd799439012', { name: 'milk', price: 100 }],
+                ]),
+            );
+
+            const first = await service.sell(CASHIER, sellDto(lines2));
+            const second = await service.sell(
+                CASHIER,
+                sellDto([...lines2].reverse()),
+            );
+
+            expect(second._id).toBe(first._id);
+            expect(create).toHaveBeenCalledTimes(1);
+        });
+
+        it.each([
+            [
+                'a different quantity',
+                sellDto([{ product: PRODUCT, quantity: 2 }]),
+            ],
+            ['a discount', sellDto(basket, discount)],
+            [
+                'different tenders',
+                sellDto(basket, undefined, {
+                    paymentType: PaymentType.CASH,
+                    tenders: [{ type: TenderType.CASH, amount: 200000 }],
+                }),
+            ],
+            ['another payment type', sellDto(basket, undefined, gcash)],
+        ])('refuses the same key with %s with a 409', async (_, changed) => {
+            await service.sell(CASHIER, sellDto(basket));
+
+            const attempt = service.sell(CASHIER, changed);
+
+            await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+            await expect(attempt).rejects.toMatchObject({
+                statusCode: 409,
+                code: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+                details: { sale: 'sale1' },
+            });
+            expect(create).toHaveBeenCalledTimes(1);
+            expect(inventorySell).toHaveBeenCalledTimes(1);
+        });
+
+        it('refuses the same key from another cashier', async () => {
+            await service.sell(CASHIER, sellDto(basket));
+
+            await expect(
+                service.sell(
+                    { ...CASHIER, userId: 'u2', username: 'other' },
+                    sellDto(basket),
+                ),
+            ).rejects.toMatchObject({
+                code: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+            });
+        });
+
+        it('returns the committed sale when a concurrent insert wins the key', async () => {
+            // The pre-check saw nothing; by insert time the other request
+            // with this key has committed.
+            create.mockImplementationOnce(
+                ([doc]: [Record<string, unknown>]) => {
+                    commit(doc, 'winner');
+                    lines = [
+                        {
+                            product: { name: 'basket' },
+                            quantity: 1,
+                            unitPrice: 100000,
+                        },
+                    ];
+                    return Promise.reject(duplicateKey('idempotencyKey'));
+                },
+            );
+
+            const receipt = await service.sell(CASHIER, sellDto(basket));
+
+            expect(receipt._id).toBe('winner');
+            expect(receipt.totalAmount).toBe(100000);
+            expect(receipt.items).toEqual([
+                { productName: 'basket', quantity: 1, amount: 100000 },
+            ]);
+            expect(inventorySell).not.toHaveBeenCalled();
+            expect(detailsBulkWrite).not.toHaveBeenCalled();
+        });
+
+        it('asks to retry when the winning sale is not visible yet', async () => {
+            create.mockRejectedValueOnce(duplicateKey('idempotencyKey'));
+
+            const attempt = service.sell(CASHIER, sellDto(basket));
+
+            await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+            await expect(attempt).rejects.toMatchObject({
+                statusCode: 409,
+                code: ErrorCode.SALE_IN_PROGRESS,
+            });
+            expect(inventorySell).not.toHaveBeenCalled();
+        });
+
+        it('replays a sale whose concurrent twin failed on stock the winner took', async () => {
+            await service.sell(CASHIER, sellDto(basket));
+            // A loser that got past the pre-check before the winner committed
+            // then fails on stock; it still answers with the winner's sale.
+            findOne.mockReturnValueOnce(query(null));
+            create.mockResolvedValueOnce([
+                { _id: 'loser', createdAt: CREATED_AT },
+            ]);
+            inventorySell.mockRejectedValueOnce(
+                new ValidationError(
+                    ErrorCode.VALIDATION_INVALID_INPUT,
+                    'Insufficient stock',
+                ),
+            );
+
+            const receipt = await service.sell(CASHIER, sellDto(basket));
+
+            expect(receipt._id).toBe('sale1');
+        });
+
+        it('rethrows the original error when no sale holds the key', async () => {
+            // The transaction rolls back, so nothing is left under the key.
+            create.mockResolvedValueOnce([
+                { _id: 'sale1', createdAt: CREATED_AT },
+            ]);
+            inventorySell.mockRejectedValueOnce(
+                new ValidationError(
+                    ErrorCode.VALIDATION_INVALID_INPUT,
+                    'Insufficient stock',
+                ),
+            );
+
+            await expect(
+                service.sell(CASHIER, sellDto(basket)),
+            ).rejects.toMatchObject({ statusCode: 400 });
+        });
+
+        describe('GCash', () => {
+            it('replays a GCash sale instead of refusing its own reference', async () => {
+                const first = await service.sell(
+                    CASHIER,
+                    sellDto(basket, undefined, gcash),
+                );
+                const second = await service.sell(
+                    CASHIER,
+                    sellDto(basket, undefined, gcash),
+                );
+
+                expect(second).toEqual(first);
+                expect(second.referenceNumber).toBe(REF);
+                expect(create).toHaveBeenCalledTimes(1);
+            });
+
+            it('replays when a concurrent twin trips the reference index first', async () => {
+                create.mockImplementationOnce(
+                    ([doc]: [Record<string, unknown>]) => {
+                        commit(doc, 'winner');
+                        return Promise.reject(duplicateKey('referenceNumber'));
+                    },
+                );
+
+                const receipt = await service.sell(
+                    CASHIER,
+                    sellDto(basket, undefined, gcash),
+                );
+
+                expect(receipt._id).toBe('winner');
+            });
+
+            it('still refuses a reference used by a sale with another key', async () => {
+                await service.sell(CASHIER, sellDto(basket, undefined, gcash));
+                create.mockRejectedValueOnce(duplicateKey('referenceNumber'));
+
+                const attempt = service.sell(CASHIER, {
+                    ...sellDto(basket, undefined, gcash),
+                    idempotencyKey: '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d',
+                });
+
+                await expect(attempt).rejects.toMatchObject({
+                    statusCode: 409,
+                    code: ErrorCode.SALE_DUPLICATE_REFERENCE,
+                });
+            });
         });
     });
 });

@@ -190,6 +190,21 @@ export class Sales {
     @Prop({ type: SaleReversalSchema, required: false })
     reversal?: SaleReversal;
 
+    /**
+     * The client's `SellDto.idempotencyKey`, unique across sales (see the
+     * index below). Sales written before idempotency existed have none.
+     */
+    @Prop({ type: String })
+    idempotencyKey?: string;
+
+    /**
+     * SHA-256 of the normalized request that recorded this sale
+     * (`saleRequestHash`). A replay of `idempotencyKey` must hash the same,
+     * or it is a different sale reusing the key and is refused.
+     */
+    @Prop({ type: String })
+    requestHash?: string;
+
     createdAt!: Date;
     updatedAt!: Date;
 }
@@ -203,6 +218,16 @@ SalesSchema.index(
     {
         unique: true,
         partialFilterExpression: { referenceNumber: { $type: 'string' } },
+    },
+);
+
+// One sale per idempotency key: a retried POST /sales cannot record a
+// second sale. Partial so legacy sales without a key do not collide.
+SalesSchema.index(
+    { idempotencyKey: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { idempotencyKey: { $type: 'string' } },
     },
 );
 
