@@ -97,7 +97,7 @@ export class NewProductsDto {
 export class GetDto {
     @IsNotEmpty()
     @IsString()
-    @MaxLength(STRING_LIMITS.PRODUCT_NAME)
+    @MaxLength(STRING_LIMITS.EAN)
     @Transform(({ value }) =>
         typeof value === 'string' ? value.trim() : (value as unknown),
     )
@@ -178,7 +178,9 @@ export class MatchesDto {
     )
     EAN!: string;
 
+    /** A name fragment; a digits-only term also matches part of an EAN. */
     @IsOptional()
+    @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
     @Transform(({ value }) =>
         typeof value === 'string'

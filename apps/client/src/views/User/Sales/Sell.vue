@@ -105,8 +105,21 @@
                             :disabled="isTicketLocked"
                             type="text"
                             placeholder="Scan barcode, enter EAN, or search item..."
+                            data-testid="scan-input"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-controls="product-matches"
+                            :aria-expanded="search.matches.value.length > 0"
+                            :aria-activedescendant="
+                                search.highlighted.value === -1
+                                    ? undefined
+                                    : `product-match-${search.highlighted.value}`
+                            "
                             class="w-full pl-11 pr-24 py-2.5 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
                             @input="onSearchChange"
+                            @keydown.down.prevent="search.move(1)"
+                            @keydown.up.prevent="search.move(-1)"
+                            @keydown.esc="search.highlighted.value = -1"
                         />
                         <div
                             class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1"
@@ -115,10 +128,7 @@
                                 v-if="searchQuery"
                                 type="button"
                                 class="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
-                                @click="
-                                    searchQuery = '';
-                                    scanInput?.focus();
-                                "
+                                @click="clearQuery"
                             >
                                 <X class="w-4 h-4" />
                             </button>
@@ -161,27 +171,65 @@
                         class="flex items-center gap-1.5 text-slate-700 font-bold text-xs uppercase tracking-wider"
                     >
                         <Search class="w-3.5 h-3.5" />
-                        <span>Matching Items ({{ matches.length }})</span>
+                        <span
+                            >Matching Items ({{
+                                search.matches.value.length
+                            }})</span
+                        >
                     </div>
                     <span class="text-[11px] text-slate-500"
-                        >Click item or press Enter to add</span
+                        >Click an item, or pick with ↑/↓ and press Enter</span
                     >
                 </div>
 
                 <div
-                    v-if="matches.length === 0"
+                    v-if="search.error.value"
+                    data-testid="search-error"
+                    role="alert"
+                    class="py-3 px-3 flex items-center justify-center gap-2 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs font-semibold"
+                >
+                    <AlertCircle class="w-4 h-4 text-red-600 shrink-0" />
+                    <span
+                        >Couldn't search products:
+                        {{ search.error.value }}</span
+                    >
+                </div>
+                <div
+                    v-else-if="search.matches.value.length === 0"
+                    data-testid="search-empty"
                     class="py-4 text-center text-slate-500 text-xs font-semibold"
                 >
-                    No item matching "{{ searchQuery }}". Check barcode number
-                    or search by name.
+                    <template v-if="search.settled.value">
+                        No item matching "{{ searchTerm }}". Check barcode
+                        number or search by name.
+                    </template>
+                    <template v-else>Searching…</template>
                 </div>
-                <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div
+                    v-else
+                    id="product-matches"
+                    role="listbox"
+                    data-testid="search-matches"
+                    class="grid grid-cols-1 sm:grid-cols-2 gap-2 transition-opacity"
+                    :class="{ 'opacity-50': !search.settled.value }"
+                    :aria-busy="!search.settled.value"
+                >
                     <button
-                        v-for="m in matches"
+                        v-for="(m, i) in search.matches.value"
+                        :id="`product-match-${i}`"
                         :key="m.product"
                         type="button"
-                        class="p-3 bg-white border border-slate-200 rounded-xl hover:border-slate-800 hover:shadow-xs transition-all flex items-center justify-between text-left group"
-                        @click="selectMatch(m)"
+                        role="option"
+                        data-testid="search-match"
+                        :aria-selected="i === search.highlighted.value"
+                        :disabled="isTicketLocked"
+                        class="p-3 bg-white border rounded-xl hover:border-slate-800 hover:shadow-xs transition-all flex items-center justify-between text-left group"
+                        :class="
+                            i === search.highlighted.value
+                                ? 'border-slate-900 ring-2 ring-slate-900/20'
+                                : 'border-slate-200'
+                        "
+                        @click="selectMatch(m, scanMultiplier)"
                     >
                         <div>
                             <h4
@@ -578,6 +626,12 @@ import {
     saleErrorMessage,
     useSaleCheckout,
 } from '@/components/User/Sales/sale-submission';
+import {
+    isBarcode,
+    type Match,
+    parseScan,
+    useProductSearch,
+} from '@/components/User/Sales/product-search';
 import { formatCurrency } from '@/utils/currency';
 import {
     DiscountType,
@@ -585,12 +639,6 @@ import {
     PaymentType,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
-
-interface Match {
-    product: string;
-    EAN: string;
-    name: string;
-}
 
 interface Product {
     _id: string;
@@ -606,7 +654,20 @@ const shiftStore = useShiftStore();
 const scanInput = ref<HTMLInputElement | null>(null);
 const searchQuery = ref('');
 const scanMultiplier = ref(1);
-const matches = ref<Match[]>([]);
+const search = useProductSearch(
+    async (name, signal) =>
+        (
+            await api.get<Match[]>('/products/matches', {
+                params: { name },
+                signal,
+            })
+        ).data,
+    () => searchTerm.value,
+);
+/** What the live search looks for: the input minus any `<qty>*` prefix. */
+const searchTerm = computed(
+    () => parseScan(searchQuery.value, scanMultiplier.value).query,
+);
 const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
     null,
 );
@@ -667,71 +728,137 @@ function showFeedback(type: 'success' | 'error', message: string) {
     }, 2500);
 }
 
-function resetQuery() {
-    searchQuery.value = '';
-    matches.value = [];
+function cancelPendingSearch() {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = undefined;
+}
+
+/**
+ * Clears the input after an item is added, but only if it still holds the
+ * text that was submitted: a scanner can start the next barcode while this
+ * lookup is in flight, and those digits must survive.
+ */
+function resetQuery(submitted: string) {
     scanMultiplier.value = 1;
+    scanInput.value?.focus();
+    if (searchQuery.value !== submitted) return;
+    cancelPendingSearch();
+    search.reset();
+    searchQuery.value = '';
+}
+
+function clearQuery() {
+    cancelPendingSearch();
+    search.reset();
+    searchQuery.value = '';
     scanInput.value?.focus();
 }
 
 function onSearchChange() {
-    if (searchTimer) clearTimeout(searchTimer);
-    if (!searchQuery.value.trim()) {
-        matches.value = [];
+    cancelPendingSearch();
+    // A highlight picked for the previous text must not ride along to Enter.
+    search.highlighted.value = -1;
+    const term = searchTerm.value;
+    if (!term) {
+        search.reset();
         return;
     }
-    searchTimer = setTimeout(() => fetchMatches(searchQuery.value), 250);
+    searchTimer = setTimeout(() => {
+        searchTimer = undefined;
+        void search.search(term);
+    }, 250);
 }
 
-async function fetchMatches(name: string) {
-    try {
-        const res = await api.get('/products/matches', {
-            params: { name: name.toUpperCase() },
-        });
-        matches.value = res.data;
-    } catch {
-        matches.value = [];
-    }
-}
-
+/**
+ * Enter / the Scan button. In order:
+ * 1. a highlighted match (picked with the arrow keys) is added;
+ * 2. a full 13-digit barcode is looked up exactly, as a scanner expects;
+ * 3. otherwise the input is searched now, and a single match of a *name*
+ *    is added straight away. A digits-only fragment is never auto-added,
+ *    even with one match: it may be the tail of a scan that lost its first
+ *    digits, or a short number that happens to hit one product;
+ * 4. every other outcome (a digit fragment, no match, several matches, a
+ *    failed search) gets a message, and the cashier picks from the list.
+ * Nothing happens while the ticket is locked for checkout.
+ */
 async function onScanSubmit() {
-    const raw = searchQuery.value.trim();
-    if (!raw || cartStore.locked) return;
+    if (cartStore.locked) return;
+    const submitted = searchQuery.value;
+    const { qty, query } = parseScan(submitted, scanMultiplier.value);
+    if (!query) return;
 
-    let qty = scanMultiplier.value;
-    let query = raw;
-
-    if (raw.includes('*')) {
-        const parts = raw.split('*');
-        const parsed = parseInt(parts[0].trim(), 10);
-        if (!Number.isNaN(parsed) && parsed > 0) {
-            qty = parsed;
-            query = parts.slice(1).join('*').trim();
-        }
+    const picked = search.highlightedMatch();
+    if (picked) {
+        await selectMatch(picked, qty, submitted);
+        return;
     }
 
+    if (isBarcode(query)) {
+        await lookUpBarcode(query, qty, submitted);
+        return;
+    }
+
+    cancelPendingSearch();
+    const found = await search.search(query);
+    // The input changed, was cleared, or a newer search (a second Enter)
+    // took over: that one reports instead.
+    if (searchTerm.value !== query || !search.settled.value) return;
+    // Superseded (null without an error): the newer search reports.
+    if (found === null && !search.error.value) return;
+
+    if (found === null) {
+        showFeedback(
+            'error',
+            `Couldn't search products: ${search.error.value}`,
+        );
+    } else if (found.length === 0) {
+        showFeedback('error', `No item matching "${query}"`);
+    } else if (found.length === 1 && !/^\d+$/.test(query)) {
+        await selectMatch(found[0], qty, submitted);
+    } else {
+        const count =
+            found.length === 1
+                ? '1 item matches'
+                : `${found.length} items match`;
+        showFeedback(
+            'error',
+            `${count} "${query}": pick it with ↓ and Enter, or click it`,
+        );
+    }
+}
+
+async function lookUpBarcode(EAN: string, qty: number, submitted: string) {
     try {
-        const res = await api.get(`/products/${encodeURIComponent(query)}`);
-        addProduct(res.data, qty);
+        const res = await api.get<Product>(
+            `/products/${encodeURIComponent(EAN)}`,
+        );
+        addProduct(res.data, qty, submitted);
     } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
-            showFeedback('error', `Barcode / code "${query}" not found`);
+            showFeedback('error', `Barcode "${EAN}" not found`);
         } else {
             showFeedback('error', 'Could not look up that code');
         }
     }
 }
 
-async function selectMatch(match: Match) {
+async function selectMatch(
+    match: Match,
+    qty: number,
+    submitted = searchQuery.value,
+) {
+    if (cartStore.locked) return;
     try {
-        const res = await api.get(`/products/${encodeURIComponent(match.EAN)}`);
-        addProduct(res.data, scanMultiplier.value);
+        const res = await api.get<Product>(
+            `/products/${encodeURIComponent(match.EAN)}`,
+        );
+        addProduct(res.data, qty, submitted);
     } catch {
         showFeedback('error', `"${match.name}" could not be added`);
     }
 }
 
-function addProduct(product: Product, quantity: number) {
+function addProduct(product: Product, quantity: number, submitted: string) {
     if (cartStore.locked) {
         showFeedback('error', 'Wait for the sale to finish recording');
         return;
@@ -749,7 +876,7 @@ function addProduct(product: Product, quantity: number) {
         'success',
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,
     );
-    resetQuery();
+    resetQuery(submitted);
 }
 
 function clearDiscount() {
@@ -860,7 +987,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-    if (searchTimer) clearTimeout(searchTimer);
+    cancelPendingSearch();
+    search.cancel();
     if (feedbackTimer) clearTimeout(feedbackTimer);
 });
 </script>
