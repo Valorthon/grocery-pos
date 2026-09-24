@@ -66,7 +66,7 @@
                         </td>
                         <td class="py-3 px-5">{{ item.name }}</td>
                         <td class="py-3 px-5 text-right">
-                            ₱{{ (item.price ?? 0).toLocaleString() }}
+                            {{ formatCurrency(item.price ?? 0) }}
                         </td>
                         <td class="py-3 px-5">
                             <div class="flex justify-end gap-1">
@@ -110,6 +110,7 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import AddProductDialog from '@/components/User/Product/AddDialog.vue';
 import { Color, useUIStore } from '@/stores/ui';
+import { formatCurrency } from '@/utils/currency';
 
 const isAddDialogOpen = ref(false);
 const uiStore = useUIStore();

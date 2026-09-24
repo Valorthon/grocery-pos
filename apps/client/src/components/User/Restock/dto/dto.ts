@@ -2,12 +2,15 @@ export interface AddForm {
     autoGenerateEAN: boolean;
     EAN: string;
     quantity: number;
+    /** Centavos. */
     unitCost: number;
+    /** Centavos. */
     totalCost?: number;
     product?: string;
 
     isNewProduct: boolean;
     name: string;
+    /** Centavos. */
     price?: number;
 }
 

@@ -554,7 +554,7 @@ import type {
     PaymentMethod,
     Receipt,
 } from '@/components/User/Sales/types';
-import { formatCurrency } from '@/utils/currency';
+import { formatCurrency, percentOf } from '@/utils/currency';
 
 interface Match {
     product: string;
@@ -566,6 +566,7 @@ interface Product {
     _id: string;
     EAN: string;
     name: string;
+    /** Centavos. */
     price: number;
 }
 
@@ -596,8 +597,8 @@ const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
 
 const subtotal = computed(() => cartStore.subtotal);
-const discountAmount = computed(
-    () => (subtotal.value * discountPercent.value) / 100,
+const discountAmount = computed(() =>
+    percentOf(subtotal.value, discountPercent.value),
 );
 const total = computed(() => subtotal.value - discountAmount.value);
 

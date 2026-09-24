@@ -69,13 +69,13 @@
                             {{ item.quantity }}
                         </td>
                         <td class="py-3 px-5 text-right">
-                            ₱{{ (item.unitCost ?? 0).toLocaleString() }}
+                            {{ formatCurrency(item.unitCost ?? 0) }}
                         </td>
                         <td class="py-3 px-5 text-right font-bold">
-                            ₱{{
-                                (
-                                    (item.unitCost ?? 0) * (item.quantity ?? 0)
-                                ).toLocaleString()
+                            {{
+                                formatCurrency(
+                                    (item.unitCost ?? 0) * (item.quantity ?? 0),
+                                )
                             }}
                         </td>
                         <td class="py-3 px-5">
@@ -124,6 +124,7 @@ import RestockAddDialog from '@/components/User/Restock/AddDialog.vue';
 import RestockSaveDialog from '@/components/User/Restock/SaveDialog.vue';
 import { AddForm, SaveForm } from '@/components/User/Restock/dto';
 import { Color, useUIStore } from '@/stores/ui';
+import { formatCurrency } from '@/utils/currency';
 import { isAxiosError } from 'axios';
 
 const isAddDialogOpen = ref(false);

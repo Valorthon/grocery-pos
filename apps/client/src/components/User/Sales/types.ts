@@ -1,3 +1,4 @@
+// Every money field below is integer centavos.
 export interface ReceiptItem {
     productName: string;
     quantity: number;

@@ -89,13 +89,11 @@
                         </td>
                         <td class="py-3 px-4">{{ d.quantity }}</td>
                         <td class="py-3 px-4 text-right">
-                            ₱{{ d.unitPrice?.toLocaleString() ?? 0 }}
+                            {{ formatCurrency(d.unitPrice ?? 0) }}
                         </td>
                         <td class="py-3 px-4 text-right">
-                            ₱{{
-                                (
-                                    (d.unitPrice ?? 0) * d.quantity
-                                ).toLocaleString()
+                            {{
+                                formatCurrency((d.unitPrice ?? 0) * d.quantity)
                             }}
                         </td>
                     </tr>
@@ -120,6 +118,7 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
+import { formatCurrency } from '@/utils/currency';
 
 const router = useRouter();
 const loading = ref(true);
@@ -146,7 +145,7 @@ async function fetchSales() {
     serverItems.value = result.data.data.map((sale: any) => ({
         id: sale._id,
         cashier: sale.cashier?.name ?? 'N/A',
-        amount: `₱${sale.amount?.toLocaleString() ?? 0}`,
+        amount: formatCurrency(sale.amount ?? 0),
         paymentType: sale.paymentType,
         date: new Date(sale.createdAt).toLocaleString('en-PH', {
             year: 'numeric',

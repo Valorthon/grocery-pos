@@ -76,6 +76,7 @@ import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
+import { formatCurrency } from '@/utils/currency';
 
 const router = useRouter();
 const loading = ref(true);
@@ -149,7 +150,7 @@ async function fetchRestock() {
         id: restock._id,
         description: restock.description,
         restockedBy: restock.restockedBy.name,
-        totalCost: `₱${(restock.totalCost ?? 0).toLocaleString()}`,
+        totalCost: formatCurrency(restock.totalCost ?? 0),
         date: new Date(restock.createdAt).toLocaleString('en-PH', {
             year: 'numeric',
             month: 'short',

@@ -48,9 +48,9 @@
             :items-length="totalItems"
         >
             <template #cell-price="{ value }">
-                <span class="font-medium"
-                    >₱{{ (value ?? 0).toLocaleString() }}</span
-                >
+                <span class="font-medium">{{
+                    formatCurrency(value ?? 0)
+                }}</span>
             </template>
         </BaseTable>
     </PageCard>
@@ -65,6 +65,7 @@ import PageCard from '@/components/ui/PageCard.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import { formatCurrency } from '@/utils/currency';
 
 const router = useRouter();
 const loading = ref(true);
