@@ -6,6 +6,8 @@ import { AdjustmentDetails } from './adjustment-details.schema';
 import { AdjustDto, GetAllDto, GetDetailsDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
+import { dateRangeFilter } from '../../common/utils/timezone';
+import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
 import { User } from '../../user/user.schema';
 
@@ -17,12 +19,13 @@ export class AdjustmentService {
         @InjectModel(AdjustmentDetails.name)
         private modelDetails: Model<AdjustmentDetails>,
         private inventoryService: InventoryService,
+        private config: TypedConfigService,
     ) {}
 
     async getAll(
         dto: GetAllDto,
     ): Promise<{ data: Adjustment[]; totalItems: number }> {
-        const { page, limit, dateRange, adjustedBy } = dto;
+        const { page, limit, dateFrom, dateTo, adjustedBy } = dto;
 
         const skip = (page - 1) * limit;
 
@@ -30,17 +33,13 @@ export class AdjustmentService {
         if (adjustedBy) {
             query.adjustedBy = new Types.ObjectId(adjustedBy);
         }
-        if (dateRange) {
-            const start = dateRange[0];
-            const end = dateRange[1] ?? new Date(start);
-
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
-
-            query.createdAt = {
-                $gte: start,
-                $lte: end,
-            };
+        const createdAt = dateRangeFilter(
+            dateFrom,
+            dateTo,
+            this.config.get('STORE_TIMEZONE'),
+        );
+        if (createdAt) {
+            query.createdAt = createdAt;
         }
 
         Logger.log({ query, dto });

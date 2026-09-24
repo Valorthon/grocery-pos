@@ -6,6 +6,8 @@ import { RestockDetails } from './restock-details.schema';
 import { GetAllDto, GetDetailsDto, RestockDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
+import { dateRangeFilter } from '../../common/utils/timezone';
+import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
 import { ProductService } from '../../product/product.service';
 import { User } from '../../user/user.schema';
@@ -18,6 +20,7 @@ export class RestockService {
         @InjectModel(RestockDetails.name)
         private modelDetails: Model<RestockDetails>,
         private inventoryService: InventoryService,
+        private config: TypedConfigService,
         private productService: ProductService,
     ) {}
 
@@ -68,7 +71,7 @@ export class RestockService {
     async getAll(
         dto: GetAllDto,
     ): Promise<{ data: Restock[]; totalItems: number }> {
-        const { page, limit, dateRange, restockedBy } = dto;
+        const { page, limit, dateFrom, dateTo, restockedBy } = dto;
 
         const skip = (page - 1) * limit;
 
@@ -76,17 +79,13 @@ export class RestockService {
         if (restockedBy) {
             query.restockedBy = new Types.ObjectId(restockedBy);
         }
-        if (dateRange) {
-            const start = dateRange[0];
-            const end = dateRange[1] ?? new Date(start);
-
-            start.setHours(0, 0, 0, 0);
-            end.setHours(23, 59, 59, 999);
-
-            query.createdAt = {
-                $gte: start,
-                $lte: end,
-            };
+        const createdAt = dateRangeFilter(
+            dateFrom,
+            dateTo,
+            this.config.get('STORE_TIMEZONE'),
+        );
+        if (createdAt) {
+            query.createdAt = createdAt;
         }
 
         Logger.log({ query, dto });

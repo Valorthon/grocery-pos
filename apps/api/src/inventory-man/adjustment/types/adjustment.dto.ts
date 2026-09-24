@@ -1,8 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
-    IsArray,
-    IsDate,
     IsInt,
     IsMongoId,
     IsNotEmpty,
@@ -15,6 +13,7 @@ import {
     ValidateNested,
 } from 'class-validator';
 import { VALIDATION, STRING_LIMITS } from '../../../constants';
+import { IsCalendarDate } from '../../../common/validators';
 
 export class GetDetailsParamDto {
     @IsNotEmpty()
@@ -85,14 +84,15 @@ export class GetAllDto {
     @IsOptional()
     adjustedBy!: string;
 
-    @IsArray()
-    @IsDate({ each: true })
+    /** Inclusive start day, `YYYY-MM-DD`, read in the store timezone. */
     @IsOptional()
-    @Transform(
-        ({ value }) => (Array.isArray(value) ? value : [value]) as unknown[],
-    )
-    @Type(() => Date)
-    dateRange!: Date[];
+    @IsCalendarDate()
+    dateFrom?: string;
+
+    /** Inclusive end day, `YYYY-MM-DD`, read in the store timezone. */
+    @IsOptional()
+    @IsCalendarDate()
+    dateTo?: string;
 
     @IsNumber()
     @IsPositive()
