@@ -59,13 +59,15 @@ describe('JWTAuthGuard.handleRequest', () => {
         expect(err.code).toBe(ErrorCode.AUTH_INVALID_TOKEN);
     });
 
-    it('rejects a strategy error with 401 AUTH_INVALID_TOKEN', () => {
+    it('rethrows a strategy error as-is instead of calling it a bad token', () => {
+        const boom = new Error('validate blew up');
+
         const err = thrownBy(() =>
-            guard.handleRequest(new Error('boom'), false, undefined, PROTECTED),
+            guard.handleRequest(boom, false, undefined, PROTECTED),
         );
 
-        expect(err.statusCode).toBe(401);
-        expect(err.code).toBe(ErrorCode.AUTH_INVALID_TOKEN);
+        expect(err).toBe(boom);
+        expect(err).not.toBeInstanceOf(AppError);
     });
 
     it('passes the decoded user through on a valid token', () => {
