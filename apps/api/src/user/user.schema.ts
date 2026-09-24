@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from '../auth/types/auth.types';
 import { STRING_LIMITS } from '../constants';
 
@@ -16,7 +17,8 @@ export class User {
 
     @Prop({
         type: [String],
-        enum: Role,
+        // Not `Role`: UNAUTHENTICATED is never a stored role.
+        enum: ASSIGNABLE_ROLES,
         required: true,
     })
     roles!: Role[];

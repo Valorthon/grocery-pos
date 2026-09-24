@@ -1,9 +1,11 @@
 import { Transform, Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
+    ArrayUnique,
     IsArray,
     IsBoolean,
     IsEnum,
+    IsIn,
     IsMongoId,
     IsNotEmpty,
     IsNumber,
@@ -13,6 +15,7 @@ import {
     MaxLength,
     ValidateNested,
 } from 'class-validator';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from '../../auth/types';
 import { STRING_LIMITS } from '../../constants';
 
@@ -33,7 +36,13 @@ class CreateFields {
     password!: string;
 
     @IsEnum(Role, { each: true })
+    @IsIn(ASSIGNABLE_ROLES, {
+        each: true,
+        message: `each value in roles must be one of: ${ASSIGNABLE_ROLES.join(', ')}`,
+    })
+    @ArrayUnique()
     @ArrayNotEmpty()
+    @IsArray()
     roles!: Role[];
 }
 export class CreateBulkDto {
@@ -60,6 +69,13 @@ class UpdateFields {
     password?: string;
 
     @IsOptional()
+    @IsEnum(Role, { each: true })
+    @IsIn(ASSIGNABLE_ROLES, {
+        each: true,
+        message: `each value in roles must be one of: ${ASSIGNABLE_ROLES.join(', ')}`,
+    })
+    @ArrayUnique()
+    @ArrayNotEmpty()
     @IsArray()
     roles?: Role[];
 
@@ -80,9 +96,27 @@ class UpdateBulkFields {
 export class UpdateBulkDto {
     @ValidateNested({ each: true })
     @Type(() => UpdateBulkFields)
+    // One entry per user: the permission and last-admin checks reason about
+    // each target's state before and after exactly one change.
+    @ArrayUnique((entry: UpdateBulkFields) => entry?.user, {
+        message: 'each user may appear only once in updates',
+    })
     @IsArray()
     @ArrayNotEmpty()
     updates!: UpdateBulkFields[];
+}
+
+/** `PATCH /users/me/password`: any signed-in user changes their own password. */
+export class ChangePasswordDto {
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(STRING_LIMITS.PASSWORD)
+    currentPassword!: string;
+
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(STRING_LIMITS.PASSWORD)
+    newPassword!: string;
 }
 
 export class GetAllDto {

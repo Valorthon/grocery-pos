@@ -1,6 +1,10 @@
 import { Body, Controller, Get, Patch, Post, Query } from '@nestjs/common';
 import { UserService } from './user.service';
-import { CreateBulkDto, UpdateBulkDto } from './types/user.dto';
+import {
+    ChangePasswordDto,
+    CreateBulkDto,
+    UpdateBulkDto,
+} from './types/user.dto';
 import { Roles } from '../auth/auth.decorator';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
@@ -27,13 +31,24 @@ export class UserController {
         return data;
     }
 
+    // Open to every signed-in user (cashiers included); the current
+    // password is required.
+    @Roles()
+    @Patch('/me/password')
+    async changeOwnPassword(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: ChangePasswordDto,
+    ) {
+        await this.service.changeOwnPassword(user, dto);
+    }
+
     @Patch()
-    async update(@Body() dto: UpdateBulkDto) {
-        await this.service.update(dto);
+    async update(@CurrentUser() user: AuthUser, @Body() dto: UpdateBulkDto) {
+        await this.service.update(user, dto);
     }
 
     @Post()
-    async create(@Body() dto: CreateBulkDto) {
-        await this.service.create(dto);
+    async create(@CurrentUser() user: AuthUser, @Body() dto: CreateBulkDto) {
+        await this.service.create(user, dto);
     }
 }
