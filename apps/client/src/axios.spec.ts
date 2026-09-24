@@ -108,24 +108,119 @@ describe('api 401 handling', () => {
         ).toBe('AUTH_001');
     });
 
-    it.each(['/auth/refresh', '/auth/logout'])(
-        'does not start a refresh on a 401 from %s',
-        async (url) => {
-            api.defaults.adapter = ((config) =>
-                fail(config, 401)) as AxiosAdapter;
+    it('does not start a refresh on a 401 from /auth/logout', async () => {
+        api.defaults.adapter = ((config) => fail(config, 401)) as AxiosAdapter;
 
-            await expect(api.post(url)).rejects.toBeInstanceOf(AxiosError);
-            expect(refresh).not.toHaveBeenCalled();
+        await expect(api.post('/auth/logout')).rejects.toBeInstanceOf(
+            AxiosError,
+        );
+        expect(refresh).not.toHaveBeenCalled();
+    });
+});
+
+describe('api when the refresh itself fails', () => {
+    const REFRESH_CONFIG = {
+        headers: new AxiosHeaders(),
+    } as InternalAxiosRequestConfig;
+
+    let refresh: MockInstance<typeof axios.post>;
+    let cookieWrites: string[];
+
+    beforeEach(() => {
+        logout.mockReset();
+        refresh = vi.spyOn(axios, 'post');
+        cookieWrites = [];
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        Object.defineProperty(document, 'cookie', {
+            configurable: true,
+            get: () => 'dummy=true',
+            set: (value: string) => cookieWrites.push(value),
+        });
+        // Every protected request 401s, so each one waits on the refresh.
+        api.defaults.adapter = ((config) =>
+            fail(config, 401, { error: 'AUTH_002' })) as AxiosAdapter;
+    });
+
+    afterEach(() => {
+        api.defaults.adapter = undefined;
+    });
+
+    /** Fires two protected requests while one refresh is in flight. */
+    async function twoRequestsDuringRefresh(refreshError: unknown) {
+        refresh.mockImplementation(
+            () =>
+                new Promise((_resolve, reject) =>
+                    setTimeout(() => reject(refreshError), 5),
+                ),
+        );
+
+        const results = await Promise.allSettled([
+            api.get('/users/profile'),
+            api.get('/products'),
+        ]);
+
+        expect(refresh).toHaveBeenCalledTimes(1);
+        return results;
+    }
+
+    it.each([
+        [
+            'a 5xx',
+            new AxiosError(
+                'Request failed with status code 503',
+                AxiosError.ERR_BAD_RESPONSE,
+                REFRESH_CONFIG,
+                undefined,
+                respond(REFRESH_CONFIG, 503),
+            ),
+        ],
+        [
+            'a network error',
+            new AxiosError('Network Error', AxiosError.ERR_NETWORK),
+        ],
+    ])(
+        'keeps the session on %s but rejects every waiting request',
+        async (_label, refreshError) => {
+            const results = await twoRequestsDuringRefresh(refreshError);
+
+            expect(results.map((r) => r.status)).toEqual([
+                'rejected',
+                'rejected',
+            ]);
+            expect(
+                results.map((r) => (r as PromiseRejectedResult).reason),
+            ).toEqual([refreshError, refreshError]);
+            expect(logout).not.toHaveBeenCalled();
+            expect(cookieWrites).toEqual([]);
         },
     );
+
+    it('logs out when the refresh answers 401', async () => {
+        const refreshError = new AxiosError(
+            'Request failed with status code 401',
+            AxiosError.ERR_BAD_REQUEST,
+            REFRESH_CONFIG,
+            undefined,
+            respond(REFRESH_CONFIG, 401, { error: 'AUTH_004' }),
+        );
+
+        const results = await twoRequestsDuringRefresh(refreshError);
+
+        expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+        expect(logout).toHaveBeenCalledTimes(1);
+        expect(cookieWrites).toEqual([
+            expect.stringMatching(/^dummy=; expires=Thu, 01 Jan 1970/),
+        ]);
+    });
 });
 
 describe('isAuthEndpoint', () => {
-    it('matches only the auth routes', () => {
+    it('matches only the auth routes, ignoring the query string', () => {
         expect(isAuthEndpoint('/auth/login')).toBe(true);
-        expect(isAuthEndpoint('/auth/refresh')).toBe(true);
+        expect(isAuthEndpoint('/auth/login?next=/sales')).toBe(true);
         expect(isAuthEndpoint('/auth/logout')).toBe(true);
         expect(isAuthEndpoint('/users/profile')).toBe(false);
+        expect(isAuthEndpoint('/users/profile?from=/auth/login')).toBe(false);
         expect(isAuthEndpoint(undefined)).toBe(false);
     });
 });
