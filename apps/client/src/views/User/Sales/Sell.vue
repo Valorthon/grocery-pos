@@ -102,6 +102,7 @@
                         <input
                             ref="scanInput"
                             v-model="searchQuery"
+                            :disabled="isTicketLocked"
                             type="text"
                             placeholder="Scan barcode, enter EAN, or search item..."
                             class="w-full pl-11 pr-24 py-2.5 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
@@ -123,6 +124,7 @@
                             </button>
                             <button
                                 type="submit"
+                                :disabled="isTicketLocked"
                                 class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase rounded-lg shadow-2xs transition-colors active:scale-[0.98]"
                             >
                                 Enter / Scan
@@ -229,6 +231,7 @@
                             <button
                                 v-if="cartStore.items.length"
                                 type="button"
+                                :disabled="isTicketLocked"
                                 class="text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors"
                                 @click="voidTicket"
                             >
@@ -320,6 +323,7 @@
                                         >
                                             <button
                                                 type="button"
+                                                :disabled="isTicketLocked"
                                                 class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                                                 @click="
                                                     cartStore.setQuantity(
@@ -336,6 +340,7 @@
                                             >
                                             <button
                                                 type="button"
+                                                :disabled="isTicketLocked"
                                                 class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                                                 @click="
                                                     cartStore.setQuantity(
@@ -360,6 +365,7 @@
                                     <td class="py-3 px-4 text-center">
                                         <button
                                             type="button"
+                                            :disabled="isTicketLocked"
                                             class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                             @click="
                                                 cartStore.remove(item.product)
@@ -415,6 +421,7 @@
                         v-for="d in discountOptions"
                         :key="d"
                         type="button"
+                        :disabled="isTicketLocked"
                         class="px-2.5 py-1 rounded-lg text-xs font-bold transition-colors active:scale-[0.98]"
                         :class="
                             discountPercent === d
@@ -436,6 +443,7 @@
                     <input
                         id="discount-reason"
                         v-model="discountReason"
+                        :disabled="isTicketLocked"
                         type="text"
                         :maxlength="STRING_LIMITS.REASON"
                         placeholder="e.g. loyalty card, damaged packaging"
@@ -499,7 +507,7 @@
                 <button
                     type="button"
                     class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all"
-                    :disabled="!canCheckout"
+                    :disabled="!canCheckout || isTicketLocked"
                     @click="openCheckout()"
                 >
                     <CreditCard class="w-5 h-5" />
@@ -511,7 +519,7 @@
                     <button
                         type="button"
                         class="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98]"
-                        :disabled="!canCheckout"
+                        :disabled="!canCheckout || isTicketLocked"
                         @click="openCheckout(PaymentType.SPLIT)"
                     >
                         <Split class="w-3.5 h-3.5 text-emerald-600" />
@@ -525,12 +533,13 @@
             v-model="isCheckoutOpen"
             :total="total"
             :initial-method="checkoutMethod"
-            @complete="completeSale"
+            :submit="submitSale"
         />
 
         <ReceiptModal
             v-model="isReceiptOpen"
             :receipt="receipt"
+            :notice="receiptNotice"
             @new-sale="onNewSale"
         />
     </div>
@@ -559,15 +568,16 @@ import {
 } from '@lucide/vue';
 import api from '@/axios';
 import { useCartStore } from '@/stores/cart';
-import { Color, useUIStore } from '@/stores/ui';
 import { useShiftStore } from '@/stores/shift';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
 import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
+import { paymentLabel, previewSale } from '@/components/User/Sales/checkout';
 import {
-    drawerCashAmount,
-    previewSale,
-} from '@/components/User/Sales/checkout';
+    isRejectedSale,
+    saleErrorMessage,
+    useSaleCheckout,
+} from '@/components/User/Sales/sale-submission';
 import { formatCurrency } from '@/utils/currency';
 import {
     DiscountType,
@@ -591,7 +601,6 @@ interface Product {
 }
 
 const cartStore = useCartStore();
-const uiStore = useUIStore();
 const shiftStore = useShiftStore();
 
 const scanInput = ref<HTMLInputElement | null>(null);
@@ -611,6 +620,8 @@ const checkoutMethod = ref<PaymentType>(PaymentType.CASH);
 // The server's response: the receipt and drawer read its totals, never the
 // preview below.
 const receipt = ref<Receipt | null>(null);
+/** Shown on the receipt when the sale had already been recorded earlier. */
+const receiptNotice = ref<string | null>(null);
 
 const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
@@ -685,7 +696,7 @@ async function fetchMatches(name: string) {
 
 async function onScanSubmit() {
     const raw = searchQuery.value.trim();
-    if (!raw) return;
+    if (!raw || cartStore.locked) return;
 
     let qty = scanMultiplier.value;
     let query = raw;
@@ -721,6 +732,10 @@ async function selectMatch(match: Match) {
 }
 
 function addProduct(product: Product, quantity: number) {
+    if (cartStore.locked) {
+        showFeedback('error', 'Wait for the sale to finish recording');
+        return;
+    }
     cartStore.add(
         {
             product: product._id,
@@ -744,11 +759,16 @@ function clearDiscount() {
 }
 
 function voidTicket() {
+    if (cartStore.locked) return;
     cartStore.clear();
     clearDiscount();
+    // An identical next ticket must not replay a sale this one may have
+    // recorded before its response was lost.
+    checkout.discardKey();
 }
 
 function applyDiscount(value: number) {
+    if (cartStore.locked) return;
     if (value === 0) {
         clearDiscount();
         return;
@@ -761,42 +781,77 @@ function openCheckout(method: PaymentType = PaymentType.CASH) {
     isCheckoutOpen.value = true;
 }
 
-async function completeSale(payment: PaymentRequest) {
-    const sellDetails = cartStore.items.map((item) => ({
-        product: item.product,
-        quantity: item.quantity,
-    }));
+const checkout = useSaleCheckout({
+    cart: cartStore,
+    ticket: () => ({
+        sellDetails: cartStore.items.map((item) => ({
+            product: item.product,
+            quantity: item.quantity,
+        })),
+        discount: discountRequest.value ?? undefined,
+    }),
+    post: async (body) => (await api.post<Receipt>('/sales', body)).data,
+    recordCash: (centavos) => shiftStore.recordCashSale(centavos),
+});
 
+/** True while `POST /sales` is in flight: the ticket cannot be edited. */
+const isTicketLocked = computed(() => cartStore.locked);
+
+/**
+ * Called by the checkout modal, which stays open until this settles. A
+ * rejection carries the message the modal shows inline.
+ */
+async function submitSale(payment: PaymentRequest) {
+    const outcome = await checkout.submit(payment).catch(explainFailure);
+    receipt.value = outcome.receipt;
+    receiptNotice.value = outcome.alreadyRecorded
+        ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this receipt, not the amount just entered.`
+        : null;
+    clearDiscount();
+    isReceiptOpen.value = true;
+}
+
+/** Rejects with the cashier-facing reason a sale failed. */
+async function explainFailure(error: unknown): Promise<never> {
+    let message = saleErrorMessage(error);
+    // A 400 means nothing was recorded. The usual cause is a price that
+    // changed since the item was scanned, so the preview total the tenders
+    // were built from is stale: refresh it for the retry.
+    if (isRejectedSale(error) && (await refreshCartPrices())) {
+        message += ' Prices have changed and the total is updated.';
+    }
+    throw new Error(message);
+}
+
+/** Re-reads each cart line's price; true if any changed. */
+async function refreshCartPrices(): Promise<boolean> {
     try {
-        const res = await api.post<Receipt>('/sales', {
-            ...payment,
-            sellDetails,
-            discount: discountRequest.value ?? undefined,
-        });
-        const sale = res.data;
-
-        receipt.value = sale;
-        // The server's cash tender net of change, not the modal's figures.
-        shiftStore.recordCashSale(drawerCashAmount(sale));
-
-        cartStore.clear();
-        clearDiscount();
-        isReceiptOpen.value = true;
-    } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error.response?.data?.message ?? 'Sale failed',
-            );
-        } else {
-            uiStore.queueMessage(Color.ERROR, 'Sale failed');
-        }
+        const products = await Promise.all(
+            cartStore.items.map(
+                async (item) =>
+                    (
+                        await api.get<Product>(
+                            `/products/${encodeURIComponent(item.EAN)}`,
+                        )
+                    ).data,
+            ),
+        );
+        const changed = products.some(
+            (p) =>
+                cartStore.items.find((item) => item.product === p._id)
+                    ?.unitPrice !== p.price,
+        );
+        cartStore.setUnitPrices(new Map(products.map((p) => [p._id, p.price])));
+        return changed;
+    } catch {
+        return false;
     }
 }
 
 function onNewSale() {
     isReceiptOpen.value = false;
     receipt.value = null;
+    receiptNotice.value = null;
     scanInput.value?.focus();
 }
 

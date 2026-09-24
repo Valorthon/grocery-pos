@@ -8,6 +8,7 @@ import {
     IsOptional,
     IsPositive,
     IsString,
+    Max,
     MaxLength,
     Min,
     ValidateNested,
@@ -70,6 +71,7 @@ export class RestockFields {
     @IsNotEmpty()
     @Type(() => Number)
     @Min(NUMERIC_LIMITS.PRICE_MIN)
+    @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     unitCost!: number;
 }
 export class RestockDto {

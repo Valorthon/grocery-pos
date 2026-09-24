@@ -31,12 +31,7 @@ import {
     ValidationError,
 } from '../common/errors';
 import { Settlement, settleTenders } from './tender';
-
-/** Mongo's duplicate-key error, as thrown by a unique index. */
-function isDuplicateKey(err: unknown, field: string): boolean {
-    const e = err as { code?: unknown; keyPattern?: Record<string, unknown> };
-    return Number(e?.code) === 11000 && !!e.keyPattern && field in e.keyPattern;
-}
+import { isDuplicateKey, saleRequestHash } from './idempotency';
 
 @Injectable()
 export class SalesService {
@@ -89,8 +84,159 @@ export class SalesService {
             .lean();
     }
 
-    async sell(user: AuthUser, dto: SellDto, session?: ClientSession) {
-        const { paymentType, referenceNumber } = dto;
+    /**
+     * Records a sale, idempotently on `dto.idempotencyKey`.
+     *
+     * - A key that already recorded a sale returns that sale's receipt, built
+     *   from what was stored, and changes nothing: no second sale, no second
+     *   stock decrement. This is checked first, so replaying a GCash sale
+     *   does not trip over its own reference number.
+     * - A key that recorded a different request (see `saleRequestHash`) is
+     *   a 409 SALE_IDEMPOTENCY_MISMATCH.
+     * - Of concurrent requests with one key, the unique index lets exactly
+     *   one sale commit. A loser (duplicate key, write conflict, or a stock
+     *   or reference failure caused by the winner) looks the key up again and
+     *   returns the winner's receipt; if the winner is not visible yet it
+     *   gets a 409 SALE_IN_PROGRESS and should retry with the same key.
+     */
+    async sell(
+        user: AuthUser,
+        dto: SellDto,
+        session?: ClientSession,
+    ): Promise<ReceiptDto> {
+        const requestHash = saleRequestHash(user.userId, dto);
+
+        const replay = await this.findReplay(
+            user,
+            dto.idempotencyKey,
+            requestHash,
+            session,
+        );
+        if (replay) return replay;
+
+        try {
+            return await this.recordSale(user, dto, requestHash, session);
+        } catch (err) {
+            // Inside a caller's transaction the committed state cannot be
+            // read past it; the caller owns the retry.
+            if (session) throw err;
+
+            const committed = await this.findReplay(
+                user,
+                dto.idempotencyKey,
+                requestHash,
+            );
+            if (committed) return committed;
+            throw err;
+        }
+    }
+
+    /**
+     * The receipt of the sale already recorded under `idempotencyKey`, or
+     * null if there is none. The request hash covers the cashier, so a
+     * matching sale is always the requesting user's own.
+     *
+     * A key that recorded a different request is a 409 SALE_003:
+     * - From the same cashier (the usual case: the response was lost and the
+     *   cashier re-tendered differently), the details carry the stored
+     *   sale's receipt, so the client can show it and credit the drawer from
+     *   its original tenders instead of dead-ending or ringing it again.
+     * - From another cashier, the details are empty: a key is a random UUID
+     *   the client made, so this is misuse, and another cashier's receipt is
+     *   not handed out.
+     */
+    private async findReplay(
+        user: AuthUser,
+        idempotencyKey: string,
+        requestHash: string,
+        session?: ClientSession,
+    ): Promise<ReceiptDto | null> {
+        const sale = await this.model
+            .findOne({ idempotencyKey })
+            .session(session ?? null)
+            .lean();
+
+        if (!sale) return null;
+
+        if (sale.requestHash !== requestHash) {
+            // Unpopulated, so the cashier is the stored ObjectId.
+            const ownSale =
+                (sale.cashier as Types.ObjectId).toString() === user.userId;
+            throw new ConflictError(
+                ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+                'This checkout was already recorded with a different payment',
+                ownSale
+                    ? {
+                          sale: String(sale._id),
+                          receipt: await this.receiptOf(sale, user, session),
+                      }
+                    : null,
+            );
+        }
+
+        return this.receiptOf(sale, user, session);
+    }
+
+    /** Rebuilds a stored sale's receipt, the same shape `POST /sales` returns. */
+    private async receiptOf(
+        sale: Sales & { _id: unknown },
+        user: AuthUser,
+        session?: ClientSession,
+    ): Promise<ReceiptDto> {
+        const lines = await this.modelDetails
+            .find({ sales: sale._id })
+            .populate<{ product: { name?: string } | null }>({
+                path: 'product',
+                select: 'name',
+            })
+            .sort({ _id: 1 })
+            .session(session ?? null)
+            .lean();
+
+        const items = lines.map(({ product, quantity, unitPrice }) => ({
+            productName: product?.name ?? '',
+            quantity,
+            amount: unitPrice * quantity,
+        }));
+
+        const discount: ReceiptDiscount | null = sale.discount
+            ? {
+                  type: sale.discount.type,
+                  value: sale.discount.value,
+                  reason: sale.discount.reason,
+                  amount: sale.discount.amount,
+              }
+            : null;
+
+        return this.makeReceipt({
+            saleId: String(sale._id),
+            createdAt: sale.createdAt,
+            status: sale.status ?? SaleStatus.COMPLETED,
+            paymentType: sale.paymentType,
+            referenceNumber: sale.referenceNumber ?? null,
+            settlement: {
+                tenders: (sale.tenders ?? []).map(({ type, amount }) => ({
+                    type,
+                    amount,
+                })),
+                amountTendered: sale.amountTendered ?? sale.amount,
+                changeGiven: sale.changeGiven ?? 0,
+            },
+            itemsInfo: items,
+            cashierName: user.username,
+            subtotal: items.reduce((sum, item) => sum + item.amount, 0),
+            discount,
+            totalAmount: sale.amount,
+        });
+    }
+
+    private async recordSale(
+        user: AuthUser,
+        dto: SellDto,
+        requestHash: string,
+        session?: ClientSession,
+    ): Promise<ReceiptDto> {
+        const { paymentType, referenceNumber, idempotencyKey } = dto;
 
         const {
             fullSellDetails,
@@ -127,6 +273,8 @@ export class SalesService {
                         amountTendered: settlement.amountTendered,
                         changeGiven: settlement.changeGiven,
                         status: SaleStatus.COMPLETED,
+                        idempotencyKey,
+                        requestHash,
                         // Until a manager override exists, any
                         // authenticated seller may discount, so the
                         // cashier is the approver.
@@ -173,6 +321,7 @@ export class SalesService {
         return this.makeReceipt({
             saleId,
             createdAt,
+            status: SaleStatus.COMPLETED,
             paymentType,
             referenceNumber: referenceNumber ?? null,
             settlement,
@@ -185,9 +334,12 @@ export class SalesService {
     }
 
     /**
-     * Inserts the sale, turning a reused GCash reference number into a 409.
-     * It has to be caught here: inside the transaction the raw Mongo error
-     * would otherwise surface as an opaque 500.
+     * Inserts the sale, turning a unique-index clash into a 409. It has to
+     * be caught here: inside the transaction the raw Mongo error would
+     * otherwise surface as an opaque 500. `keyPattern` tells the two apart.
+     *
+     * A clash on the idempotency key means a concurrent request with the
+     * same key committed first; `sell` then returns that sale instead.
      */
     private async createSale(
         doc: Record<string, unknown>,
@@ -196,6 +348,13 @@ export class SalesService {
         try {
             return await this.model.create([doc], { session });
         } catch (err) {
+            if (isDuplicateKey(err, 'idempotencyKey')) {
+                throw new ConflictError(
+                    ErrorCode.SALE_IN_PROGRESS,
+                    'This sale is already being recorded. Retry in a moment.',
+                    { idempotencyKey: doc.idempotencyKey },
+                );
+            }
             if (isDuplicateKey(err, 'referenceNumber')) {
                 throw new ConflictError(
                     ErrorCode.SALE_DUPLICATE_REFERENCE,
@@ -349,6 +508,7 @@ export class SalesService {
     private makeReceipt({
         saleId,
         createdAt,
+        status,
         paymentType,
         referenceNumber,
         settlement,
@@ -360,6 +520,7 @@ export class SalesService {
     }: {
         saleId: string;
         createdAt: Date;
+        status: SaleStatus;
         paymentType: ReceiptDto['paymentType'];
         referenceNumber: string | null;
         settlement: Settlement;
@@ -380,7 +541,7 @@ export class SalesService {
         return {
             _id: saleId,
             createdAt,
-            status: SaleStatus.COMPLETED,
+            status,
             paymentType,
             referenceNumber,
             tenders: settlement.tenders,

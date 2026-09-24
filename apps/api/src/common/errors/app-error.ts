@@ -42,6 +42,8 @@ export class AppError extends Error {
                 return HttpStatus.NOT_FOUND;
             case ErrorCode.SALE_DUPLICATE_REFERENCE:
             case ErrorCode.SALE_NOT_REVERSIBLE:
+            case ErrorCode.SALE_IDEMPOTENCY_MISMATCH:
+            case ErrorCode.SALE_IN_PROGRESS:
                 return HttpStatus.CONFLICT;
             case ErrorCode.INTERNAL_ERROR:
                 return HttpStatus.INTERNAL_SERVER_ERROR;

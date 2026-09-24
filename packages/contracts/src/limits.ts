@@ -23,6 +23,13 @@ export const NUMERIC_LIMITS = {
     STOCK_MIN: 0,
     /** Smallest sale total, in centavos: a sale cannot total ₱0. */
     AMOUNT_MIN: 1,
+    /**
+     * Largest money amount any request may carry, in centavos (₱10,000,000):
+     * a price, a cost, a fixed discount or a tender. Far above any real
+     * grocery figure, it only stops absurd values (and overflowing sums)
+     * from reaching the ledger.
+     */
+    AMOUNT_MAX: 1_000_000_000,
 } as const;
 
 export const EAN_COUNTER = {

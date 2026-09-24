@@ -15,6 +15,16 @@ export enum ErrorCode {
     SALE_DUPLICATE_REFERENCE = 'SALE_001',
     /** The sale is already voided or refunded. */
     SALE_NOT_REVERSIBLE = 'SALE_002',
+    /**
+     * `POST /sales` reused an idempotency key that already recorded a
+     * different sale (other lines, quantities, discount or payment).
+     */
+    SALE_IDEMPOTENCY_MISMATCH = 'SALE_003',
+    /**
+     * A sale with this idempotency key is being recorded by a concurrent
+     * request and is not visible yet: retry with the same key.
+     */
+    SALE_IN_PROGRESS = 'SALE_004',
 
     DB_DUPLICATE_KEY = 'DB_002',
     DB_VALIDATION_ERROR = 'DB_003',

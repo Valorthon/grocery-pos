@@ -44,7 +44,15 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     return config;
 });
 
-// RESPONSE interceptor with intelligent refresh token logic
+// RESPONSE interceptor with intelligent refresh token logic.
+//
+// Replays after a refresh resend `originalRequest` as it was, body
+// included. That is safe for `POST /sales`: its body carries the sale's
+// idempotency key, so a replay can only return the sale already recorded
+// under it, never record a second one. (A 401 also comes from the auth
+// guard before the handler runs, so the first attempt was not recorded.)
+// Any new non-idempotent POST must carry a key the same way before it can
+// go through this path. The queued-replay `_retry` bug is tracked in #21.
 api.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
