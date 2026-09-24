@@ -1,8 +1,6 @@
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
-    IsArray,
-    IsDate,
     IsInt,
     IsMongoId,
     IsNotEmpty,
@@ -14,7 +12,7 @@ import {
     Min,
     ValidateNested,
 } from 'class-validator';
-import { RequiresOne } from '../../../common/validators';
+import { IsCalendarDate, RequiresOne } from '../../../common/validators';
 import { NewProductFields } from '../../../product/types';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../../../constants';
 
@@ -91,14 +89,15 @@ export class GetAllDto {
     @IsOptional()
     restockedBy!: string;
 
-    @IsArray()
-    @IsDate({ each: true })
+    /** Inclusive start day, `YYYY-MM-DD`, read in the store timezone. */
     @IsOptional()
-    @Transform(
-        ({ value }) => (Array.isArray(value) ? value : [value]) as unknown[],
-    )
-    @Type(() => Date)
-    dateRange!: Date[];
+    @IsCalendarDate()
+    dateFrom?: string;
+
+    /** Inclusive end day, `YYYY-MM-DD`, read in the store timezone. */
+    @IsOptional()
+    @IsCalendarDate()
+    dateTo?: string;
 
     @IsPositive()
     @IsNumber()

@@ -125,22 +125,16 @@ const resetFilters = () => {
 async function fetchAdjust() {
     loading.value = true;
 
-    let dateRange: string[] | undefined;
-    if (searchDateStart.value && searchDateEnd.value) {
-        dateRange = [
-            new Date(searchDateStart.value).toISOString(),
-            new Date(searchDateEnd.value).toISOString(),
-        ];
-    }
-
     const result = await api.get(`/adjustments`, {
         params: {
             page: page.value,
             limit: limit.value,
             adjustedBy: searchAdjustedBy.value,
-            dateRange,
+            // Calendar days as YYYY-MM-DD (the date input's value). The
+            // server reads them in the store timezone; either may be blank.
+            dateFrom: searchDateStart.value || undefined,
+            dateTo: searchDateEnd.value || undefined,
         },
-        paramsSerializer: { indexes: null },
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

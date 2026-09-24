@@ -1,4 +1,5 @@
 import * as zod from 'zod';
+import { isValidTimeZone } from '../utils/timezone';
 
 export const envSchema = zod
     .object({
@@ -47,6 +48,14 @@ export const envSchema = zod
             .gt(0)
             .lte(1, 'Disk threshold must be a fraction between 0 and 1'),
         HEALTH_DISK_PATH: zod.string(),
+        STORE_TIMEZONE: zod
+            .string()
+            .trim()
+            .default('Asia/Manila')
+            .refine(isValidTimeZone, {
+                message:
+                    'STORE_TIMEZONE must be a valid IANA timezone name, e.g. Asia/Manila',
+            }),
     })
     .refine((data) => data.REFRESH_EXPIRY_S > data.JWT_EXPIRY_S, {
         message:
