@@ -2,10 +2,10 @@
 
 A point-of-sale and inventory system for a grocery store, as a pnpm workspace.
 
-| Package | Path | What it is |
-| --- | --- | --- |
-| `grocery-pos-api` | `apps/api` | NestJS 11 + Mongoose 8 REST API (MongoDB) |
-| `grocery-pos-client` | `apps/client` | Vue 3 + Vite + Tailwind 4 SPA |
+| Package                  | Path                 | What it is                                                         |
+| ------------------------ | -------------------- | ------------------------------------------------------------------ |
+| `grocery-pos-api`        | `apps/api`           | NestJS 11 + Mongoose 8 REST API (MongoDB)                          |
+| `grocery-pos-client`     | `apps/client`        | Vue 3 + Vite + Tailwind 4 SPA                                      |
 | `@grocery-pos/contracts` | `packages/contracts` | Types shared by both: roles, validation limits, enums, error codes |
 
 `packages/contracts` is the single source of truth for anything both sides must
@@ -24,6 +24,15 @@ cp apps/client/.env.example apps/client/.env
 ```
 
 Inspect both `.env` files for values you need to set.
+
+`JWT_SECRET` and `COOKIE_SECRET` must be at least 32 characters. The
+placeholders in `.env.example` work in dev (`NODE_ENV=dev`) but are rejected at
+startup in `prod`/`stage`, as is using the same value for both. Generate a
+distinct value for each deployed secret with:
+
+```bash
+openssl rand -base64 48
+```
 
 ## Database
 
