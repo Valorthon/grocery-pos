@@ -15,11 +15,26 @@ export function formatCurrency(centavos: number): string {
     })}`;
 }
 
-/** Converts a typed peso amount to centavos; blank or invalid input is 0. */
-export function pesosToCentavos(pesos: string | number | null | undefined) {
-    const value = typeof pesos === 'number' ? pesos : parseFloat(pesos ?? '');
-    if (!Number.isFinite(value)) return 0;
-    return Math.round(value * CENTAVOS_PER_PESO);
+const PESO_INPUT = /^(-?)(\d*)(?:\.(\d{0,2}))?$/;
+
+/**
+ * Converts a typed peso amount to centavos from its decimal digits, never by
+ * multiplying a double (1.005 * 100 is 100.49999999999999). Blank or invalid
+ * input, including more than two decimals, is 0 so callers treat it as empty.
+ */
+export function pesosToCentavos(
+    pesos: string | number | null | undefined,
+): number {
+    const match = PESO_INPUT.exec(String(pesos ?? '').trim());
+    if (!match) return 0;
+
+    const [, sign, whole = '', fraction = ''] = match;
+    if (!whole && !fraction) return 0;
+
+    const centavos =
+        Number(whole || '0') * CENTAVOS_PER_PESO +
+        Number(fraction.padEnd(2, '0'));
+    return sign && centavos ? -centavos : centavos;
 }
 
 /** Converts centavos to pesos for pre-filling a number input. */

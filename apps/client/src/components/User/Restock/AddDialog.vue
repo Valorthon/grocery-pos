@@ -44,7 +44,8 @@
                     v-model.number="formData.unitCost"
                     label="Unit Cost (₱)"
                     type="number"
-                    min="0"
+                    min="0.01"
+                    step="0.01"
                     :error="errors.unitCost"
                 />
             </div>
@@ -64,7 +65,8 @@
                     v-model.number="formData.price"
                     label="Selling Price (₱)"
                     type="number"
-                    min="0"
+                    min="0.01"
+                    step="0.01"
                     :error="errors.price"
                 />
             </template>
@@ -93,7 +95,7 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
-import { AddForm, MatchedProductsDto } from './dto';
+import { AddForm, AddFormInput, MatchedProductsDto } from './dto';
 import { Color, useUIStore } from '@/stores/ui';
 import { isAxiosError } from 'axios';
 import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
@@ -113,8 +115,7 @@ const model = computed({
 });
 
 const uiStore = useUIStore();
-// unitCost and price are typed pesos here; converted to centavos on submit.
-const formData = reactive<AddForm>({
+const formData = reactive<AddFormInput>({
     autoGenerateEAN: false,
     EAN: '',
     quantity: 0,
@@ -196,11 +197,11 @@ function validate(): boolean {
     if (!formData.quantity || formData.quantity < 1)
         e.quantity = 'Must be at least 1';
     if (pesosToCentavos(formData.unitCost) < NUMERIC_LIMITS.PRICE_MIN)
-        e.unitCost = 'Must be at least ₱0.01';
+        e.unitCost = 'Enter at least ₱0.01, up to 2 decimals';
     if (formData.isNewProduct) {
         if (!formData.name) e.name = 'This field is required';
         if (pesosToCentavos(formData.price) < NUMERIC_LIMITS.PRICE_MIN)
-            e.price = 'Must be at least ₱0.01';
+            e.price = 'Enter at least ₱0.01, up to 2 decimals';
     }
     errors.value = e;
     return Object.keys(e).length === 0;
@@ -224,7 +225,7 @@ const handleSubmit = async () => {
         }
     }
 
-    const payload = {
+    const payload: AddForm = {
         ...formData,
         unitCost: pesosToCentavos(formData.unitCost),
         price: pesosToCentavos(formData.price),

@@ -21,22 +21,40 @@ describe('formatCurrency', () => {
 });
 
 describe('pesosToCentavos', () => {
-    it('converts typed pesos to whole centavos', () => {
+    it('converts typed pesos to whole centavos from the decimal digits', () => {
         expect(pesosToCentavos('19.99')).toBe(1999);
-        // 1.15 * 100 is 114.99999999999999 as a double; it must round, not truncate.
+        expect(pesosToCentavos('19.9')).toBe(1990);
+        expect(pesosToCentavos('20')).toBe(2000);
+        expect(pesosToCentavos('20.')).toBe(2000);
+        expect(pesosToCentavos('.25')).toBe(25);
+        expect(pesosToCentavos('-5.00')).toBe(-500);
+        // 1.15 * 100 is 114.99999999999999 as a double.
         expect(pesosToCentavos('1.15')).toBe(115);
+    });
+
+    it('accepts numbers, as v-model.number delivers them', () => {
         expect(pesosToCentavos(0.25)).toBe(25);
+        expect(pesosToCentavos(110.41)).toBe(11041);
+    });
+
+    it('treats more than two decimals as invalid, not silently rounded', () => {
+        // Float rounding sent 0.005 to 1 but 1.005 to 100.
+        expect(pesosToCentavos('0.005')).toBe(0);
+        expect(pesosToCentavos('1.005')).toBe(0);
+        expect(pesosToCentavos(1.005)).toBe(0);
     });
 
     it('treats blank or invalid input as zero', () => {
         expect(pesosToCentavos('')).toBe(0);
+        expect(pesosToCentavos('.')).toBe(0);
         expect(pesosToCentavos('abc')).toBe(0);
+        expect(pesosToCentavos('1e3')).toBe(0);
         expect(pesosToCentavos(null)).toBe(0);
     });
 
     it('round-trips the pre-filled input value', () => {
-        expect(pesosToCentavos(centavosToPesoInput(11041))).toBe(11041);
         expect(centavosToPesoInput(11041)).toBe('110.41');
+        expect(pesosToCentavos(centavosToPesoInput(11041))).toBe(11041);
     });
 });
 
@@ -44,14 +62,5 @@ describe('percentOf', () => {
     it('rounds to a whole centavo', () => {
         // 15% off ₱129.90 is ₱19.485 of discount.
         expect(percentOf(12990, 15)).toBe(1949);
-    });
-
-    it('lets a customer tender exactly the displayed total', () => {
-        // Regression: the cash branch compared against the unrounded 110.415,
-        // so tendering the ₱110.41 on screen left Confirm disabled.
-        const total = 12990 - percentOf(12990, 15);
-
-        expect(formatCurrency(total)).toBe('₱110.41');
-        expect(pesosToCentavos('110.41') >= total).toBe(true);
     });
 });

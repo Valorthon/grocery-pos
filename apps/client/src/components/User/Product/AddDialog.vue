@@ -31,7 +31,8 @@
                 v-model.number="formData.price"
                 label="Selling Price (₱)"
                 type="number"
-                min="0"
+                min="0.01"
+                step="0.01"
                 :error="errors.price"
             />
         </div>
@@ -122,7 +123,7 @@ function validate(): boolean {
         formData.price == null ||
         pesosToCentavos(formData.price) < NUMERIC_LIMITS.PRICE_MIN
     )
-        e.price = 'Valid price is required';
+        e.price = 'Enter at least ₱0.01, up to 2 decimals';
     errors.value = e;
     return Object.keys(e).length === 0;
 }

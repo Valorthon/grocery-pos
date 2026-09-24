@@ -305,9 +305,9 @@ import {
     CENTAVOS_PER_PESO,
     centavosToPesoInput,
     formatCurrency,
-    percentOf,
     pesosToCentavos,
 } from '@/utils/currency';
+import { cashTender, discountedTotal } from './checkout';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -338,16 +338,17 @@ const processing = ref(false);
 const cashBills = [20, 50, 100, 500, 1000].map((p) => p * CENTAVOS_PER_PESO);
 const splitBills = [5, 10, 20, 50, 100, 500].map((p) => p * CENTAVOS_PER_PESO);
 
-const total = computed(
-    () => props.subtotal - percentOf(props.subtotal, props.discountPercent),
+const total = computed(() =>
+    discountedTotal(props.subtotal, props.discountPercent),
 );
 const roundedUpTotal = computed(
     () => Math.ceil(total.value / CENTAVOS_PER_PESO) * CENTAVOS_PER_PESO,
 );
 
-const tenderedNum = computed(() => pesosToCentavos(amountTendered.value));
-const changeDue = computed(() => Math.max(0, tenderedNum.value - total.value));
-const isCashSufficient = computed(() => tenderedNum.value >= total.value);
+const cash = computed(() => cashTender(total.value, amountTendered.value));
+const tenderedNum = computed(() => cash.value.tendered);
+const changeDue = computed(() => cash.value.changeDue);
+const isCashSufficient = computed(() => cash.value.isSufficient);
 
 const cashGivenNum = computed(() => pesosToCentavos(splitCashGiven.value));
 const splitCashPortion = computed(() =>
