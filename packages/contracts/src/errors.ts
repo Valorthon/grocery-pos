@@ -11,6 +11,11 @@ export enum ErrorCode {
     PRODUCT_NOT_FOUND = 'PRODUCT_001',
     PRODUCT_DUPLICATE = 'PRODUCT_002',
 
+    /** A GCash reference number already used by another sale. */
+    SALE_DUPLICATE_REFERENCE = 'SALE_001',
+    /** The sale is already voided or refunded. */
+    SALE_NOT_REVERSIBLE = 'SALE_002',
+
     DB_DUPLICATE_KEY = 'DB_002',
     DB_VALIDATION_ERROR = 'DB_003',
 
