@@ -98,6 +98,44 @@
                         </td>
                     </tr>
                 </tbody>
+                <tfoot
+                    v-if="!detailsLoading && selectedSale"
+                    class="border-t border-slate-200 text-sm"
+                >
+                    <template v-if="selectedSale.discount">
+                        <tr>
+                            <td colspan="3" class="py-2 px-4 text-slate-500">
+                                Subtotal
+                            </td>
+                            <td class="py-2 px-4 text-right">
+                                {{
+                                    formatCurrency(
+                                        selectedSale.amount +
+                                            selectedSale.discount.amount,
+                                    )
+                                }}
+                            </td>
+                        </tr>
+                        <tr class="text-emerald-700">
+                            <td colspan="3" class="py-2 px-4">
+                                Discount ({{
+                                    discountLabel(selectedSale.discount)
+                                }}) &mdash; {{ selectedSale.discount.reason }}
+                            </td>
+                            <td class="py-2 px-4 text-right">
+                                -{{
+                                    formatCurrency(selectedSale.discount.amount)
+                                }}
+                            </td>
+                        </tr>
+                    </template>
+                    <tr class="font-bold text-slate-900">
+                        <td colspan="3" class="py-2 px-4">Total charged</td>
+                        <td class="py-2 px-4 text-right">
+                            {{ formatCurrency(selectedSale.amount) }}
+                        </td>
+                    </tr>
+                </tfoot>
             </table>
             <template #footer>
                 <BaseButton variant="outline" @click="isDialogOpen = false"
@@ -119,6 +157,14 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import { formatCurrency } from '@/utils/currency';
+import { DiscountType } from '@grocery-pos/contracts';
+import type { ReceiptDiscount } from '@/components/User/Sales/types';
+
+/** The ledger fields of a sale that explain its total (centavos). */
+interface SaleTotals {
+    amount: number;
+    discount: ReceiptDiscount | null;
+}
 
 const router = useRouter();
 const loading = ref(true);
@@ -146,6 +192,10 @@ async function fetchSales() {
         id: sale._id,
         cashier: sale.cashier?.name ?? 'N/A',
         amount: formatCurrency(sale.amount ?? 0),
+        totals: {
+            amount: sale.amount ?? 0,
+            discount: sale.discount ?? null,
+        } satisfies SaleTotals,
         paymentType: sale.paymentType,
         date: new Date(sale.createdAt).toLocaleString('en-PH', {
             year: 'numeric',
@@ -169,10 +219,18 @@ const detailsLoading = ref(false);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const details = ref<any[]>([]);
 const selectedId = ref('');
+const selectedSale = ref<SaleTotals | null>(null);
+
+function discountLabel(discount: ReceiptDiscount): string {
+    return discount.type === DiscountType.PERCENT
+        ? `${discount.value}%`
+        : 'fixed';
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function showDetails(row: any) {
     selectedId.value = row.id;
+    selectedSale.value = row.totals ?? null;
     isDialogOpen.value = true;
     detailsLoading.value = true;
     try {
