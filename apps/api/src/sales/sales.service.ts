@@ -133,9 +133,17 @@ export class SalesService {
 
     /**
      * The receipt of the sale already recorded under `idempotencyKey`, or
-     * null if there is none. Throws a 409 if that sale was recorded by a
-     * different request. The request hash covers the cashier, so a matching
-     * sale is always the requesting user's own.
+     * null if there is none. The request hash covers the cashier, so a
+     * matching sale is always the requesting user's own.
+     *
+     * A key that recorded a different request is a 409 SALE_003:
+     * - From the same cashier (the usual case: the response was lost and the
+     *   cashier re-tendered differently), the details carry the stored
+     *   sale's receipt, so the client can show it and credit the drawer from
+     *   its original tenders instead of dead-ending or ringing it again.
+     * - From another cashier, the details are empty: a key is a random UUID
+     *   the client made, so this is misuse, and another cashier's receipt is
+     *   not handed out.
      */
     private async findReplay(
         user: AuthUser,
@@ -151,13 +159,30 @@ export class SalesService {
         if (!sale) return null;
 
         if (sale.requestHash !== requestHash) {
+            // Unpopulated, so the cashier is the stored ObjectId.
+            const ownSale =
+                (sale.cashier as Types.ObjectId).toString() === user.userId;
             throw new ConflictError(
                 ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
-                'This checkout was already recorded as a different sale. Check Sales History before charging again.',
-                { sale: String(sale._id) },
+                'This checkout was already recorded with a different payment',
+                ownSale
+                    ? {
+                          sale: String(sale._id),
+                          receipt: await this.receiptOf(sale, user, session),
+                      }
+                    : null,
             );
         }
 
+        return this.receiptOf(sale, user, session);
+    }
+
+    /** Rebuilds a stored sale's receipt, the same shape `POST /sales` returns. */
+    private async receiptOf(
+        sale: Sales & { _id: unknown },
+        user: AuthUser,
+        session?: ClientSession,
+    ): Promise<ReceiptDto> {
         const lines = await this.modelDetails
             .find({ sales: sale._id })
             .populate<{ product: { name?: string } | null }>({

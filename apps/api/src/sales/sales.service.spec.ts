@@ -686,21 +686,23 @@ describe('SalesService.sell', () => {
             ],
             ['another payment type', sellDto(basket, undefined, gcash)],
         ])('refuses the same key with %s with a 409', async (_, changed) => {
-            await service.sell(CASHIER, sellDto(basket));
+            const original = await service.sell(CASHIER, sellDto(basket));
 
             const attempt = service.sell(CASHIER, changed);
 
             await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+            // The cashier's own sale: the 409 carries its stored receipt,
+            // original tenders included, so the client can settle on it.
             await expect(attempt).rejects.toMatchObject({
                 statusCode: 409,
                 code: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
-                details: { sale: 'sale1' },
+                details: { sale: 'sale1', receipt: original },
             });
             expect(create).toHaveBeenCalledTimes(1);
             expect(inventorySell).toHaveBeenCalledTimes(1);
         });
 
-        it('refuses the same key from another cashier', async () => {
+        it('refuses the same key from another cashier without leaking the sale', async () => {
             await service.sell(CASHIER, sellDto(basket));
 
             await expect(
@@ -709,8 +711,20 @@ describe('SalesService.sell', () => {
                     sellDto(basket),
                 ),
             ).rejects.toMatchObject({
+                statusCode: 409,
                 code: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+                details: null,
             });
+        });
+
+        it('replays a voided sale with its current status', async () => {
+            await service.sell(CASHIER, sellDto(basket));
+            stored!.status = SaleStatus.VOIDED;
+
+            const replay = await service.sell(CASHIER, sellDto(basket));
+
+            expect(replay.status).toBe(SaleStatus.VOIDED);
+            expect(create).toHaveBeenCalledTimes(1);
         });
 
         it('returns the committed sale when a concurrent insert wins the key', async () => {
