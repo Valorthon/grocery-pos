@@ -11,6 +11,7 @@ import {
     IsOptional,
     IsPositive,
     IsString,
+    Max,
     MaxLength,
     Min,
     ValidateNested,
@@ -83,6 +84,7 @@ export class NewProductFields {
     @IsInt()
     @Type(() => Number)
     @Min(NUMERIC_LIMITS.PRICE_MIN)
+    @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     price!: number;
 }
 
@@ -117,6 +119,7 @@ class UpdateFields {
     @IsOptional()
     @IsInt()
     @Min(NUMERIC_LIMITS.PRICE_MIN)
+    @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     price?: number;
 }
 class UpdateBulkFields {
