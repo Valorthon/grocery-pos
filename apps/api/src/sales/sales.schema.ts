@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Types } from 'mongoose';
 import { User } from '../user/user.schema';
 import { DiscountType, PaymentType } from './types';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
+import { DISCOUNT_LIMITS, NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
 /**
  * A whole-sale discount as the server applied it. The discount lives here,
@@ -32,7 +32,7 @@ export class SaleDiscount {
     @Prop({
         type: Number,
         required: true,
-        min: 1,
+        min: DISCOUNT_LIMITS.AMOUNT_MIN,
         validate: {
             validator: Number.isInteger,
             message: 'discount amount must be an integer number of centavos',

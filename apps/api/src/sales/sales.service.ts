@@ -13,7 +13,7 @@ import {
     SellDto,
 } from './types';
 import { discountAmount } from '@grocery-pos/contracts';
-import { NUMERIC_LIMITS } from '../constants';
+import { DISCOUNT_LIMITS, NUMERIC_LIMITS } from '../constants';
 import { ProductService } from '../product/product.service';
 import { runInTransaction } from '../common/utils/db';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
@@ -165,7 +165,20 @@ export class SalesService {
         const amount = discountAmount(subtotal, requested);
         const totalAmount = subtotal - amount;
 
-        if (totalAmount < NUMERIC_LIMITS.AMOUNT_MIN) {
+        if (amount < DISCOUNT_LIMITS.AMOUNT_MIN) {
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Discount rounds to nothing',
+                { subtotal, discount: amount },
+            );
+        }
+
+        // Also catches a malformed discount that slipped past validation and
+        // produced NaN, so it is a 400 here rather than a schema 500.
+        if (
+            !Number.isInteger(totalAmount) ||
+            totalAmount < NUMERIC_LIMITS.AMOUNT_MIN
+        ) {
             throw new ValidationError(
                 ErrorCode.VALIDATION_INVALID_INPUT,
                 'Discount leaves nothing to charge',

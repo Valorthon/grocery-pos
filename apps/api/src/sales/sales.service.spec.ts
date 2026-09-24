@@ -43,6 +43,15 @@ const SHARED_DISCOUNT_CASES = [
     { subtotal: 5000, type: DiscountType.FIXED, value: 1250, amount: 1250 },
 ] as const;
 
+/** Cases both sides refuse: the server with a 400, the preview as not chargeable. */
+const SHARED_REJECTED_CASES = [
+    // 5% of 9 centavos is 0.45: the discount rounds to nothing.
+    { subtotal: 9, type: DiscountType.PERCENT, value: 5 },
+    { subtotal: 5000, type: DiscountType.FIXED, value: 5001 },
+    { subtotal: 5000, type: DiscountType.FIXED, value: 5000 },
+    { subtotal: 5000, type: DiscountType.PERCENT, value: 100 },
+] as const;
+
 describe('SalesService.sell', () => {
     let service: SalesService;
     let getMany: jest.Mock;
@@ -282,20 +291,37 @@ describe('SalesService.sell', () => {
             expect(create).not.toHaveBeenCalled();
         });
 
-        it('rejects a discount that leaves nothing to charge', async () => {
-            for (const discount of [
-                { type: DiscountType.FIXED, value: 5000, reason: 'promo' },
-                { type: DiscountType.PERCENT, value: 100, reason: 'promo' },
-            ]) {
+        it.each(SHARED_REJECTED_CASES)(
+            'rejects $type $value off $subtotal with a 400',
+            async ({ subtotal, type, value }) => {
                 const attempt = service.sell(
                     CASHIER,
-                    sellDto(priceBasket(5000), discount),
+                    sellDto(priceBasket(subtotal), {
+                        type,
+                        value,
+                        reason: 'promo',
+                    }),
                 );
 
+                await expect(attempt).rejects.toBeInstanceOf(ValidationError);
                 await expect(attempt).rejects.toMatchObject({
                     statusCode: 400,
                 });
-            }
+                expect(create).not.toHaveBeenCalled();
+            },
+        );
+
+        it('rejects a malformed discount that yields no integer total', async () => {
+            // An array body used to slip past validation and total NaN.
+            const attempt = service.sell(
+                CASHIER,
+                sellDto(
+                    priceBasket(5000),
+                    [] as unknown as SellDto['discount'],
+                ),
+            );
+
+            await expect(attempt).rejects.toMatchObject({ statusCode: 400 });
             expect(create).not.toHaveBeenCalled();
         });
 

@@ -14,6 +14,11 @@ export const DISCOUNT_LIMITS = {
     PERCENT_MAX: 100,
     /** Smallest fixed discount, in centavos. */
     FIXED_MIN: 1,
+    /**
+     * Smallest discount actually taken off, in centavos. A percent of a tiny
+     * subtotal can round to 0, which would record a discount of nothing.
+     */
+    AMOUNT_MIN: 1,
 } as const;
 
 /** What the client sends in `POST /sales` to discount the whole sale. */

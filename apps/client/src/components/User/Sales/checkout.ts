@@ -1,4 +1,5 @@
 import {
+    DISCOUNT_LIMITS,
     discountAmount,
     type DiscountInput,
     NUMERIC_LIMITS,
@@ -23,8 +24,13 @@ export function previewSale(
         subtotal,
         discountAmount: amount,
         total,
-        /** Mirrors the server's 400 for an over-discounted or ₱0 sale. */
-        isChargeable: total >= NUMERIC_LIMITS.AMOUNT_MIN,
+        /**
+         * Mirrors the server's 400s: a discount that rounds to nothing, or
+         * one that leaves an over-discounted or ₱0 sale.
+         */
+        isChargeable:
+            (discount === null || amount >= DISCOUNT_LIMITS.AMOUNT_MIN) &&
+            total >= NUMERIC_LIMITS.AMOUNT_MIN,
     };
 }
 

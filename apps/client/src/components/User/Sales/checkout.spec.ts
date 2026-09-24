@@ -21,6 +21,15 @@ const SHARED_DISCOUNT_CASES = [
     { subtotal: 5000, type: DiscountType.FIXED, value: 1250, amount: 1250 },
 ] as const;
 
+/** Cases both sides refuse: the server with a 400, the preview as not chargeable. */
+const SHARED_REJECTED_CASES = [
+    // 5% of 9 centavos is 0.45: the discount rounds to nothing.
+    { subtotal: 9, type: DiscountType.PERCENT, value: 5 },
+    { subtotal: 5000, type: DiscountType.FIXED, value: 5001 },
+    { subtotal: 5000, type: DiscountType.FIXED, value: 5000 },
+    { subtotal: 5000, type: DiscountType.PERCENT, value: 100 },
+] as const;
+
 describe('checkout preview', () => {
     it.each(SHARED_DISCOUNT_CASES)(
         '$type $value off $subtotal takes off $amount centavos, like the server',
@@ -41,14 +50,14 @@ describe('checkout preview', () => {
         });
     });
 
-    it('flags discounts the server would reject', () => {
-        const fixed = { type: DiscountType.FIXED, value: 5000 };
-        const all = { type: DiscountType.PERCENT, value: 100 };
-
-        expect(previewSale(5000, fixed).isChargeable).toBe(false);
-        expect(previewSale(4999, fixed).isChargeable).toBe(false);
-        expect(previewSale(5000, all).isChargeable).toBe(false);
-    });
+    it.each(SHARED_REJECTED_CASES)(
+        'flags $type $value off $subtotal as not chargeable, like the server',
+        ({ subtotal, type, value }) => {
+            expect(previewSale(subtotal, { type, value }).isChargeable).toBe(
+                false,
+            );
+        },
+    );
 });
 
 describe('cash checkout', () => {

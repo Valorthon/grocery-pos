@@ -5,6 +5,8 @@ import {
     IsInt,
     IsMongoId,
     IsNotEmpty,
+    IsNotEmptyObject,
+    IsObject,
     IsNumber,
     IsOptional,
     IsPositive,
@@ -101,6 +103,9 @@ export class SellDto {
 
     /** Optional whole-sale discount; the server computes its amount. */
     @IsOptional()
+    // Without this an array passes: ValidateNested checks each element.
+    @IsObject()
+    @IsNotEmptyObject()
     @ValidateNested()
     @Type(() => DiscountFields)
     discount?: DiscountFields;
