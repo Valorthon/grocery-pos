@@ -29,10 +29,14 @@ export class AppError extends Error {
 
     static getHttpStatus(code: ErrorCode): number {
         switch (code) {
+            // Every AUTH_* code means "this caller is not (or no longer)
+            // authenticated": the client refreshes the session on a 401 and
+            // sends the user back to login when the refresh itself 401s.
             case ErrorCode.AUTH_INVALID_CREDENTIALS:
             case ErrorCode.AUTH_TOKEN_EXPIRED:
             case ErrorCode.AUTH_MISSING_REFRESH_TOKEN:
             case ErrorCode.AUTH_INVALID_TOKEN:
+                return HttpStatus.UNAUTHORIZED;
             case ErrorCode.VALIDATION_INVALID_INPUT:
             case ErrorCode.VALIDATION_EAN_INVALID:
             case ErrorCode.PRODUCT_DUPLICATE:
@@ -53,6 +57,7 @@ export class AppError extends Error {
     }
 }
 
+/** 401: the caller is not authenticated (see the AUTH_* codes). */
 export class AuthError extends AppError {
     constructor(code: ErrorCode, message: string, details: unknown = null) {
         super(code, AppError.getHttpStatus(code), message, details);

@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { JWTPayload } from './types/auth.types';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
-import { AuthError, ErrorCode, ValidationError } from '../common/errors';
+import { AuthError, ErrorCode } from '../common/errors';
 
 @Injectable()
 export class AuthService {
@@ -31,7 +31,7 @@ export class AuthService {
         );
 
         if (!userInfo) {
-            throw new ValidationError(
+            throw new AuthError(
                 ErrorCode.AUTH_INVALID_CREDENTIALS,
                 `Username and Password do not match`,
             );

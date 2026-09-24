@@ -24,7 +24,7 @@ export class JWTAuthGuard extends AuthGuard('jwt') {
         if (err || !user) {
             if (isPublic) return { roles: Role.Unauthenticated } as TUser;
 
-            throw new JWTInvalidError();
+            throw JWTInvalidError.from(info);
         }
 
         return user as TUser;
