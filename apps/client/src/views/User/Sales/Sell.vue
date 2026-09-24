@@ -539,6 +539,7 @@
         <ReceiptModal
             v-model="isReceiptOpen"
             :receipt="receipt"
+            :notice="receiptNotice"
             @new-sale="onNewSale"
         />
     </div>
@@ -571,7 +572,7 @@ import { useShiftStore } from '@/stores/shift';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
 import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
-import { previewSale } from '@/components/User/Sales/checkout';
+import { paymentLabel, previewSale } from '@/components/User/Sales/checkout';
 import {
     isRejectedSale,
     saleErrorMessage,
@@ -619,6 +620,8 @@ const checkoutMethod = ref<PaymentType>(PaymentType.CASH);
 // The server's response: the receipt and drawer read its totals, never the
 // preview below.
 const receipt = ref<Receipt | null>(null);
+/** Shown on the receipt when the sale had already been recorded earlier. */
+const receiptNotice = ref<string | null>(null);
 
 const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
@@ -759,6 +762,9 @@ function voidTicket() {
     if (cartStore.locked) return;
     cartStore.clear();
     clearDiscount();
+    // An identical next ticket must not replay a sale this one may have
+    // recorded before its response was lost.
+    checkout.discardKey();
 }
 
 function applyDiscount(value: number) {
@@ -796,7 +802,11 @@ const isTicketLocked = computed(() => cartStore.locked);
  * rejection carries the message the modal shows inline.
  */
 async function submitSale(payment: PaymentRequest) {
-    receipt.value = await checkout.submit(payment).catch(explainFailure);
+    const outcome = await checkout.submit(payment).catch(explainFailure);
+    receipt.value = outcome.receipt;
+    receiptNotice.value = outcome.alreadyRecorded
+        ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this receipt, not the amount just entered.`
+        : null;
     clearDiscount();
     isReceiptOpen.value = true;
 }
@@ -841,6 +851,7 @@ async function refreshCartPrices(): Promise<boolean> {
 function onNewSale() {
     isReceiptOpen.value = false;
     receipt.value = null;
+    receiptNotice.value = null;
     scanInput.value?.focus();
 }
 

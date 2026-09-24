@@ -1,6 +1,10 @@
 import { ref } from 'vue';
 import { isAxiosError } from 'axios';
-import { type DiscountInput, ErrorCode } from '@grocery-pos/contracts';
+import {
+    type DiscountInput,
+    ErrorCode,
+    SaleStatus,
+} from '@grocery-pos/contracts';
 import { drawerCashAmount } from './checkout';
 import type { PaymentRequest, Receipt } from './types';
 
@@ -79,6 +83,17 @@ interface CartLike {
  * and the receipt shown from the server's response only; on failure the
  * cart is left as it was and the error is rethrown for the checkout modal
  * to show, with Retry reusing the same key.
+ *
+ * Two answers settle the ticket without being a fresh sale:
+ * - 409 SALE_003 with a stored receipt: the first try did commit (its
+ *   response was lost) and the retry was tendered differently. The stored
+ *   sale stands, with its original payment; it is returned as
+ *   `alreadyRecorded` and the drawer is credited from its tenders, not the
+ *   ones just typed.
+ * - A replayed sale that is no longer COMPLETED (voided or refunded since):
+ *   nothing is credited and the ticket is not cleared. The key is dropped,
+ *   so confirming again rings the ticket up as a new sale, and a
+ *   `SaleNotCompletedError` explains why.
  */
 export function useSaleCheckout(deps: {
     cart: CartLike;
@@ -90,7 +105,7 @@ export function useSaleCheckout(deps: {
     const attempt = createCheckoutAttempt(deps.generateKey);
     const inFlight = ref(false);
 
-    async function submit(payment: PaymentRequest): Promise<Receipt> {
+    async function submit(payment: PaymentRequest): Promise<SaleOutcome> {
         if (inFlight.value) {
             throw new Error('This sale is already being recorded');
         }
@@ -105,21 +120,72 @@ export function useSaleCheckout(deps: {
         inFlight.value = true;
         deps.cart.lock();
         let receipt: Receipt;
+        let alreadyRecorded = false;
         try {
             receipt = await deps.post(body);
+        } catch (error) {
+            const stored = recordedReceipt(error);
+            if (!stored) throw error;
+            receipt = stored;
+            alreadyRecorded = true;
         } finally {
             deps.cart.unlock();
             inFlight.value = false;
         }
 
         attempt.settle();
+
+        if (receipt.status !== SaleStatus.COMPLETED) {
+            throw new SaleNotCompletedError(receipt);
+        }
+
         // The server's cash tender net of change, not the modal's figures.
         deps.recordCash(drawerCashAmount(receipt));
         deps.cart.clear();
-        return receipt;
+        return { receipt, alreadyRecorded };
     }
 
-    return { submit, inFlight };
+    return {
+        submit,
+        inFlight,
+        /** Drops the ticket's key, e.g. when the ticket is voided. */
+        discardKey: () => attempt.settle(),
+    };
+}
+
+export interface SaleOutcome {
+    /** The recorded sale, as the server stored it. */
+    receipt: Receipt;
+    /**
+     * True when this ticket had already been recorded by an earlier try
+     * with a different payment: `receipt` holds the original payment.
+     */
+    alreadyRecorded: boolean;
+}
+
+/** A replayed sale that was voided or refunded after it was recorded. */
+export class SaleNotCompletedError extends Error {
+    constructor(readonly receipt: Receipt) {
+        const what =
+            receipt.status === SaleStatus.REFUNDED ? 'refunded' : 'voided';
+        super(
+            `This ticket was already recorded as a sale that has since been ${what}, so nothing was charged. Confirm again to ring it up as a new sale.`,
+        );
+        this.name = 'SaleNotCompletedError';
+    }
+}
+
+/**
+ * The stored receipt a 409 SALE_003 carries when this cashier's ticket was
+ * already recorded with a different payment, or null for any other error.
+ */
+function recordedReceipt(error: unknown): Receipt | null {
+    if (!isAxiosError(error) || error.response?.status !== 409) return null;
+    const data = error.response.data as
+        { error?: unknown; details?: { receipt?: Receipt } | null } | undefined;
+    if (data?.error !== ErrorCode.SALE_IDEMPOTENCY_MISMATCH) return null;
+    const receipt = data.details?.receipt;
+    return receipt && typeof receipt._id === 'string' ? receipt : null;
 }
 
 /** Why a `POST /sales` failed, worded for the cashier. */
@@ -140,6 +206,9 @@ export function saleErrorMessage(error: unknown): string {
             : 'Sale failed';
 
     if (data?.error === ErrorCode.SALE_IN_PROGRESS) return `${message}.`;
+    if (data?.error === ErrorCode.SALE_IDEMPOTENCY_MISMATCH) {
+        return `${message}. Check Sales History before charging again.`;
+    }
     if (res.status === 400) {
         return `${message}. Review the ticket and the total, then retry.`;
     }

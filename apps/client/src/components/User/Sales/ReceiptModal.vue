@@ -8,6 +8,14 @@
         </template>
 
         <div
+            v-if="notice"
+            role="status"
+            class="mx-4 sm:mx-5 mt-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-800"
+            data-testid="receipt-notice"
+        >
+            {{ notice }}
+        </div>
+        <div
             class="p-4 sm:p-5 overflow-y-auto bg-slate-100 font-mono text-xs text-slate-900"
         >
             <div
@@ -188,6 +196,8 @@ const props = defineProps<{
     modelValue: boolean;
     /** The server's receipt: its subtotal, discount and total are shown as-is. */
     receipt: Receipt | null;
+    /** Shown above the receipt, e.g. when the sale was recorded earlier. */
+    notice?: string | null;
 }>();
 
 const emit = defineEmits<{

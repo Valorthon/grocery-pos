@@ -13,6 +13,7 @@ import {
     createCheckoutAttempt,
     newIdempotencyKey,
     saleErrorMessage,
+    SaleNotCompletedError,
     type SaleRequest,
     useSaleCheckout,
 } from './sale-submission';
@@ -256,10 +257,112 @@ describe('useSaleCheckout', () => {
         });
         const { checkout, recordCash } = setup(() => Promise.resolve(response));
 
-        const receipt = await checkout.submit(CASH_PAYMENT);
+        const { receipt, alreadyRecorded } =
+            await checkout.submit(CASH_PAYMENT);
 
         expect(receipt).toBe(response);
+        expect(alreadyRecorded).toBe(false);
         expect(recordCash).toHaveBeenCalledWith(50000 - 7700);
+    });
+    describe('a ticket already recorded with another payment (409 SALE_003)', () => {
+        // The first try (cash ₱500) committed but its response was lost;
+        // the retry was tendered as GCash.
+        const stored = receiptFor({ _id: 'original', changeGiven: 5000 });
+        const GCASH_PAYMENT: PaymentRequest = {
+            paymentType: PaymentType.GCASH,
+            tenders: [{ type: TenderType.GCASH, amount: 45000 }],
+            referenceNumber: '1234567890123',
+        };
+
+        it('settles on the stored sale and credits its original tenders', async () => {
+            const { checkout, recordCash, cart, post } = setup(() =>
+                Promise.reject(
+                    httpError(409, {
+                        error: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+                        message: 'Already recorded',
+                        details: { sale: 'original', receipt: stored },
+                    }),
+                ),
+            );
+
+            const outcome = await checkout.submit(GCASH_PAYMENT);
+
+            expect(outcome).toEqual({ receipt: stored, alreadyRecorded: true });
+            // ₱500 cash less ₱50 change from the stored sale; none of the
+            // GCash just typed.
+            expect(recordCash).toHaveBeenCalledWith(45000);
+            expect(cart.items).toEqual([]);
+            expect(cart.locked).toBe(false);
+
+            // The key is settled: the next ticket gets a new one.
+            cart.add(
+                { product: 'p1', EAN: '1', name: 'bread', unitPrice: 22500 },
+                2,
+            );
+            await checkout.submit(GCASH_PAYMENT).catch(() => undefined);
+            expect(post.mock.calls[1][0].idempotencyKey).not.toBe(
+                post.mock.calls[0][0].idempotencyKey,
+            );
+        });
+
+        it('stays a failure when the 409 carries no receipt (another cashier)', async () => {
+            const { checkout, recordCash, cart } = setup(() =>
+                Promise.reject(
+                    httpError(409, {
+                        error: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+                        message:
+                            'This checkout was already recorded with a different payment',
+                        details: null,
+                    }),
+                ),
+            );
+
+            await expect(checkout.submit(GCASH_PAYMENT)).rejects.toThrow();
+            expect(recordCash).not.toHaveBeenCalled();
+            expect(cart.items).toHaveLength(1);
+        });
+    });
+
+    it.each([
+        [SaleStatus.VOIDED, 'voided'],
+        [SaleStatus.REFUNDED, 'refunded'],
+    ])(
+        'does not treat a replayed %s sale as a success',
+        async (status, word) => {
+            const { checkout, recordCash, cart, post } = setup(() =>
+                Promise.resolve(receiptFor({ status })),
+            );
+
+            const attempt = checkout.submit(CASH_PAYMENT);
+
+            await expect(attempt).rejects.toBeInstanceOf(SaleNotCompletedError);
+            await expect(attempt).rejects.toThrow(word);
+            expect(recordCash).not.toHaveBeenCalled();
+            // The ticket stays for re-ringing, under a new key.
+            expect(cart.items).toHaveLength(1);
+            expect(cart.locked).toBe(false);
+            post.mockResolvedValueOnce(receiptFor({ _id: 'new' }));
+            await checkout.submit(CASH_PAYMENT);
+            expect(post.mock.calls[1][0].idempotencyKey).not.toBe(
+                post.mock.calls[0][0].idempotencyKey,
+            );
+        },
+    );
+
+    it('drops the key when the ticket is voided', async () => {
+        const { checkout, post } = setup(() => Promise.reject(httpError(null)));
+
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        checkout.discardKey();
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+
+        // Same lines as before, but not a replay of the lost attempt.
+        expect(post.mock.calls[1][0].sellDetails).toEqual(
+            post.mock.calls[0][0].sellDetails,
+        );
+        expect(post.mock.calls[1][0].idempotencyKey).not.toBe(
+            post.mock.calls[0][0].idempotencyKey,
+        );
     });
 });
 
