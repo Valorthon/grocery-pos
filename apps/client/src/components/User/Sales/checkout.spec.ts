@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { DiscountType } from '@grocery-pos/contracts';
-import { cashTender, drawerCashAmount, previewSale } from './checkout';
-import type { PaymentInfo, Receipt } from './types';
+import {
+    DiscountType,
+    PaymentType,
+    SaleStatus,
+    TenderType,
+} from '@grocery-pos/contracts';
+import {
+    buildPayment,
+    cashTender,
+    drawerCashAmount,
+    previewSale,
+    referenceNumberError,
+} from './checkout';
+import type { Receipt } from './types';
 import { centavosToPesoInput, formatCurrency } from '@/utils/currency';
 import { useShiftStore } from '@/stores/shift';
 
@@ -93,62 +104,186 @@ describe('cash checkout', () => {
     });
 });
 
-describe('drawer expectation after a sale', () => {
-    // A server receipt whose total differs from any client-side copy: the
-    // drawer must follow the server.
-    const receipt: Receipt = {
-        cashierName: 'ana',
-        items: [{ productName: 'basket', quantity: 1, amount: 100000 }],
-        subtotal: 100000,
-        discount: {
-            type: DiscountType.PERCENT,
-            value: 20,
-            reason: 'loyalty',
-            amount: 20000,
+describe('building the tender breakdown', () => {
+    const REF = '1234567890123';
+    const TOTAL = 100000;
+
+    it('sends cash handed over as a single CASH tender, change left to the server', () => {
+        expect(
+            buildPayment(PaymentType.CASH, TOTAL, {
+                cash: '1500',
+                referenceNumber: '',
+            }),
+        ).toEqual({
+            paymentType: PaymentType.CASH,
+            tenders: [{ type: TenderType.CASH, amount: 150000 }],
+        });
+    });
+
+    it('never sends a reference number with a cash sale', () => {
+        expect(
+            buildPayment(PaymentType.CASH, TOTAL, {
+                cash: '1000',
+                referenceNumber: REF,
+            }),
+        ).not.toHaveProperty('referenceNumber');
+    });
+
+    it('holds a cash sale that is a centavo short', () => {
+        expect(
+            buildPayment(PaymentType.CASH, TOTAL, {
+                cash: '999.99',
+                referenceNumber: '',
+            }),
+        ).toBeNull();
+    });
+
+    it('sends GCash for exactly the total with the normalized reference', () => {
+        expect(
+            buildPayment(PaymentType.GCASH, TOTAL, {
+                cash: '',
+                referenceNumber: '1234 567 890123',
+            }),
+        ).toEqual({
+            paymentType: PaymentType.GCASH,
+            tenders: [{ type: TenderType.GCASH, amount: TOTAL }],
+            referenceNumber: REF,
+        });
+    });
+
+    it.each(['', 'x', '123456789012', '12345678901234', '12345678901ab'])(
+        'holds GCash with the reference %j',
+        (referenceNumber) => {
+            expect(
+                buildPayment(PaymentType.GCASH, TOTAL, {
+                    cash: '',
+                    referenceNumber,
+                }),
+            ).toBeNull();
+            expect(referenceNumberError(referenceNumber)).not.toBeNull();
         },
-        totalAmount: 80000,
-    };
+    );
+
+    it('accepts a 13-digit reference', () => {
+        expect(referenceNumberError('1234 567 890123')).toBeNull();
+    });
+
+    it('sends a ₱500 + ₱500 split as SPLIT with both tenders', () => {
+        expect(
+            buildPayment(PaymentType.SPLIT, TOTAL, {
+                cash: '500',
+                referenceNumber: REF,
+            }),
+        ).toEqual({
+            paymentType: PaymentType.SPLIT,
+            tenders: [
+                { type: TenderType.CASH, amount: 50000 },
+                { type: TenderType.GCASH, amount: 50000 },
+            ],
+            referenceNumber: REF,
+        });
+    });
+
+    it('holds a split without cash or without a valid reference', () => {
+        expect(
+            buildPayment(PaymentType.SPLIT, TOTAL, {
+                cash: '',
+                referenceNumber: REF,
+            }),
+        ).toBeNull();
+        expect(
+            buildPayment(PaymentType.SPLIT, TOTAL, {
+                cash: '500',
+                referenceNumber: 'x',
+            }),
+        ).toBeNull();
+    });
+
+    it('sends a split whose cash covers everything as a cash sale', () => {
+        expect(
+            buildPayment(PaymentType.SPLIT, TOTAL, {
+                cash: '1200',
+                referenceNumber: '',
+            }),
+        ).toEqual({
+            paymentType: PaymentType.CASH,
+            tenders: [{ type: TenderType.CASH, amount: 120000 }],
+        });
+    });
+});
+
+describe('drawer expectation after a sale', () => {
+    // A server receipt whose figures differ from anything the client typed:
+    // the drawer must follow the server.
+    function receipt(
+        paymentType: PaymentType,
+        tenders: Receipt['tenders'],
+        changeGiven: number,
+    ): Receipt {
+        return {
+            _id: 'sale1',
+            createdAt: '2026-09-24T02:00:00.000Z',
+            status: SaleStatus.COMPLETED,
+            paymentType,
+            referenceNumber:
+                paymentType === PaymentType.CASH ? null : '1234567890123',
+            tenders,
+            amountTendered: tenders.reduce((sum, t) => sum + t.amount, 0),
+            changeGiven,
+            cashierName: 'ana',
+            items: [{ productName: 'basket', quantity: 1, amount: 100000 }],
+            subtotal: 100000,
+            discount: {
+                type: DiscountType.PERCENT,
+                value: 20,
+                reason: 'loyalty',
+                amount: 20000,
+            },
+            totalAmount: 80000,
+        };
+    }
 
     beforeEach(() => {
         localStorage.clear();
         setActivePinia(createPinia());
     });
 
-    it('records the server total for a cash sale', () => {
-        const payment: PaymentInfo = {
-            method: 'CASH',
-            amountTendered: 100000,
-            changeDue: 20000,
-        };
+    it('keeps the cash tendered less the server’s change for a cash sale', () => {
+        const sale = receipt(
+            PaymentType.CASH,
+            [{ type: TenderType.CASH, amount: 100000 }],
+            20000,
+        );
         const shift = useShiftStore();
         shift.startShift('ana', 'T1', {}, 0);
 
-        shift.recordCashSale(drawerCashAmount(payment, receipt));
+        shift.recordCashSale(drawerCashAmount(sale));
 
         expect(shift.currentDrawerCash).toBe(80000);
     });
 
-    it('caps a split sale’s cash at the server total', () => {
-        const payment: PaymentInfo = {
-            method: 'SPLIT',
-            split: {
-                cashAmount: 100000,
-                onlineAmount: 0,
-                cashTendered: 100000,
-                cashChange: 0,
-                referenceNumber: 'r',
-                onlineMethod: 'GCash QR',
-            },
-        };
+    it('keeps only the cash part of a split sale', () => {
+        // ₱800 total: ₱500 GCash, ₱500 bill for the rest, ₱200 change.
+        const sale = receipt(
+            PaymentType.SPLIT,
+            [
+                { type: TenderType.CASH, amount: 50000 },
+                { type: TenderType.GCASH, amount: 50000 },
+            ],
+            20000,
+        );
 
-        expect(drawerCashAmount(payment, receipt)).toBe(80000);
+        expect(drawerCashAmount(sale)).toBe(30000);
     });
 
     it('puts no cash in the drawer for GCash', () => {
         expect(
             drawerCashAmount(
-                { method: 'GCASH', referenceNumber: 'r' },
-                receipt,
+                receipt(
+                    PaymentType.GCASH,
+                    [{ type: TenderType.GCASH, amount: 80000 }],
+                    0,
+                ),
             ),
         ).toBe(0);
     });

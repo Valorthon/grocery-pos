@@ -2,15 +2,17 @@ import 'reflect-metadata';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
-import { SellDto } from './sales.dto';
-import { DiscountType, PaymentType } from './sales.types';
+import { ReverseSaleDto, SellDto } from './sales.dto';
+import { DiscountType, PaymentType, TenderType } from './sales.types';
 import { STRING_LIMITS } from '../../constants';
 
 const SELL_DETAILS = [{ product: '507f1f77bcf86cd799439011', quantity: 1 }];
+const CASH_TENDER = [{ type: TenderType.CASH, amount: 10000 }];
 
 async function validateDiscount(discount: unknown) {
     const dto = plainToInstance(SellDto, {
         paymentType: PaymentType.CASH,
+        tenders: CASH_TENDER,
         sellDetails: SELL_DETAILS,
         discount,
     });
@@ -159,6 +161,7 @@ describe('SellDto through the global ValidationPipe', () => {
         await expect(
             run({
                 paymentType: PaymentType.CASH,
+                tenders: CASH_TENDER,
                 sellDetails: SELL_DETAILS,
                 discount,
             }),
@@ -176,9 +179,139 @@ describe('SellDto through the global ValidationPipe', () => {
         await expect(
             run({
                 paymentType: PaymentType.CASH,
+                tenders: CASH_TENDER,
                 sellDetails: SELL_DETAILS,
                 ...extra,
             }),
         ).rejects.toBeInstanceOf(BadRequestException);
+    });
+});
+
+describe('SellDto payment', () => {
+    const REF = '1234567890123';
+    const GCASH_TENDER = [{ type: TenderType.GCASH, amount: 10000 }];
+
+    async function errorsFor(body: Record<string, unknown>) {
+        const dto = plainToInstance(SellDto, {
+            sellDetails: SELL_DETAILS,
+            ...body,
+        });
+        return { dto, errors: await validate(dto) };
+    }
+
+    function propertyErrors(errors: ValidationError[], property: string) {
+        return errors.find((e) => e.property === property)?.constraints;
+    }
+
+    it('accepts SPLIT as a payment type', async () => {
+        const { errors } = await errorsFor({
+            paymentType: PaymentType.SPLIT,
+            referenceNumber: REF,
+            tenders: [...CASH_TENDER, ...GCASH_TENDER],
+        });
+
+        expect(errors).toHaveLength(0);
+    });
+
+    it.each([PaymentType.GCASH, PaymentType.SPLIT])(
+        'requires a reference number for %s',
+        async (paymentType) => {
+            const { errors } = await errorsFor({
+                paymentType,
+                tenders: GCASH_TENDER,
+            });
+
+            expect(propertyErrors(errors, 'referenceNumber')).toHaveProperty(
+                'isNotEmpty',
+            );
+        },
+    );
+
+    it.each([
+        ['too short', '123456789012'],
+        ['too long', '12345678901234'],
+        ['not digits', '12345678901ab'],
+        ['a placeholder', 'x'],
+    ])('rejects a reference that is %s', async (_, referenceNumber) => {
+        const { errors } = await errorsFor({
+            paymentType: PaymentType.GCASH,
+            referenceNumber,
+            tenders: GCASH_TENDER,
+        });
+
+        expect(propertyErrors(errors, 'referenceNumber')).toBeDefined();
+    });
+
+    it('strips the spaces GCash prints between digit groups', async () => {
+        const { dto, errors } = await errorsFor({
+            paymentType: PaymentType.GCASH,
+            referenceNumber: '1234 567 890123',
+            tenders: GCASH_TENDER,
+        });
+
+        expect(errors).toHaveLength(0);
+        expect(dto.referenceNumber).toBe(REF);
+    });
+
+    it('rejects a reference number on a cash sale', async () => {
+        const { errors } = await errorsFor({
+            paymentType: PaymentType.CASH,
+            referenceNumber: REF,
+            tenders: CASH_TENDER,
+        });
+
+        expect(propertyErrors(errors, 'referenceNumber')).toHaveProperty(
+            'isNotOnCashSale',
+        );
+    });
+
+    it('requires at least one tender', async () => {
+        const missing = await errorsFor({ paymentType: PaymentType.CASH });
+        const empty = await errorsFor({
+            paymentType: PaymentType.CASH,
+            tenders: [],
+        });
+
+        expect(propertyErrors(missing.errors, 'tenders')).toBeDefined();
+        expect(propertyErrors(empty.errors, 'tenders')).toHaveProperty(
+            'arrayNotEmpty',
+        );
+    });
+
+    it.each([
+        ['a zero amount', { type: TenderType.CASH, amount: 0 }],
+        ['a fractional amount', { type: TenderType.CASH, amount: 10.5 }],
+        ['an unknown type', { type: 'CARD', amount: 100 }],
+    ])('rejects a tender with %s', async (_, tender) => {
+        const { errors } = await errorsFor({
+            paymentType: PaymentType.CASH,
+            tenders: [tender],
+        });
+
+        expect(errors.find((e) => e.property === 'tenders')).toBeDefined();
+    });
+});
+
+describe('ReverseSaleDto', () => {
+    it('requires a non-blank reason', async () => {
+        const blank = await validate(
+            plainToInstance(ReverseSaleDto, { reason: '   ' }),
+        );
+        const ok = await validate(
+            plainToInstance(ReverseSaleDto, { reason: 'mis-ring' }),
+        );
+
+        expect(blank[0]?.constraints).toHaveProperty('isNotEmpty');
+        expect(ok).toHaveLength(0);
+    });
+
+    it('caps the reason length', async () => {
+        const errors = await validate(
+            plainToInstance(ReverseSaleDto, {
+                reason: 'x'.repeat(STRING_LIMITS.REASON + 1),
+            }),
+        );
+
+        expect(errors[0]?.constraints).toHaveProperty('maxLength');
     });
 });

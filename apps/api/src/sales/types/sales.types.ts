@@ -1,1 +1,7 @@
-export { DiscountType, PaymentType } from '@grocery-pos/contracts';
+export {
+    DiscountType,
+    PaymentType,
+    ReversalType,
+    SaleStatus,
+    TenderType,
+} from '@grocery-pos/contracts';

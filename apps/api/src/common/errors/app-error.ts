@@ -40,6 +40,9 @@ export class AppError extends Error {
             case ErrorCode.PRODUCT_NOT_FOUND:
             case ErrorCode.NOT_FOUND:
                 return HttpStatus.NOT_FOUND;
+            case ErrorCode.SALE_DUPLICATE_REFERENCE:
+            case ErrorCode.SALE_NOT_REVERSIBLE:
+                return HttpStatus.CONFLICT;
             case ErrorCode.INTERNAL_ERROR:
                 return HttpStatus.INTERNAL_SERVER_ERROR;
             default:
@@ -61,6 +64,13 @@ export class ValidationError extends AppError {
 }
 
 export class NotFoundError extends AppError {
+    constructor(code: ErrorCode, message: string, details: unknown = null) {
+        super(code, AppError.getHttpStatus(code), message, details);
+    }
+}
+
+/** 409: the request is valid but clashes with the current state of the data. */
+export class ConflictError extends AppError {
     constructor(code: ErrorCode, message: string, details: unknown = null) {
         super(code, AppError.getHttpStatus(code), message, details);
     }

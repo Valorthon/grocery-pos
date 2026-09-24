@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Sales } from '../sales/sales.schema';
+import { COUNTED_SALES_FILTER, Sales } from '../sales/sales.schema';
 import { Inventory } from '../inventory-man/inventory/inventory.schema';
 import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
@@ -56,6 +56,8 @@ export class DashboardService {
                 {
                     $match: {
                         createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        // Voided and refunded sales are not revenue.
+                        ...COUNTED_SALES_FILTER,
                     },
                 },
                 {

@@ -512,7 +512,7 @@
                         type="button"
                         class="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98]"
                         :disabled="!canCheckout"
-                        @click="openCheckout('SPLIT')"
+                        @click="openCheckout(PaymentType.SPLIT)"
                     >
                         <Split class="w-3.5 h-3.5 text-emerald-600" />
                         <span>Split Payment</span>
@@ -531,7 +531,6 @@
         <ReceiptModal
             v-model="isReceiptOpen"
             :receipt="receipt"
-            :payment="paymentInfo"
             @new-sale="onNewSale"
         />
     </div>
@@ -564,11 +563,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { useShiftStore } from '@/stores/shift';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
-import type {
-    PaymentInfo,
-    PaymentMethod,
-    Receipt,
-} from '@/components/User/Sales/types';
+import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
 import {
     drawerCashAmount,
     previewSale,
@@ -577,6 +572,7 @@ import { formatCurrency } from '@/utils/currency';
 import {
     DiscountType,
     type DiscountInput,
+    PaymentType,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
 
@@ -610,12 +606,11 @@ const discountPercent = ref(0);
 const discountReason = ref('');
 const isCheckoutOpen = ref(false);
 const isReceiptOpen = ref(false);
-const checkoutMethod = ref<PaymentMethod>('CASH');
+const checkoutMethod = ref<PaymentType>(PaymentType.CASH);
 
 // The server's response: the receipt and drawer read its totals, never the
 // preview below.
 const receipt = ref<Receipt | null>(null);
-const paymentInfo = ref<PaymentInfo | null>(null);
 
 const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
@@ -761,12 +756,12 @@ function applyDiscount(value: number) {
     discountPercent.value = value;
 }
 
-function openCheckout(method: PaymentMethod = 'CASH') {
+function openCheckout(method: PaymentType = PaymentType.CASH) {
     checkoutMethod.value = method;
     isCheckoutOpen.value = true;
 }
 
-async function completeSale(payment: PaymentInfo) {
+async function completeSale(payment: PaymentRequest) {
     const sellDetails = cartStore.items.map((item) => ({
         product: item.product,
         quantity: item.quantity,
@@ -774,16 +769,15 @@ async function completeSale(payment: PaymentInfo) {
 
     try {
         const res = await api.post<Receipt>('/sales', {
-            paymentType: payment.method === 'SPLIT' ? 'GCASH' : payment.method,
-            referenceNumber: payment.referenceNumber || undefined,
+            ...payment,
             sellDetails,
             discount: discountRequest.value ?? undefined,
         });
         const sale = res.data;
 
         receipt.value = sale;
-        paymentInfo.value = payment;
-        shiftStore.recordCashSale(drawerCashAmount(payment, sale));
+        // The server's cash tender net of change, not the modal's figures.
+        shiftStore.recordCashSale(drawerCashAmount(sale));
 
         cartStore.clear();
         clearDiscount();
@@ -803,7 +797,6 @@ async function completeSale(payment: PaymentInfo) {
 function onNewSale() {
     isReceiptOpen.value = false;
     receipt.value = null;
-    paymentInfo.value = null;
     scanInput.value?.focus();
 }
 

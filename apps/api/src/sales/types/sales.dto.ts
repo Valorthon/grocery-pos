@@ -1,6 +1,8 @@
 import { Transform, Type } from 'class-transformer';
 import {
+    ArrayMaxSize,
     ArrayNotEmpty,
+    IsArray,
     IsEnum,
     IsInt,
     IsMongoId,
@@ -11,18 +13,29 @@ import {
     IsOptional,
     IsPositive,
     IsString,
+    Matches,
     MaxLength,
     Min,
+    MinLength,
+    ValidateIf,
     ValidateNested,
     ValidationArguments,
     registerDecorator,
 } from 'class-validator';
-import { DiscountType, PaymentType } from './sales.types';
+import {
+    DiscountType,
+    PaymentType,
+    ReversalType,
+    SaleStatus,
+    TenderType,
+} from './sales.types';
 import {
     DISCOUNT_LIMITS,
     NUMERIC_LIMITS,
+    REFERENCE_NUMBER_LIMITS,
     STRING_LIMITS,
 } from '../../constants';
+import { normalizeReferenceNumber } from '@grocery-pos/contracts';
 
 export class GetDetailsDto {
     @IsNotEmpty()
@@ -86,15 +99,84 @@ export class DiscountFields {
     reason!: string;
 }
 
+export class TenderFields {
+    @IsNotEmpty()
+    @IsEnum(TenderType)
+    type!: TenderType;
+
+    /** Centavos handed over (CASH) or transferred (GCASH). */
+    @IsNotEmpty()
+    @IsInt()
+    @Min(NUMERIC_LIMITS.AMOUNT_MIN)
+    amount!: number;
+}
+
+/**
+ * Rejects a reference number on a pure CASH sale, where it would mean
+ * nothing and would still take a slot in the unique index.
+ */
+function IsNotOnCashSale() {
+    return function (target: object, propertyName: string) {
+        registerDecorator({
+            name: 'isNotOnCashSale',
+            target: target.constructor,
+            propertyName,
+            validator: {
+                validate(_value: unknown, args: ValidationArguments) {
+                    return (
+                        (args.object as SellDto).paymentType !==
+                        PaymentType.CASH
+                    );
+                },
+                defaultMessage() {
+                    return 'A cash sale must not have a reference number';
+                },
+            },
+        });
+    };
+}
+
 export class SellDto {
     @IsNotEmpty()
     @IsEnum(PaymentType)
     paymentType!: PaymentType;
 
-    @IsOptional()
+    /**
+     * The GCash reference number: 13 digits. Spaces are stripped first, so
+     * the grouping GCash prints (`1234 567 890123`) is accepted.
+     */
+    // Required for GCASH and SPLIT; on CASH it is only validated (and
+    // rejected) when sent.
+    @ValidateIf(
+        (o: SellDto) =>
+            o.paymentType !== PaymentType.CASH ||
+            o.referenceNumber !== undefined,
+    )
+    @IsNotOnCashSale()
+    @IsNotEmpty()
     @IsString()
-    @MaxLength(STRING_LIMITS.REFERENCE_NUMBER)
+    @MinLength(REFERENCE_NUMBER_LIMITS.MIN_LENGTH)
+    @MaxLength(REFERENCE_NUMBER_LIMITS.MAX_LENGTH)
+    @Matches(REFERENCE_NUMBER_LIMITS.PATTERN, {
+        message: 'referenceNumber must contain digits only',
+    })
+    @Transform(({ value }) =>
+        typeof value === 'string'
+            ? normalizeReferenceNumber(value)
+            : (value as unknown),
+    )
     referenceNumber?: string;
+
+    /**
+     * How the customer paid, in centavos. The server checks the tenders
+     * against the total it computes and works out the change.
+     */
+    @IsArray()
+    @ArrayNotEmpty()
+    @ArrayMaxSize(Object.keys(TenderType).length)
+    @ValidateNested({ each: true })
+    @Type(() => TenderFields)
+    tenders!: TenderFields[];
 
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
@@ -127,6 +209,18 @@ export class ReceiptDiscount {
 }
 
 export class ReceiptDto {
+    /** The sale's id, to look it up later. */
+    _id!: string;
+    createdAt!: Date;
+    status!: SaleStatus;
+    paymentType!: PaymentType;
+    /** Null for a cash sale. */
+    referenceNumber!: string | null;
+    tenders!: TenderFields[];
+    /** Centavos: the sum of the tenders. */
+    amountTendered!: number;
+    /** Centavos, paid out of the cash tender. */
+    changeGiven!: number;
     cashierName!: string;
     items!: ReceiptFields[];
     /** Centavos: the sum of the undiscounted lines. */
@@ -148,3 +242,22 @@ export class GetAllDto {
     @IsNotEmpty()
     limit!: number;
 }
+
+export class ReverseSaleParamDto {
+    @IsNotEmpty()
+    @IsMongoId()
+    id!: string;
+}
+
+/** Body of `POST /sales/:id/void` and `POST /sales/:id/refund`. */
+export class ReverseSaleDto {
+    @IsNotEmpty()
+    @IsString()
+    @MaxLength(STRING_LIMITS.REASON)
+    @Transform(({ value }) =>
+        typeof value === 'string' ? value.trim() : (value as unknown),
+    )
+    reason!: string;
+}
+
+export type ReverseSaleInput = ReverseSaleDto & { type: ReversalType };

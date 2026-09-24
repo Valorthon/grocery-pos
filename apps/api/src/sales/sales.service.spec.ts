@@ -1,13 +1,24 @@
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
-import { ClientSession } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { SalesService } from './sales.service';
 import { Sales } from './sales.schema';
 import { SalesDetails } from './sales-details.schema';
 import { ProductService } from '../product/product.service';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
-import { ValidationError } from '../common/errors';
-import { DiscountType, PaymentType, SellDto } from './types';
+import {
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+} from '../common/errors';
+import {
+    DiscountType,
+    PaymentType,
+    ReversalType,
+    SaleStatus,
+    SellDto,
+    TenderType,
+} from './types';
 import { AuthUser } from '../auth/types';
 import { Role } from '@grocery-pos/contracts';
 
@@ -17,16 +28,25 @@ const CASHIER: AuthUser = {
     roles: [Role.Admin],
 };
 
+/** Cash large enough to cover any basket in these tests. */
+const PLENTY_OF_CASH = [{ type: TenderType.CASH, amount: 100_000_000 }];
+
 function sellDto(
     details: { product: string; quantity: number }[],
     discount?: SellDto['discount'],
+    payment: Pick<SellDto, 'paymentType' | 'tenders' | 'referenceNumber'> = {
+        paymentType: PaymentType.CASH,
+        tenders: PLENTY_OF_CASH,
+    },
 ): SellDto {
     return {
-        paymentType: PaymentType.CASH,
+        ...payment,
         sellDetails: details,
         discount,
     } as SellDto;
 }
+
+const CREATED_AT = new Date('2026-09-24T02:00:00.000Z');
 
 /**
  * Cases the client's checkout preview is tested against too
@@ -62,7 +82,9 @@ describe('SalesService.sell', () => {
     beforeEach(async () => {
         getMany = jest.fn();
         inventorySell = jest.fn().mockResolvedValue(undefined);
-        create = jest.fn().mockResolvedValue([{ _id: 'sale1' }]);
+        create = jest
+            .fn()
+            .mockResolvedValue([{ _id: 'sale1', createdAt: CREATED_AT }]);
         detailsBulkWrite = jest.fn().mockResolvedValue(undefined);
 
         const session = {
@@ -342,5 +364,304 @@ describe('SalesService.sell', () => {
             expect(doc.amount).toBe(100000);
             expect(doc).not.toHaveProperty('discount');
         });
+    });
+
+    describe('payment', () => {
+        const PRODUCT = '507f1f77bcf86cd799439011';
+        const REF = '1234567890123';
+
+        beforeEach(() => {
+            getMany.mockResolvedValue(
+                new Map([[PRODUCT, { name: 'basket', price: 100000 }]]),
+            );
+        });
+
+        const basket = [{ product: PRODUCT, quantity: 1 }];
+
+        function createdDoc(): Record<string, unknown> {
+            const [[[doc]]] = create.mock.calls as [
+                [Record<string, unknown>],
+            ][];
+            return doc;
+        }
+
+        it('returns the sale id and creation time so the sale can be looked up', async () => {
+            const receipt = await service.sell(CASHIER, sellDto(basket));
+
+            expect(receipt._id).toBe('sale1');
+            expect(receipt.createdAt).toBe(CREATED_AT);
+            expect(receipt.status).toBe(SaleStatus.COMPLETED);
+        });
+
+        it('records cash tendered and the change the server computed', async () => {
+            const receipt = await service.sell(
+                CASHIER,
+                sellDto(basket, undefined, {
+                    paymentType: PaymentType.CASH,
+                    tenders: [{ type: TenderType.CASH, amount: 150000 }],
+                }),
+            );
+
+            expect(receipt).toMatchObject({
+                paymentType: PaymentType.CASH,
+                referenceNumber: null,
+                tenders: [{ type: TenderType.CASH, amount: 150000 }],
+                amountTendered: 150000,
+                changeGiven: 50000,
+            });
+            expect(createdDoc()).toMatchObject({
+                status: SaleStatus.COMPLETED,
+                amountTendered: 150000,
+                changeGiven: 50000,
+            });
+        });
+
+        it('books a split sale as SPLIT with both tenders, not as GCash', async () => {
+            const receipt = await service.sell(
+                CASHIER,
+                sellDto(basket, undefined, {
+                    paymentType: PaymentType.SPLIT,
+                    referenceNumber: REF,
+                    tenders: [
+                        { type: TenderType.CASH, amount: 50000 },
+                        { type: TenderType.GCASH, amount: 50000 },
+                    ],
+                }),
+            );
+
+            expect(receipt).toMatchObject({
+                paymentType: PaymentType.SPLIT,
+                referenceNumber: REF,
+                amountTendered: 100000,
+                changeGiven: 0,
+            });
+            expect(createdDoc()).toMatchObject({
+                paymentType: PaymentType.SPLIT,
+                referenceNumber: REF,
+                tenders: [
+                    { type: TenderType.CASH, amount: 50000 },
+                    { type: TenderType.GCASH, amount: 50000 },
+                ],
+            });
+        });
+
+        it('checks the tenders against the discounted server total', async () => {
+            // ₱1,000 at 20% off is ₱800: ₱800 GCash is exact, ₱1,000 is not.
+            const discount = {
+                type: DiscountType.PERCENT,
+                value: 20,
+                reason: 'loyalty',
+            };
+
+            await expect(
+                service.sell(
+                    CASHIER,
+                    sellDto(basket, discount, {
+                        paymentType: PaymentType.GCASH,
+                        referenceNumber: REF,
+                        tenders: [{ type: TenderType.GCASH, amount: 100000 }],
+                    }),
+                ),
+            ).rejects.toMatchObject({ statusCode: 400 });
+
+            const receipt = await service.sell(
+                CASHIER,
+                sellDto(basket, discount, {
+                    paymentType: PaymentType.GCASH,
+                    referenceNumber: REF,
+                    tenders: [{ type: TenderType.GCASH, amount: 80000 }],
+                }),
+            );
+            expect(receipt.changeGiven).toBe(0);
+        });
+
+        it('rejects tenders that do not cover the total before writing', async () => {
+            const attempt = service.sell(
+                CASHIER,
+                sellDto(basket, undefined, {
+                    paymentType: PaymentType.CASH,
+                    tenders: [{ type: TenderType.CASH, amount: 99999 }],
+                }),
+            );
+
+            await expect(attempt).rejects.toBeInstanceOf(ValidationError);
+            expect(create).not.toHaveBeenCalled();
+            expect(inventorySell).not.toHaveBeenCalled();
+        });
+
+        it('returns a 409, not a 500, for a reused GCash reference', async () => {
+            create.mockRejectedValue(
+                Object.assign(new Error('E11000 duplicate key'), {
+                    name: 'MongoServerError',
+                    code: 11000,
+                    keyPattern: { referenceNumber: 1 },
+                }),
+            );
+
+            const attempt = service.sell(
+                CASHIER,
+                sellDto(basket, undefined, {
+                    paymentType: PaymentType.GCASH,
+                    referenceNumber: REF,
+                    tenders: [{ type: TenderType.GCASH, amount: 100000 }],
+                }),
+            );
+
+            await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+            await expect(attempt).rejects.toMatchObject({
+                statusCode: 409,
+                details: { referenceNumber: REF },
+            });
+            expect(inventorySell).not.toHaveBeenCalled();
+        });
+    });
+});
+
+describe('SalesService.reverse', () => {
+    const SALE = '507f1f77bcf86cd799439099';
+    const ADMIN: AuthUser = {
+        userId: '507f1f77bcf86cd799439001',
+        username: 'boss',
+        roles: [Role.Admin],
+    };
+    const P1 = new Types.ObjectId();
+    const P2 = new Types.ObjectId();
+
+    let service: SalesService;
+    let findOneAndUpdate: jest.Mock;
+    let findById: jest.Mock;
+    let detailsFind: jest.Mock;
+    let returnStock: jest.Mock;
+
+    const chain = (value: unknown) => {
+        const c = {
+            session: () => c,
+            lean: () => Promise.resolve(value),
+        };
+        return c;
+    };
+
+    beforeEach(async () => {
+        findOneAndUpdate = jest.fn();
+        findById = jest.fn();
+        detailsFind = jest.fn().mockReturnValue(
+            chain([
+                { product: P1, quantity: 2 },
+                { product: P2, quantity: 5 },
+            ]),
+        );
+        returnStock = jest.fn().mockResolvedValue(undefined);
+
+        const session = {
+            withTransaction: async (fn: (s: ClientSession) => unknown) =>
+                fn({} as ClientSession),
+            endSession: jest.fn(),
+        };
+
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                SalesService,
+                {
+                    provide: getConnectionToken(),
+                    useValue: { startSession: () => Promise.resolve(session) },
+                },
+                {
+                    provide: getModelToken(Sales.name),
+                    useValue: { findOneAndUpdate, findById },
+                },
+                {
+                    provide: getModelToken(SalesDetails.name),
+                    useValue: { find: detailsFind },
+                },
+                { provide: ProductService, useValue: {} },
+                { provide: InventoryService, useValue: { returnStock } },
+            ],
+        }).compile();
+
+        service = moduleRef.get(SalesService);
+    });
+
+    it('voids a completed sale and returns its stock', async () => {
+        findOneAndUpdate.mockReturnValue(
+            chain({ _id: SALE, status: SaleStatus.VOIDED }),
+        );
+
+        const sale = await service.reverse(ADMIN, SALE, {
+            type: ReversalType.VOID,
+            reason: 'rang up twice',
+        });
+
+        expect(sale.status).toBe(SaleStatus.VOIDED);
+
+        const [[filter, update]] = findOneAndUpdate.mock.calls as [
+            [
+                Record<string, unknown>,
+                { $set: { status: string; reversal: Record<string, unknown> } },
+            ],
+        ];
+        // Only a sale not already reversed can match: the double-void guard.
+        expect(filter).toEqual({
+            _id: SALE,
+            status: { $nin: [SaleStatus.VOIDED, SaleStatus.REFUNDED] },
+        });
+        expect(update.$set.status).toBe(SaleStatus.VOIDED);
+        expect(update.$set.reversal).toMatchObject({
+            type: ReversalType.VOID,
+            reason: 'rang up twice',
+        });
+        expect(String(update.$set.reversal.approvedBy)).toBe(ADMIN.userId);
+        expect(update.$set.reversal.at).toBeInstanceOf(Date);
+
+        expect(returnStock).toHaveBeenCalledWith(
+            [
+                { product: P1, quantity: 2 },
+                { product: P2, quantity: 5 },
+            ],
+            expect.anything(),
+        );
+    });
+
+    it('marks a refund as REFUNDED and also returns stock', async () => {
+        findOneAndUpdate.mockReturnValue(
+            chain({ _id: SALE, status: SaleStatus.REFUNDED }),
+        );
+
+        await service.reverse(ADMIN, SALE, {
+            type: ReversalType.REFUND,
+            reason: 'customer return',
+        });
+
+        const [[, update]] = findOneAndUpdate.mock.calls as [
+            [unknown, { $set: { status: string } }],
+        ];
+        expect(update.$set.status).toBe(SaleStatus.REFUNDED);
+        expect(returnStock).toHaveBeenCalledTimes(1);
+    });
+
+    it('refuses to reverse a sale twice with a 409 and returns no stock', async () => {
+        findOneAndUpdate.mockReturnValue(chain(null));
+        findById.mockReturnValue(chain({ status: SaleStatus.VOIDED }));
+
+        const attempt = service.reverse(ADMIN, SALE, {
+            type: ReversalType.REFUND,
+            reason: 'again',
+        });
+
+        await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+        await expect(attempt).rejects.toMatchObject({ statusCode: 409 });
+        expect(returnStock).not.toHaveBeenCalled();
+    });
+
+    it('returns a 404 for an unknown sale', async () => {
+        findOneAndUpdate.mockReturnValue(chain(null));
+        findById.mockReturnValue(chain(null));
+
+        const attempt = service.reverse(ADMIN, SALE, {
+            type: ReversalType.VOID,
+            reason: 'x',
+        });
+
+        await expect(attempt).rejects.toBeInstanceOf(NotFoundError);
+        expect(returnStock).not.toHaveBeenCalled();
     });
 });

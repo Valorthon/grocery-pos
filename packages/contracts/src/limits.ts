@@ -9,7 +9,6 @@ export const STRING_LIMITS = {
     PASSWORD: 64,
     REASON: 100,
     DESCRIPTION: 300,
-    REFERENCE_NUMBER: 50,
 } as const;
 
 /**
@@ -33,4 +32,16 @@ export const EAN_COUNTER = {
 
 export const VALIDATION = {
     CHANGE_NOT_ZERO: 0,
+} as const;
+
+/**
+ * A GCash reference number as printed on the GCash receipt: 13 digits
+ * (shown grouped as `1234 567 890123`). The client strips spaces before
+ * sending and the server strips them again, so only the digits are stored.
+ */
+export const REFERENCE_NUMBER_LIMITS = {
+    MIN_LENGTH: 13,
+    MAX_LENGTH: 13,
+    /** Digits only, after whitespace is removed. */
+    PATTERN: /^\d+$/,
 } as const;

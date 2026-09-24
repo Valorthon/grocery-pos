@@ -40,6 +40,12 @@
                         <span>Cashier: {{ receipt?.cashierName }}</span>
                         <span>Store #104</span>
                     </div>
+                    <div class="flex justify-between gap-2">
+                        <span>Sale ID:</span>
+                        <span class="break-all text-right">{{
+                            receipt?._id
+                        }}</span>
+                    </div>
                 </div>
 
                 <div
@@ -117,62 +123,28 @@
                         }}</span>
                     </div>
 
-                    <template v-if="payment?.split">
-                        <div
-                            class="flex justify-between text-slate-800 font-semibold"
-                        >
-                            <span>1. Cash Paid:</span>
-                            <span>{{
-                                currency(payment.split.cashAmount)
-                            }}</span>
-                        </div>
-                        <div
-                            class="flex justify-between text-slate-800 font-semibold"
-                        >
-                            <span>2. GCash Paid:</span>
-                            <span>{{
-                                currency(payment.split.onlineAmount)
-                            }}</span>
-                        </div>
-                        <div
-                            v-if="payment.split.cashChange > 0"
-                            class="flex justify-between text-emerald-700 font-bold"
-                        >
-                            <span>Cash Change Given:</span>
-                            <span>{{
-                                currency(payment.split.cashChange)
-                            }}</span>
-                        </div>
-                        <div
-                            class="flex justify-between text-slate-500 text-[10px]"
-                        >
-                            <span>QR Ref Code:</span>
-                            <span>#{{ payment.split.referenceNumber }}</span>
-                        </div>
-                    </template>
-                    <template v-else>
-                        <div
-                            v-if="payment?.amountTendered"
-                            class="flex justify-between"
-                        >
-                            <span>Tendered:</span>
-                            <span>{{ currency(payment.amountTendered) }}</span>
-                        </div>
-                        <div
-                            v-if="payment?.changeDue"
-                            class="flex justify-between text-emerald-700 font-bold"
-                        >
-                            <span>Change:</span>
-                            <span>{{ currency(payment.changeDue) }}</span>
-                        </div>
-                        <div
-                            v-if="payment?.referenceNumber"
-                            class="flex justify-between"
-                        >
-                            <span>Ref:</span>
-                            <span>#{{ payment.referenceNumber }}</span>
-                        </div>
-                    </template>
+                    <div
+                        v-for="tender in receipt?.tenders ?? []"
+                        :key="tender.type"
+                        class="flex justify-between text-slate-800 font-semibold"
+                    >
+                        <span>{{ tenderLabel(tender.type) }}:</span>
+                        <span>{{ currency(tender.amount) }}</span>
+                    </div>
+                    <div
+                        v-if="receipt?.changeGiven"
+                        class="flex justify-between text-emerald-700 font-bold"
+                    >
+                        <span>Change:</span>
+                        <span>{{ currency(receipt.changeGiven) }}</span>
+                    </div>
+                    <div
+                        v-if="receipt?.referenceNumber"
+                        class="flex justify-between"
+                    >
+                        <span>GCash Ref:</span>
+                        <span>#{{ receipt.referenceNumber }}</span>
+                    </div>
                 </div>
 
                 <div
@@ -207,15 +179,15 @@ import { computed } from 'vue';
 import { Barcode, CheckCircle2, Printer, RotateCcw } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import type { PaymentInfo, Receipt } from './types';
+import type { Receipt } from './types';
 import { formatCurrency } from '@/utils/currency';
+import { paymentLabel, tenderLabel } from './checkout';
 import { DiscountType } from '@grocery-pos/contracts';
 
 const props = defineProps<{
     modelValue: boolean;
     /** The server's receipt: its subtotal, discount and total are shown as-is. */
     receipt: Receipt | null;
-    payment: PaymentInfo | null;
 }>();
 
 const emit = defineEmits<{
@@ -240,21 +212,12 @@ const discountLabel = computed(() => {
         : 'Fixed';
 });
 
-const methodLabel = computed(() => {
-    switch (props.payment?.method) {
-        case 'CASH':
-            return 'Cash';
-        case 'GCASH':
-            return 'GCash (QR)';
-        case 'SPLIT':
-            return 'Split (Cash + GCash)';
-        default:
-            return '—';
-    }
-});
+const methodLabel = computed(() =>
+    props.receipt ? paymentLabel(props.receipt.paymentType) : '—',
+);
 
 const formattedDate = computed(() =>
-    new Date().toLocaleString('en-PH', {
+    new Date(props.receipt?.createdAt ?? Date.now()).toLocaleString('en-PH', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',

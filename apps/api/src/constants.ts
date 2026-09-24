@@ -4,6 +4,8 @@ export {
     EAN_COUNTER,
     VALIDATION,
     DISCOUNT_LIMITS,
+    REFERENCE_NUMBER_LIMITS,
+    REVERSED_SALE_STATUSES,
 } from '@grocery-pos/contracts';
 
 /**

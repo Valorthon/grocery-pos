@@ -165,9 +165,32 @@ export class InventoryService {
      * already applied and are undone only when the transaction aborts.
      */
     async adjust(dto: AdjustDto, session: ClientSession): Promise<void> {
-        const netByProduct = sumByProduct(
+        await this.applyChanges(
             dto.adjustDetails.map(({ product, change }) => [product, change]),
+            session,
         );
+    }
+
+    /**
+     * Puts sold stock back, e.g. when a sale is voided or refunded: one
+     * positive increment per product, through the same path as adjust().
+     * Rejects with 404 if a product no longer has an inventory row.
+     */
+    async returnStock(
+        lines: { product: { toString(): string }; quantity: number }[],
+        session: ClientSession,
+    ): Promise<void> {
+        await this.applyChanges(
+            lines.map(({ product, quantity }) => [product, quantity]),
+            session,
+        );
+    }
+
+    private async applyChanges(
+        entries: [product: { toString(): string }, change: number][],
+        session: ClientSession,
+    ): Promise<void> {
+        const netByProduct = sumByProduct(entries);
 
         // Read before writing: bulkWrite is ordered, so a read afterwards
         // would see stock already changed by earlier ops in this request.

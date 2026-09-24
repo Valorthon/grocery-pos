@@ -58,6 +58,14 @@ const routes: RouteRecordRaw[] = [
                 name: 'Dashboard',
                 component: () => import('@/views/User/Dashboard.vue'),
             },
+            {
+                // Admins void and refund sales from here; sellers see the
+                // same view under /seller/orders.
+                path: 'sales',
+                name: 'SalesHistory',
+                component: () => import('@/views/User/Sales/Index.vue'),
+                meta: { roles: [Role.Admin] },
+            },
 
             {
                 path: 'products',
