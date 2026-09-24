@@ -3,9 +3,12 @@
  *
  * Boots a Nest app with the real AuthController, AuthService, JWTStrategy,
  * RefreshTokenService, CookieService, the global JWTAuthGuard + RoleGuard and
- * GlobalFilter, cookie-parser and URI versioning exactly as main.ts sets them
- * up. Only the persistence edges are faked: the RefreshToken model (an
- * in-memory map at the provider level) and UserService.checkCredentials.
+ * GlobalFilter, plus cookie-parser and URI versioning configured as in
+ * main.ts. It does not install main.ts's global ValidationPipe,
+ * SanitationPipe, helmet or CORS: none of them bear on how auth failures map
+ * to status codes. The persistence edges are faked: the RefreshToken model
+ * (an in-memory map at the provider level) and
+ * UserService.checkCredentials.
  * Requests go through Node's built-in fetch, so no supertest dependency.
  */
 import { createHmac } from 'node:crypto';
