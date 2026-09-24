@@ -427,6 +427,25 @@
                     </button>
                 </div>
 
+                <div v-if="discountPercent > 0" class="space-y-1">
+                    <label
+                        for="discount-reason"
+                        class="block text-xs font-bold text-slate-500"
+                        >Discount reason (required)</label
+                    >
+                    <input
+                        id="discount-reason"
+                        v-model="discountReason"
+                        type="text"
+                        :maxlength="STRING_LIMITS.REASON"
+                        placeholder="e.g. loyalty card, damaged packaging"
+                        class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
+                        :class="
+                            needsReason ? 'border-red-300' : 'border-slate-300'
+                        "
+                    />
+                </div>
+
                 <div class="space-y-2.5 text-slate-600 text-xs sm:text-sm pt-1">
                     <div class="flex justify-between font-medium">
                         <span class="text-slate-500"
@@ -480,7 +499,7 @@
                 <button
                     type="button"
                     class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all"
-                    :disabled="cartStore.items.length === 0"
+                    :disabled="!canCheckout"
                     @click="openCheckout()"
                 >
                     <CreditCard class="w-5 h-5" />
@@ -492,7 +511,7 @@
                     <button
                         type="button"
                         class="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98]"
-                        :disabled="cartStore.items.length === 0"
+                        :disabled="!canCheckout"
                         @click="openCheckout('SPLIT')"
                     >
                         <Split class="w-3.5 h-3.5 text-emerald-600" />
@@ -504,8 +523,7 @@
 
         <CheckoutModal
             v-model="isCheckoutOpen"
-            :subtotal="subtotal"
-            :discount-percent="discountPercent"
+            :total="total"
             :initial-method="checkoutMethod"
             @complete="completeSale"
         />
@@ -513,9 +531,6 @@
         <ReceiptModal
             v-model="isReceiptOpen"
             :receipt="receipt"
-            :subtotal="receiptSubtotal"
-            :discount-amount="receiptDiscount"
-            :total="receiptTotal"
             :payment="paymentInfo"
             @new-sale="onNewSale"
         />
@@ -554,7 +569,16 @@ import type {
     PaymentMethod,
     Receipt,
 } from '@/components/User/Sales/types';
-import { formatCurrency, percentOf } from '@/utils/currency';
+import {
+    drawerCashAmount,
+    previewSale,
+} from '@/components/User/Sales/checkout';
+import { formatCurrency } from '@/utils/currency';
+import {
+    DiscountType,
+    type DiscountInput,
+    STRING_LIMITS,
+} from '@grocery-pos/contracts';
 
 interface Match {
     product: string;
@@ -583,24 +607,44 @@ const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
 );
 const showDiscount = ref(false);
 const discountPercent = ref(0);
+const discountReason = ref('');
 const isCheckoutOpen = ref(false);
 const isReceiptOpen = ref(false);
 const checkoutMethod = ref<PaymentMethod>('CASH');
 
+// The server's response: the receipt and drawer read its totals, never the
+// preview below.
 const receipt = ref<Receipt | null>(null);
-const receiptSubtotal = ref(0);
-const receiptDiscount = ref(0);
-const receiptTotal = ref(0);
 const paymentInfo = ref<PaymentInfo | null>(null);
 
 const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
 
-const subtotal = computed(() => cartStore.subtotal);
-const discountAmount = computed(() =>
-    percentOf(subtotal.value, discountPercent.value),
+const discountRequest = computed<DiscountInput | null>(() =>
+    discountPercent.value > 0
+        ? {
+              type: DiscountType.PERCENT,
+              value: discountPercent.value,
+              reason: discountReason.value.trim(),
+          }
+        : null,
 );
-const total = computed(() => subtotal.value - discountAmount.value);
+// Preview for display and tendering only; the server computes the charge.
+const preview = computed(() =>
+    previewSale(cartStore.subtotal, discountRequest.value),
+);
+const subtotal = computed(() => preview.value.subtotal);
+const discountAmount = computed(() => preview.value.discountAmount);
+const total = computed(() => preview.value.total);
+const needsReason = computed(
+    () => discountRequest.value !== null && !discountRequest.value.reason,
+);
+const canCheckout = computed(
+    () =>
+        cartStore.items.length > 0 &&
+        !needsReason.value &&
+        preview.value.isChargeable,
+);
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -698,15 +742,23 @@ function addProduct(product: Product, quantity: number) {
     resetQuery();
 }
 
-function voidTicket() {
-    cartStore.clear();
+function clearDiscount() {
     discountPercent.value = 0;
+    discountReason.value = '';
     showDiscount.value = false;
 }
 
+function voidTicket() {
+    cartStore.clear();
+    clearDiscount();
+}
+
 function applyDiscount(value: number) {
+    if (value === 0) {
+        clearDiscount();
+        return;
+    }
     discountPercent.value = value;
-    if (value === 0) showDiscount.value = false;
 }
 
 function openCheckout(method: PaymentMethod = 'CASH') {
@@ -721,29 +773,20 @@ async function completeSale(payment: PaymentInfo) {
     }));
 
     try {
-        const res = await api.post('/sales', {
+        const res = await api.post<Receipt>('/sales', {
             paymentType: payment.method === 'SPLIT' ? 'GCASH' : payment.method,
             referenceNumber: payment.referenceNumber || undefined,
             sellDetails,
+            discount: discountRequest.value ?? undefined,
         });
+        const sale = res.data;
 
-        receipt.value = res.data;
-        receiptSubtotal.value = subtotal.value;
-        receiptDiscount.value = discountAmount.value;
-        receiptTotal.value = total.value;
+        receipt.value = sale;
         paymentInfo.value = payment;
-
-        const cashPortion =
-            payment.method === 'CASH'
-                ? total.value
-                : payment.method === 'SPLIT'
-                  ? (payment.split?.cashAmount ?? 0)
-                  : 0;
-        shiftStore.recordCashSale(cashPortion);
+        shiftStore.recordCashSale(drawerCashAmount(payment, sale));
 
         cartStore.clear();
-        discountPercent.value = 0;
-        showDiscount.value = false;
+        clearDiscount();
         isReceiptOpen.value = true;
     } catch (error) {
         if (isAxiosError(error)) {

@@ -1,3 +1,5 @@
+import type { DiscountType } from '@grocery-pos/contracts';
+
 // Every money field below is integer centavos.
 export interface ReceiptItem {
     productName: string;
@@ -5,9 +7,19 @@ export interface ReceiptItem {
     amount: number;
 }
 
+export interface ReceiptDiscount {
+    type: DiscountType;
+    value: number;
+    reason: string;
+    amount: number;
+}
+
+/** `POST /sales` response: every total here is the server's, not a copy. */
 export interface Receipt {
     cashierName: string;
     items: ReceiptItem[];
+    subtotal: number;
+    discount: ReceiptDiscount | null;
     totalAmount: number;
 }
 
