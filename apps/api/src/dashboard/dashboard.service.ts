@@ -11,6 +11,7 @@ export interface DashboardResponse {
     totalProducts: number;
     lowStockCount: number;
     todaySalesCount: number;
+    /** Centavos. */
     todayRevenue: number;
     recentSales: Array<Record<string, unknown>>;
     recentRestocks: Array<Record<string, unknown>>;

@@ -32,8 +32,13 @@ export class RestockDetails {
     @Prop({
         type: Number,
         required: true,
-        min: NUMERIC_LIMITS.STOCK_MIN,
+        min: NUMERIC_LIMITS.PRICE_MIN,
+        validate: {
+            validator: Number.isInteger,
+            message: 'unitCost must be an integer number of centavos',
+        },
     })
+    /** Centavos. */
     unitCost!: number;
 }
 

@@ -94,6 +94,31 @@ describe('SalesService.sell', () => {
         );
     });
 
+    it('totals in integer centavos, so line totals are exact', async () => {
+        // As pesos in doubles, the ₱0.10 x 7 line alone is 0.7000000000000001.
+        getMany.mockResolvedValue(
+            new Map([
+                ['p1', { name: 'bread', price: 1999 }],
+                ['p2', { name: 'milk', price: 10 }],
+            ]),
+        );
+
+        const receipt = await service.sell(
+            CASHIER,
+            sellDto([
+                { product: 'p1', quantity: 3 },
+                { product: 'p2', quantity: 7 },
+            ]),
+        );
+
+        expect(receipt.totalAmount).toBe(6067);
+        expect(Number.isInteger(receipt.totalAmount)).toBe(true);
+        expect(create).toHaveBeenCalledWith(
+            [expect.objectContaining({ amount: 6067 })],
+            expect.anything(),
+        );
+    });
+
     it('prices inside the transaction so a concurrent edit cannot be read early', async () => {
         getMany.mockResolvedValue(
             new Map([['p1', { name: 'bread', price: 5 }]]),

@@ -159,7 +159,7 @@ async function seedProduct() {
         EAN: (currentEAN++).toString(),
         name: item.name,
         category: item.category,
-        price: randomInt(10, 1000),
+        price: randomInt(1_000, 100_000), // centavos: ₱10.00 to ₱999.99
     }));
 
     console.log(products);
@@ -215,7 +215,7 @@ async function seedRestock() {
         for (let j = 0; j < numItems; j++) {
             const randomProduct = products[randomInt(0, products.length)];
             const quantity = randomInt(10, 100);
-            const unitCost = randomInt(5, 50); // Random unit cost
+            const unitCost = randomInt(500, 5_000); // centavos: ₱5.00 to ₱49.99
 
             totalCost += quantity * unitCost;
 

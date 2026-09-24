@@ -4,6 +4,7 @@ import {
     IsArray,
     IsBoolean,
     IsEnum,
+    IsInt,
     IsMongoId,
     IsNotEmpty,
     IsNumber,
@@ -77,8 +78,9 @@ export class NewProductFields {
     })
     category!: Category;
 
+    /** Centavos. */
     @IsNotEmpty()
-    @IsNumber()
+    @IsInt()
     @Type(() => Number)
     @Min(NUMERIC_LIMITS.PRICE_MIN)
     price!: number;
@@ -111,8 +113,9 @@ class UpdateFields {
     @IsNotEmpty()
     name?: string;
 
+    /** Centavos. */
     @IsOptional()
-    @IsNumber()
+    @IsInt()
     @Min(NUMERIC_LIMITS.PRICE_MIN)
     price?: number;
 }
