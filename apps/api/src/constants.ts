@@ -3,6 +3,7 @@ export {
     NUMERIC_LIMITS,
     EAN_COUNTER,
     VALIDATION,
+    DISCOUNT_LIMITS,
 } from '@grocery-pos/contracts';
 
 /**
