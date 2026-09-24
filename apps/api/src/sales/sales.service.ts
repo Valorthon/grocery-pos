@@ -4,12 +4,16 @@ import { Sales } from './sales.schema';
 import { ClientSession, Connection, Model } from 'mongoose';
 import { SalesDetails } from './sales-details.schema';
 import {
+    DiscountType,
     GetAllDto,
     GetDetailsDto,
+    ReceiptDiscount,
     ReceiptDto,
     ReceiptFields,
     SellDto,
 } from './types';
+import { discountAmount } from '@grocery-pos/contracts';
+import { DISCOUNT_LIMITS, NUMERIC_LIMITS } from '../constants';
 import { ProductService } from '../product/product.service';
 import { runInTransaction } from '../common/utils/db';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
@@ -70,53 +74,134 @@ export class SalesService {
     async sell(user: AuthUser, dto: SellDto, session?: ClientSession) {
         const { paymentType, referenceNumber } = dto;
 
-        const { totalAmount, fullSellDetails } = await runInTransaction(
-            async (session) => {
-                const { totalAmount, fullSellDetails } = await this.prepareSell(
-                    dto,
-                    session,
-                );
+        const { fullSellDetails, subtotal, discount, totalAmount } =
+            await runInTransaction(
+                async (session) => {
+                    const { subtotal, fullSellDetails } =
+                        await this.prepareSell(dto, session);
+                    const { discount, totalAmount } = this.applyDiscount(
+                        subtotal,
+                        dto,
+                    );
 
-                const [created] = await this.model.create(
-                    [
-                        {
-                            amount: totalAmount,
-                            cashier: user.userId,
-                            paymentType,
-                            referenceNumber,
-                        },
-                    ],
-                    { session },
-                );
-
-                const inserts = fullSellDetails.map(
-                    ({ product, quantity, unitPrice }) => ({
-                        insertOne: {
-                            document: {
-                                product,
-                                quantity,
-                                unitPrice,
-                                sales: created._id,
+                    const [created] = await this.model.create(
+                        [
+                            {
+                                amount: totalAmount,
+                                cashier: user.userId,
+                                paymentType,
+                                referenceNumber,
+                                // Until a manager override exists, any
+                                // authenticated seller may discount, so the
+                                // cashier is the approver.
+                                ...(discount && {
+                                    discount: {
+                                        ...discount,
+                                        approvedBy: user.userId,
+                                    },
+                                }),
                             },
-                        },
-                    }),
-                );
+                        ],
+                        { session },
+                    );
 
-                await this.modelDetails.bulkWrite(inserts, { session });
-                await this.inventoryService.sell(dto, session);
+                    const inserts = fullSellDetails.map(
+                        ({ product, quantity, unitPrice }) => ({
+                            insertOne: {
+                                document: {
+                                    product,
+                                    quantity,
+                                    unitPrice,
+                                    sales: created._id,
+                                },
+                            },
+                        }),
+                    );
 
-                return { totalAmount, fullSellDetails };
-            },
-            this.connection,
-            session,
+                    await this.modelDetails.bulkWrite(inserts, { session });
+                    await this.inventoryService.sell(dto, session);
+
+                    return { fullSellDetails, subtotal, discount, totalAmount };
+                },
+                this.connection,
+                session,
+            );
+
+        return this.makeReceipt(
+            fullSellDetails,
+            user.username,
+            subtotal,
+            discount,
+            totalAmount,
         );
+    }
 
-        return this.makeReceipt(fullSellDetails, user.username, totalAmount);
+    /**
+     * Applies the requested whole-sale discount to the server-priced
+     * subtotal. The client never sends an amount: it sends the type, value
+     * and reason, and the server derives the centavos taken off.
+     */
+    private applyDiscount(
+        subtotal: number,
+        dto: SellDto,
+    ): { discount: ReceiptDiscount | null; totalAmount: number } {
+        const requested = dto.discount;
+
+        if (!requested) {
+            return { discount: null, totalAmount: subtotal };
+        }
+
+        if (
+            requested.type === DiscountType.FIXED &&
+            requested.value > subtotal
+        ) {
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Discount exceeds the sale subtotal',
+                { subtotal, discount: requested.value },
+            );
+        }
+
+        const amount = discountAmount(subtotal, requested);
+        const totalAmount = subtotal - amount;
+
+        if (amount < DISCOUNT_LIMITS.AMOUNT_MIN) {
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Discount rounds to nothing',
+                { subtotal, discount: amount },
+            );
+        }
+
+        // Also catches a malformed discount that slipped past validation and
+        // produced NaN, so it is a 400 here rather than a schema 500.
+        if (
+            !Number.isInteger(totalAmount) ||
+            totalAmount < NUMERIC_LIMITS.AMOUNT_MIN
+        ) {
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Discount leaves nothing to charge',
+                { subtotal, discount: amount },
+            );
+        }
+
+        return {
+            discount: {
+                type: requested.type,
+                value: requested.value,
+                reason: requested.reason,
+                amount,
+            },
+            totalAmount,
+        };
     }
 
     private makeReceipt(
         itemsInfo: ReceiptFields[],
         cashierName: string,
+        subtotal: number,
+        discount: ReceiptDiscount | null,
         totalAmount: number,
     ): ReceiptDto {
         const items: ReceiptFields[] = itemsInfo.map(
@@ -130,6 +215,8 @@ export class SalesService {
         return {
             cashierName,
             items,
+            subtotal,
+            discount,
             totalAmount,
         };
     }
@@ -141,7 +228,7 @@ export class SalesService {
             sellDetails.map((detail) => detail.product),
             session,
         );
-        let totalAmount = 0;
+        let subtotal = 0;
 
         const unknownProducts: string[] = [];
 
@@ -155,12 +242,12 @@ export class SalesService {
                 continue;
             }
 
-            // Integer centavos throughout, so the total is exact.
+            // Integer centavos throughout, so the subtotal is exact.
             const unitPrice = productDetails.price;
             const productName = productDetails.name;
 
             const quantityAmount = unitPrice * quantity;
-            totalAmount += quantityAmount;
+            subtotal += quantityAmount;
 
             fullSellDetails.push({
                 product,
@@ -179,6 +266,6 @@ export class SalesService {
             );
         }
 
-        return { totalAmount, fullSellDetails };
+        return { subtotal, fullSellDetails };
     }
 }

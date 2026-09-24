@@ -1,10 +1,12 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
     IsEnum,
     IsInt,
     IsMongoId,
     IsNotEmpty,
+    IsNotEmptyObject,
+    IsObject,
     IsNumber,
     IsOptional,
     IsPositive,
@@ -12,9 +14,15 @@ import {
     MaxLength,
     Min,
     ValidateNested,
+    ValidationArguments,
+    registerDecorator,
 } from 'class-validator';
-import { PaymentType } from './sales.types';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
+import { DiscountType, PaymentType } from './sales.types';
+import {
+    DISCOUNT_LIMITS,
+    NUMERIC_LIMITS,
+    STRING_LIMITS,
+} from '../../constants';
 
 export class GetDetailsDto {
     @IsNotEmpty()
@@ -32,6 +40,52 @@ class SellDetailsFields {
     quantity!: number;
 }
 
+/** Caps `value` at 100 when the discount is a percent; FIXED is unbounded here. */
+function IsPercentInRange() {
+    return function (target: object, propertyName: string) {
+        registerDecorator({
+            name: 'isPercentInRange',
+            target: target.constructor,
+            propertyName,
+            validator: {
+                validate(value: unknown, args: ValidationArguments) {
+                    const { type } = args.object as DiscountFields;
+                    return (
+                        type !== DiscountType.PERCENT ||
+                        (typeof value === 'number' &&
+                            value <= DISCOUNT_LIMITS.PERCENT_MAX)
+                    );
+                },
+                defaultMessage() {
+                    return `A percent discount cannot exceed ${DISCOUNT_LIMITS.PERCENT_MAX}%`;
+                },
+            },
+        });
+    };
+}
+
+export class DiscountFields {
+    @IsNotEmpty()
+    @IsEnum(DiscountType)
+    type!: DiscountType;
+
+    /** A whole percent (1-100) for PERCENT, centavos for FIXED. */
+    @IsNotEmpty()
+    @IsInt()
+    // PERCENT_MIN and FIXED_MIN are both 1: one lower bound serves both types.
+    @Min(DISCOUNT_LIMITS.PERCENT_MIN)
+    @IsPercentInRange()
+    value!: number;
+
+    @IsNotEmpty()
+    @IsString()
+    @MaxLength(STRING_LIMITS.REASON)
+    @Transform(({ value }) =>
+        typeof value === 'string' ? value.trim() : (value as unknown),
+    )
+    reason!: string;
+}
+
 export class SellDto {
     @IsNotEmpty()
     @IsEnum(PaymentType)
@@ -46,6 +100,15 @@ export class SellDto {
     @ArrayNotEmpty()
     @Type(() => SellDetailsFields)
     sellDetails!: SellDetailsFields[];
+
+    /** Optional whole-sale discount; the server computes its amount. */
+    @IsOptional()
+    // Without this an array passes: ValidateNested checks each element.
+    @IsObject()
+    @IsNotEmptyObject()
+    @ValidateNested()
+    @Type(() => DiscountFields)
+    discount?: DiscountFields;
 }
 
 export class ReceiptFields {
@@ -55,10 +118,22 @@ export class ReceiptFields {
     amount!: number;
 }
 
+export class ReceiptDiscount {
+    type!: DiscountType;
+    value!: number;
+    reason!: string;
+    /** Centavos taken off the subtotal. */
+    amount!: number;
+}
+
 export class ReceiptDto {
     cashierName!: string;
     items!: ReceiptFields[];
-    /** Centavos. */
+    /** Centavos: the sum of the undiscounted lines. */
+    subtotal!: number;
+    /** Null when the sale has no discount. */
+    discount!: ReceiptDiscount | null;
+    /** Centavos: the charged total, `subtotal - discount.amount`. */
     totalAmount!: number;
 }
 

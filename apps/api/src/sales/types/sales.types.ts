@@ -1,1 +1,1 @@
-export { PaymentType } from '@grocery-pos/contracts';
+export { DiscountType, PaymentType } from '@grocery-pos/contracts';

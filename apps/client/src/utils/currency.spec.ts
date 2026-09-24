@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
     centavosToPesoInput,
     formatCurrency,
-    percentOf,
     pesosToCentavos,
 } from './currency';
 
@@ -55,12 +54,5 @@ describe('pesosToCentavos', () => {
     it('round-trips the pre-filled input value', () => {
         expect(centavosToPesoInput(11041)).toBe('110.41');
         expect(pesosToCentavos(centavosToPesoInput(11041))).toBe(11041);
-    });
-});
-
-describe('percentOf', () => {
-    it('rounds to a whole centavo', () => {
-        // 15% off ₱129.90 is ₱19.485 of discount.
-        expect(percentOf(12990, 15)).toBe(1949);
     });
 });

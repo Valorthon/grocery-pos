@@ -46,8 +46,3 @@ export function centavosToPesos(centavos: number): number {
 export function centavosToPesoInput(centavos: number): string {
     return centavosToPesos(centavos).toFixed(2);
 }
-
-/** A percentage of an amount, rounded to the nearest centavo. */
-export function percentOf(centavos: number, percent: number): number {
-    return Math.round((centavos * percent) / 100);
-}

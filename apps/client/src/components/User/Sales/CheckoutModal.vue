@@ -307,12 +307,12 @@ import {
     formatCurrency,
     pesosToCentavos,
 } from '@/utils/currency';
-import { cashTender, discountedTotal } from './checkout';
+import { cashTender } from './checkout';
 
 const props = defineProps<{
     modelValue: boolean;
-    subtotal: number;
-    discountPercent: number;
+    /** Preview total due, in centavos, from `previewSale` in Sell.vue. */
+    total: number;
     initialMethod?: PaymentMethod;
     initialCash?: number | null;
 }>();
@@ -338,9 +338,7 @@ const processing = ref(false);
 const cashBills = [20, 50, 100, 500, 1000].map((p) => p * CENTAVOS_PER_PESO);
 const splitBills = [5, 10, 20, 50, 100, 500].map((p) => p * CENTAVOS_PER_PESO);
 
-const total = computed(() =>
-    discountedTotal(props.subtotal, props.discountPercent),
-);
+const total = computed(() => props.total);
 const roundedUpTotal = computed(
     () => Math.ceil(total.value / CENTAVOS_PER_PESO) * CENTAVOS_PER_PESO,
 );

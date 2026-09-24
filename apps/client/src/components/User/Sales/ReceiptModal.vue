@@ -77,16 +77,22 @@
                     <div class="flex justify-between text-slate-600">
                         <span>Subtotal ({{ itemCount }} Items):</span>
                         <span class="font-bold text-slate-900">{{
-                            currency(subtotal)
+                            currency(receipt?.subtotal ?? 0)
                         }}</span>
                     </div>
-                    <div
-                        v-if="discountAmount > 0"
-                        class="flex justify-between text-emerald-700 font-bold"
-                    >
-                        <span>Member Savings:</span>
-                        <span>-{{ currency(discountAmount) }}</span>
-                    </div>
+                    <template v-if="receipt?.discount">
+                        <div
+                            class="flex justify-between text-emerald-700 font-bold"
+                        >
+                            <span>Discount ({{ discountLabel }}):</span>
+                            <span
+                                >-{{ currency(receipt.discount.amount) }}</span
+                            >
+                        </div>
+                        <div class="text-[10px] text-slate-500">
+                            Reason: {{ receipt.discount.reason }}
+                        </div>
+                    </template>
                     <div class="flex justify-between text-slate-600">
                         <span>Sales Tax (Exempt):</span>
                         <span>{{ currency(0) }}</span>
@@ -96,7 +102,7 @@
                     >
                         <span>TOTAL:</span>
                         <span class="text-base font-black">{{
-                            currency(total)
+                            currency(receipt?.totalAmount ?? 0)
                         }}</span>
                     </div>
                 </div>
@@ -203,13 +209,12 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import type { PaymentInfo, Receipt } from './types';
 import { formatCurrency } from '@/utils/currency';
+import { DiscountType } from '@grocery-pos/contracts';
 
 const props = defineProps<{
     modelValue: boolean;
+    /** The server's receipt: its subtotal, discount and total are shown as-is. */
     receipt: Receipt | null;
-    subtotal: number;
-    discountAmount: number;
-    total: number;
     payment: PaymentInfo | null;
 }>();
 
@@ -226,6 +231,14 @@ const model = computed({
 const itemCount = computed(
     () => props.receipt?.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0,
 );
+
+const discountLabel = computed(() => {
+    const discount = props.receipt?.discount;
+    if (!discount) return '';
+    return discount.type === DiscountType.PERCENT
+        ? `${discount.value}%`
+        : 'Fixed';
+});
 
 const methodLabel = computed(() => {
     switch (props.payment?.method) {
