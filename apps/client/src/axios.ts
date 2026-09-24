@@ -34,6 +34,15 @@ const processQueue = (error: AxiosError | null) => {
     failedQueue = [];
 };
 
+/**
+ * A 401 from the auth routes themselves is an answer, not an expired
+ * session: a wrong password on login must reach the login form, and a
+ * failed refresh or logout must not start another refresh.
+ */
+const AUTH_ENDPOINTS = [constant.login, constant.refresh, constant.logout];
+export const isAuthEndpoint = (url?: string): boolean =>
+    !!url && AUTH_ENDPOINTS.some((path) => url.endsWith(path));
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     if (config.data instanceof FormData) {
         delete config.headers['Content-Type'];
@@ -60,7 +69,11 @@ api.interceptors.response.use(
             _retry?: boolean;
         };
         // Check if error is 401 and we haven't tried to refresh yet
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (
+            error.response?.status === 401 &&
+            !originalRequest._retry &&
+            !isAuthEndpoint(originalRequest.url)
+        ) {
             // If already refreshing, queue this request
             if (isRefreshing) {
                 return new Promise((resolve, reject) => {
