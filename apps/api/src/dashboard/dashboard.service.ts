@@ -6,6 +6,8 @@ import { Inventory } from '../inventory-man/inventory/inventory.schema';
 import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
 import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
+import { TypedConfigService } from '../common/typed-config/typed-config.service';
+import { calendarDateInZone, dayRangeInZone } from '../common/utils/timezone';
 
 export interface DashboardResponse {
     totalProducts: number;
@@ -27,19 +29,14 @@ export class DashboardService {
         @InjectModel(Restock.name) private restockModel: Model<Restock>,
         @InjectModel(Adjustment.name)
         private adjustmentModel: Model<Adjustment>,
+        private config: TypedConfigService,
     ) {}
 
     async getDashboard(): Promise<DashboardResponse> {
-        const now = new Date();
-        const startOfDay = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate(),
-        );
-        const endOfDay = new Date(
-            now.getFullYear(),
-            now.getMonth(),
-            now.getDate() + 1,
+        const timeZone = this.config.get('STORE_TIMEZONE');
+        const { start: startOfDay, end: endOfDay } = dayRangeInZone(
+            calendarDateInZone(new Date(), timeZone),
+            timeZone,
         );
 
         const [
