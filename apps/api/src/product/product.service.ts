@@ -17,6 +17,14 @@ import { AuthUser } from '../auth/types';
 import { EanCounterService } from '../ean-counter/ean-counter.service';
 import { ErrorCode, NotFoundError, ValidationError } from '../common/errors';
 
+/** Most rows `GET /products/matches` returns: it feeds a pick list. */
+export const MAX_MATCHES = 10;
+
+/** Escapes user input so it matches literally inside a `$regex`. */
+export function escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 @Injectable()
 export class ProductService {
     constructor(
@@ -83,12 +91,10 @@ export class ProductService {
 
         const query: Record<string, unknown> = {};
         if (name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.name = { $regex: `^${escaped}` };
+            query.name = { $regex: `^${escapeRegex(name)}` };
         }
         if (EAN) {
-            const escaped = EAN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.EAN = { $regex: `^${escaped}` };
+            query.EAN = { $regex: `^${escapeRegex(EAN)}` };
         }
 
         const [data, totalItems] = await Promise.all([
@@ -119,12 +125,10 @@ export class ProductService {
 
         const query: Record<string, unknown> = {};
         if (name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.name = { $regex: escaped };
+            query.name = { $regex: escapeRegex(name) };
         }
         if (EAN) {
-            const escaped = EAN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.EAN = { $regex: `^${escaped}` };
+            query.EAN = { $regex: `^${escapeRegex(EAN)}` };
         }
 
         Logger.log({ query, dto });
@@ -237,13 +241,18 @@ export class ProductService {
     ): Promise<{ EAN: string; name: string; product: string }[]> {
         const { EAN, name } = dto;
 
-        const query: Record<string, unknown> = {};
+        let query: Record<string, unknown>;
         if (EAN) {
-            const escaped = EAN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.EAN = { $regex: `^${escaped}` };
+            query = { EAN: { $regex: `^${escapeRegex(EAN)}` } };
         } else if (name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.name = { $regex: `${escaped}` };
+            // Names are stored lowercase and MatchesDto lowercases the term,
+            // so a plain substring match is already case-insensitive.
+            const byName = { name: { $regex: escapeRegex(name) } };
+            // A digits-only term may also be part of a barcode, e.g. the
+            // legible half of a torn label.
+            query = /^\d+$/.test(name)
+                ? { $or: [byName, { EAN: { $regex: escapeRegex(name) } }] }
+                : byName;
         } else {
             return [];
         }
@@ -251,14 +260,12 @@ export class ProductService {
         const matches = (await this.model
             .find(query, 'name EAN')
             .sort({ name: 1 })
-            .limit(5)
+            .limit(MAX_MATCHES)
             .lean()) as Array<{
             EAN: string;
             name: string;
             _id: Types.ObjectId;
         }>;
-
-        Logger.log({ query, matches });
 
         return matches.map((match) => ({
             EAN: match.EAN,
