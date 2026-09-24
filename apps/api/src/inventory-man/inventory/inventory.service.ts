@@ -159,49 +159,92 @@ export class InventoryService {
     }
 
     /**
-     * Throws unless every product in the adjustment exists and has an
-     * inventory row. Run this before writing any adjustment records so a
-     * rejected adjustment leaves no audit trail behind.
+     * Applies an adjustment. Rejects with 404 if any product has no inventory
+     * row and with 400 if any product's net change would drive stock negative.
+     * Must run inside a transaction: on a 400, ops before the failing one have
+     * already applied and are undone only when the transaction aborts.
      */
-    async assertAdjustable(
-        adjustDetails: AdjustDto['adjustDetails'],
-        session: ClientSession,
-    ): Promise<void> {
+    async adjust(dto: AdjustDto, session: ClientSession): Promise<void> {
+        const netByProduct = sumByProduct(
+            dto.adjustDetails.map(({ product, change }) => [product, change]),
+        );
+
+        // Read before writing: bulkWrite is ordered, so a read afterwards
+        // would see stock already changed by earlier ops in this request.
         const stockByProduct = await this.getStockByProduct(
-            adjustDetails.map((d) => d.product),
+            [...netByProduct.keys()],
             session,
         );
 
-        this.throwIfMissing(adjustDetails, stockByProduct);
-    }
+        const missing = [...netByProduct.keys()].filter(
+            (product) => !stockByProduct.has(product),
+        );
+        if (missing.length > 0) {
+            throw new NotFoundError(
+                ErrorCode.PRODUCT_NOT_FOUND,
+                'One or more products have no inventory record',
+                missing.map((product) => ({ product })),
+            );
+        }
 
-    async adjust(dto: AdjustDto, session: ClientSession): Promise<void> {
-        const { adjustDetails } = dto;
+        // One op per product with a non-zero net change. Lines that cancel
+        // out (e.g. +3 and -3) leave stock unchanged and need no write.
+        const updates = [...netByProduct]
+            .filter(([, change]) => change !== 0)
+            .map(([product, change]) => ({
+                updateOne: {
+                    // Same guard as sell(): Mongoose's `min` validator does not
+                    // run on update operators, so a negative $inc must be
+                    // guarded in the filter or it will drive stock below zero.
+                    filter:
+                        change < 0
+                            ? { product, stock: { $gte: -change } }
+                            : { product },
+                    update: { $inc: { stock: change } },
+                },
+            }));
 
-        const updates = adjustDetails.map(({ product, change }) => ({
-            updateOne: {
-                // Same guard as sell(): Mongoose's `min` validator does not run
-                // on update operators, so a negative $inc must be guarded in
-                // the filter or it will drive stock below zero.
-                filter:
-                    change < 0
-                        ? { product, stock: { $gte: -change } }
-                        : { product },
-                update: { $inc: { stock: change } },
-            },
-        }));
+        if (updates.length === 0) return;
 
         const result = await this.model.bulkWrite(updates, { session });
 
         if (result.matchedCount !== updates.length) {
-            await this.throwAdjustmentRejected(adjustDetails, session);
+            const shortfalls = [...netByProduct]
+                .map(([product, change]) => {
+                    const current = stockByProduct.get(product);
+                    return {
+                        product,
+                        name: current?.name,
+                        change,
+                        available: current?.stock ?? 0,
+                    };
+                })
+                .filter((item) => item.available + item.change < 0);
+
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Adjustment would make stock negative for one or more products',
+                shortfalls,
+            );
         }
     }
 
+    /**
+     * Sells stock. Quantities are summed per product so each product gets a
+     * single guarded decrement, and shortfalls are reported against stock
+     * read before the write (see adjust() for why).
+     */
     async sell(dto: SellDto, session: ClientSession): Promise<void> {
-        const { sellDetails } = dto;
+        const quantityByProduct = sumByProduct(
+            dto.sellDetails.map(({ product, quantity }) => [product, quantity]),
+        );
 
-        const updates = sellDetails.map(({ product, quantity }) => ({
+        const stockByProduct = await this.getStockByProduct(
+            [...quantityByProduct.keys()],
+            session,
+        );
+
+        const updates = [...quantityByProduct].map(([product, quantity]) => ({
             updateOne: {
                 // The $gte guard belongs in the filter: Mongoose's `min` validator
                 // does not run on update operators, so an unguarded $inc will
@@ -214,91 +257,22 @@ export class InventoryService {
         const result = await this.model.bulkWrite(updates, { session });
 
         if (result.matchedCount !== updates.length) {
-            await this.throwInsufficientStock(sellDetails, session);
-        }
-    }
+            const shortfalls = [...quantityByProduct]
+                .map(([product, quantity]) => {
+                    const current = stockByProduct.get(product);
+                    return {
+                        product,
+                        name: current?.name,
+                        requested: quantity,
+                        available: current?.stock ?? 0,
+                    };
+                })
+                .filter((item) => item.available < item.requested);
 
-    /**
-     * Called when a guarded sell matched fewer rows than it tried to update.
-     * Re-reads the affected inventory inside the same transaction to report
-     * exactly which products were short, rather than a bare count mismatch.
-     */
-    private async throwInsufficientStock(
-        sellDetails: SellDto['sellDetails'],
-        session: ClientSession,
-    ): Promise<never> {
-        const stockByProduct = await this.getStockByProduct(
-            sellDetails.map((d) => d.product),
-            session,
-        );
-
-        const shortfalls = sellDetails
-            .map(({ product, quantity }) => {
-                const current = stockByProduct.get(product.toString());
-                return {
-                    product: product.toString(),
-                    name: current?.name,
-                    requested: quantity,
-                    available: current?.stock ?? 0,
-                };
-            })
-            .filter((item) => item.available < item.requested);
-
-        throw new ValidationError(
-            ErrorCode.VALIDATION_INVALID_INPUT,
-            'Insufficient stock for one or more products',
-            shortfalls,
-        );
-    }
-
-    /**
-     * Called when a guarded adjust matched fewer rows than it tried to update.
-     * Distinguishes a missing inventory row from a decrement below zero.
-     */
-    private async throwAdjustmentRejected(
-        adjustDetails: AdjustDto['adjustDetails'],
-        session: ClientSession,
-    ): Promise<never> {
-        const stockByProduct = await this.getStockByProduct(
-            adjustDetails.map((d) => d.product),
-            session,
-        );
-
-        this.throwIfMissing(adjustDetails, stockByProduct);
-
-        const shortfalls = adjustDetails
-            .filter(({ change }) => change < 0)
-            .map(({ product, change }) => {
-                const current = stockByProduct.get(product.toString());
-                return {
-                    product: product.toString(),
-                    name: current?.name,
-                    change,
-                    available: current?.stock ?? 0,
-                };
-            })
-            .filter((item) => item.available < -item.change);
-
-        throw new ValidationError(
-            ErrorCode.VALIDATION_INVALID_INPUT,
-            'Adjustment would make stock negative for one or more products',
-            shortfalls,
-        );
-    }
-
-    private throwIfMissing(
-        adjustDetails: AdjustDto['adjustDetails'],
-        stockByProduct: Map<string, unknown>,
-    ): void {
-        const missing = [
-            ...new Set(adjustDetails.map((d) => d.product.toString())),
-        ].filter((product) => !stockByProduct.has(product));
-
-        if (missing.length > 0) {
-            throw new NotFoundError(
-                ErrorCode.PRODUCT_NOT_FOUND,
-                'One or more products have no inventory record',
-                missing.map((product) => ({ product })),
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Insufficient stock for one or more products',
+                shortfalls,
             );
         }
     }
@@ -347,4 +321,16 @@ export class InventoryService {
 
         await this.model.insertMany(toInsert, { session });
     }
+}
+
+/** Sums amounts per product id, preserving first-seen order. */
+function sumByProduct(
+    entries: [product: { toString(): string }, amount: number][],
+): Map<string, number> {
+    const totals = new Map<string, number>();
+    for (const [product, amount] of entries) {
+        const key = product.toString();
+        totals.set(key, (totals.get(key) ?? 0) + amount);
+    }
+    return totals;
 }

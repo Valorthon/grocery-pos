@@ -87,12 +87,9 @@ export class AdjustmentService {
                     { session },
                 );
 
-                // Validate and apply the stock change before recording it, so
-                // a rejected adjustment never leaves an AdjustmentDetails row.
-                await this.inventoryService.assertAdjustable(
-                    adjustDetails,
-                    session,
-                );
+                // Apply the stock change before recording it. adjust() throws
+                // for a missing inventory row or negative stock, so a rejected
+                // adjustment never leaves an AdjustmentDetails row.
                 await this.inventoryService.adjust(dto, session);
 
                 const inserts = adjustDetails.map((detail) => ({

@@ -27,13 +27,11 @@ describe('AdjustmentService.adjust', () => {
     let service: AdjustmentService;
     let create: jest.Mock;
     let detailsBulkWrite: jest.Mock;
-    let assertAdjustable: jest.Mock;
     let inventoryAdjust: jest.Mock;
 
     beforeEach(async () => {
         create = jest.fn().mockResolvedValue([{ _id: 'adj1' }]);
         detailsBulkWrite = jest.fn().mockResolvedValue(undefined);
-        assertAdjustable = jest.fn().mockResolvedValue(undefined);
         inventoryAdjust = jest.fn().mockResolvedValue(undefined);
 
         const session = {
@@ -59,10 +57,7 @@ describe('AdjustmentService.adjust', () => {
                 },
                 {
                     provide: InventoryService,
-                    useValue: {
-                        assertAdjustable,
-                        adjust: inventoryAdjust,
-                    },
+                    useValue: { adjust: inventoryAdjust },
                 },
             ],
         }).compile();
@@ -73,7 +68,6 @@ describe('AdjustmentService.adjust', () => {
     it('records details only after the stock change has been applied', async () => {
         await service.adjust(ADMIN, adjustDto([{ product: 'p1', change: 3 }]));
 
-        expect(assertAdjustable).toHaveBeenCalled();
         expect(inventoryAdjust).toHaveBeenCalled();
         expect(detailsBulkWrite).toHaveBeenCalledTimes(1);
         expect(inventoryAdjust.mock.invocationCallOrder[0]).toBeLessThan(
@@ -82,7 +76,7 @@ describe('AdjustmentService.adjust', () => {
     });
 
     it('writes no details row for a product with no inventory row', async () => {
-        assertAdjustable.mockRejectedValue(
+        inventoryAdjust.mockRejectedValue(
             new NotFoundError(ErrorCode.PRODUCT_NOT_FOUND, 'missing', [
                 { product: 'ghost' },
             ]),
@@ -92,7 +86,6 @@ describe('AdjustmentService.adjust', () => {
             service.adjust(ADMIN, adjustDto([{ product: 'ghost', change: 5 }])),
         ).rejects.toMatchObject({ statusCode: 404 });
 
-        expect(inventoryAdjust).not.toHaveBeenCalled();
         expect(detailsBulkWrite).not.toHaveBeenCalled();
     });
 
