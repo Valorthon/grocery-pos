@@ -85,6 +85,7 @@ import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import { formatCurrency } from '@/utils/currency';
 
 const props = defineProps<{
     item: {
@@ -144,8 +145,10 @@ async function fetchDetails() {
             id: details.id,
             name: details.product?.name,
             quantity: details.quantity,
-            unitCost: `₱${(details.unitCost ?? 0).toLocaleString()}`,
-            totalCost: `₱${((details.unitCost ?? 0) * (details.quantity ?? 0)).toLocaleString()}`,
+            unitCost: formatCurrency(details.unitCost ?? 0),
+            totalCost: formatCurrency(
+                (details.unitCost ?? 0) * (details.quantity ?? 0),
+            ),
         }),
     );
 

@@ -92,24 +92,26 @@
                 <button
                     type="button"
                     class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98]"
-                    @click="amountTendered = total.toFixed(2)"
+                    @click="amountTendered = centavosToPesoInput(total)"
                 >
                     Exact
                 </button>
                 <button
                     type="button"
                     class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98]"
-                    @click="amountTendered = Math.ceil(total).toFixed(2)"
+                    @click="
+                        amountTendered = centavosToPesoInput(roundedUpTotal)
+                    "
                 >
-                    {{ currency(Math.ceil(total)) }}
+                    {{ currency(roundedUpTotal) }}
                 </button>
                 <button
                     v-for="bill in cashBills"
                     :key="bill"
                     type="button"
                     class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-30 active:scale-[0.98]"
-                    :disabled="bill < total && Math.ceil(total) > bill"
-                    @click="amountTendered = bill.toFixed(2)"
+                    :disabled="bill < total"
+                    @click="amountTendered = centavosToPesoInput(bill)"
                 >
                     {{ currency(bill) }}
                 </button>
@@ -188,7 +190,7 @@
                         :key="bill"
                         type="button"
                         class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98]"
-                        @click="splitCashGiven = bill.toString()"
+                        @click="splitCashGiven = centavosToPesoInput(bill)"
                     >
                         {{ currency(bill) }}
                     </button>
@@ -299,7 +301,13 @@ import { Banknote, QrCode, Split } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import type { PaymentInfo, PaymentMethod } from './types';
-import { formatCurrency } from '@/utils/currency';
+import {
+    CENTAVOS_PER_PESO,
+    centavosToPesoInput,
+    formatCurrency,
+    pesosToCentavos,
+} from '@/utils/currency';
+import { cashTender, discountedTotal } from './checkout';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -325,26 +333,32 @@ const splitCashGiven = ref('');
 const referenceNumber = ref('');
 const processing = ref(false);
 
-const cashBills = [20, 50, 100, 500, 1000];
-const splitBills = [5, 10, 20, 50, 100, 500];
+// Money below is integer centavos; the two text inputs hold typed pesos and
+// are converted once, on read.
+const cashBills = [20, 50, 100, 500, 1000].map((p) => p * CENTAVOS_PER_PESO);
+const splitBills = [5, 10, 20, 50, 100, 500].map((p) => p * CENTAVOS_PER_PESO);
 
-const total = computed(
-    () => props.subtotal * (1 - props.discountPercent / 100),
+const total = computed(() =>
+    discountedTotal(props.subtotal, props.discountPercent),
+);
+const roundedUpTotal = computed(
+    () => Math.ceil(total.value / CENTAVOS_PER_PESO) * CENTAVOS_PER_PESO,
 );
 
-const tenderedNum = computed(() => parseFloat(amountTendered.value) || 0);
-const changeDue = computed(() => Math.max(0, tenderedNum.value - total.value));
-const isCashSufficient = computed(() => tenderedNum.value >= total.value);
+const cash = computed(() => cashTender(total.value, amountTendered.value));
+const tenderedNum = computed(() => cash.value.tendered);
+const changeDue = computed(() => cash.value.changeDue);
+const isCashSufficient = computed(() => cash.value.isSufficient);
 
-const cashGivenNum = computed(() => parseFloat(splitCashGiven.value) || 0);
+const cashGivenNum = computed(() => pesosToCentavos(splitCashGiven.value));
 const splitCashPortion = computed(() =>
     Math.min(total.value, cashGivenNum.value),
 );
 const splitOnlinePortion = computed(() =>
-    Math.max(0, +(total.value - splitCashPortion.value).toFixed(2)),
+    Math.max(0, total.value - splitCashPortion.value),
 );
 const splitCashChangeDue = computed(() =>
-    Math.max(0, +(cashGivenNum.value - total.value).toFixed(2)),
+    Math.max(0, cashGivenNum.value - total.value),
 );
 
 const canConfirm = computed(() => {
@@ -364,14 +378,14 @@ function currency(value: number): string {
 function selectMethod(next: PaymentMethod) {
     method.value = next;
     if (next === 'CASH' && !amountTendered.value) {
-        amountTendered.value = total.value.toFixed(2);
+        amountTendered.value = centavosToPesoInput(total.value);
     }
 }
 
 function reset() {
     method.value = props.initialMethod ?? 'CASH';
     amountTendered.value =
-        props.initialCash != null ? props.initialCash.toFixed(2) : '';
+        props.initialCash != null ? centavosToPesoInput(props.initialCash) : '';
     splitCashGiven.value = '';
     referenceNumber.value = '';
     processing.value = false;

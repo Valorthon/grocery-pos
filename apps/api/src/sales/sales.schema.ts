@@ -10,7 +10,12 @@ export class Sales {
         type: Number,
         min: NUMERIC_LIMITS.AMOUNT_MIN,
         required: true,
+        validate: {
+            validator: Number.isInteger,
+            message: 'amount must be an integer number of centavos',
+        },
     })
+    /** Centavos. */
     amount!: number;
 
     @Prop({

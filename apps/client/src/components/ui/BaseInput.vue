@@ -19,6 +19,8 @@
             <input
                 :id="id"
                 :type="type"
+                :min="min"
+                :step="step"
                 :value="modelValue"
                 :placeholder="placeholder"
                 :disabled="disabled"
@@ -54,6 +56,8 @@ const props = withDefaults(
         id?: string;
         label?: string;
         type?: string;
+        min?: string | number;
+        step?: string | number;
         placeholder?: string;
         disabled?: boolean;
         clearable?: boolean;
@@ -66,6 +70,8 @@ const props = withDefaults(
         id: '',
         label: '',
         type: 'text',
+        min: undefined,
+        step: undefined,
         placeholder: '',
         disabled: false,
         clearable: false,

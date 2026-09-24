@@ -15,7 +15,7 @@
                     <span>{{ group.title }}</span>
                 </div>
                 <span class="font-mono text-xs font-bold text-slate-600">
-                    {{ format(group.subtotal, group.kind === 'bills' ? 0 : 2) }}
+                    {{ formatCurrency(group.subtotal) }}
                 </span>
             </div>
 
@@ -49,12 +49,7 @@
                                 class="font-mono text-xs font-black"
                                 :class="group.subtotalClass"
                             >
-                                {{
-                                    format(
-                                        count(d.id) * d.value,
-                                        group.kind === 'bills' ? 0 : 2,
-                                    )
-                                }}
+                                {{ formatCurrency(count(d.id) * d.value) }}
                                 <span
                                     class="text-[11px] font-bold"
                                     :class="group.countClass"
@@ -111,6 +106,7 @@ import { Banknote, Coins, Minus, Plus } from '@lucide/vue';
 import DenominationIcon from './DenominationIcon.vue';
 import { COIN_DENOMINATIONS, PAPER_DENOMINATIONS } from './shift';
 import type { BillCounts } from './shift';
+import { formatCurrency } from '@/utils/currency';
 
 const props = defineProps<{
     modelValue: BillCounts;
@@ -180,12 +176,5 @@ function set(id: string, event: Event) {
         [id]: Number.isNaN(parsed) || parsed < 0 ? 0 : parsed,
     };
     emit('update:modelValue', next);
-}
-
-function format(value: number, decimals: number): string {
-    return `₱${value.toLocaleString('en-PH', {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals,
-    })}`;
 }
 </script>

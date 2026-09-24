@@ -83,7 +83,7 @@
                     <div
                         class="flex justify-between font-black pt-1 border-t border-slate-300"
                         :class="
-                            Math.abs(report.overShort) < 0.01
+                            report.overShort === 0
                                 ? 'text-emerald-700'
                                 : report.overShort > 0
                                   ? 'text-amber-700'
@@ -92,7 +92,7 @@
                     >
                         <span>
                             VARIANCE ({{
-                                Math.abs(report.overShort) < 0.01
+                                report.overShort === 0
                                     ? 'EXACT'
                                     : report.overShort > 0
                                       ? 'OVER'
@@ -103,9 +103,7 @@
                             {{
                                 report.overShort > 0
                                     ? `+${currency(report.overShort)}`
-                                    : report.overShort < 0
-                                      ? `-${currency(Math.abs(report.overShort))}`
-                                      : currency(0)
+                                    : currency(report.overShort)
                             }}
                         </span>
                     </div>

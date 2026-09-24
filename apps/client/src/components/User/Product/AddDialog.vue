@@ -29,9 +29,10 @@
             />
             <BaseInput
                 v-model.number="formData.price"
-                label="Selling Price"
+                label="Selling Price (₱)"
                 type="number"
-                min="0"
+                min="0.01"
+                step="0.01"
                 :error="errors.price"
             />
         </div>
@@ -59,12 +60,15 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import { isAxiosError } from 'axios';
+import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
+import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
 
 const props = defineProps<{
     modelValue: boolean;
     item?: {
         EAN?: string;
         autoGenerateEAN?: boolean;
+        /** Centavos. */
         price?: number;
         name?: string;
     };
@@ -85,6 +89,7 @@ const uiStore = useUIStore();
 const formData = reactive({
     EAN: '',
     name: '',
+    // Typed pesos; converted to centavos on submit.
     price: null as number | null,
     autoGenerateEAN: false,
 });
@@ -99,7 +104,10 @@ watch(
         if (open) {
             formData.EAN = props.item?.EAN ?? '';
             formData.name = props.item?.name ?? '';
-            formData.price = props.item?.price ?? null;
+            formData.price =
+                props.item?.price != null
+                    ? centavosToPesos(props.item.price)
+                    : null;
             formData.autoGenerateEAN = props.item?.autoGenerateEAN ?? false;
             errors.value = {};
         }
@@ -111,8 +119,11 @@ function validate(): boolean {
     if (!formData.autoGenerateEAN && !formData.EAN)
         e.EAN = 'This field is required';
     if (!formData.name) e.name = 'This field is required';
-    if (formData.price == null || formData.price < 0)
-        e.price = 'Valid price is required';
+    if (
+        formData.price == null ||
+        pesosToCentavos(formData.price) < NUMERIC_LIMITS.PRICE_MIN
+    )
+        e.price = 'Enter at least ₱0.01, up to 2 decimals';
     errors.value = e;
     return Object.keys(e).length === 0;
 }
@@ -133,10 +144,11 @@ const submitProduct = async () => {
         return;
     }
 
+    const payload = { ...formData, price: pesosToCentavos(formData.price) };
     if (isEditMode.value) {
-        emit('update', { ...formData });
+        emit('update', payload);
     } else {
-        emit('add', { ...formData });
+        emit('add', payload);
     }
     model.value = false;
 };

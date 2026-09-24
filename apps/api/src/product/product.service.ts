@@ -43,16 +43,19 @@ export class ProductService {
     }
 
     async update(dto: UpdateBulkDto, session?: ClientSession): Promise<void> {
-        const updates = dto.updates.map(({ product, update }) => ({
-            updateOne: {
-                filter: { _id: product },
-                update: { $set: update },
-            },
-        }));
-
         await runInTransaction(
             async (session) => {
-                await this.model.bulkWrite(updates, { session });
+                // Not bulkWrite: Mongoose never runs schema validators on
+                // bulkWrite updates, so the integer-centavo and min price
+                // checks would be skipped. Sequential because operations
+                // sharing a transaction session must not run concurrently.
+                for (const { product, update } of dto.updates) {
+                    await this.model.updateOne(
+                        { _id: product },
+                        { $set: update },
+                        { session, runValidators: true },
+                    );
+                }
             },
             this.connection,
             session,

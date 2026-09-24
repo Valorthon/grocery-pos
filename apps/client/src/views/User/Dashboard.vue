@@ -76,7 +76,7 @@
                                     {{ sale.cashier?.name ?? 'N/A' }}
                                 </td>
                                 <td class="py-3 px-5 font-medium">
-                                    ₱{{ sale.amount?.toLocaleString() ?? 0 }}
+                                    {{ formatCurrency(sale.amount ?? 0) }}
                                 </td>
                                 <td class="py-3 px-5">
                                     <Badge
@@ -139,6 +139,7 @@ import api from '@/axios';
 import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import { useAuthStore } from '@/stores/auth';
+import { formatCurrency } from '@/utils/currency';
 
 const authStore = useAuthStore();
 const loading = ref(true);
@@ -192,7 +193,7 @@ const stats = computed(() => [
     },
     {
         title: "Today's Revenue",
-        value: `₱${(data.value?.todayRevenue ?? 0).toLocaleString()}`,
+        value: formatCurrency(data.value?.todayRevenue ?? 0),
         icon: Banknote,
         avatarClass: 'bg-amber-50 text-amber-600',
     },
@@ -212,7 +213,7 @@ const activities = computed(() => {
     data.value.recentSales.forEach((s) => {
         items.push({
             id: `sale-${s._id}`,
-            title: `Sale: ₱${s.amount?.toLocaleString() ?? 0}`,
+            title: `Sale: ${formatCurrency(s.amount ?? 0)}`,
             time: formatRelative(s.createdAt),
             color: 'success',
         });

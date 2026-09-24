@@ -28,6 +28,7 @@ export class RestockService {
     ): Promise<void> {
         const { description, restockDetails } = dto;
 
+        // unitCost is integer centavos, so the total is exact.
         const totalCost = restockDetails.reduce((sum, detail) => {
             return sum + detail.quantity * detail.unitCost;
         }, 0);

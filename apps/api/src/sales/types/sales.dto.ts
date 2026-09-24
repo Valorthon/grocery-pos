@@ -51,12 +51,14 @@ export class SellDto {
 export class ReceiptFields {
     productName!: string;
     quantity!: number;
+    /** Centavos. */
     amount!: number;
 }
 
 export class ReceiptDto {
     cashierName!: string;
     items!: ReceiptFields[];
+    /** Centavos. */
     totalAmount!: number;
 }
 

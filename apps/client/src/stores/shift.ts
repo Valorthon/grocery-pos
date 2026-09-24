@@ -7,9 +7,13 @@ import type {
     ZReadReport,
 } from '@/components/User/Sales/shift';
 
-const STORAGE_KEY = 'grocery_pos_active_shift';
+// v2: money is stored as integer centavos. A shift saved by an older build
+// (pesos) is ignored rather than misread as 1/100th of its value.
+const STORAGE_KEY = 'grocery_pos_active_shift_v2';
+const LEGACY_STORAGE_KEY = 'grocery_pos_active_shift';
 
 function loadActiveShift(): ShiftRecord | null {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return null;
     try {

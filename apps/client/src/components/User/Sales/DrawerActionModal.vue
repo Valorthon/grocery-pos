@@ -39,13 +39,13 @@
                         type="button"
                         class="px-2.5 py-1 rounded-lg border font-bold text-[11px] transition-colors active:scale-[0.98]"
                         :class="
-                            numericAmount === q
+                            amountCentavos === q
                                 ? 'bg-slate-900 text-white border-slate-900'
                                 : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
                         "
-                        @click="amount = q.toString()"
+                        @click="amount = centavosToPesoInput(q)"
                     >
-                        ₱{{ q.toLocaleString() }}
+                        {{ currency(q) }}
                     </button>
                 </div>
             </div>
@@ -71,7 +71,7 @@
             >
             <BaseButton
                 class="flex-1"
-                :disabled="numericAmount <= 0"
+                :disabled="amountCentavos <= 0"
                 @click="confirm"
             >
                 <Check class="w-3.5 h-3.5" />
@@ -88,7 +88,12 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { useShiftStore } from '@/stores/shift';
 import { useUIStore, Color } from '@/stores/ui';
-import { formatCurrency } from '@/utils/currency';
+import {
+    CENTAVOS_PER_PESO,
+    centavosToPesoInput,
+    formatCurrency,
+    pesosToCentavos,
+} from '@/utils/currency';
 
 const shiftStore = useShiftStore();
 const uiStore = useUIStore();
@@ -107,10 +112,12 @@ const open = computed({
 const type = computed(() => shiftStore.drawerAction);
 const isCashIn = computed(() => type.value === 'cash_in');
 
-const numericAmount = computed(() => parseFloat(amount.value) || 0);
+const amountCentavos = computed(() => pesosToCentavos(amount.value));
 
 const quickAmounts = computed(() =>
-    isCashIn.value ? [200, 500, 1000, 2000] : [1000, 2000, 3000, 5000],
+    (isCashIn.value ? [200, 500, 1000, 2000] : [1000, 2000, 3000, 5000]).map(
+        (pesos) => pesos * CENTAVOS_PER_PESO,
+    ),
 );
 
 watch(
@@ -132,9 +139,12 @@ function currency(value: number): string {
 }
 
 function confirm() {
-    if (numericAmount.value <= 0) return;
+    if (amountCentavos.value <= 0) return;
 
-    if (!isCashIn.value && numericAmount.value > shiftStore.currentDrawerCash) {
+    if (
+        !isCashIn.value &&
+        amountCentavos.value > shiftStore.currentDrawerCash
+    ) {
         error.value = `Cannot drop more cash than currently in drawer (${currency(
             shiftStore.currentDrawerCash,
         )})`;
@@ -144,7 +154,7 @@ function confirm() {
 
     shiftStore.addDrawerTransaction(
         type.value as 'cash_in' | 'cash_drop',
-        numericAmount.value,
+        amountCentavos.value,
         reason.value.trim() ||
             (isCashIn.value ? 'Cash In (Change)' : 'Cash Drop (Safe)'),
     );

@@ -25,7 +25,12 @@ export class Restock {
         type: Number,
         required: true,
         min: NUMERIC_LIMITS.PRICE_MIN,
+        validate: {
+            validator: Number.isInteger,
+            message: 'totalCost must be an integer number of centavos',
+        },
     })
+    /** Centavos. */
     totalCost!: number;
 }
 

@@ -12,11 +12,18 @@ export const STRING_LIMITS = {
     REFERENCE_NUMBER: 50,
 } as const;
 
+/**
+ * Money is stored and sent as integer centavos (₱1.00 = 100), so every money
+ * bound here is in centavos too. Pesos exist only at the client's input and
+ * display boundary.
+ */
 export const NUMERIC_LIMITS = {
-    PRICE_MIN: 0,
+    /** Smallest price or cost, in centavos: free products are invalid. */
+    PRICE_MIN: 1,
     QUANTITY_MIN: 1,
     STOCK_MIN: 0,
-    AMOUNT_MIN: 0,
+    /** Smallest sale total, in centavos: a sale cannot total ₱0. */
+    AMOUNT_MIN: 1,
 } as const;
 
 export const EAN_COUNTER = {

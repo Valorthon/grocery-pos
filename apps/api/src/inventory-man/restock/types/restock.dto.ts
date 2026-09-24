@@ -67,7 +67,8 @@ export class RestockFields {
     @IsInt()
     quantity!: number;
 
-    @IsNumber()
+    /** Centavos. */
+    @IsInt()
     @IsNotEmpty()
     @Type(() => Number)
     @Min(NUMERIC_LIMITS.PRICE_MIN)

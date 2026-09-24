@@ -155,6 +155,7 @@ export class SalesService {
                 continue;
             }
 
+            // Integer centavos throughout, so the total is exact.
             const unitPrice = productDetails.price;
             const productName = productDetails.name;
 

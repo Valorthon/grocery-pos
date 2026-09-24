@@ -42,9 +42,10 @@
                 />
                 <BaseInput
                     v-model.number="formData.unitCost"
-                    label="Unit Cost"
+                    label="Unit Cost (₱)"
                     type="number"
-                    min="0"
+                    min="0.01"
+                    step="0.01"
                     :error="errors.unitCost"
                 />
             </div>
@@ -62,9 +63,10 @@
                 />
                 <BaseInput
                     v-model.number="formData.price"
-                    label="Selling Price"
+                    label="Selling Price (₱)"
                     type="number"
-                    min="0"
+                    min="0.01"
+                    step="0.01"
                     :error="errors.price"
                 />
             </template>
@@ -93,9 +95,11 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
-import { AddForm, MatchedProductsDto } from './dto';
+import { AddForm, AddFormInput, MatchedProductsDto } from './dto';
 import { Color, useUIStore } from '@/stores/ui';
 import { isAxiosError } from 'axios';
+import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
+import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
 
 const props = defineProps<{ modelValue: boolean; item?: AddForm }>();
 
@@ -111,7 +115,7 @@ const model = computed({
 });
 
 const uiStore = useUIStore();
-const formData = reactive<AddForm>({
+const formData = reactive<AddFormInput>({
     autoGenerateEAN: false,
     EAN: '',
     quantity: 0,
@@ -134,11 +138,11 @@ watch(
         formData.autoGenerateEAN = props.item?.autoGenerateEAN ?? false;
         formData.EAN = props.item?.EAN ?? '';
         formData.quantity = props.item?.quantity ?? 0;
-        formData.unitCost = props.item?.unitCost ?? 0;
+        formData.unitCost = centavosToPesos(props.item?.unitCost ?? 0);
         formData.product = props.item?.product ?? '';
         formData.isNewProduct = props.item?.isNewProduct ?? false;
         formData.name = props.item?.name ?? '';
-        formData.price = props.item?.price ?? 0;
+        formData.price = centavosToPesos(props.item?.price ?? 0);
         errors.value = {};
         matchedProducts.value = [];
     },
@@ -192,12 +196,12 @@ function validate(): boolean {
         e.EAN = 'This field is required';
     if (!formData.quantity || formData.quantity < 1)
         e.quantity = 'Must be at least 1';
-    if (formData.unitCost == null || formData.unitCost < 0)
-        e.unitCost = 'Cannot be negative';
+    if (pesosToCentavos(formData.unitCost) < NUMERIC_LIMITS.PRICE_MIN)
+        e.unitCost = 'Enter at least ₱0.01, up to 2 decimals';
     if (formData.isNewProduct) {
         if (!formData.name) e.name = 'This field is required';
-        if (formData.price == null || formData.price < 0)
-            e.price = 'Cannot be negative';
+        if (pesosToCentavos(formData.price) < NUMERIC_LIMITS.PRICE_MIN)
+            e.price = 'Enter at least ₱0.01, up to 2 decimals';
     }
     errors.value = e;
     return Object.keys(e).length === 0;
@@ -221,7 +225,11 @@ const handleSubmit = async () => {
         }
     }
 
-    const payload = { ...formData };
+    const payload: AddForm = {
+        ...formData,
+        unitCost: pesosToCentavos(formData.unitCost),
+        price: pesosToCentavos(formData.price),
+    };
     if (isEditMode.value) emit('update', payload);
     else emit('add', payload);
     model.value = false;

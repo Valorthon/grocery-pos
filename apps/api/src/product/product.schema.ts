@@ -25,7 +25,12 @@ export class Product {
         type: Number,
         required: true,
         min: NUMERIC_LIMITS.PRICE_MIN,
+        validate: {
+            validator: Number.isInteger,
+            message: 'price must be an integer number of centavos',
+        },
     })
+    /** Centavos. */
     price!: number;
 
     @Prop({

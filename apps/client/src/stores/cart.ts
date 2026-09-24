@@ -5,6 +5,7 @@ export interface CartItem {
     product: string;
     EAN: string;
     name: string;
+    /** Centavos. */
     unitPrice: number;
     quantity: number;
 }

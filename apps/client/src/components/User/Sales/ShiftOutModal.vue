@@ -92,13 +92,12 @@ const variance = computed(
 
 const varianceLabel = computed(() => {
     const v = variance.value;
-    if (Math.abs(v) < 0.005) return currency(0);
-    return v > 0 ? `+${currency(v)}` : `-${currency(Math.abs(v))}`;
+    return v > 0 ? `+${currency(v)}` : currency(v);
 });
 
 const varianceColor = computed(() => {
     const v = variance.value;
-    if (Math.abs(v) < 0.005) return 'text-emerald-400';
+    if (v === 0) return 'text-emerald-400';
     return v > 0 ? 'text-amber-400' : 'text-rose-400';
 });
 
