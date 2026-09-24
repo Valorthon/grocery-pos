@@ -7,6 +7,7 @@ import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
 import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
+import { SaleStatus } from '@grocery-pos/contracts';
 
 function recentQuery() {
     const chain = {
@@ -114,5 +115,20 @@ describe('DashboardService.getDashboard', () => {
         expect(matchedRange().$gte.toISOString()).toBe(
             '2026-01-05T16:00:00.000Z',
         );
+    });
+
+    it('leaves voided and refunded sales out of revenue and the count', async () => {
+        jest.setSystemTime(new Date('2026-01-05T02:00:00.000Z'));
+
+        await service.getDashboard();
+
+        const pipeline = aggregate.mock.calls[0][0] as Array<{
+            $match?: Record<string, unknown>;
+        }>;
+        // "Not reversed" rather than "COMPLETED", so sales stored before the
+        // status field existed still count.
+        expect(pipeline[0].$match).toMatchObject({
+            status: { $nin: [SaleStatus.VOIDED, SaleStatus.REFUNDED] },
+        });
     });
 });

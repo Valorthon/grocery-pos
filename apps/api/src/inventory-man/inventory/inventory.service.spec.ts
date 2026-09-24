@@ -400,6 +400,42 @@ describe('InventoryService.adjust', () => {
         });
         expect(bulkWrite).not.toHaveBeenCalled();
     });
+
+    describe('returnStock', () => {
+        it('puts sold units back as one positive increment per product', async () => {
+            stock({ p1: 0, p2: 4 });
+            bulkWrite.mockResolvedValue({ matchedCount: 2 });
+
+            await service.returnStock(
+                [
+                    { product: 'p1', quantity: 2 },
+                    { product: 'p2', quantity: 3 },
+                    { product: 'p1', quantity: 1 },
+                ],
+                session,
+            );
+
+            expect(operations()).toEqual([
+                { filter: { product: 'p1' }, update: { $inc: { stock: 3 } } },
+                { filter: { product: 'p2' }, update: { $inc: { stock: 3 } } },
+            ]);
+        });
+
+        it('rejects with a 404 when a product has no inventory row', async () => {
+            stock({ p1: 0 });
+
+            await expect(
+                service.returnStock(
+                    [
+                        { product: 'p1', quantity: 1 },
+                        { product: 'gone', quantity: 1 },
+                    ],
+                    session,
+                ),
+            ).rejects.toBeInstanceOf(NotFoundError);
+            expect(bulkWrite).not.toHaveBeenCalled();
+        });
+    });
 });
 
 describe('InventoryService.restock', () => {
