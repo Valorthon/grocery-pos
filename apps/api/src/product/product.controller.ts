@@ -20,11 +20,26 @@ import {
     UpdateBulkDto,
 } from './types';
 
+/**
+ * Effective roles per route (handler @Roles replaces the class's; Admin
+ * passes every check):
+ *
+ *   GET   /products/matches      Restocker, Adjuster, Seller
+ *   GET   /products/ensureValid  Restocker, Adjuster
+ *   GET   /products/:EAN         Restocker, Adjuster, Seller
+ *   PATCH /products              Restocker, Adjuster
+ *   GET   /products              Restocker, Adjuster
+ *   POST  /products/bulk         Restocker, Adjuster
+ *
+ * product.access.e2e.spec.ts pins this table.
+ */
 @Roles(Role.Restocker, Role.Adjuster)
 @Controller('products')
 export class ProductController {
     constructor(private service: ProductService) {}
 
+    // The register's name / partial-barcode search.
+    @Roles(Role.Restocker, Role.Adjuster, Role.Seller)
     @Get('matches')
     async getMatches(@Query() dto: MatchesDto) {
         const data = await this.service.getMatches(dto);
