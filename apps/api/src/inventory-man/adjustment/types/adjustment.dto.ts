@@ -3,6 +3,7 @@ import {
     ArrayNotEmpty,
     IsArray,
     IsDate,
+    IsInt,
     IsMongoId,
     IsNotEmpty,
     IsNumber,
@@ -45,13 +46,13 @@ export class GetDetailsQueryDto {
 
 export type GetDetailsDto = GetDetailsQueryDto & GetDetailsParamDto;
 
-class AdjustFields {
+export class AdjustFields {
     @IsNotEmpty()
     @IsMongoId()
     product!: string;
 
     @IsNotEmpty()
-    @IsNumber()
+    @IsInt()
     @NotEquals(VALIDATION.CHANGE_NOT_ZERO, { message: 'Change must not be 0' })
     change!: number;
 

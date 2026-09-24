@@ -9,7 +9,12 @@ import { ProductService } from '../../product/product.service';
 import { NewProductFields } from '../../product/types';
 import { AuthUser } from '../../auth/types';
 import { GetAllDto } from './types';
-import { ErrorCode, ValidationError } from '../../common/errors';
+import {
+    ErrorCode,
+    InternalError,
+    NotFoundError,
+    ValidationError,
+} from '../../common/errors';
 
 @Injectable()
 export class InventoryService {
@@ -135,9 +140,39 @@ export class InventoryService {
                 },
             }));
 
-        await this.model.bulkWrite(updates, { session });
+        const result = await this.model.bulkWrite(updates, { session });
+
+        // Every op upserts, so each one either matches an existing row or
+        // inserts a new one. Anything short of that means a write was lost.
+        if (result.matchedCount + result.upsertedCount !== updates.length) {
+            throw new InternalError(
+                'Restock was not applied to every product',
+                {
+                    expected: updates.length,
+                    matched: result.matchedCount,
+                    upserted: result.upsertedCount,
+                },
+            );
+        }
 
         return updatedRestockDetails;
+    }
+
+    /**
+     * Throws unless every product in the adjustment exists and has an
+     * inventory row. Run this before writing any adjustment records so a
+     * rejected adjustment leaves no audit trail behind.
+     */
+    async assertAdjustable(
+        adjustDetails: AdjustDto['adjustDetails'],
+        session: ClientSession,
+    ): Promise<void> {
+        const stockByProduct = await this.getStockByProduct(
+            adjustDetails.map((d) => d.product),
+            session,
+        );
+
+        this.throwIfMissing(adjustDetails, stockByProduct);
     }
 
     async adjust(dto: AdjustDto, session: ClientSession): Promise<void> {
@@ -145,12 +180,22 @@ export class InventoryService {
 
         const updates = adjustDetails.map(({ product, change }) => ({
             updateOne: {
-                filter: { product },
+                // Same guard as sell(): Mongoose's `min` validator does not run
+                // on update operators, so a negative $inc must be guarded in
+                // the filter or it will drive stock below zero.
+                filter:
+                    change < 0
+                        ? { product, stock: { $gte: -change } }
+                        : { product },
                 update: { $inc: { stock: change } },
             },
         }));
 
-        await this.model.bulkWrite(updates, { session });
+        const result = await this.model.bulkWrite(updates, { session });
+
+        if (result.matchedCount !== updates.length) {
+            await this.throwAdjustmentRejected(adjustDetails, session);
+        }
     }
 
     async sell(dto: SellDto, session: ClientSession): Promise<void> {
@@ -182,22 +227,9 @@ export class InventoryService {
         sellDetails: SellDto['sellDetails'],
         session: ClientSession,
     ): Promise<never> {
-        const rows = await this.model
-            .find({ product: { $in: sellDetails.map((d) => d.product) } })
-            .populate<{ product: { _id: Types.ObjectId; name: string } }>({
-                path: 'product',
-                select: 'name',
-            })
-            .session(session)
-            .lean();
-
-        const stockByProduct = new Map(
-            rows
-                .filter((row) => row.product?._id)
-                .map((row) => [
-                    row.product._id.toString(),
-                    { name: row.product.name, stock: row.stock },
-                ]),
+        const stockByProduct = await this.getStockByProduct(
+            sellDetails.map((d) => d.product),
+            session,
         );
 
         const shortfalls = sellDetails
@@ -216,6 +248,85 @@ export class InventoryService {
             ErrorCode.VALIDATION_INVALID_INPUT,
             'Insufficient stock for one or more products',
             shortfalls,
+        );
+    }
+
+    /**
+     * Called when a guarded adjust matched fewer rows than it tried to update.
+     * Distinguishes a missing inventory row from a decrement below zero.
+     */
+    private async throwAdjustmentRejected(
+        adjustDetails: AdjustDto['adjustDetails'],
+        session: ClientSession,
+    ): Promise<never> {
+        const stockByProduct = await this.getStockByProduct(
+            adjustDetails.map((d) => d.product),
+            session,
+        );
+
+        this.throwIfMissing(adjustDetails, stockByProduct);
+
+        const shortfalls = adjustDetails
+            .filter(({ change }) => change < 0)
+            .map(({ product, change }) => {
+                const current = stockByProduct.get(product.toString());
+                return {
+                    product: product.toString(),
+                    name: current?.name,
+                    change,
+                    available: current?.stock ?? 0,
+                };
+            })
+            .filter((item) => item.available < -item.change);
+
+        throw new ValidationError(
+            ErrorCode.VALIDATION_INVALID_INPUT,
+            'Adjustment would make stock negative for one or more products',
+            shortfalls,
+        );
+    }
+
+    private throwIfMissing(
+        adjustDetails: AdjustDto['adjustDetails'],
+        stockByProduct: Map<string, unknown>,
+    ): void {
+        const missing = [
+            ...new Set(adjustDetails.map((d) => d.product.toString())),
+        ].filter((product) => !stockByProduct.has(product));
+
+        if (missing.length > 0) {
+            throw new NotFoundError(
+                ErrorCode.PRODUCT_NOT_FOUND,
+                'One or more products have no inventory record',
+                missing.map((product) => ({ product })),
+            );
+        }
+    }
+
+    /**
+     * Reads current stock for the given products inside the session, keyed
+     * by product id. Rows whose product no longer exists are left out.
+     */
+    private async getStockByProduct(
+        products: string[],
+        session: ClientSession,
+    ): Promise<Map<string, { name: string; stock: number }>> {
+        const rows = await this.model
+            .find({ product: { $in: products } })
+            .populate<{ product: { _id: Types.ObjectId; name: string } }>({
+                path: 'product',
+                select: 'name',
+            })
+            .session(session)
+            .lean();
+
+        return new Map(
+            rows
+                .filter((row) => row.product?._id)
+                .map((row) => [
+                    row.product._id.toString(),
+                    { name: row.product.name, stock: row.stock },
+                ]),
         );
     }
 

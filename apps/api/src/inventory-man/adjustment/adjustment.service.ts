@@ -87,6 +87,14 @@ export class AdjustmentService {
                     { session },
                 );
 
+                // Validate and apply the stock change before recording it, so
+                // a rejected adjustment never leaves an AdjustmentDetails row.
+                await this.inventoryService.assertAdjustable(
+                    adjustDetails,
+                    session,
+                );
+                await this.inventoryService.adjust(dto, session);
+
                 const inserts = adjustDetails.map((detail) => ({
                     insertOne: {
                         document: {
@@ -97,7 +105,6 @@ export class AdjustmentService {
                 }));
 
                 await this.modelDetails.bulkWrite(inserts, { session });
-                await this.inventoryService.adjust(dto, session);
             },
             this.connection,
             session,
