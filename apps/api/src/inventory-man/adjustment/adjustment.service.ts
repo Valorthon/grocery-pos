@@ -87,6 +87,11 @@ export class AdjustmentService {
                     { session },
                 );
 
+                // Apply the stock change before recording it. adjust() throws
+                // for a missing inventory row or negative stock, so a rejected
+                // adjustment never leaves an AdjustmentDetails row.
+                await this.inventoryService.adjust(dto, session);
+
                 const inserts = adjustDetails.map((detail) => ({
                     insertOne: {
                         document: {
@@ -97,7 +102,6 @@ export class AdjustmentService {
                 }));
 
                 await this.modelDetails.bulkWrite(inserts, { session });
-                await this.inventoryService.adjust(dto, session);
             },
             this.connection,
             session,
