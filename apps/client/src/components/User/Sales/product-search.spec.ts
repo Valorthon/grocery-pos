@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import { AxiosError, AxiosHeaders, CanceledError } from 'axios';
 import { STRING_LIMITS } from '@grocery-pos/contracts';
 import {
@@ -85,9 +86,16 @@ describe('searchErrorMessage', () => {
 });
 
 describe('useProductSearch', () => {
+    /** What the input holds; the search compares its answers against it. */
+    const input = ref('');
+    const term = () => input.value;
+    beforeEach(() => {
+        input.value = '';
+    });
+
     it('keeps the newest results when an older response arrives last', async () => {
         const { fetch, calls } = controlledFetch();
-        const search = useProductSearch(fetch);
+        const search = useProductSearch(fetch, term);
 
         const older = search.search('mi');
         const newer = search.search('milk');
@@ -106,7 +114,7 @@ describe('useProductSearch', () => {
 
     it('ignores a stale failure, too', async () => {
         const { fetch, calls } = controlledFetch();
-        const search = useProductSearch(fetch);
+        const search = useProductSearch(fetch, term);
 
         const older = search.search('mi');
         const newer = search.search('milk');
@@ -120,8 +128,12 @@ describe('useProductSearch', () => {
     });
 
     it('reports a failure as an error, not as "no matches"', async () => {
-        const search = useProductSearch(() =>
-            Promise.reject(httpError(403, { message: 'Forbidden resource' })),
+        const search = useProductSearch(
+            () =>
+                Promise.reject(
+                    httpError(403, { message: 'Forbidden resource' }),
+                ),
+            term,
         );
 
         expect(await search.search('milk')).toBeNull();
@@ -132,7 +144,7 @@ describe('useProductSearch', () => {
 
     it('does not send a search longer than any product name', async () => {
         const fetch = vi.fn();
-        const search = useProductSearch(fetch);
+        const search = useProductSearch(fetch, term);
 
         await search.search('x'.repeat(STRING_LIMITS.PRODUCT_NAME + 1));
 
@@ -141,7 +153,11 @@ describe('useProductSearch', () => {
     });
 
     it('moves the highlight through the matches, wrapping around', async () => {
-        const search = useProductSearch(() => Promise.resolve([MILK, MINTS]));
+        const search = useProductSearch(
+            () => Promise.resolve([MILK, MINTS]),
+            term,
+        );
+        input.value = 'm';
         await search.search('m');
         expect(search.highlightedMatch()).toBeNull();
 
@@ -156,12 +172,44 @@ describe('useProductSearch', () => {
     });
 
     it('clears the highlight when new results arrive', async () => {
-        const search = useProductSearch(() => Promise.resolve([MILK, MINTS]));
+        const search = useProductSearch(
+            () => Promise.resolve([MILK, MINTS]),
+            term,
+        );
+        input.value = 'm';
         await search.search('m');
         search.move(1);
 
+        input.value = 'mi';
         await search.search('mi');
 
         expect(search.highlighted.value).toBe(-1);
+    });
+
+    it('will not highlight or pick from results for older text', async () => {
+        const { fetch, calls } = controlledFetch();
+        const search = useProductSearch(fetch, term);
+        input.value = 'milk';
+        const first = search.search('milk');
+        calls[0].resolve([MILK]);
+        await first;
+        search.move(1);
+        expect(search.highlightedMatch()).toEqual(MILK);
+
+        // Retyped: the milk list is still on screen, "eggs" not answered.
+        input.value = 'eggs';
+        expect(search.settled.value).toBe(false);
+        expect(search.highlightedMatch()).toBeNull();
+        search.highlighted.value = -1;
+        search.move(1);
+        expect(search.highlighted.value).toBe(-1);
+
+        // In flight for the current text is not settled either.
+        const second = search.search('eggs');
+        search.move(1);
+        expect(search.highlighted.value).toBe(-1);
+        calls[1].resolve([]);
+        await second;
+        expect(search.settled.value).toBe(true);
     });
 });

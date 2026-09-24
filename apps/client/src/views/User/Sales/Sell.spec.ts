@@ -48,16 +48,25 @@ function forbidden() {
 }
 
 /** Answers `GET /products/:EAN` from PRODUCTS and matches with `matches`. */
-function serve(matches: (name: string) => Promise<unknown>) {
+/**
+ * Answers `GET /products/matches` with `matches`, and `GET /products/:EAN`
+ * with `lookup` (default: straight from PRODUCTS).
+ */
+function serve(
+    matches: (name: string) => Promise<unknown>,
+    lookup: (EAN: string) => Promise<unknown> = (EAN) =>
+        PRODUCTS[EAN]
+            ? Promise.resolve(PRODUCTS[EAN])
+            : Promise.reject(new Error('not found')),
+) {
     get.mockImplementation(
         (url: string, config?: { params?: { name: string } }) => {
             if (url === '/products/matches') {
                 return matches(config!.params!.name).then((data) => ({ data }));
             }
-            const product = PRODUCTS[decodeURIComponent(url.split('/').pop()!)];
-            return product
-                ? Promise.resolve({ data: product })
-                : Promise.reject(new Error('not found'));
+            return lookup(decodeURIComponent(url.split('/').pop()!)).then(
+                (data) => ({ data }),
+            );
         },
     );
 }
@@ -170,14 +179,95 @@ describe('Sell register search', () => {
         expect(shown).toEqual(['milk']);
     });
 
-    it('adds the only match of a name or partial barcode on Enter', async () => {
-        serve((name) => Promise.resolve(name === '00015' ? [MILK] : []));
+    it('adds the only match of a name on Enter', async () => {
+        serve((name) => Promise.resolve(name === 'milk' ? [MILK] : []));
         mount();
 
-        await type('2*00015');
+        await type('2*milk');
         await pressEnter();
 
         expect(cartNames()).toEqual(['2x milk']);
+    });
+
+    it('never auto-adds the only match of a digits-only fragment', async () => {
+        // e.g. the tail of a scan that lost its first digits.
+        serve((name) => Promise.resolve(name === '00022' ? [MINTS] : []));
+        mount();
+
+        await type('2*00022');
+        await pressEnter();
+
+        expect(cartNames()).toEqual([]);
+        expect(document.body.textContent).toContain(
+            '1 item matches "00022": pick it with ↓ and Enter',
+        );
+
+        await key('ArrowDown');
+        await pressEnter();
+
+        expect(cartNames()).toEqual(['2x mints']);
+    });
+
+    it('keeps the next scan typed while a barcode lookup was in flight', async () => {
+        let answer!: (p: unknown) => void;
+        serve(
+            () => Promise.resolve([]),
+            () => new Promise((resolve) => (answer = resolve)),
+        );
+        mount();
+
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+
+        // The scanner starts the next barcode before milk comes back.
+        input().value = '20000';
+        input().dispatchEvent(new Event('input'));
+        answer(PRODUCTS[MILK.EAN]);
+        await flush();
+
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(input().value).toBe('20000');
+    });
+
+    it('will not add from the previous list after a quick retype', async () => {
+        serve((name) =>
+            name === 'milk' ? Promise.resolve([MILK]) : new Promise(() => {}),
+        );
+        mount();
+        await type('milk');
+        expect(
+            document.querySelectorAll('[data-testid="search-match"]'),
+        ).toHaveLength(1);
+
+        // Retype and press ↓+Enter before "eggs" has been answered.
+        input().value = 'eggs';
+        input().dispatchEvent(new Event('input'));
+        await key('ArrowDown');
+        await pressEnter();
+
+        expect(cartNames()).toEqual([]);
+        expect(get).not.toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+    });
+
+    it('reports a double Enter once, not as a failed search', async () => {
+        const pending: ((m: unknown[]) => void)[] = [];
+        serve(() => new Promise((resolve) => pending.push(resolve)));
+        mount();
+
+        input().value = 'bread';
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+        await pressEnter();
+        pending[1]([]);
+        await flush();
+        pending[0]([]);
+        await flush();
+
+        expect(document.body.textContent).not.toContain(
+            "Couldn't search products",
+        );
+        expect(document.body.textContent).toContain('No item matching "bread"');
     });
 
     it('asks the cashier to pick when several items match', async () => {

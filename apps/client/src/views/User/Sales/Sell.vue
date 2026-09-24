@@ -199,7 +199,7 @@
                     data-testid="search-empty"
                     class="py-4 text-center text-slate-500 text-xs font-semibold"
                 >
-                    <template v-if="isSearchSettled">
+                    <template v-if="search.settled.value">
                         No item matching "{{ searchTerm }}". Check barcode
                         number or search by name.
                     </template>
@@ -209,7 +209,10 @@
                     v-else
                     id="product-matches"
                     role="listbox"
-                    class="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                    data-testid="search-matches"
+                    class="grid grid-cols-1 sm:grid-cols-2 gap-2 transition-opacity"
+                    :class="{ 'opacity-50': !search.settled.value }"
+                    :aria-busy="!search.settled.value"
                 >
                     <button
                         v-for="(m, i) in search.matches.value"
@@ -659,15 +662,11 @@ const search = useProductSearch(
                 signal,
             })
         ).data,
+    () => searchTerm.value,
 );
 /** What the live search looks for: the input minus any `<qty>*` prefix. */
 const searchTerm = computed(
     () => parseScan(searchQuery.value, scanMultiplier.value).query,
-);
-/** True once the results on screen answer the current input. */
-const isSearchSettled = computed(
-    () =>
-        !search.loading.value && search.answeredFor.value === searchTerm.value,
 );
 const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
     null,
@@ -734,12 +733,18 @@ function cancelPendingSearch() {
     searchTimer = undefined;
 }
 
-function resetQuery() {
+/**
+ * Clears the input after an item is added, but only if it still holds the
+ * text that was submitted: a scanner can start the next barcode while this
+ * lookup is in flight, and those digits must survive.
+ */
+function resetQuery(submitted: string) {
+    scanMultiplier.value = 1;
+    scanInput.value?.focus();
+    if (searchQuery.value !== submitted) return;
     cancelPendingSearch();
     search.reset();
     searchQuery.value = '';
-    scanMultiplier.value = 1;
-    scanInput.value?.focus();
 }
 
 function clearQuery() {
@@ -768,55 +773,66 @@ function onSearchChange() {
  * Enter / the Scan button. In order:
  * 1. a highlighted match (picked with the arrow keys) is added;
  * 2. a full 13-digit barcode is looked up exactly, as a scanner expects;
- * 3. otherwise the input is searched now, and a single match is added
- *    straight away (a unique name or partial barcode is unambiguous);
- * 4. no match, several matches or a failed search each get a message.
+ * 3. otherwise the input is searched now, and a single match of a *name*
+ *    is added straight away. A digits-only fragment is never auto-added,
+ *    even with one match: it may be the tail of a scan that lost its first
+ *    digits, or a short number that happens to hit one product;
+ * 4. every other outcome (a digit fragment, no match, several matches, a
+ *    failed search) gets a message, and the cashier picks from the list.
  * Nothing happens while the ticket is locked for checkout.
  */
 async function onScanSubmit() {
     if (cartStore.locked) return;
-    const { qty, query } = parseScan(searchQuery.value, scanMultiplier.value);
+    const submitted = searchQuery.value;
+    const { qty, query } = parseScan(submitted, scanMultiplier.value);
     if (!query) return;
 
     const picked = search.highlightedMatch();
     if (picked) {
-        await selectMatch(picked, qty);
+        await selectMatch(picked, qty, submitted);
         return;
     }
 
     if (isBarcode(query)) {
-        await lookUpBarcode(query, qty);
+        await lookUpBarcode(query, qty, submitted);
         return;
     }
 
     cancelPendingSearch();
     const found = await search.search(query);
-    // The input changed (or was cleared) while this search ran.
-    if (searchTerm.value !== query) return;
+    // The input changed, was cleared, or a newer search (a second Enter)
+    // took over: that one reports instead.
+    if (searchTerm.value !== query || !search.settled.value) return;
+    // Superseded (null without an error): the newer search reports.
+    if (found === null && !search.error.value) return;
 
     if (found === null) {
         showFeedback(
             'error',
             `Couldn't search products: ${search.error.value}`,
         );
-    } else if (found.length === 1) {
-        await selectMatch(found[0], qty);
     } else if (found.length === 0) {
         showFeedback('error', `No item matching "${query}"`);
+    } else if (found.length === 1 && !/^\d+$/.test(query)) {
+        await selectMatch(found[0], qty, submitted);
     } else {
+        const count =
+            found.length === 1
+                ? '1 item matches'
+                : `${found.length} items match`;
         showFeedback(
             'error',
-            `${found.length} items match "${query}": pick one with ↑/↓ or click it`,
+            `${count} "${query}": pick it with ↓ and Enter, or click it`,
         );
     }
 }
 
-async function lookUpBarcode(EAN: string, qty: number) {
+async function lookUpBarcode(EAN: string, qty: number, submitted: string) {
     try {
         const res = await api.get<Product>(
             `/products/${encodeURIComponent(EAN)}`,
         );
-        addProduct(res.data, qty);
+        addProduct(res.data, qty, submitted);
     } catch (error) {
         if (isAxiosError(error) && error.response?.status === 404) {
             showFeedback('error', `Barcode "${EAN}" not found`);
@@ -826,19 +842,23 @@ async function lookUpBarcode(EAN: string, qty: number) {
     }
 }
 
-async function selectMatch(match: Match, qty: number) {
+async function selectMatch(
+    match: Match,
+    qty: number,
+    submitted = searchQuery.value,
+) {
     if (cartStore.locked) return;
     try {
         const res = await api.get<Product>(
             `/products/${encodeURIComponent(match.EAN)}`,
         );
-        addProduct(res.data, qty);
+        addProduct(res.data, qty, submitted);
     } catch {
         showFeedback('error', `"${match.name}" could not be added`);
     }
 }
 
-function addProduct(product: Product, quantity: number) {
+function addProduct(product: Product, quantity: number, submitted: string) {
     if (cartStore.locked) {
         showFeedback('error', 'Wait for the sale to finish recording');
         return;
@@ -856,7 +876,7 @@ function addProduct(product: Product, quantity: number) {
         'success',
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,
     );
-    resetQuery();
+    resetQuery(submitted);
 }
 
 function clearDiscount() {
