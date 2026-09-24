@@ -2,10 +2,15 @@ import {
     DISCOUNT_LIMITS,
     discountAmount,
     type DiscountInput,
+    isValidReferenceNumber,
+    normalizeReferenceNumber,
     NUMERIC_LIMITS,
+    PaymentType,
+    REFERENCE_NUMBER_LIMITS,
+    TenderType,
 } from '@grocery-pos/contracts';
 import { pesosToCentavos } from '@/utils/currency';
-import type { PaymentInfo, Receipt } from './types';
+import type { PaymentRequest, Receipt } from './types';
 
 /**
  * The checkout preview of a discounted sale, in centavos, for tendering.
@@ -45,16 +50,96 @@ export function cashTender(total: number, tenderedInput: string | number) {
 }
 
 /**
- * Cash that stays in the drawer for a completed sale, from the total the
- * server charged rather than the client's preview.
+ * Why a typed GCash reference would be rejected by the API, or null if it is
+ * fine. Spaces are ignored, as on the server.
+ */
+export function referenceNumberError(input: string): string | null {
+    const digits = normalizeReferenceNumber(input);
+    if (!digits) return 'Enter the GCash reference number';
+    if (isValidReferenceNumber(digits)) return null;
+    return `A GCash reference number is ${REFERENCE_NUMBER_LIMITS.MIN_LENGTH} digits`;
+}
+
+/** What the cashier typed into the checkout modal. */
+export interface TenderInput {
+    /** Typed pesos: cash handed over (CASH, and the cash part of SPLIT). */
+    cash: string | number;
+    /** Typed GCash reference (GCASH and SPLIT). */
+    referenceNumber: string;
+}
+
+/**
+ * Builds the payment part of `POST /sales` from the checkout form, or null
+ * when the form cannot be confirmed yet. Mirrors the server's checks
+ * against the previewed total (centavos); the server re-checks against the
+ * total it charges.
+ *
+ * SPLIT is the cash given plus GCash for the rest. If the cash alone covers
+ * the total there is nothing left for GCash, so it is sent as a CASH sale.
+ */
+export function buildPayment(
+    method: PaymentType,
+    total: number,
+    input: TenderInput,
+): PaymentRequest | null {
+    const cash = pesosToCentavos(input.cash);
+    const referenceNumber = normalizeReferenceNumber(input.referenceNumber);
+    const hasReference = isValidReferenceNumber(referenceNumber);
+
+    if (
+        method === PaymentType.CASH ||
+        (method === PaymentType.SPLIT && cash >= total)
+    ) {
+        if (cash < total) return null;
+        return {
+            paymentType: PaymentType.CASH,
+            tenders: [{ type: TenderType.CASH, amount: cash }],
+        };
+    }
+
+    if (!hasReference) return null;
+
+    if (method === PaymentType.GCASH) {
+        return {
+            paymentType: PaymentType.GCASH,
+            tenders: [{ type: TenderType.GCASH, amount: total }],
+            referenceNumber,
+        };
+    }
+
+    if (cash <= 0) return null;
+    return {
+        paymentType: PaymentType.SPLIT,
+        tenders: [
+            { type: TenderType.CASH, amount: cash },
+            { type: TenderType.GCASH, amount: total - cash },
+        ],
+        referenceNumber,
+    };
+}
+
+/**
+ * Cash that stays in the drawer for a completed sale: the cash tender the
+ * server recorded, less the change it computed. Nothing from the client's
+ * preview is used.
  */
 export function drawerCashAmount(
-    payment: PaymentInfo,
-    receipt: Pick<Receipt, 'totalAmount'>,
+    receipt: Pick<Receipt, 'tenders' | 'changeGiven'>,
 ): number {
-    if (payment.method === 'CASH') return receipt.totalAmount;
-    if (payment.method === 'SPLIT') {
-        return Math.min(receipt.totalAmount, payment.split?.cashTendered ?? 0);
-    }
-    return 0;
+    const cash = receipt.tenders.find((t) => t.type === TenderType.CASH);
+    return cash ? cash.amount - receipt.changeGiven : 0;
+}
+
+const PAYMENT_LABELS: Record<PaymentType, string> = {
+    [PaymentType.CASH]: 'Cash',
+    [PaymentType.GCASH]: 'GCash (QR)',
+    [PaymentType.SPLIT]: 'Split (Cash + GCash)',
+};
+
+export function paymentLabel(type: PaymentType): string {
+    return PAYMENT_LABELS[type] ?? type;
+}
+
+export function tenderLabel(type: TenderType): string {
+    return type === TenderType.CASH ? 'Cash Tendered' : 'GCash Paid';
 }

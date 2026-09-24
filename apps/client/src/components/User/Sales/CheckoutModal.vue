@@ -32,11 +32,11 @@
                     type="button"
                     class="py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                     :class="
-                        method === 'CASH'
+                        method === PaymentType.CASH
                             ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     "
-                    @click="selectMethod('CASH')"
+                    @click="selectMethod(PaymentType.CASH)"
                 >
                     <Banknote class="w-5 h-5" />
                     <span>Cash</span>
@@ -46,11 +46,11 @@
                     type="button"
                     class="py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                     :class="
-                        method === 'GCASH'
+                        method === PaymentType.GCASH
                             ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     "
-                    @click="selectMethod('GCASH')"
+                    @click="selectMethod(PaymentType.GCASH)"
                 >
                     <QrCode class="w-5 h-5" />
                     <span>GCash</span>
@@ -60,11 +60,11 @@
                     type="button"
                     class="py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                     :class="
-                        method === 'SPLIT'
+                        method === PaymentType.SPLIT
                             ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                             : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                     "
-                    @click="selectMethod('SPLIT')"
+                    @click="selectMethod(PaymentType.SPLIT)"
                 >
                     <Split class="w-5 h-5" />
                     <span>Split</span>
@@ -74,7 +74,7 @@
 
         <!-- CASH -->
         <div
-            v-if="method === 'CASH'"
+            v-if="method === PaymentType.CASH"
             class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4"
         >
             <div class="flex items-center justify-between">
@@ -151,7 +151,7 @@
 
         <!-- GCASH -->
         <div
-            v-else-if="method === 'GCASH'"
+            v-else-if="method === PaymentType.GCASH"
             class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4"
         >
             <label
@@ -162,9 +162,17 @@
             <input
                 v-model="referenceNumber"
                 type="text"
-                placeholder="Enter GCash reference number"
+                inputmode="numeric"
+                autocomplete="off"
+                placeholder="13-digit GCash reference number"
                 class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
             />
+            <p
+                v-if="referenceNumber && referenceError"
+                class="text-xs font-semibold text-red-600"
+            >
+                {{ referenceError }}
+            </p>
         </div>
 
         <!-- SPLIT -->
@@ -235,15 +243,24 @@
                         <input
                             v-model="referenceNumber"
                             type="text"
-                            placeholder="Enter GCash reference number"
+                            inputmode="numeric"
+                            autocomplete="off"
+                            placeholder="13-digit GCash reference number"
                             class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                         />
+                        <p
+                            v-if="referenceNumber && referenceError"
+                            class="text-xs font-semibold text-red-600"
+                        >
+                            {{ referenceError }}
+                        </p>
                     </div>
                     <div
                         v-else
                         class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold"
                     >
-                        Cash given covers the full total!
+                        Cash given covers the full total, so this is recorded as
+                        a cash sale.
                         <template v-if="splitCashChangeDue > 0">
                             — Cash Change:
                             {{ currency(splitCashChangeDue) }}</template
@@ -283,7 +300,7 @@
                 <template v-if="processing">
                     Processing Transaction...
                 </template>
-                <template v-else-if="method === 'SPLIT'">
+                <template v-else-if="method === PaymentType.SPLIT">
                     Confirm Split ({{ currency(splitCashPortion) }} Cash +
                     {{ currency(splitOnlinePortion) }} GCash)
                 </template>
@@ -300,26 +317,27 @@ import { computed, ref, watch } from 'vue';
 import { Banknote, QrCode, Split } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import type { PaymentInfo, PaymentMethod } from './types';
+import { PaymentType } from '@grocery-pos/contracts';
+import type { PaymentRequest } from './types';
 import {
     CENTAVOS_PER_PESO,
     centavosToPesoInput,
     formatCurrency,
     pesosToCentavos,
 } from '@/utils/currency';
-import { cashTender } from './checkout';
+import { buildPayment, cashTender, referenceNumberError } from './checkout';
 
 const props = defineProps<{
     modelValue: boolean;
     /** Preview total due, in centavos, from `previewSale` in Sell.vue. */
     total: number;
-    initialMethod?: PaymentMethod;
+    initialMethod?: PaymentType;
     initialCash?: number | null;
 }>();
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
-    (e: 'complete', payment: PaymentInfo): void;
+    (e: 'complete', payment: PaymentRequest): void;
 }>();
 
 const model = computed({
@@ -327,7 +345,7 @@ const model = computed({
     set: (val) => emit('update:modelValue', val),
 });
 
-const method = ref<PaymentMethod>('CASH');
+const method = ref<PaymentType>(PaymentType.CASH);
 const amountTendered = ref('');
 const splitCashGiven = ref('');
 const referenceNumber = ref('');
@@ -344,7 +362,6 @@ const roundedUpTotal = computed(
 );
 
 const cash = computed(() => cashTender(total.value, amountTendered.value));
-const tenderedNum = computed(() => cash.value.tendered);
 const changeDue = computed(() => cash.value.changeDue);
 const isCashSufficient = computed(() => cash.value.isSufficient);
 
@@ -359,29 +376,36 @@ const splitCashChangeDue = computed(() =>
     Math.max(0, cashGivenNum.value - total.value),
 );
 
-const canConfirm = computed(() => {
-    if (method.value === 'CASH') return isCashSufficient.value;
-    if (method.value === 'SPLIT') {
-        return (
-            cashGivenNum.value > 0 && referenceNumber.value.trim().length > 0
-        );
-    }
-    return referenceNumber.value.trim().length > 0;
-});
+const referenceError = computed(() =>
+    referenceNumberError(referenceNumber.value),
+);
+
+// What will be sent; null until the form is complete and valid.
+const payment = computed(() =>
+    buildPayment(method.value, total.value, {
+        cash:
+            method.value === PaymentType.SPLIT
+                ? splitCashGiven.value
+                : amountTendered.value,
+        referenceNumber: referenceNumber.value,
+    }),
+);
+
+const canConfirm = computed(() => payment.value !== null);
 
 function currency(value: number): string {
     return formatCurrency(value);
 }
 
-function selectMethod(next: PaymentMethod) {
+function selectMethod(next: PaymentType) {
     method.value = next;
-    if (next === 'CASH' && !amountTendered.value) {
+    if (next === PaymentType.CASH && !amountTendered.value) {
         amountTendered.value = centavosToPesoInput(total.value);
     }
 }
 
 function reset() {
-    method.value = props.initialMethod ?? 'CASH';
+    method.value = props.initialMethod ?? PaymentType.CASH;
     amountTendered.value =
         props.initialCash != null ? centavosToPesoInput(props.initialCash) : '';
     splitCashGiven.value = '';
@@ -397,41 +421,14 @@ watch(
 );
 
 function finish() {
-    if (!canConfirm.value || processing.value) return;
+    const request = payment.value;
+    if (!request || processing.value) return;
 
     processing.value = true;
 
     setTimeout(() => {
-        let payment: PaymentInfo;
-
-        if (method.value === 'CASH') {
-            payment = {
-                method: 'CASH',
-                amountTendered: tenderedNum.value || total.value,
-                changeDue: changeDue.value,
-            };
-        } else if (method.value === 'SPLIT') {
-            payment = {
-                method: 'SPLIT',
-                referenceNumber: referenceNumber.value,
-                split: {
-                    cashAmount: splitCashPortion.value,
-                    onlineAmount: splitOnlinePortion.value,
-                    cashTendered: cashGivenNum.value,
-                    cashChange: splitCashChangeDue.value,
-                    referenceNumber: referenceNumber.value,
-                    onlineMethod: 'GCash QR',
-                },
-            };
-        } else {
-            payment = {
-                method: 'GCASH',
-                referenceNumber: referenceNumber.value,
-            };
-        }
-
         processing.value = false;
-        emit('complete', payment);
+        emit('complete', request);
         model.value = false;
     }, 600);
 }

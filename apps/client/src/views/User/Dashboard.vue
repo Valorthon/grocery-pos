@@ -87,6 +87,15 @@
                                         "
                                         >{{ sale.paymentType }}</Badge
                                     >
+                                    <Badge
+                                        v-if="
+                                            sale.status &&
+                                            sale.status !== 'COMPLETED'
+                                        "
+                                        color="error"
+                                        class="ml-1"
+                                        >{{ sale.status }}</Badge
+                                    >
                                 </td>
                                 <td class="py-3 px-5 text-xs text-slate-500">
                                     {{ formatDate(sale.createdAt) }}
@@ -153,6 +162,8 @@ interface DashboardData {
         _id: string;
         amount: number;
         paymentType: string;
+        /** Absent on sales recorded before statuses existed. */
+        status?: string;
         createdAt: string;
         cashier?: { name: string };
     }>;
