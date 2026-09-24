@@ -1,4 +1,8 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, {
+    AxiosError,
+    isAxiosError,
+    type InternalAxiosRequestConfig,
+} from 'axios';
 import constant from '@/constant';
 import { useAuthStore } from './stores/auth';
 import { Color, useUIStore } from './stores/ui';
@@ -34,6 +38,18 @@ const processQueue = (error: AxiosError | null) => {
     failedQueue = [];
 };
 
+/**
+ * A 401 from the auth routes is an answer, not an expired session: a wrong
+ * password on login must reach the login form, and logout must not start a
+ * refresh. (The refresh call itself goes through bare `axios`, not `api`, so
+ * it never reaches this interceptor.)
+ */
+const AUTH_ENDPOINTS = [constant.login, constant.logout];
+export const isAuthEndpoint = (url?: string): boolean => {
+    const path = url?.split('?')[0];
+    return !!path && AUTH_ENDPOINTS.some((endpoint) => path.endsWith(endpoint));
+};
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     if (config.data instanceof FormData) {
         delete config.headers['Content-Type'];
@@ -60,7 +76,11 @@ api.interceptors.response.use(
             _retry?: boolean;
         };
         // Check if error is 401 and we haven't tried to refresh yet
-        if (error.response?.status === 401 && !originalRequest._retry) {
+        if (
+            error.response?.status === 401 &&
+            !originalRequest._retry &&
+            !isAuthEndpoint(originalRequest.url)
+        ) {
             // If already refreshing, queue this request
             if (isRefreshing) {
                 return new Promise((resolve, reject) => {
@@ -103,13 +123,21 @@ api.interceptors.response.use(
             } catch (refreshError) {
                 console.error('Token refresh failed:', refreshError);
 
+                processQueue(refreshError as AxiosError);
+                isRefreshing = false;
+
+                // Only a 401 means the session is over. A 5xx or a network
+                // error is transient: the server kept the cookies, so keep
+                // the user signed in and let this request fail on its own.
+                const sessionOver =
+                    isAxiosError(refreshError) &&
+                    refreshError.response?.status === 401;
+                if (!sessionOver) return Promise.reject(refreshError);
+
                 const domainString = env.VITE_DOMAIN
                     ? `; domain=${env.VITE_DOMAIN}`
                     : '';
                 document.cookie = `dummy=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domainString}`;
-
-                processQueue(refreshError as AxiosError);
-                isRefreshing = false;
 
                 if (!isSessionDialogShown) {
                     isSessionDialogShown = true;

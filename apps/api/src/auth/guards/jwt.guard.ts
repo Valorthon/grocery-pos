@@ -24,7 +24,16 @@ export class JWTAuthGuard extends AuthGuard('jwt') {
         if (err || !user) {
             if (isPublic) return { roles: Role.Unauthenticated } as TUser;
 
-            throw new JWTInvalidError();
+            // passport-jwt reports a missing, expired or bad token through
+            // `info` (user = false). `err` is only set when something broke
+            // while authenticating (e.g. `validate` threw): that is a server
+            // fault, not a bad token, so it must surface as-is, not as a 401.
+            if (err)
+                throw err instanceof Error
+                    ? err
+                    : new Error('Authentication failed', { cause: err });
+
+            throw JWTInvalidError.from(info);
         }
 
         return user as TUser;

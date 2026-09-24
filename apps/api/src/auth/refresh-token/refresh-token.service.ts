@@ -55,9 +55,18 @@ export class RefreshTokenService {
             .populate('user')
             .lean<FoundRefresh>();
 
-        if (!found || !this.checkValid(found)) {
+        // Unknown covers revoked (logged out) and reused: rotation deletes
+        // the old token, so presenting it a second time finds nothing.
+        if (!found) {
             throw new AuthError(
-                ErrorCode.AUTH_MISSING_REFRESH_TOKEN,
+                ErrorCode.AUTH_INVALID_TOKEN,
+                `Please login again`,
+            );
+        }
+
+        if (!this.checkValid(found)) {
+            throw new AuthError(
+                ErrorCode.AUTH_TOKEN_EXPIRED,
                 `Please login again`,
             );
         }
