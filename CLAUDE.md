@@ -321,8 +321,9 @@ requestId}`. A 5xx never carries details or internals.
   close it); the register behind it is inert and its keys pause.
 - Every register button and field is at least 44px (`min-h-11 min-w-11` or
   `w-11 h-11`), including the scan box's Clear, Enter / Scan and the Qty
-  select. `BaseModal`'s header close (×) is still 32px, in every dialog. No text below 12px (`text-xs`); `layout-drift.spec.ts` enforces
-  it for classes and CSS `font-size`.
+  select. `BaseModal`'s header close (×) is still 32px, in every dialog.
+  No text below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for
+  classes and CSS `font-size`.
 - No third-party runtime assets: Poppins (400–900) comes from
   `@fontsource/poppins`, and the login photo is
   `public/images/login-hero.jpg`, fetched at deploy (README) over a
