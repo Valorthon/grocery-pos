@@ -86,6 +86,7 @@ import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import { dateRangeError } from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
+import { formatStoreDateTime } from '@/utils/datetime';
 import AdjustDetails from '@/components/User/Adjustments/DetailsDialog.vue';
 
 const router = useRouter();
@@ -193,14 +194,7 @@ const {
             id: adjust._id,
             description: adjust.description,
             adjustedBy: adjust.adjustedBy.name,
-            date: new Date(adjust.createdAt).toLocaleString('en-PH', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true,
-            }),
+            date: formatStoreDateTime(adjust.createdAt),
         }));
 
         totalItems.value = result.data.totalItems;

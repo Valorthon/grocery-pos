@@ -73,7 +73,9 @@ describe('ZReadModal (issue #24)', () => {
 
     it("takes the terminal and cashier from the stored report, times in the store's zone", async () => {
         await mount();
-        const text = document.querySelector('[role="dialog"]')!.textContent!;
+        const text = document
+            .querySelector('[role="dialog"]')!
+            .textContent!.replace(/\s+/g, ' ');
         expect(
             document.querySelector('[data-testid="zread-terminal"]')
                 ?.textContent,

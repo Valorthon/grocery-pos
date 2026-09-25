@@ -57,6 +57,11 @@ function byTestId(id: string) {
     return document.querySelector(`[data-testid="${id}"]`);
 }
 
+/** ICU may put U+202F or U+00A0 before AM/PM; compare with plain spaces. */
+function plain(text: string | null | undefined) {
+    return (text ?? '').replace(/\s+/g, ' ');
+}
+
 function dialogText() {
     return document.querySelector('[role="dialog"]')?.textContent ?? '';
 }
@@ -66,7 +71,7 @@ describe('ReceiptModal (issue #24)', () => {
         // The device clock is nowhere near either sale.
         vi.useFakeTimers({ now: new Date('2030-01-01T12:00:00Z') });
         const current = await mount(RECEIPT);
-        expect(byTestId('receipt-date')?.textContent).toBe(
+        expect(plain(byTestId('receipt-date')?.textContent)).toBe(
             'Sep 25, 2026, 8:05 AM',
         );
         expect(byTestId('receipt-date')?.getAttribute('datetime')).toBe(
@@ -79,7 +84,7 @@ describe('ReceiptModal (issue #24)', () => {
             createdAt: '2026-09-25T13:47:00.000Z', // 9:47 PM in Manila
         };
         await flush();
-        expect(byTestId('receipt-date')?.textContent).toBe(
+        expect(plain(byTestId('receipt-date')?.textContent)).toBe(
             'Sep 25, 2026, 9:47 PM',
         );
     });

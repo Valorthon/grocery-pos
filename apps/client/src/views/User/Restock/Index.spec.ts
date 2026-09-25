@@ -310,3 +310,30 @@ describe('restock history filters and paging (issue #20)', () => {
         ).toContain('All users');
     });
 });
+
+describe('restock history dates (issue #24)', () => {
+    it("shows the restock's time in the store timezone", async () => {
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/restocks/users'
+                        ? []
+                        : {
+                              // 16:30 UTC on the 24th is 00:30 on the 25th
+                              // in Manila.
+                              data: [
+                                  {
+                                      ...RESTOCK,
+                                      createdAt: '2026-09-24T16:30:00.000Z',
+                                  },
+                              ],
+                              totalItems: 1,
+                          },
+            }),
+        );
+        const host = await mount();
+        expect(host.textContent?.replace(/\s+/g, ' ')).toContain(
+            'Sep 25, 2026, 12:30 AM',
+        );
+    });
+});

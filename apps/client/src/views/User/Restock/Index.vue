@@ -88,6 +88,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
 import { formatCurrency } from '@/utils/currency';
+import { formatStoreDateTime } from '@/utils/datetime';
 
 const router = useRouter();
 const uiStore = useUIStore();
@@ -196,14 +197,7 @@ const {
             description: restock.description,
             restockedBy: restock.restockedBy.name,
             totalCost: formatCurrency(restock.totalCost ?? 0),
-            date: new Date(restock.createdAt).toLocaleString('en-PH', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true,
-            }),
+            date: formatStoreDateTime(restock.createdAt),
         }));
 
         totalItems.value = result.data.totalItems;

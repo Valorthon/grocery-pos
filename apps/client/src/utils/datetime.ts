@@ -26,3 +26,17 @@ export function formatStoreDateTime(iso: string | null | undefined): string {
     const date = new Date(iso);
     return Number.isNaN(date.getTime()) ? '' : dateTime.format(date);
 }
+
+const time = new Intl.DateTimeFormat('en-PH', {
+    timeZone: STORE_TIME_ZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+});
+
+/** An ISO timestamp as a time of day in the store's timezone, e.g. "8:05 AM". */
+export function formatStoreTime(iso: string | null | undefined): string {
+    if (!iso) return '';
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? '' : time.format(date);
+}

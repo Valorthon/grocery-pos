@@ -138,7 +138,7 @@
                 class="flex justify-between gap-2"
             >
                 <span class="truncate"
-                    >{{ formatTime(m.at) }} {{ movementLabel(m.type) }} ·
+                    >{{ formatStoreTime(m.at) }} {{ movementLabel(m.type) }} ·
                     {{ m.reason }} ({{ m.byName }})</span
                 >
                 <span class="shrink-0">{{ currency(m.amount) }}</span>
@@ -155,7 +155,7 @@
 import { computed, defineComponent, h } from 'vue';
 import { DrawerMovementType, type ZReadReport } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
-import { formatStoreDateTime, STORE_TIME_ZONE } from '@/utils/datetime';
+import { formatStoreDateTime, formatStoreTime } from '@/utils/datetime';
 
 /** The server's stored Z-read. Every figure is shown as the server sent it. */
 const props = defineProps<{ report: ZReadReport }>();
@@ -212,14 +212,5 @@ const MOVEMENT_LABELS: Record<DrawerMovementType, string> = {
 
 function movementLabel(type: DrawerMovementType): string {
     return MOVEMENT_LABELS[type] ?? type;
-}
-
-function formatTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString('en-PH', {
-        timeZone: STORE_TIME_ZONE,
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-    });
 }
 </script>
