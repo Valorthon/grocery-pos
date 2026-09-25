@@ -248,6 +248,22 @@
                 >
                     Checking open shifts…
                 </p>
+                <div
+                    v-else-if="shiftsError"
+                    role="alert"
+                    class="flex flex-wrap items-center gap-2 text-xs font-bold text-red-800"
+                    data-testid="payout-shifts-error"
+                >
+                    <span class="flex-1"
+                        >Could not load open shifts: {{ shiftsError }}</span
+                    >
+                    <BaseButton
+                        variant="outline"
+                        size="sm"
+                        @click="loadPayoutShifts(payoutRequired)"
+                        >Retry</BaseButton
+                    >
+                </div>
                 <p
                     v-else-if="!payoutRequired"
                     class="text-xs text-red-700"
@@ -508,6 +524,8 @@ const reversalCash = computed(() =>
 );
 const openShifts = ref<ShiftListItem[]>([]);
 const loadingShifts = ref(false);
+/** Why the open shifts could not be loaded; never read as "none open". */
+const shiftsError = ref('');
 /** True when an open shift must be chosen to pay the cash back. */
 const payoutRequired = ref(false);
 const payoutShiftId = ref('');
@@ -535,14 +553,17 @@ async function loadPayoutShifts(forceChoice = false) {
         return;
     }
     loadingShifts.value = true;
+    shiftsError.value = '';
     try {
         const res = await api.get<Paginated<ShiftListItem>>('/shifts', {
             params: { page: 1, limit: 100, status: ShiftStatus.OPEN },
         });
         openShifts.value = res.data.data;
-    } catch {
-        // Let the server decide; it answers SHIFT_PAYOUT_REQUIRED if a
-        // shift must be chosen, and this runs again.
+    } catch (error) {
+        // Unknown, not "none open": say so and offer a retry. Without a
+        // forced choice the server decides; it answers
+        // SHIFT_PAYOUT_REQUIRED if a shift must be chosen.
+        shiftsError.value = apiErrorText(error, 'Please try again.');
         openShifts.value = [];
         payoutRequired.value = forceChoice;
         return;
@@ -563,6 +584,7 @@ async function loadPayoutShifts(forceChoice = false) {
 
 function startReversal(type: ReversalType) {
     pendingReversal.value = type;
+    shiftsError.value = '';
     reversalReason.value = '';
     payoutShiftId.value = '';
     payoutRequired.value = false;
@@ -571,6 +593,7 @@ function startReversal(type: ReversalType) {
 
 function cancelReversal() {
     pendingReversal.value = null;
+    shiftsError.value = '';
     reversalReason.value = '';
     payoutShiftId.value = '';
     payoutRequired.value = false;

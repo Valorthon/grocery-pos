@@ -178,6 +178,42 @@ describe('admin void/refund cash payout (issue #2)', () => {
         expect(confirmButton().disabled).toBe(true);
     });
 
+    it('says the open shifts could not be loaded, not that none is open', async () => {
+        serve(CASH_SALE, [openShift(OTHER_SHIFT, 'ben')]);
+        const serveShifts = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url: string, ...rest: unknown[]) =>
+            url === '/shifts'
+                ? Promise.reject(
+                      new AxiosError('Network Error', 'ERR_NETWORK', {
+                          headers: new AxiosHeaders(),
+                      }),
+                  )
+                : serveShifts(url, ...rest),
+        );
+        await startVoid();
+
+        const error = () =>
+            document.querySelector('[data-testid="payout-shifts-error"]');
+        expect(error()?.textContent).toContain('Could not load open shifts');
+        expect(
+            document.querySelector('[data-testid="payout-no-open-shift"]'),
+        ).toBeNull();
+
+        api.get.mockImplementation(serveShifts);
+        [...error()!.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Retry'))!
+            .click();
+        await flush();
+
+        expect(error()).toBeNull();
+        expect(
+            document.querySelector('[data-testid="payout-own-shift"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector('[data-testid="payout-shift"] select'),
+        ).not.toBeNull();
+    });
+
     it('asks nothing for a GCash-only sale, which touches no drawer', async () => {
         serve(
             {
