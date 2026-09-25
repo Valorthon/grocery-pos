@@ -2,6 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { isAxiosError } from 'axios';
 import api from '@/axios';
+import { useCartStore } from './cart';
+import { useShiftStore } from './shift';
 
 import { Role } from '@grocery-pos/contracts';
 
@@ -46,6 +48,11 @@ export const useAuthStore = defineStore('auth', () => {
             // logout is best-effort; local state is cleared either way
         } finally {
             clearUser();
+            // The next person at this register must not inherit this
+            // cashier's basket or shift. The shift itself stays open on
+            // the server; the same cashier resumes it at next login.
+            useShiftStore().reset();
+            useCartStore().reset();
             const { default: router } = await import('@/router');
             await router.push({ name: 'Login' });
         }

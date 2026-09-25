@@ -106,6 +106,7 @@ import { Banknote, Coins, Minus, Plus } from '@lucide/vue';
 import DenominationIcon from './DenominationIcon.vue';
 import { COIN_DENOMINATIONS, PAPER_DENOMINATIONS } from './shift';
 import type { BillCounts } from './shift';
+import type { CashDenomination } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
 
 const props = defineProps<{
@@ -147,7 +148,7 @@ function count(id: string): number {
     return props.modelValue[id] ?? 0;
 }
 
-function subtotal(denoms: typeof PAPER_DENOMINATIONS): number {
+function subtotal(denoms: readonly CashDenomination[]): number {
     return denoms.reduce(
         (sum, d) => sum + (props.modelValue[d.id] ?? 0) * d.value,
         0,

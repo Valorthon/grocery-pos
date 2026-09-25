@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { Role } from '@grocery-pos/contracts';
+import { Role, ShiftStatus } from '@grocery-pos/contracts';
 import { AxiosError, type AxiosResponse } from 'axios';
 
 vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
@@ -142,6 +142,44 @@ describe('auth store', () => {
 
         expect(store.user).toBeNull();
         expect(localStorage.getItem('user')).toBeNull();
+    });
+
+    it('resets the shift and the cart on logout, so the next cashier inherits neither (#2)', async () => {
+        localStorage.setItem(
+            'user',
+            JSON.stringify({ username: 'ana', roles: [Role.Seller] }),
+        );
+        const api = (await import('@/axios')).default;
+        vi.mocked(api.post).mockResolvedValue({});
+
+        const store = await loadStore();
+        const { useCartStore } = await import('./cart');
+        const { useShiftStore } = await import('./shift');
+        const cart = useCartStore();
+        const shift = useShiftStore();
+        cart.add({ product: 'p1', EAN: '1', name: 'milk', unitPrice: 9500 });
+        // Even a cart locked mid-checkout is emptied.
+        cart.lock();
+        shift.activeShift = {
+            _id: 's1',
+            status: ShiftStatus.OPEN,
+            cashierName: 'ana',
+            terminal: 'Lane #1',
+            openedAt: '2026-09-25T00:00:00.000Z',
+            openingFloat: 100_000,
+            movements: [],
+        };
+        shift.loaded = true;
+        shift.shiftOutOpen = true;
+
+        await store.logout();
+
+        expect(cart.items).toEqual([]);
+        expect(cart.locked).toBe(false);
+        expect(shift.activeShift).toBeNull();
+        expect(shift.loaded).toBe(false);
+        expect(shift.shiftOutOpen).toBe(false);
+        expect(shift.zRead).toBeNull();
     });
 
     describe('initSession (roles freshness, #12)', () => {

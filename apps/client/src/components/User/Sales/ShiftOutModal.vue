@@ -10,49 +10,60 @@
             class="flex items-center gap-1.5 text-slate-600 font-semibold text-[11px] mb-3"
         >
             <ShieldCheck class="w-3.5 h-3.5 text-slate-500" />
-            <span>Enter the actual cash found in the drawer</span>
+            <span
+                >Enter the cash you find in the drawer. The shift close report
+                shows how it compares once you submit.</span
+            >
         </div>
 
         <BillCountInput v-model="billCounts" />
 
-        <div class="mt-4 bg-slate-900 text-white rounded-xl p-4 space-y-3">
-            <div class="flex items-center justify-between">
-                <div>
-                    <div
-                        class="text-[10px] text-slate-400 font-bold uppercase tracking-wider"
-                    >
-                        Total Physical Counted Cash
-                    </div>
-                    <div
-                        class="text-2xl font-mono font-black text-primary-300 mt-0.5"
-                    >
-                        {{ currency(actualCash) }}
-                    </div>
+        <div
+            class="mt-4 bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between"
+        >
+            <div>
+                <div
+                    class="text-[10px] text-slate-400 font-bold uppercase tracking-wider"
+                >
+                    Total Physical Counted Cash ({{ totalPieces }} pieces)
                 </div>
-                <div class="text-right">
-                    <span class="text-[11px] text-slate-400">Cashier:</span>
-                    <div class="text-xs font-bold text-slate-200">
-                        {{ shiftStore.activeShift?.cashier }}
-                    </div>
+                <div
+                    class="text-2xl font-mono font-black text-primary-300 mt-0.5"
+                    data-testid="counted-cash"
+                >
+                    {{ currency(countedCash) }}
                 </div>
             </div>
-
-            <div
-                class="flex items-center justify-between p-2.5 bg-slate-800 rounded-lg text-xs"
-            >
-                <span class="text-slate-400">Variance:</span>
-                <span class="font-mono font-bold" :class="varianceColor">
-                    {{ varianceLabel }}
-                </span>
+            <div class="text-right">
+                <span class="text-[11px] text-slate-400">Cashier:</span>
+                <div class="text-xs font-bold text-slate-200">
+                    {{ shiftStore.activeShift?.cashierName }}
+                </div>
             </div>
         </div>
 
+        <p
+            v-if="error"
+            class="mt-3 text-xs font-semibold text-red-600"
+            data-testid="shift-out-error"
+        >
+            {{ error }}
+        </p>
+
         <template #footer>
-            <BaseButton variant="outline" @click="open = false"
+            <BaseButton
+                variant="outline"
+                :disabled="submitting"
+                @click="open = false"
                 >Cancel</BaseButton
             >
-            <BaseButton class="flex-1" @click="confirm">
-                Generate Z-Read Report
+            <BaseButton
+                class="flex-1"
+                :loading="submitting"
+                data-testid="shift-out-confirm"
+                @click="confirm"
+            >
+                Submit Count & Close Shift
                 <ArrowRight class="w-4 h-4" />
             </BaseButton>
         </template>
@@ -62,49 +73,46 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ArrowRight, ShieldCheck } from '@lucide/vue';
+import { billCountTotal, ErrorCode } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { ALL_DENOMINATIONS } from './shift';
+import { countPieces } from './shift';
 import type { BillCounts } from './shift';
-import { useShiftStore } from '@/stores/shift';
+import { apiErrorCode, apiErrorMessage, useShiftStore } from '@/stores/shift';
+import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 
+/**
+ * The closing count is blind (issue #2): the cashier sees only what they
+ * counted, never the expected cash or a variance. The server computes both
+ * and returns them in the Z-read after the count is submitted.
+ */
 const shiftStore = useShiftStore();
+const uiStore = useUIStore();
 
 const billCounts = ref<BillCounts>({});
+const submitting = ref(false);
+const error = ref('');
 
 const open = computed({
     get: () => shiftStore.shiftOutOpen,
-    set: (val) => (shiftStore.shiftOutOpen = val),
+    set: (val) => {
+        if (!submitting.value) shiftStore.shiftOutOpen = val;
+    },
 });
 
-const actualCash = computed(() =>
-    ALL_DENOMINATIONS.reduce(
-        (sum, d) => sum + (billCounts.value[d.id] ?? 0) * d.value,
-        0,
-    ),
-);
-
-const variance = computed(
-    () => actualCash.value - shiftStore.currentDrawerCash,
-);
-
-const varianceLabel = computed(() => {
-    const v = variance.value;
-    return v > 0 ? `+${currency(v)}` : currency(v);
-});
-
-const varianceColor = computed(() => {
-    const v = variance.value;
-    if (v === 0) return 'text-emerald-400';
-    return v > 0 ? 'text-amber-400' : 'text-rose-400';
-});
+// Display only: the server adds the counts up itself.
+const countedCash = computed(() => billCountTotal(billCounts.value));
+const totalPieces = computed(() => countPieces(billCounts.value));
 
 watch(
     () => shiftStore.shiftOutOpen,
     (val) => {
-        if (val) billCounts.value = {};
+        if (val) {
+            billCounts.value = {};
+            error.value = '';
+        }
     },
 );
 
@@ -112,7 +120,23 @@ function currency(value: number): string {
     return formatCurrency(value);
 }
 
-function confirm() {
-    shiftStore.endShift(actualCash.value);
+async function confirm() {
+    if (submitting.value) return;
+    submitting.value = true;
+    error.value = '';
+    try {
+        await shiftStore.closeShift(billCounts.value);
+    } catch (err) {
+        error.value = apiErrorMessage(err, 'Could not close the shift');
+        if (apiErrorCode(err) === ErrorCode.SHIFT_NOT_OPEN) {
+            // Closed elsewhere (e.g. by an admin): the modal has closed.
+            uiStore.queueMessage(
+                Color.ERROR,
+                'This shift is no longer open. See the last shift report.',
+            );
+        }
+    } finally {
+        submitting.value = false;
+    }
 }
 </script>

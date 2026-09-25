@@ -66,12 +66,16 @@
         </div>
 
         <template #footer>
-            <BaseButton variant="outline" @click="open = false"
+            <BaseButton
+                variant="outline"
+                :disabled="submitting"
+                @click="open = false"
                 >Cancel</BaseButton
             >
             <BaseButton
                 class="flex-1"
                 :disabled="amountCentavos <= 0"
+                :loading="submitting"
                 @click="confirm"
             >
                 <Check class="w-3.5 h-3.5" />
@@ -84,9 +88,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Check } from '@lucide/vue';
+import { DrawerMovementType, NUMERIC_LIMITS } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import { useShiftStore } from '@/stores/shift';
+import { apiErrorMessage, useShiftStore } from '@/stores/shift';
 import { useUIStore, Color } from '@/stores/ui';
 import {
     CENTAVOS_PER_PESO,
@@ -101,16 +106,17 @@ const uiStore = useUIStore();
 const amount = ref('500');
 const reason = ref('');
 const error = ref('');
+const submitting = ref(false);
 
 const open = computed({
     get: () => shiftStore.drawerAction !== null,
     set: (val) => {
-        if (!val) shiftStore.drawerAction = null;
+        if (!val && !submitting.value) shiftStore.drawerAction = null;
     },
 });
 
 const type = computed(() => shiftStore.drawerAction);
-const isCashIn = computed(() => type.value === 'cash_in');
+const isCashIn = computed(() => type.value === DrawerMovementType.CASH_IN);
 
 const amountCentavos = computed(() => pesosToCentavos(amount.value));
 
@@ -126,7 +132,7 @@ watch(
         if (action) {
             amount.value = '500';
             reason.value =
-                action === 'cash_in'
+                action === DrawerMovementType.CASH_IN
                     ? 'Change replenishment'
                     : 'Excess cash drop to safe';
             error.value = '';
@@ -138,26 +144,38 @@ function currency(value: number): string {
     return formatCurrency(value);
 }
 
-function confirm() {
-    if (amountCentavos.value <= 0) return;
-
-    if (
-        !isCashIn.value &&
-        amountCentavos.value > shiftStore.currentDrawerCash
-    ) {
-        error.value = `Cannot drop more cash than currently in drawer (${currency(
-            shiftStore.currentDrawerCash,
-        )})`;
-        uiStore.queueMessage(Color.ERROR, error.value);
+/**
+ * Records the movement on the server. A cash drop is not checked against
+ * the drawer (the cashier never sees expected cash): a drop larger than
+ * what is there shows up as a shortfall in the Z-read.
+ */
+async function confirm() {
+    const action = type.value;
+    if (!action || amountCentavos.value <= 0 || submitting.value) return;
+    if (amountCentavos.value > NUMERIC_LIMITS.AMOUNT_MAX) {
+        error.value = 'That amount is too large';
         return;
     }
 
-    shiftStore.addDrawerTransaction(
-        type.value as 'cash_in' | 'cash_drop',
-        amountCentavos.value,
-        reason.value.trim() ||
-            (isCashIn.value ? 'Cash In (Change)' : 'Cash Drop (Safe)'),
-    );
-    shiftStore.drawerAction = null;
+    submitting.value = true;
+    error.value = '';
+    try {
+        await shiftStore.recordDrawer(
+            action,
+            amountCentavos.value,
+            reason.value.trim() ||
+                (isCashIn.value ? 'Cash In (Change)' : 'Cash Drop (Safe)'),
+        );
+        uiStore.queueMessage(
+            Color.SUCCESS,
+            `${isCashIn.value ? 'Cash in' : 'Cash drop'} of ${currency(amountCentavos.value)} recorded`,
+        );
+        shiftStore.drawerAction = null;
+    } catch (err) {
+        error.value = apiErrorMessage(err, 'Could not record the movement');
+        uiStore.queueMessage(Color.ERROR, error.value);
+    } finally {
+        submitting.value = false;
+    }
 }
 </script>
