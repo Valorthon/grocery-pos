@@ -201,15 +201,77 @@ requestId}`. A 5xx never carries details or internals.
   revokes that user's sessions. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.
 
+**Sessions** (#21)
+
+- A session lasts a fixed 7 days from login; refresh-token rotation keeps
+  that expiry. The refresh and marker cookies expire with the session, and
+  the access token is capped at the session end.
+- The axios refresh accepts any 2xx, has a timeout, and marks queued
+  requests `_retry`. Only a 401 from refresh logs out; a timeout or 5xx
+  doesn't.
+- Login errors are chosen by status only (`login-error.ts`): 400/401 the
+  generic message, 429 "try again in…", network/5xx "can't reach the
+  server". The login page has no Remember me, Privacy or Terms; a forgotten
+  password is "ask an admin to reset it".
+
+**Client payloads and errors** (#33, #18)
+
+- The `utils/payloads.ts` mappers send exactly the DTO fields.
+- `utils/api-error.ts` (`apiErrorMessages`/`apiErrorText`) is the one way to
+  read an API error.
+- Server failures of user actions are toasts; field validation is inline;
+  list and dashboard load failures are an inline error with Retry via
+  `useListFetch` (BaseTable `error`/`@retry`), and only the latest load
+  writes.
+- Error toasts stay until dismissed (`role=alert`); success/info close by
+  themselves. The stack is capped at 5 and cleared when the session changes.
+- Save dialogs (including the Users dialogs) stay open until the save
+  resolves.
+
+**Forms** (#17)
+
+- Field rules in `utils/rules.ts` mirror the API DTOs exactly, neither
+  stricter nor looser. Forms validate on submit and show errors inline.
+- Money is typed as text and parsed by `parsePesos`.
+- `BaseInput` has `inheritAttrs: false`: attrs go on the `<input>`, class and
+  style on the wrapper.
+- The product combobox binds a snapshot taken at pick time; toggling "new
+  product" clears it. Product search goes through `useProductMatches`
+  (debounced, out-of-order answers dropped).
+
+**Draft screens** (#19)
+
+- Draft pages key rows by a generated draft id, confirm Clear and leaving
+  with unsaved drafts, and block double submits.
+
+**List views** (#20)
+
+- Paged lists use `useListPaging`: a page change loads once, a page-size
+  change goes back to page 1, and `search()` (filter change, Enter, Search
+  button, Clear Filters) goes to page 1 with a single load.
+- Text searches run on Enter or a Search button. Select and date filters
+  apply on change. `BaseSelect`'s opt-in `allLabel` adds an "All" option
+  that maps to `null`.
+- A reversed date range (`dateFrom` after `dateTo`) is a 400 from the
+  restock, adjustment and sales GetAll DTOs (`@IsNotBefore('dateFrom')`).
+  The client shows `dateRangeError` on the To field and doesn't send it;
+  paging and Retry reuse the last applied filters.
+- BaseTable hides its pager while `error` is set.
+- Sale details clear before loading, and only the latest click's answer is
+  shown. The user editor edits a copy of the row's roles, so Cancel changes
+  nothing. Create validates name, password and roles like `CreateFields`.
+- Dashboard recent activity is sorted on raw timestamps, then cut to 7.
+
 **Scope**
 
 - Receipts are shown on screen only, with no printing. BIR compliance (VAT,
   official receipts, SC/PWD) is deferred to #48.
+- Editing and archiving products is #38, not part of the list views.
 - Open decisions are in **#61**: USER_MANAGER self-edits, and a fail-closed
   `RoleGuard`.
 
 ## Status
 
-Phases 1–4 of #31 are complete. Phase 4 (#8, #15, #14, #16) covered errors,
-text handling, inventory integrity and reporting. Next is Phase 5, client
-correctness, starting with #33.
+Phases 1–5 of #31 are complete. Phase 5 (#21, #33, #17, #18, #19, #20)
+covered sessions and client correctness: payloads, forms, errors, draft
+screens and list views. Next is Phase 6, the register, starting with #22.
