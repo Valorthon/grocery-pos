@@ -1,5 +1,5 @@
 <template>
-    <div>
+    <div :class="attrs.class" :style="attrs.style">
         <label
             v-if="label"
             :for="id"
@@ -18,9 +18,8 @@
 
             <input
                 :id="id"
+                v-bind="inputAttrs()"
                 :type="type"
-                :min="min"
-                :step="step"
                 :maxlength="maxlength"
                 :value="modelValue"
                 :placeholder="placeholder"
@@ -48,8 +47,27 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useAttrs } from 'vue';
 import { X } from '@lucide/vue';
+
+/*
+ * Attributes the caller sets (min, step, inputmode, name, autocomplete,
+ * listeners...) belong on the <input>, not on the wrapper div; class and
+ * style stay on the wrapper so a grid cell class like `md:col-span-3`
+ * still lays out the whole field (issue #17).
+ */
+defineOptions({ inheritAttrs: false });
+
+const attrs = useAttrs();
+// A function, not a computed: attrs are not reactive, but a change to them
+// re-renders the component, which calls this again.
+function inputAttrs() {
+    return Object.fromEntries(
+        Object.entries(attrs).filter(
+            ([key]) => key !== 'class' && key !== 'style',
+        ),
+    );
+}
 
 const props = withDefaults(
     defineProps<{
@@ -57,8 +75,6 @@ const props = withDefaults(
         id?: string;
         label?: string;
         type?: string;
-        min?: string | number;
-        step?: string | number;
         /** Longest value the input accepts, e.g. a contracts STRING_LIMITS. */
         maxlength?: number;
         placeholder?: string;
@@ -73,8 +89,6 @@ const props = withDefaults(
         id: '',
         label: '',
         type: 'text',
-        min: undefined,
-        step: undefined,
         maxlength: undefined,
         placeholder: '',
         disabled: false,
