@@ -101,12 +101,41 @@ Rules:
   `packages/contracts/src/discount.ts` and needs a reason. `Sales.discount`
   records `approvedBy`. Any SELLER may apply one until the manager PIN (#34).
 - Void and refund cover the whole sale only, are ADMIN-only, put the stock back,
-  and record `reversal`. Revenue excludes reversed sales.
+  pay the cash back out of a shift's drawer (see Shifts), and record
+  `reversal`. Revenue excludes reversed sales.
 - SPLIT tender stores `tenders`, `amountTendered` and `changeGiven`. A GCash
   `referenceNumber` is 13 digits, unique, and required for non-cash tenders.
 - `POST /sales` is idempotent through `idempotencyKey` plus a `requestHash`. A
   replay returns the original receipt. The receipt and drawer figures always come
   from the server response.
+
+**Shifts** (#2)
+
+- Shifts live on the server (`apps/api/src/shift`); the client keeps
+  nothing in localStorage. At most one OPEN shift per cashier (unique
+  partial index), opened with a positive counted float. Logout leaves it
+  open and the same cashier resumes it; nobody else inherits it. ADMIN
+  holds every role, so an admin who sells needs a shift too.
+- `POST /sales` needs the caller's open shift (409 `SHIFT_NOT_OPEN`),
+  writes it with a `status: OPEN` filter in the sale's transaction and
+  sets `sale.shift`. Close flips the status in a transaction with the same
+  filter. An idempotent replay needs no open shift.
+- Blind until submitted: while open, the cashier never sees expected
+  cash, sales totals or variance, and cash drops are not checked. Close
+  takes bill counts (`CASH_DENOMINATIONS` in contracts); the server
+  computes and stores the Z-read (sales by tender, discounts,
+  voids/refunds, drawer movements, expected, counted, over/short).
+- Expected cash = float + cash in − drops + net cash of the shift's sales
+  (cash tender − change, `saleNetCash`) − reversal payouts charged to it.
+- Void/refund pays the sale's net cash out of its own shift while open,
+  else out of the open shift the ADMIN passes as `payoutShiftId`;
+  otherwise it is refused and nothing changes. GCash-only touches no
+  drawer. `reversal.payoutShift` records which shift paid.
+- An ADMIN can force-close an open shift with a count; the Z-read records
+  the admin. Cashiers reopen their last Z-read from the seller dashboard;
+  admins see every shift on `/admin/shifts`. CSV and reports are #44.
+- A non-admin reads only their own sales in their current open shift
+  (none without one; others 404).
 
 **Access**
 
@@ -132,6 +161,5 @@ Rules:
 
 ## Status
 
-Phases 1 and 2 of #31 are complete. Next is **Phase 3: #2** (server-side shifts
-and cash accountability). Cash refunds adjusting the drawer were deferred to #2;
-see its comments.
+Phases 1, 2 and 3 of #31 are complete. Phase 3 (#2) moved shifts and cash
+accountability to the server. The next phase is in #31.
