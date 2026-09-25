@@ -52,6 +52,7 @@ function bulkDuplicate() {
 describe('Error responses (e2e, issue #8)', () => {
     let harness: AccessHarness;
     let errorLog: jest.SpyInstance;
+    let warnLog: jest.SpyInstance;
     const insertMany = jest.fn();
     const findOne = jest.fn();
     const inventoryCreateMany = jest.fn().mockResolvedValue(undefined);
@@ -93,9 +94,9 @@ describe('Error responses (e2e, issue #8)', () => {
         errorLog = jest
             .spyOn(Logger.prototype, 'error')
             .mockImplementation(() => undefined);
-        jest.spyOn(Logger.prototype, 'warn').mockImplementation(
-            () => undefined,
-        );
+        warnLog = jest
+            .spyOn(Logger.prototype, 'warn')
+            .mockImplementation(() => undefined);
         jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
     });
 
@@ -128,6 +129,58 @@ describe('Error responses (e2e, issue #8)', () => {
         expect(json).not.toContain('"op"');
         expect(json).not.toContain('1999');
         expect(inventoryCreateMany).not.toHaveBeenCalled();
+
+        // A 4xx, so a warning, but with the stack and the driver error.
+        expect(errorLog).not.toHaveBeenCalled();
+        expect(warnLog).toHaveBeenCalledTimes(1);
+        const entry = warnLog.mock.calls[0][0] as string;
+        expect(entry).toContain(
+            `[${String(body.requestId)}] POST /v1/products/bulk -> 400 DB_002`,
+        );
+        expect(entry).toContain('\n    at ');
+        expect(entry).toContain('Caused by: MongoBulkWriteError');
+    });
+
+    it('answers an oversized body with 413, not a 500', async () => {
+        const res = await harness.call(restocker, 'POST', '/products/bulk', {
+            newProducts: [
+                {
+                    name: 'Milk',
+                    price: 1999,
+                    padding: 'x'.repeat(200 * 1024),
+                },
+            ],
+        });
+        const body = (await res.json()) as Record<string, unknown>;
+
+        expect(res.status).toBe(413);
+        expect(body).toMatchObject({
+            statusCode: 413,
+            error: ErrorCode.HTTP_ERROR,
+            message: 'request entity too large',
+            details: null,
+            requestId: res.headers.get('x-request-id'),
+        });
+        expect(insertMany).not.toHaveBeenCalled();
+        expect(errorLog).not.toHaveBeenCalled();
+        expect(warnLog).toHaveBeenCalledTimes(1);
+    });
+
+    it('answers malformed JSON with 400 VALIDATION_INVALID_INPUT, not a 500', async () => {
+        // body-parser rejects it before any guard runs, so no caller.
+        const res = await fetch(
+            `${await harness.app.getUrl()}/v1/products/bulk`,
+            {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: '{"newProducts": [',
+            },
+        );
+
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: string }).error).toBe(
+            ErrorCode.VALIDATION_INVALID_INPUT,
+        );
         expect(errorLog).not.toHaveBeenCalled();
     });
 

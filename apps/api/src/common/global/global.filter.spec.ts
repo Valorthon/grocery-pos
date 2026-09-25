@@ -21,6 +21,7 @@ import {
     AuthError,
     ConflictError,
     ErrorCode,
+    classifyDbError,
     InternalError,
     RateLimitError,
     ValidationError,
@@ -230,18 +231,14 @@ describe('GlobalFilter on duplicate keys (issue #8)', () => {
         ['a MongoServerError', serverDuplicate],
         ['a MongoBulkWriteError', bulkDuplicate],
         [
-            'a MongoServerError wrapped by a transaction',
-            () =>
-                new InternalError('Transaction failed', null, {
-                    cause: serverDuplicate(),
-                }),
+            // What runInTransaction throws: the classified AppError, with
+            // the driver error as its cause.
+            'a MongoServerError classified by a transaction',
+            () => classifyDbError(serverDuplicate())!,
         ],
         [
-            'a MongoBulkWriteError wrapped by a transaction',
-            () =>
-                new InternalError('Transaction failed', null, {
-                    cause: bulkDuplicate(),
-                }),
+            'a MongoBulkWriteError classified by a transaction',
+            () => classifyDbError(bulkDuplicate())!,
         ],
     ])(
         'answers %s with 400 DB_DUPLICATE_KEY and no driver payload',
@@ -302,9 +299,11 @@ describe('GlobalFilter on Mongoose validation (issue #8)', () => {
         const err = new MongooseError.ValidationError();
         err.addError(
             'price',
+            // A `validate` message written in our schema.
             new MongooseError.ValidatorError({
                 path: 'price',
                 message: 'price must be an integer',
+                type: 'user defined',
                 value: 1.5,
             }),
         );
@@ -333,9 +332,49 @@ describe('GlobalFilter on Mongoose validation (issue #8)', () => {
         const body = bodyOf(res);
         expect(body).toMatchObject({
             error: ErrorCode.DB_VALIDATION_ERROR,
-            details: [{ field: '_id' }],
+            details: [{ field: '_id', message: 'Invalid value' }],
         });
-        expect(JSON.stringify(body)).not.toContain('not-an-id-secret');
+        const json = JSON.stringify(body);
+        expect(json).not.toContain('not-an-id-secret');
+        expect(json).not.toContain('Cast to');
+        // The raw message stays in the log.
+        expect(warnLog.mock.calls[0][0]).toContain('not-an-id-secret');
+    });
+
+    it("hides Mongoose's built-in messages, which echo the value", () => {
+        const err = new MongooseError.ValidationError();
+        err.addError(
+            'price',
+            new MongooseError.ValidatorError({
+                path: 'price',
+                message:
+                    'Path `price` (-4242) is less than minimum allowed value (0).',
+                type: 'min',
+                value: -4242,
+            }),
+        );
+        err.addError(
+            'shift',
+            new MongooseError.CastError(
+                'ObjectId',
+                'nope-secret',
+                'shift',
+                new Error('BSONError: input must be a 24 character hex string'),
+            ),
+        );
+        const { host, res } = hostFor('/v1/sales');
+
+        filter.catch(err, host);
+
+        const body = bodyOf(res);
+        expect(body.details).toEqual([
+            { field: 'price', message: 'Invalid value' },
+            { field: 'shift', message: 'Invalid value' },
+        ]);
+        const json = JSON.stringify(body);
+        for (const leak of ['-4242', 'nope-secret', 'BSON', 'minimum']) {
+            expect(json).not.toContain(leak);
+        }
     });
 
     it('does not mistake the app ValidationError for a Mongoose one', () => {
@@ -587,5 +626,124 @@ describe('GlobalFilter on AppErrors (issue #8)', () => {
             details: null,
         });
         expect(errorLog).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('GlobalFilter on body-parser (http-errors) client errors (issue #8)', () => {
+    const filter = new GlobalFilter();
+
+    /** The shape `http-errors` gives body-parser's errors. */
+    function httpError(
+        status: number,
+        name: string,
+        message: string,
+        extra: Record<string, unknown> = {},
+    ) {
+        return Object.assign(new Error(message), {
+            name,
+            status,
+            statusCode: status,
+            expose: status < 500,
+            ...extra,
+        });
+    }
+
+    it.each([
+        [
+            httpError(413, 'PayloadTooLargeError', 'request entity too large', {
+                type: 'entity.too.large',
+                limit: 102400,
+                length: 204800,
+            }),
+            413,
+            ErrorCode.HTTP_ERROR,
+        ],
+        [
+            httpError(400, 'SyntaxError', 'Unexpected token } in JSON', {
+                type: 'entity.parse.failed',
+                body: '{"password":"hunter2"}',
+            }),
+            400,
+            ErrorCode.VALIDATION_INVALID_INPUT,
+        ],
+        [
+            httpError(
+                415,
+                'UnsupportedMediaTypeError',
+                'unsupported charset "X"',
+            ),
+            415,
+            ErrorCode.HTTP_ERROR,
+        ],
+    ])('keeps the status of an exposed %#', (err, status, code) => {
+        const { host, res } = hostFor('/v1/products/bulk');
+
+        filter.catch(err, host);
+
+        expect(res.status).toHaveBeenCalledWith(status);
+        const body = bodyOf(res);
+        expect(body).toMatchObject({
+            statusCode: status,
+            error: code,
+            message: err.message,
+            details: null,
+        });
+        expect(JSON.stringify(body)).not.toContain('hunter2');
+        expect(errorLog).not.toHaveBeenCalled();
+        expect(warnLog).toHaveBeenCalledTimes(1);
+        expect(warnLog.mock.calls[0][0]).not.toContain('hunter2');
+    });
+
+    it('keeps a non-exposed or 5xx http error a generic 500', () => {
+        for (const err of [
+            httpError(400, 'BadRequestError', 'secret', { expose: false }),
+            httpError(503, 'ServiceUnavailableError', 'secret'),
+            httpError(503, 'ServiceUnavailableError', 'secret', {
+                expose: true,
+            }),
+        ]) {
+            const { host, res } = hostFor('/v1/x');
+
+            filter.catch(err, host);
+
+            expect(bodyOf(res)).toMatchObject({
+                statusCode: 500,
+                message: INTERNAL_MESSAGE,
+            });
+        }
+    });
+});
+
+describe('GlobalFilter logs classified database errors with the stack (issue #8)', () => {
+    const filter = new GlobalFilter();
+
+    it('warns with the stack and cause chain for a duplicate from a transaction', () => {
+        const driver = serverDuplicate();
+        const { host } = hostFor('/v1/products/bulk');
+
+        filter.catch(classifyDbError(driver)!, host);
+
+        expect(errorLog).not.toHaveBeenCalled();
+        expect(warnLog).toHaveBeenCalledTimes(1);
+        const entry = warnLog.mock.calls[0][0] as string;
+        expect(entry).toContain('-> 400 DB_002');
+        expect(entry).toContain(`Caused by: ${driver.stack}`);
+    });
+
+    it('warns with the stack for a raw duplicate outside a transaction', () => {
+        const driver = serverDuplicate();
+        const { host } = hostFor('/v1/users');
+
+        filter.catch(driver, host);
+
+        expect(warnLog.mock.calls[0][0]).toContain(driver.stack);
+    });
+
+    it('keeps other 4xx to one line', () => {
+        const { host } = hostFor('/v1/x');
+
+        filter.catch(new ForbiddenException(), host);
+
+        expect(warnLog.mock.calls[0][0]).not.toContain('\n');
     });
 });

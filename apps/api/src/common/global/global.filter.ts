@@ -68,16 +68,18 @@ function safeString(value: unknown): string {
  * Turns every exception into an `AppErrorResponse` (issue #8).
  *
  * - `AppError`: its own status, code and `details` (none on a 5xx).
- * - An `InternalError` or raw error from the database is classified first
- *   (`classifyDbError`, also unwrapping a `cause`): a duplicate key or
- *   validation failure is a 400, not a 500.
+ * - A raw error from the database is classified first (`classifyDbError`):
+ *   a duplicate key or validation failure is a 400, not a 500.
  * - `HttpException` (Nest, guards, `ValidationPipe`): its real status and a
  *   matching code (`codeForStatus`). The ValidationPipe's message list is
  *   joined into `message` and kept in `details.messages`.
+ * - An exposed `http-errors` 4xx (body-parser's 413, malformed JSON): its
+ *   status, a matching code and its message.
  * - Anything else: 500 INTERNAL_ERROR with a generic message.
  *
  * Every body carries the request's correlation id. A 5xx is logged as an
- * error with the stack (and every `cause`); a 4xx as one warning line.
+ * error with the stack (and every `cause`); a 4xx as one warning line,
+ * plus the stack and causes for a classified database error.
  * Request bodies are never logged.
  */
 @Catch()
@@ -101,11 +103,9 @@ export class GlobalFilter implements ExceptionFilter {
         path: string,
         requestId: string,
     ): AppErrorResponse {
-        const classified =
-            classifyDbError(exception) ??
-            (exception instanceof AppError && exception.statusCode >= 500
-                ? classifyDbError(exception.cause)
-                : null);
+        // A raw database error thrown outside `runInTransaction` (inside
+        // one, db.ts has already classified it).
+        const classified = classifyDbError(exception);
         if (classified) return classified.toResponse(path, requestId);
 
         if (exception instanceof AppError) {
@@ -116,14 +116,28 @@ export class GlobalFilter implements ExceptionFilter {
             return this.fromHttpException(exception, path, requestId);
         }
 
-        return {
-            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-            error: ErrorCode.INTERNAL_ERROR,
-            message: INTERNAL_MESSAGE,
+        const base = {
             timestamp: new Date().toISOString(),
             path,
             details: null,
             requestId,
+        };
+
+        const httpError = exposedClientError(exception);
+        if (httpError) {
+            return {
+                ...base,
+                statusCode: httpError.status,
+                error: codeForStatus(httpError.status),
+                message: httpError.message,
+            };
+        }
+
+        return {
+            ...base,
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            error: ErrorCode.INTERNAL_ERROR,
+            message: INTERNAL_MESSAGE,
         };
     }
 
@@ -171,16 +185,16 @@ export class GlobalFilter implements ExceptionFilter {
         // The path without the query string: queries can carry search terms.
         const path = (req.originalUrl ?? req.url ?? '').split('?')[0];
         const line = `[${body.requestId}] ${req.method} ${path} -> ${body.statusCode} ${body.error}`;
+        const message =
+            exception instanceof Error
+                ? `${exception.name}: ${exception.message}`
+                : safeString(exception);
 
         if (body.statusCode >= 500) {
             const details =
                 exception instanceof AppError && exception.details !== null
                     ? ` details=${safeString(exception.details)}`
                     : '';
-            const message =
-                exception instanceof Error
-                    ? `${exception.name}: ${exception.message}`
-                    : safeString(exception);
             this.logger.error(
                 `${line}: ${message}${details}`,
                 stackWithCauses(exception),
@@ -188,6 +202,49 @@ export class GlobalFilter implements ExceptionFilter {
             return;
         }
 
+        // A classified database error (a duplicate key, a validation
+        // failure) is a 4xx, but its stack and the driver error behind it
+        // are what explain it: still a warning, with the stack and causes
+        // in the same entry.
+        if (isClassifiedDbError(exception)) {
+            this.logger.warn(
+                `${line}: ${message}\n${stackWithCauses(exception)}`,
+            );
+            return;
+        }
+
         this.logger.warn(`${line}: ${body.message}`);
     }
+}
+
+/**
+ * A database error that answers 4xx: raw (classified by the filter) or
+ * already classified by `runInTransaction` (an AppError whose `cause` is
+ * the driver or Mongoose error).
+ */
+function isClassifiedDbError(exception: unknown): boolean {
+    return (
+        classifyDbError(exception) !== null ||
+        (exception instanceof AppError && exception.cause !== undefined)
+    );
+}
+
+/**
+ * An `http-errors` client error, as body-parser raises it (413 entity too
+ * large, 400 malformed JSON, 415 unsupported charset): `expose` is true
+ * only when its message is meant for the client.
+ */
+function exposedClientError(
+    exception: unknown,
+): { status: number; message: string } | null {
+    if (!(exception instanceof Error)) return null;
+    const e = exception as Error & {
+        expose?: unknown;
+        status?: unknown;
+        statusCode?: unknown;
+    };
+    const status = Number(e.status ?? e.statusCode);
+    if (e.expose !== true || !Number.isInteger(status)) return null;
+    if (status < 400 || status >= 500) return null;
+    return { status, message: e.message };
 }
