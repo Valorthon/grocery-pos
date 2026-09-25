@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    newProductLines,
     toAdjustmentBody,
     toEnsureValidQuery,
     toNewProductsBody,
@@ -151,5 +152,18 @@ describe('toAdjustmentBody (POST /adjustments)', () => {
             ],
             description: 'weekly count',
         });
+    });
+});
+
+describe('newProductLines', () => {
+    it('lists the draft line of each new product, in insert order', () => {
+        expect(
+            newProductLines([
+                { isNewProduct: false },
+                { isNewProduct: true },
+                { isNewProduct: false },
+                { isNewProduct: true },
+            ]),
+        ).toEqual([1, 3]);
     });
 });

@@ -126,7 +126,7 @@ import { AddForm, SaveForm } from '@/components/User/Restock/dto';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
-import { toRestockBody } from '@/utils/payloads';
+import { newProductLines, toRestockBody } from '@/utils/payloads';
 
 const isAddDialogOpen = ref(false);
 const isSaveDialogOpen = ref(false);
@@ -149,6 +149,8 @@ const filteredItems = computed(() => {
 });
 
 const saveToDB = async (saveForm: SaveForm) => {
+    // The API numbers insert errors among the new products only.
+    const newLines = newProductLines(items.value);
     try {
         await api.post(
             '/restocks',
@@ -159,9 +161,9 @@ const saveToDB = async (saveForm: SaveForm) => {
         router.push({ name: 'Restocks' });
         uiStore.queueMessage(Color.SUCCESS, 'Restock saved.');
     } catch (error) {
-        apiErrorMessages(error, 'Error saving. Try again.').forEach((message) =>
-            uiStore.queueMessage(Color.ERROR, message),
-        );
+        apiErrorMessages(error, 'Error saving. Try again.', {
+            insertLine: (index) => newLines[index] ?? index,
+        }).forEach((message) => uiStore.queueMessage(Color.ERROR, message));
     }
 };
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { apiErrorMessages, NETWORK_ERROR_MESSAGE } from './api-error';
+import { newProductLines } from './payloads';
 
 /** An axios error carrying `data` as the response body. */
 function httpError(status: number, data: unknown): AxiosError {
@@ -105,5 +106,129 @@ describe('apiErrorMessages', () => {
         expect(apiErrorMessages(new Error('boom'), 'Try again')).toEqual([
             'Try again',
         ]);
+    });
+
+    it('does not name an unknown clashing field', () => {
+        const error = httpError(
+            400,
+            body('Duplicate key', [
+                { msg: 'Already exists', property: 'unknown', index: 0 },
+            ]),
+        );
+
+        expect(apiErrorMessages(error)).toEqual(['Item 1: Already exists']);
+    });
+
+    it('numbers an invalid barcode among the inserted products', () => {
+        const error = httpError(
+            400,
+            body('Invalid barcode', [
+                { index: 1, EAN: '4006381333932', message: 'Bad check digit' },
+            ]),
+        );
+
+        expect(apiErrorMessages(error)).toEqual(['Item 2: Bad check digit']);
+    });
+
+    it('says how much stock an adjustment would overdraw', () => {
+        const error = httpError(
+            400,
+            body('Adjustment would make stock negative', [
+                { product: 'p1', name: 'bread', change: -5, available: 2 },
+                { product: 'p2', change: -1, available: 0 },
+            ]),
+        );
+
+        expect(apiErrorMessages(error)).toEqual([
+            'bread: only 2 in stock',
+            'A product: only 0 in stock',
+        ]);
+    });
+
+    it('names the restock line of a product that does not exist', () => {
+        const error = httpError(
+            404,
+            body('One or more products do not exist', [
+                { index: 2, product: '507f1f77bcf86cd799439011' },
+            ]),
+        );
+
+        expect(apiErrorMessages(error)).toEqual(['Item 3: product not found']);
+    });
+
+    it('reports a missing product without a line', () => {
+        const error = httpError(
+            404,
+            body('One or more products have no inventory record', [
+                { product: '507f1f77bcf86cd799439011' },
+            ]),
+        );
+
+        expect(apiErrorMessages(error)).toEqual(['Product not found']);
+    });
+
+    describe('insert positions (insertLine)', () => {
+        // Restock lines: existing, existing, new, new. The API inserts only
+        // the two new products, so it reports the second one as index 1.
+        const drafts = [
+            { isNewProduct: false },
+            { isNewProduct: false },
+            { isNewProduct: true },
+            { isNewProduct: true },
+        ];
+        const lines = newProductLines(drafts);
+        const insertLine = (index: number) => lines[index] ?? index;
+
+        it('maps a restock duplicate key to its draft line', () => {
+            const error = httpError(
+                400,
+                body('Duplicate key', [
+                    { msg: 'Already exists', property: 'name', index: 1 },
+                ]),
+            );
+
+            expect(apiErrorMessages(error, undefined, { insertLine })).toEqual([
+                'Item 4: name: Already exists',
+            ]);
+        });
+
+        it('maps a restock invalid barcode to its draft line', () => {
+            const error = httpError(
+                400,
+                body('Invalid barcode', [
+                    { index: 0, EAN: 'x', message: 'Bad check digit' },
+                ]),
+            );
+
+            expect(apiErrorMessages(error, undefined, { insertLine })).toEqual([
+                'Item 3: Bad check digit',
+            ]);
+        });
+
+        it('leaves a restock not-found line as the request line', () => {
+            const error = httpError(
+                404,
+                body('One or more products do not exist', [
+                    { index: 1, product: '507f1f77bcf86cd799439011' },
+                ]),
+            );
+
+            expect(apiErrorMessages(error, undefined, { insertLine })).toEqual([
+                'Item 2: product not found',
+            ]);
+        });
+
+        it('keeps the position for /products/bulk, where every line is inserted', () => {
+            const error = httpError(
+                400,
+                body('Duplicate key', [
+                    { msg: 'Already exists', property: 'name', index: 1 },
+                ]),
+            );
+
+            expect(apiErrorMessages(error)).toEqual([
+                'Item 2: name: Already exists',
+            ]);
+        });
     });
 });

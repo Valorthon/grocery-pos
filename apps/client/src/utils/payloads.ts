@@ -99,6 +99,17 @@ export function toRestockBody(
     };
 }
 
+/**
+ * The draft line (0-based) of each new product in `toRestockBody`'s
+ * output, in insert order: the API inserts only the new products, so its
+ * duplicate-key and barcode errors count positions among those.
+ */
+export function newProductLines(
+    drafts: Pick<RestockDraft, 'isNewProduct'>[],
+): number[] {
+    return drafts.flatMap((d, line) => (d.isNewProduct ? [line] : []));
+}
+
 /** An adjustment draft line; EAN and name are for display only. */
 export interface AdjustmentDraft {
     product: string;
