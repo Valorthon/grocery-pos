@@ -8,11 +8,7 @@
                 <Plus class="w-4 h-4" />
                 Add Product
             </BaseButton>
-            <BaseButton
-                size="sm"
-                variant="outline"
-                @click="isSaveDialogOpen = true"
-            >
+            <BaseButton size="sm" variant="outline" @click="openSaveDialog">
                 <Save class="w-4 h-4" />
                 Save
             </BaseButton>
@@ -32,7 +28,8 @@
                     variant="outline"
                     size="sm"
                     block
-                    @click="items = []"
+                    :disabled="items.length === 0"
+                    @click="confirmClear"
                 >
                     <Trash2 class="w-4 h-4" />
                     Clear Drafts
@@ -60,10 +57,7 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr
-                        v-for="item in filteredItems"
-                        :key="item.EAN ?? item.name"
-                    >
+                    <tr v-for="item in filteredItems" :key="item.draftId">
                         <td class="py-3 px-5 font-medium">{{ item.name }}</td>
                         <td class="py-3 px-5 text-right">
                             {{ item.quantity }}
@@ -83,6 +77,7 @@
                                 <button
                                     type="button"
                                     class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50"
+                                    aria-label="Edit draft"
                                     @click="editDraft(item)"
                                 >
                                     <Pencil class="w-4 h-4" />
@@ -90,6 +85,7 @@
                                 <button
                                     type="button"
                                     class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                    aria-label="Delete draft"
                                     @click="deleteDraft(item)"
                                 >
                                     <Trash2 class="w-4 h-4" />
@@ -110,16 +106,19 @@
     />
 
     <RestockSaveDialog v-model="isSaveDialogOpen" :save="saveToDB" />
+
+    <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Pencil, Plus, Save, Trash2, Truck } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import RestockAddDialog from '@/components/User/Restock/AddDialog.vue';
 import RestockSaveDialog from '@/components/User/Restock/SaveDialog.vue';
 import { AddForm, SaveForm } from '@/components/User/Restock/dto';
@@ -127,16 +126,47 @@ import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { newProductLines, toRestockBody } from '@/utils/payloads';
+import { useConfirm } from '@/composables/useConfirm';
+import {
+    clearDraftsRequest,
+    useDraftList,
+    useUnsavedDraftsGuard,
+    type WithDraftId,
+} from '@/composables/useDrafts';
+
+type Row = WithDraftId<AddForm>;
+
+const NOTHING_TO_SAVE = 'No restock lines to save';
 
 const isAddDialogOpen = ref(false);
 const isSaveDialogOpen = ref(false);
 const search = ref('');
-const items = ref<AddForm[]>([]);
+const { items, add, replace, remove, clear } = useDraftList<AddForm>();
 const editItem = ref<AddForm>();
-const editIndex = ref(-1);
+const editingId = ref<string | null>(null);
+/** True while the save request is in flight (the save dialog is busy). */
+const saving = ref(false);
 
 const uiStore = useUIStore();
 const router = useRouter();
+
+const {
+    request: confirmRequest,
+    confirm,
+    answer: answerConfirm,
+} = useConfirm();
+useUnsavedDraftsGuard({
+    count: () => items.value.length,
+    saving: () => saving.value,
+    confirm,
+});
+
+// A save that settles after the page is gone (only a forced logout can
+// take it away mid-save) must not navigate or report here.
+let unmounted = false;
+onBeforeUnmount(() => {
+    unmounted = true;
+});
 
 const filteredItems = computed(() => {
     const q = search.value.trim().toLowerCase();
@@ -148,16 +178,31 @@ const filteredItems = computed(() => {
     );
 });
 
+/** An empty restock is never sent: say so instead of asking for details. */
+const openSaveDialog = () => {
+    if (items.value.length === 0) {
+        uiStore.queueMessage(Color.ERROR, NOTHING_TO_SAVE);
+        return;
+    }
+    isSaveDialogOpen.value = true;
+};
+
 /** The save dialog waits on this and closes only when it is true. */
 const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
+    if (items.value.length === 0) {
+        uiStore.queueMessage(Color.ERROR, NOTHING_TO_SAVE);
+        return false;
+    }
     // The API numbers insert errors among the new products only.
     const newLines = newProductLines(items.value);
+    saving.value = true;
     try {
         await api.post(
             '/restocks',
             toRestockBody(items.value, saveForm.description),
         );
     } catch (error) {
+        if (unmounted) return false;
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(error, 'Error saving. Try again.', {
@@ -165,42 +210,49 @@ const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
             }),
         );
         return false;
+    } finally {
+        saving.value = false;
     }
 
+    if (unmounted) return true;
+    // Saved: nothing is left unsaved, so the leave guard lets this go.
+    clear();
     uiStore.queueMessage(Color.SUCCESS, 'Restock saved.');
     router.push({ name: 'Restocks' });
     return true;
 };
 
+const confirmClear = async () => {
+    const count = items.value.length;
+    if (count === 0) return;
+    if (await confirm(clearDraftsRequest(count))) clear();
+};
+
 const openAddDialog = () => {
     editItem.value = undefined;
-    editIndex.value = -1;
+    editingId.value = null;
     isAddDialogOpen.value = true;
 };
 
 const handleNewItem = (newItem: AddForm) => {
     const totalCost = newItem.quantity * newItem.unitCost;
-    items.value.push({ ...newItem, totalCost });
+    add({ ...newItem, totalCost });
     isAddDialogOpen.value = false;
 };
 
-const editDraft = (item: AddForm) => {
-    editIndex.value = items.value.indexOf(item);
+const editDraft = (item: Row) => {
+    editingId.value = item.draftId;
     editItem.value = { ...item };
     isAddDialogOpen.value = true;
 };
 
 const handleUpdateItem = (updatedProduct: AddForm) => {
-    if (editIndex.value > -1) {
-        items.value[editIndex.value] = updatedProduct;
-    }
+    if (editingId.value) replace(editingId.value, updatedProduct);
+    editingId.value = null;
     isAddDialogOpen.value = false;
 };
 
-const deleteDraft = (item: AddForm) => {
-    const index = items.value.indexOf(item);
-    if (index > -1) {
-        items.value.splice(index, 1);
-    }
+const deleteDraft = (item: Row) => {
+    remove(item.draftId);
 };
 </script>

@@ -83,6 +83,31 @@
     </Teleport>
 </template>
 
+<script lang="ts">
+/**
+ * Open modals, newest last, shared by every BaseModal (issue #19: a
+ * confirmation can open on top of a save dialog). Only the topmost one
+ * answers Escape, and the page stays scroll-locked until the last one
+ * closes. Full dialog semantics (focus trap, roles) are #22.
+ */
+const openModals: symbol[] = [];
+
+function lockScroll(modal: symbol): void {
+    if (!openModals.includes(modal)) openModals.push(modal);
+    document.body.style.overflow = 'hidden';
+}
+
+function unlockScroll(modal: symbol): void {
+    const index = openModals.indexOf(modal);
+    if (index > -1) openModals.splice(index, 1);
+    if (openModals.length === 0) document.body.style.overflow = '';
+}
+
+function isTopmost(modal: symbol): boolean {
+    return openModals[openModals.length - 1] === modal;
+}
+</script>
+
 <script setup lang="ts">
 import { onBeforeUnmount, watch } from 'vue';
 import { X } from '@lucide/vue';
@@ -107,12 +132,14 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
+const self = Symbol('BaseModal');
+
 function close() {
     emit('update:modelValue', false);
 }
 
 function onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape' && props.modelValue) close();
+    if (event.key === 'Escape' && props.modelValue && isTopmost(self)) close();
 }
 
 watch(
@@ -120,16 +147,16 @@ watch(
     (open) => {
         if (open) {
             document.addEventListener('keydown', onKeydown);
-            document.body.style.overflow = 'hidden';
+            lockScroll(self);
         } else {
             document.removeEventListener('keydown', onKeydown);
-            document.body.style.overflow = '';
+            unlockScroll(self);
         }
     },
 );
 
 onBeforeUnmount(() => {
     document.removeEventListener('keydown', onKeydown);
-    document.body.style.overflow = '';
+    unlockScroll(self);
 });
 </script>

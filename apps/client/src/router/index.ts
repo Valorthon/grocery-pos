@@ -197,7 +197,12 @@ router.beforeEach(async (to) => {
         return { name: 'Login' };
     }
 
-    if (to.name === 'Login' && isAuthenticated) {
+    // Signing out goes to Login before the session ends (requestLogout).
+    if (
+        to.name === 'Login' &&
+        isAuthenticated &&
+        !authStore.userLogoutPending
+    ) {
         return homeFor(authStore);
     }
 

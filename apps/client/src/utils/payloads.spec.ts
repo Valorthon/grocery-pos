@@ -167,3 +167,43 @@ describe('newProductLines', () => {
         ).toEqual([1, 3]);
     });
 });
+
+describe('draft row ids (issue #19)', () => {
+    it('never reach a request body', () => {
+        const draftId = 'draft-7';
+        const product = { ...typed, draftId };
+        const restock = {
+            ...autoWithStaleEAN,
+            isNewProduct: true,
+            quantity: 2,
+            unitCost: 3500,
+            draftId,
+        };
+        const existing = {
+            ...typed,
+            isNewProduct: false,
+            product: PRODUCT,
+            quantity: 1,
+            unitCost: 100,
+            draftId,
+        };
+        const adjustment = {
+            EAN: '4006381333931',
+            name: 'bread',
+            product: PRODUCT,
+            change: 1,
+            reason: 'recount',
+            draftId,
+        };
+
+        const bodies = [
+            toEnsureValidQuery(product),
+            toNewProductsBody([product]),
+            toRestockBody([restock, existing], 'delivery'),
+            toAdjustmentBody([adjustment], 'count'),
+        ];
+        for (const body of bodies) {
+            expect(JSON.stringify(body)).not.toContain(draftId);
+        }
+    });
+});

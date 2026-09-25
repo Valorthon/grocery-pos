@@ -4,11 +4,16 @@
             <List class="w-5 h-5 text-primary-600" />
         </template>
         <template #actions>
-            <BaseButton size="sm" @click="openAddDialog">
+            <BaseButton size="sm" :disabled="saving" @click="openAddDialog">
                 <Plus class="w-4 h-4" />
                 Add Product
             </BaseButton>
-            <BaseButton size="sm" variant="outline" @click="saveToDB">
+            <BaseButton
+                size="sm"
+                variant="outline"
+                :loading="saving"
+                @click="saveToDB"
+            >
                 <Save class="w-4 h-4" />
                 Save All
             </BaseButton>
@@ -28,7 +33,8 @@
                     variant="outline"
                     size="sm"
                     block
-                    @click="items = []"
+                    :disabled="saving || items.length === 0"
+                    @click="confirmClear"
                 >
                     <Trash2 class="w-4 h-4" />
                     Clear Drafts
@@ -55,7 +61,7 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr v-for="item in filteredItems" :key="item.EAN">
+                    <tr v-for="item in filteredItems" :key="item.draftId">
                         <td class="py-3 px-5">
                             <span
                                 v-if="item.autoGenerateEAN"
@@ -72,14 +78,18 @@
                             <div class="flex justify-end gap-1">
                                 <button
                                     type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40"
+                                    :disabled="saving"
+                                    aria-label="Edit draft"
                                     @click="editDraft(item)"
                                 >
                                     <Pencil class="w-4 h-4" />
                                 </button>
                                 <button
                                     type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-40"
+                                    :disabled="saving"
+                                    aria-label="Delete draft"
                                     @click="deleteDraft(item)"
                                 >
                                     <Trash2 class="w-4 h-4" />
@@ -98,29 +108,60 @@
         @add="handleNewProduct"
         @update="updateDraft"
     />
+
+    <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Pencil, Plus, Save, Trash2 } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import AddProductDialog from '@/components/User/Product/AddDialog.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toNewProductsBody, type ProductDraft } from '@/utils/payloads';
+import { useConfirm } from '@/composables/useConfirm';
+import {
+    clearDraftsRequest,
+    useDraftList,
+    useUnsavedDraftsGuard,
+    type WithDraftId,
+} from '@/composables/useDrafts';
+
+type Row = WithDraftId<ProductDraft>;
 
 const isAddDialogOpen = ref(false);
 const uiStore = useUIStore();
 const search = ref('');
-const items = ref<ProductDraft[]>([]);
+const { items, add, replace, remove, clear } = useDraftList<ProductDraft>();
 const editItem = ref<Partial<ProductDraft>>({});
-const editIndex = ref(-1);
+const editingId = ref<string | null>(null);
+const saving = ref(false);
 const router = useRouter();
+
+const {
+    request: confirmRequest,
+    confirm,
+    answer: answerConfirm,
+} = useConfirm();
+useUnsavedDraftsGuard({
+    count: () => items.value.length,
+    saving: () => saving.value,
+    confirm,
+});
+
+// A save that settles after the page is gone (only a forced logout can
+// take it away mid-save) must not navigate or report here.
+let unmounted = false;
+onBeforeUnmount(() => {
+    unmounted = true;
+});
 
 const filteredItems = computed(() => {
     const q = search.value.trim().toLowerCase();
@@ -133,54 +174,66 @@ const filteredItems = computed(() => {
 });
 
 const saveToDB = async () => {
+    // The button is busy while a save is in flight; this also stops a
+    // second call that slips in before it re-renders.
+    if (saving.value) return;
     if (items.value.length === 0) {
         uiStore.queueMessage(Color.ERROR, 'No products to save');
         return;
     }
 
+    saving.value = true;
     try {
         await api.post('/products/bulk', toNewProductsBody(items.value));
     } catch (err: unknown) {
+        if (unmounted) return;
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(err, 'Error saving products. Please try again'),
         );
         return;
+    } finally {
+        saving.value = false;
     }
 
+    if (unmounted) return;
+    // Saved: nothing is left unsaved, so the leave guard lets this go.
+    clear();
     router.push({ name: 'Products' });
     uiStore.queueMessage(Color.SUCCESS, 'Products saved');
 };
 
+const confirmClear = async () => {
+    const count = items.value.length;
+    if (count === 0) return;
+    if (await confirm(clearDraftsRequest(count))) clear();
+};
+
 const openAddDialog = () => {
     editItem.value = {};
-    editIndex.value = -1;
+    editingId.value = null;
     isAddDialogOpen.value = true;
 };
 
 const handleNewProduct = async (newProduct: ProductDraft) => {
-    items.value.push(newProduct);
+    add(newProduct);
     isAddDialogOpen.value = false;
     uiStore.queueMessage(Color.SUCCESS, 'Product added');
 };
 
-const editDraft = (item: ProductDraft) => {
-    editIndex.value = items.value.indexOf(item);
+const editDraft = (item: Row) => {
+    editingId.value = item.draftId;
     editItem.value = { ...item };
     isAddDialogOpen.value = true;
 };
 
 const updateDraft = (updatedProduct: ProductDraft) => {
-    if (editIndex.value > -1) {
-        items.value[editIndex.value] = updatedProduct;
-    }
+    if (editingId.value) replace(editingId.value, updatedProduct);
+    editingId.value = null;
     isAddDialogOpen.value = false;
 };
 
-const deleteDraft = (item: ProductDraft) => {
-    const index = items.value.indexOf(item);
-    if (index > -1) {
-        items.value.splice(index, 1);
-    }
+const deleteDraft = (item: Row) => {
+    remove(item.draftId);
 };
 </script>
