@@ -203,8 +203,8 @@ requestId}`. A 5xx never carries details or internals.
 
 **Sessions** (#21)
 
-- A session lasts a fixed 7 days from login; refresh-token rotation keeps
-  that expiry. The refresh and marker cookies expire with the session, and
+- A session lasts `REFRESH_EXPIRY_S` (7 days in `.env.example`) from login,
+  fixed; refresh-token rotation keeps that expiry. The refresh and marker cookies expire with the session, and
   the access token is capped at the session end.
 - The axios refresh accepts any 2xx, has a timeout, and marks queued
   requests `_retry`. Only a 401 from refresh logs out; a timeout or 5xx
@@ -243,23 +243,29 @@ requestId}`. A 5xx never carries details or internals.
 
 - Draft pages key rows by a generated draft id, confirm Clear and leaving
   with unsaved drafts, and block double submits.
+- A manual Logout with unsaved drafts asks first: "Stay" keeps them, "Log
+  out" discards them. A logout because the session expired doesn't ask.
 
 **List views** (#20)
 
 - Paged lists use `useListPaging`: a page change loads once, a page-size
   change goes back to page 1, and `search()` (filter change, Enter, Search
   button, Clear Filters) goes to page 1 with a single load.
-- Text searches run on Enter or a Search button. Select and date filters
-  apply on change. `BaseSelect`'s opt-in `allLabel` adds an "All" option
-  that maps to `null`.
+- Text searches run on Enter, a Search button or clearing the box (×).
+  Select and date filters apply on change. `BaseSelect`'s opt-in
+  `allLabel` adds an "All" option that maps to `null`.
+- Requests read the last applied filters (`useAppliedFilters`, or the
+  `applied` snapshot on restock/adjustment history), so paging, a page-size
+  change and Retry never send typed-but-unsearched text.
 - A reversed date range (`dateFrom` after `dateTo`) is a 400 from the
   restock, adjustment and sales GetAll DTOs (`@IsNotBefore('dateFrom')`).
-  The client shows `dateRangeError` on the To field and doesn't send it;
-  paging and Retry reuse the last applied filters.
+  The client shows `dateRangeError` on the To field and keeps the last
+  valid range; a user-select change still applies with it.
 - BaseTable hides its pager while `error` is set.
 - Sale details clear before loading, and only the latest click's answer is
   shown. The user editor edits a copy of the row's roles, so Cancel changes
-  nothing. Create validates name, password and roles like `CreateFields`.
+  nothing. Create validates name (trimmed), password and roles like
+  `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
 
 **Scope**
