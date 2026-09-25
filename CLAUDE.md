@@ -183,6 +183,8 @@ requestId}`. A 5xx never carries details or internals.
   everything. For anyone else they only narrow the own-open-shift scope, and
   naming another cashier returns nothing. Sales are indexed on `{createdAt}`,
   `{cashier, createdAt}` and `{shift, createdAt}`.
+- `startOfDayInZone` returns the first of two repeated midnights on a
+  fall-back day (Amman 2021-10-29), searching back up to 3h.
 
 **Access**
 

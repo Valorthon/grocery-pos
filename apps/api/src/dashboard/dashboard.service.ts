@@ -51,9 +51,11 @@ export const RESTOCK_ACTIVITY_FIELDS = '_id description restockedBy createdAt';
  * `1 <= stock <= LOW_STOCK_THRESHOLD`, out of stock is `stock <= 0`.
  *
  * Orphan rows (their product gone) count toward neither: the inner
- * `$unwind` drops them, as in `inventoryListPipeline` (issue #14), so the
- * tiles agree with the inventory list filtered by `maxStock`. Exported so
- * specs can pin its shape; its behaviour needs a real MongoDB.
+ * `$unwind` drops them, as `inventoryListPipeline` does (issue #14). So the
+ * out-of-stock tile matches the inventory list at `maxStock=0`, and the two
+ * tiles together match `maxStock=LOW_STOCK_THRESHOLD` (0..10); the low tile
+ * alone is 1..10. Exported so specs can pin its shape; its behaviour needs
+ * a real MongoDB.
  */
 export function stockAlertPipeline(): PipelineStage[] {
     return [
