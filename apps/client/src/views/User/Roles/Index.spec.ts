@@ -1,9 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import {
+    appPermissionsOf,
     ASSIGNABLE_ROLES,
-    PERMISSIONS,
-    permissionsOf,
     Role,
 } from '@grocery-pos/contracts';
 import RolesPage from './Index.vue';
@@ -42,14 +41,34 @@ describe('Roles page (issue #24)', () => {
         expect(cards).toEqual(ASSIGNABLE_ROLES.map((r) => `role-${r}`));
     });
 
-    it("lists each role's permissions from the shared table", async () => {
+    it("lists each role's app permissions from the shared table", async () => {
         await mount();
         for (const role of ASSIGNABLE_ROLES) {
             expect(permissionsShown(role)).toEqual(
-                permissionsOf(role).map((p) => p.label),
+                appPermissionsOf(role).map((p) => p.label),
             );
         }
-        expect(permissionsShown(Role.Admin)).toHaveLength(PERMISSIONS.length);
+    });
+
+    it('hides what has no screen yet (decision 2026-09-25)', async () => {
+        await mount();
+        for (const role of ASSIGNABLE_ROLES) {
+            const shown = permissionsShown(role);
+            // No screen until #38.
+            expect(shown).not.toContain('Change prices');
+            expect(shown).not.toContain('Edit product details (not price)');
+            expect(shown).not.toContain('Change own password');
+        }
+        // Products/Add is Restocker and Admin only (#61), though the API
+        // also lets an Adjuster add products.
+        expect(permissionsShown(Role.Adjuster)).not.toContain('Add products');
+        expect(permissionsShown(Role.Restocker)).toContain('Add products');
+        expect(permissionsShown(Role.Admin)).toContain('Add products');
+        // The register needs the SELLER role itself.
+        expect(permissionsShown(Role.Admin)).not.toContain(
+            'Sell at the register',
+        );
+        expect(permissionsShown(Role.Admin)).toContain('Void and refund sales');
     });
 
     it('matches the route roles: sellers sell but get no stock dashboard; only admins void', async () => {
@@ -64,8 +83,11 @@ describe('Roles page (issue #24)', () => {
                 permissionsShown(role).includes('Void and refund sales'),
             ).toBe(role === Role.Admin);
         }
-        // Price changes are ADMIN-only (assertMayChangePrices).
-        expect(permissionsShown(Role.Restocker)).not.toContain('Change prices');
-        expect(permissionsShown(Role.Admin)).toContain('Change prices');
+        expect(permissionsShown(Role.Adjuster)).toContain(
+            'Create and view adjustments',
+        );
+        expect(permissionsShown(Role.Restocker)).not.toContain(
+            'Create and view adjustments',
+        );
     });
 });

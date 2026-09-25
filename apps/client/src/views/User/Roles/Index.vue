@@ -54,7 +54,11 @@ import {
     Truck,
     Users,
 } from '@lucide/vue';
-import { ASSIGNABLE_ROLES, permissionsOf, Role } from '@grocery-pos/contracts';
+import {
+    ASSIGNABLE_ROLES,
+    appPermissionsOf,
+    Role,
+} from '@grocery-pos/contracts';
 import PageCard from '@/components/ui/PageCard.vue';
 import Badge from '@/components/ui/Badge.vue';
 
@@ -101,6 +105,6 @@ const roles = ASSIGNABLE_ROLES.map((role) => ({
     key: role,
     // ASSIGNABLE_ROLES never holds Unauthenticated (see contracts roles.ts).
     ...LOOK[role as AssignableRole],
-    permissions: permissionsOf(role).map((p) => p.label),
+    permissions: appPermissionsOf(role).map((p) => p.label),
 }));
 </script>
