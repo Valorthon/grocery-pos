@@ -31,7 +31,12 @@
 }
 
 body {
-    font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto,
+    font-family:
+        'Poppins',
+        system-ui,
+        -apple-system,
+        'Segoe UI',
+        Roboto,
         sans-serif;
     background-color: #f8fafc;
     color: #0f172a;
