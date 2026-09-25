@@ -56,6 +56,16 @@ export enum ErrorCode {
 
     /** The caller is signed in but may not do this (generic 403). */
     FORBIDDEN = 'FORBIDDEN_001',
+    /**
+     * Generic 409 for a conflict with no more specific code (e.g. a Nest
+     * `ConflictException`).
+     */
+    CONFLICT = 'CONFLICT_001',
+    /**
+     * Any other 4xx the API refused with no more specific code (e.g. 405,
+     * 413, 415). The response keeps the real HTTP status.
+     */
+    HTTP_ERROR = 'HTTP_001',
 
     /** Granting a role the actor does not hold (e.g. ADMIN as USER_MANAGER). */
     USER_ROLE_NOT_GRANTABLE = 'USER_001',
@@ -80,11 +90,27 @@ export enum ErrorCode {
      */
     RATE_LIMITED = 'RATE_001',
 
+    /**
+     * A write clashed with a unique index (e.g. a product name that already
+     * exists). 400; `details` lists the clashing fields as
+     * `{ msg, property, index? }` (`index`: position in a bulk insert).
+     */
     DB_DUPLICATE_KEY = 'DB_002',
+    /**
+     * The database or Mongoose schema rejected a document (validation or
+     * cast failure). 400; `details` lists `{ field, message }`.
+     */
     DB_VALIDATION_ERROR = 'DB_003',
 
     INTERNAL_ERROR = 'INTERNAL_001',
 }
+
+/**
+ * Correlation id header. The API accepts a sane incoming value or generates
+ * one, echoes it on every response and puts it in every error body
+ * (`AppErrorResponse.requestId`) so users can quote it (issue #8).
+ */
+export const REQUEST_ID_HEADER = 'X-Request-Id';
 
 /** Body returned by the API's GlobalFilter for every error response. */
 export interface AppErrorResponse {
@@ -93,7 +119,13 @@ export interface AppErrorResponse {
     message: string;
     timestamp: string;
     path: string;
+    /**
+     * Extra, intentional context for 4xx errors. Always `null` on a 5xx:
+     * internals stay in the server log, found by `requestId`.
+     */
     details: unknown;
+    /** The request's correlation id (also the `X-Request-Id` header). */
+    requestId: string;
 }
 
 /** Shape of every paginated list endpoint. */

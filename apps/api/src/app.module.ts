@@ -21,9 +21,12 @@ import { TimingMiddleware } from './common/middleware/timing.middleware';
 import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RateLimitModule } from './auth/rate-limit/rate-limit';
+import { RequestIdModule } from './common/request-id/request-id';
 
 @Module({
     imports: [
+        // First, so the correlation id is set before any other middleware.
+        RequestIdModule,
         TypedConfigModule,
         MongooseModule.forRootAsync({
             imports: [TypedConfigModule],

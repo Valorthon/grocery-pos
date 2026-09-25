@@ -3,7 +3,7 @@
  * Test-only: excluded from the build (tsconfig.build.json).
  *
  * Boots the given controllers behind the real global JWTAuthGuard,
- * RoleGuard and GlobalFilter, with cookie-parser, URI versioning and the
+ * RoleGuard and GlobalFilter, the RequestIdModule (X-Request-Id), with cookie-parser, URI versioning and the
  * ValidationPipe configured as in main.ts (the same harness as
  * auth/auth.e2e.spec.ts and product/product.access.e2e.spec.ts). Callers
  * supply the providers behind the controllers, usually real services over
@@ -29,6 +29,7 @@ import { RoleGuard } from '../../auth/guards/role.guard';
 import { JWTStrategy } from '../../auth/jwt.strategy';
 import { Role } from '../../auth/types';
 import { GlobalFilter } from '../global/global.filter';
+import { RequestIdModule } from '../request-id/request-id';
 import { TypedConfigService } from '../typed-config/typed-config.service';
 
 const COOKIE_SECRET = 'access-harness-cookie-secret-0123456789';
@@ -56,6 +57,7 @@ export interface AccessHarness {
         method: 'GET' | 'POST' | 'PATCH',
         path: string,
         body?: unknown,
+        headers?: Record<string, string>,
     ): Promise<Response>;
     close(): Promise<void>;
 }
@@ -88,7 +90,7 @@ export async function bootAccessHarness(
     };
 
     const moduleRef = await Test.createTestingModule({
-        imports: [JwtModule.register({})],
+        imports: [JwtModule.register({}), RequestIdModule],
         controllers,
         providers: [
             JWTStrategy,
@@ -123,7 +125,7 @@ export async function bootAccessHarness(
 
     return {
         app,
-        call(who, method, path, body) {
+        call(who, method, path, body, headers = {}) {
             const token = jwt.sign(
                 { userId: who.userId, username: 'user', roles: who.roles },
                 { secret: JWT_SECRET, expiresIn: 600 },
@@ -133,6 +135,7 @@ export async function bootAccessHarness(
                 headers: {
                     cookie: `jwt=${signCookie(token)}`,
                     'content-type': 'application/json',
+                    ...headers,
                 },
                 body: body === undefined ? undefined : JSON.stringify(body),
             });

@@ -5,25 +5,35 @@ import type { AppErrorResponse } from '@grocery-pos/contracts';
 export type { AppErrorResponse } from '@grocery-pos/contracts';
 
 export class AppError extends Error {
+    /**
+     * @param options.cause the underlying error (e.g. a Mongo driver error).
+     *   It is logged by GlobalFilter and never sent to the client.
+     */
     constructor(
         public readonly code: ErrorCode,
         public readonly statusCode: number,
         message: string,
         public readonly details: unknown = null,
+        options?: { cause?: unknown },
     ) {
-        super(message);
+        super(message, options);
         this.name = this.constructor.name;
         Error.captureStackTrace(this, this.constructor);
     }
 
-    toResponse(path: string): AppErrorResponse {
+    /**
+     * The response body. A 5xx never carries `details`: whatever an
+     * internal failure knows stays in the server log (issue #8).
+     */
+    toResponse(path: string, requestId: string): AppErrorResponse {
         return {
             statusCode: this.statusCode,
             error: this.code,
             message: this.message,
             timestamp: new Date().toISOString(),
             path,
-            details: this.details,
+            details: this.statusCode >= 500 ? null : this.details,
+            requestId,
         };
     }
 
@@ -51,6 +61,8 @@ export class AppError extends Error {
             case ErrorCode.VALIDATION_INVALID_INPUT:
             case ErrorCode.VALIDATION_EAN_INVALID:
             case ErrorCode.PRODUCT_DUPLICATE:
+            case ErrorCode.DB_DUPLICATE_KEY:
+            case ErrorCode.DB_VALIDATION_ERROR:
                 return HttpStatus.BAD_REQUEST;
             case ErrorCode.PRODUCT_NOT_FOUND:
             case ErrorCode.NOT_FOUND:
@@ -66,6 +78,7 @@ export class AppError extends Error {
             case ErrorCode.SHIFT_CLOSED:
             case ErrorCode.SHIFT_PAYOUT_REQUIRED:
             case ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT:
+            case ErrorCode.CONFLICT:
                 return HttpStatus.CONFLICT;
             case ErrorCode.RATE_LIMITED:
                 return HttpStatus.TOO_MANY_REQUESTS;
@@ -133,13 +146,22 @@ export class DuplicateError extends AppError {
     }
 }
 
+/**
+ * 500. `details` and `cause` are for the server log only: the response
+ * carries neither (see `AppError.toResponse`).
+ */
 export class InternalError extends AppError {
-    constructor(message: string, details: unknown = null) {
+    constructor(
+        message: string,
+        details: unknown = null,
+        options?: { cause?: unknown },
+    ) {
         super(
             ErrorCode.INTERNAL_ERROR,
             HttpStatus.INTERNAL_SERVER_ERROR,
             message,
             details,
+            options,
         );
     }
 }

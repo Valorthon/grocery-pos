@@ -593,7 +593,9 @@ describe('Auth session flow (e2e)', () => {
                 password: 'password123',
             });
             const body = (await res.json()) as Record<string, unknown>;
+            // Per request, not per outcome.
             delete body.timestamp;
+            delete body.requestId;
             return { status: res.status, body };
         }
 
