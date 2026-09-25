@@ -18,3 +18,7 @@ pnpm-debug.log*
 
 todo.md
 guidelines.md
+
+# Claude Code local state (worktrees, local settings)
+.claude/worktrees/
+.claude/settings.local.json
