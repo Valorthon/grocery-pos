@@ -21,12 +21,18 @@
                 :value="modelValue"
                 :placeholder="placeholder"
                 :disabled="disabled"
+                :maxlength="maxlength"
+                autocomplete="off"
+                role="combobox"
+                :aria-expanded="isOpen && options.length > 0"
                 :class="[
                     'w-full py-2.5 rounded-xl border text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10 transition-all',
-                    icon ? 'pl-10 pr-10' : 'px-3.5',
+                    icon ? 'pl-10 pr-10' : 'px-3.5 pr-10',
                     error
                         ? 'border-red-500 bg-red-50'
-                        : 'border-slate-300 bg-slate-50 focus:bg-white',
+                        : selected
+                          ? 'border-emerald-500 bg-white'
+                          : 'border-slate-300 bg-slate-50 focus:bg-white',
                 ]"
                 @input="onInput"
                 @keydown.down.prevent="moveSelection(1)"
@@ -41,9 +47,23 @@
                 size="sm"
                 class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
             />
+            <CircleCheck
+                v-else-if="selected"
+                :size="16"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600"
+            />
         </div>
 
         <p v-if="error" class="text-xs text-red-600 mt-1">{{ error }}</p>
+        <p
+            v-else-if="selected"
+            data-testid="combobox-selected"
+            class="mt-1 text-xs text-emerald-700"
+        >
+            Selected:
+            <span class="font-bold">{{ selected.label }}</span>
+            <span v-if="selected.subtitle"> · {{ selected.subtitle }}</span>
+        </p>
 
         <ul
             v-if="isOpen && options.length"
@@ -74,12 +94,15 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { CircleCheck } from '@lucide/vue';
 import Spinner from './Spinner.vue';
 
 export interface ComboboxOption {
     value: string;
     label: string;
     subtitle?: string;
+    /** Text written back into the input when picked; defaults to `label`. */
+    display?: string;
 }
 
 const props = withDefaults(
@@ -92,7 +115,14 @@ const props = withDefaults(
         loading?: boolean;
         error?: string;
         icon?: boolean;
+        maxlength?: number;
         options: ComboboxOption[];
+        /**
+         * The picked option (`v-model:selected`), shown as a confirmation
+         * under the input. Typing after a pick clears it, so a stale pick
+         * never stays attached to different text (issue #17).
+         */
+        selected?: ComboboxOption | null;
     }>(),
     {
         modelValue: '',
@@ -103,6 +133,8 @@ const props = withDefaults(
         loading: false,
         error: '',
         icon: false,
+        maxlength: undefined,
+        selected: null,
     },
 );
 
@@ -110,6 +142,7 @@ const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;
     (e: 'search', value: string): void;
     (e: 'select', value: ComboboxOption): void;
+    (e: 'update:selected', value: ComboboxOption | null): void;
 }>();
 
 const isOpen = ref(false);
@@ -117,6 +150,7 @@ const highlighted = ref(0);
 
 function onInput(event: Event) {
     const value = (event.target as HTMLInputElement).value;
+    if (props.selected) emit('update:selected', null);
     emit('update:modelValue', value);
     emit('search', value);
     isOpen.value = true;
@@ -124,6 +158,8 @@ function onInput(event: Event) {
 }
 
 function select(opt: ComboboxOption) {
+    emit('update:modelValue', opt.display ?? opt.label);
+    emit('update:selected', opt);
     emit('select', opt);
     isOpen.value = false;
 }
