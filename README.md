@@ -63,6 +63,84 @@ prints which host and database that is first. It runs freely only when
 `NODE_ENV` is `dev` or `test`; anything else (including `prod`, `stage` or
 unset) needs `--force-destroy-data` (`pnpm seed --force-destroy-data`).
 
+## Deploy notes (operator)
+
+One-off steps to run by hand at a specific deploy. Each runs from a checkout
+of the deployed commit (with `pnpm install` and the contracts built), pointed
+at the target database through `DATABASE_URL`, e.g.
+`DATABASE_URL='mongodb+srv://…' pnpm migrate:decode-entities`.
+
+### Decode HTML entities in stored text (#15), once
+
+Before #15 the API stored request text HTML-encoded: `M&M's` became
+`M&amp;M's`, and receipts, reports and the product list showed it literally.
+The fix stores text as typed; this migration decodes what is already stored
+(`&amp;`, `&lt;`, `&gt;`, `&quot;`) in product and user names, restock and
+adjustment descriptions, adjustment reasons, sale discount and void/refund
+reasons, and shift cashier names, drawer-movement reasons and Z-read names.
+
+```bash
+pnpm migrate:decode-entities            # dry run: prints what would change
+pnpm migrate:decode-entities --apply    # writes it
+pnpm migrate:decode-entities --apply --resume-stale   # after a crashed run
+```
+
+Run it with the API stopped, and keep the API stopped until the migration
+has ended `complete`, including any reruns after an `incomplete` or crashed
+run. Text typed after the fix is stored raw, and a literal `&amp;` in it must
+not be decoded, but a rerun plans every document it has no record of; with
+the API stopped nobody can type such text, or re-create a name, in between:
+
+1. Back up the database (or rehearse on a restored copy first).
+2. Stop the API.
+3. Deploy the fix, without starting the API yet.
+4. Run the dry run. It lists, per collection and field, how many documents
+   would change, with examples, and every `SKIPPED` document: a product or
+   user whose decoded name would duplicate an existing one (both names are
+   unique).
+5. Run with `--apply`. If it exits with status 1, fix the cause and run
+   `--apply` again (see below) until it ends `complete`.
+6. Start the API.
+
+A `SKIPPED` product or user keeps its encoded name until someone renames it.
+A skipped user must type the name encoded to sign in (e.g. `m&amp;m`, not
+`m&m`) until an admin renames the account; rename one of each pair in the
+app once the API is back.
+
+Only one `--apply` can run at a time. It first claims the marker in the
+`migrations` collection (status `running`, with its run id, `host:pid` and
+start time); a second `--apply` meanwhile refuses with status 1 and names
+the holder. A dry run next to it only warns. If an `--apply` crashed or was
+killed, its marker stays `running` and the next `--apply` refuses; once you
+are sure that process is gone, rerun with `--apply --resume-stale` to take
+the lock over. Never use `--resume-stale` while another run may be alive:
+two runs at once can decode a document twice.
+
+The run is crash-safe and resumable. It records each document's exact
+edit in `migration_progress` before touching it. Each write only applies if
+the document still holds the value that was read, so a document edited
+meanwhile is reported and skipped, not overwritten. A product or user name
+that is taken is retried after the other renames land, so a name freed in the
+same run (`&amp;lt;x` waiting for the `&lt;x` that becomes `<x`) still
+decodes; only real duplicates are skipped. If a write fails, the
+run carries on, exits with status 1 and ends `incomplete`: fix the cause and
+run `--apply` again. The rerun (like a rerun after a crash) retries only the
+documents that were not written and never decodes one twice. Once a run ends
+`complete`, further `--apply` runs are refused, because decoding text typed
+after the fix would corrupt it.
+
+The old pipe decoded its input before re-encoding it, so an entity a user
+typed literally was already lost on the way in: a typed `&lt;` was stored as
+`&lt;`, exactly like a typed `<`, and the migration turns it into `<`. That
+cannot be undone. Everything else decodes back to what was typed. Passwords
+are not affected: login passwords were never encoded, and hashes cannot be
+migrated. A password changed through "change password" before #15 that
+contained `&`, `<`, `>` or leading/trailing spaces was hashed in its encoded,
+trimmed form; that user signs in with the encoded form or gets an admin
+reset.
+
+## Passwords
+
 Passwords must be at least 8 characters when set (new users, admin resets,
 self-service changes). Login does not check the length, so older, shorter
 passwords still work until they are changed.

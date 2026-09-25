@@ -24,7 +24,6 @@ const BASE_ENV = {
     REFRESH_EXPIRY_S: '604800',
     EAN_COUNTER_ID: 'EAN_COUNTER_ID',
     EAN_COUNTER_DIGITS: '9',
-    SANITATION_EXCLUDES: 'password',
     HEALTH_HEAP_THRESHOLD: '1',
     HEALTH_RSS_THRESHOLD: '1',
     HEALTH_DISK_THRESHOLD_PERCENT: '0.9',
@@ -48,6 +47,18 @@ function issueMessages(env: Record<string, unknown>): string[] {
     const result = envSchema.safeParse(env);
     return (result.error?.issues ?? []).map((i) => i.message);
 }
+
+describe('envSchema leftovers', () => {
+    it('ignores a leftover SANITATION_EXCLUDES instead of failing startup (#15)', () => {
+        const result = envSchema.safeParse({
+            ...BASE_ENV,
+            SANITATION_EXCLUDES: 'password',
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.data).not.toHaveProperty('SANITATION_EXCLUDES');
+    });
+});
 
 describe('envSchema.STORE_TIMEZONE', () => {
     it('defaults to Asia/Manila', () => {

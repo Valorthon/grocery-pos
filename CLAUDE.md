@@ -70,8 +70,10 @@ Rules:
   `apps/api/src/common/testing/access-harness.ts` and
   `apps/api/src/auth/auth.e2e.spec.ts`. Test-only helpers live under
   `**/testing/**`, which the build excludes.
-- `sanitize-html` is ESM-only and can't be loaded by jest. Tests stand in for
-  `SanitationPipe` instead of loading it.
+- The only global pipe is `createValidationPipe()`
+  (`apps/api/src/common/pipes/validation.pipe.ts`); e2e harnesses use it too.
+  Request text is stored as typed (no HTML sanitising, #15); DTOs trim text
+  fields with `@Transform`, and password fields have no transform.
 - Client: vitest. Components are mounted with plain `createApp` in jsdom; there
   is no `@vue/test-utils`.
 - Behaviour that needs a real replica set (unique partial indexes, transactions

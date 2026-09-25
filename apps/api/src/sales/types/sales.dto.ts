@@ -150,7 +150,9 @@ export class SellDto {
     @IsNotEmpty()
     @IsUUID()
     @Transform(({ value }) =>
-        typeof value === 'string' ? value.toLowerCase() : (value as unknown),
+        typeof value === 'string'
+            ? value.trim().toLowerCase()
+            : (value as unknown),
     )
     idempotencyKey!: string;
 

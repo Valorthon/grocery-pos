@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
     IsInt,
@@ -83,6 +83,9 @@ export class RestockDto {
     @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.DESCRIPTION)
+    @Transform(({ value }) =>
+        typeof value === 'string' ? value.trim() : (value as unknown),
+    )
     description!: string;
 }
 

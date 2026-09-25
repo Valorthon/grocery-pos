@@ -6,6 +6,7 @@
         "dist",
         "**/*spec.ts",
         "**/testing/**",
-        "seed.ts"
+        "seed.ts",
+        "migrate-decode-entities.ts"
     ]
 }
