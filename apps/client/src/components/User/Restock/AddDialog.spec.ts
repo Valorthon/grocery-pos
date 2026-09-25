@@ -25,6 +25,7 @@ const MILK = {
 
 let app: App | null = null;
 let added: AddForm[];
+let updated: AddForm[];
 
 beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -35,6 +36,7 @@ beforeEach(() => {
         }),
     );
     added = [];
+    updated = [];
 });
 
 afterEach(() => {
@@ -44,7 +46,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-async function open() {
+async function open(item?: AddForm) {
     const isOpen = ref(false);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -53,7 +55,9 @@ async function open() {
             h(AddDialog, {
                 modelValue: isOpen.value,
                 'onUpdate:modelValue': (v: boolean) => (isOpen.value = v),
+                item,
                 onAdd: (p: AddForm) => added.push(p),
+                onUpdate: (p: AddForm) => updated.push(p),
             }),
     });
     app.use(createPinia());
@@ -181,5 +185,129 @@ describe('Restock AddDialog (#17)', () => {
         await click('Restock');
         expect(added).toHaveLength(1);
         expect(added[0]).toMatchObject({ EAN: '4006381333931', price: 2000 });
+    });
+
+    it('drops a pick when switching to a new product and back (review)', async () => {
+        await open();
+        await searchAndPick('bear');
+        await check('This is a new product', true);
+        expect(field('EAN').value).toBe('');
+        expect(field('Product Name').value).toBe('');
+        await type('EAN', '96385074');
+        await type('Product Name', 'SOMETHING ELSE');
+        await check('This is a new product', false);
+
+        expect(document.body.textContent).not.toContain('Selected:');
+        expect(field('Search Product').value).toBe('');
+        await type('Quantity', '6');
+        await type('Unit Cost', '12.50');
+        await click('Restock');
+        expect(added).toEqual([]);
+        expect(fieldError('Search Product')).toBe(
+            'Pick a product from the matches',
+        );
+    });
+
+    it('never sends a picked id with a new product', async () => {
+        await open();
+        await searchAndPick('bear');
+        await check('This is a new product', true);
+        await type('EAN', '96385074');
+        await type('Product Name', 'SOMETHING ELSE');
+        await type('Selling Price', '15');
+        await type('Quantity', '6');
+        await type('Unit Cost', '12.50');
+        await click('Restock');
+        expect(added).toHaveLength(1);
+        expect(added[0]).not.toHaveProperty('product');
+        expect(added[0]).toMatchObject({
+            isNewProduct: true,
+            EAN: '96385074',
+            name: 'SOMETHING ELSE',
+            price: 1500,
+        });
+    });
+
+    it('never sends new-product fields with a picked product', async () => {
+        await open();
+        await check('This is a new product', true);
+        await type('Product Name', 'Typed first');
+        await type('Selling Price', '9');
+        await check('This is a new product', false);
+        await searchAndPick('bear');
+        await type('Quantity', '1');
+        await type('Unit Cost', '3');
+        await click('Restock');
+        expect(added).toHaveLength(1);
+        expect(added[0]).not.toHaveProperty('price');
+        expect(added[0]).toMatchObject({
+            isNewProduct: false,
+            autoGenerateEAN: false,
+            product: MILK.product,
+            name: MILK.name,
+            EAN: MILK.EAN,
+        });
+    });
+
+    it('shows a correct pick made after a failed submit', async () => {
+        await open();
+        await type('Search Product', 'bear');
+        await click('Restock');
+        expect(fieldError('Search Product')).toBe(
+            'Pick a product from the matches',
+        );
+        await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+        await flush();
+        await pickFirstMatch();
+        expect(fieldError('Search Product')).toBe('');
+        expect(document.body.textContent).toContain('Selected:');
+    });
+
+    it('edits an existing-product draft and keeps its pick', async () => {
+        await open({
+            isNewProduct: false,
+            autoGenerateEAN: false,
+            EAN: MILK.EAN,
+            name: MILK.name,
+            product: MILK.product,
+            quantity: 6,
+            unitCost: 1250,
+        });
+        expect(document.body.textContent).toContain('Selected:');
+        expect(field('Unit Cost').value).toBe('12.50');
+        await type('Quantity', '8');
+        await click('Update Restock');
+        expect(updated).toHaveLength(1);
+        expect(updated[0]).toMatchObject({
+            product: MILK.product,
+            EAN: MILK.EAN,
+            quantity: 8,
+            unitCost: 1250,
+        });
+        expect(updated[0]).not.toHaveProperty('price');
+    });
+
+    it('edits a new-product draft without attaching a product id', async () => {
+        await open({
+            isNewProduct: true,
+            autoGenerateEAN: false,
+            EAN: '4006381333931',
+            name: 'Pens',
+            price: 2000,
+            quantity: 1,
+            unitCost: 1000,
+        });
+        expect(field('Product Name').value).toBe('Pens');
+        expect(field('Selling Price').value).toBe('20.00');
+        await type('Selling Price', '21');
+        await click('Update Restock');
+        expect(updated).toHaveLength(1);
+        expect(updated[0]).not.toHaveProperty('product');
+        expect(updated[0]).toMatchObject({
+            isNewProduct: true,
+            EAN: '4006381333931',
+            name: 'Pens',
+            price: 2100,
+        });
     });
 });

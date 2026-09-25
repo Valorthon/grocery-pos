@@ -155,4 +155,26 @@ describe('Adjustments AddDialog (#17)', () => {
         await open();
         expect(field('Reason').getAttribute('maxlength')).toBe('100');
     });
+
+    it('shows a correct pick made after a failed submit', async () => {
+        await open();
+        await type('Search Product', 'bear');
+        await click('Adjust');
+        expect(fieldError('Search Product')).toBe(
+            'Pick a product from the matches',
+        );
+        await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+        await flush();
+        await pickFirstMatch();
+        expect(fieldError('Search Product')).toBe('');
+        expect(document.body.textContent).toContain('Selected:');
+    });
+
+    it('clears the stale error as soon as the search text is edited', async () => {
+        await open();
+        await type('Search Product', 'bear');
+        await click('Adjust');
+        await type('Search Product', 'bear b');
+        expect(fieldError('Search Product')).toBe('');
+    });
 });

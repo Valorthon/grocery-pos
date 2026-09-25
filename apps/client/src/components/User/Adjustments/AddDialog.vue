@@ -16,7 +16,7 @@
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :loading="isLoadingMatches"
                 :error="errors.EAN || searchError"
-                @search="debouncedSearch"
+                @search="onSearch"
             />
 
             <!-- No inputmode: a numeric keypad has no minus key, and a
@@ -100,6 +100,7 @@ const isEditMode = computed(
 );
 
 const {
+    matches,
     options: matchOptions,
     loading: isLoadingMatches,
     error: searchError,
@@ -107,45 +108,85 @@ const {
     reset: resetMatches,
 } = useProductMatches();
 
+/** The product picked from the matches, as it was when picked. */
+interface PickedProduct {
+    product: string;
+    name: string;
+    EAN: string;
+}
+
 /**
- * The picked product, shown under the search box. Picking sets the line's
- * product id and name (the combobox writes its EAN back into the box);
- * typing afterwards clears both, so a stale id never rides along with
- * different text.
+ * Only a pick sets this, and only the pick's own snapshot is shown or
+ * sent; typing in the search box clears it (issue #17).
  */
+const picked = ref<PickedProduct | null>(null);
+
 const selectedProduct = computed<ComboboxOption | null>({
     get: () =>
-        formData.product
+        picked.value
             ? {
-                  value: formData.product,
-                  label: formData.name,
-                  subtitle: `EAN: ${formData.EAN}`,
+                  value: picked.value.product,
+                  label: picked.value.name,
+                  subtitle: `EAN: ${picked.value.EAN}`,
               }
             : null,
     set: (opt) => {
-        formData.product = opt?.value ?? '';
-        formData.name = opt?.label ?? '';
+        const match = opt
+            ? matches.value.find((m) => m.product === opt.value)
+            : undefined;
+        picked.value = opt
+            ? {
+                  product: opt.value,
+                  name: opt.label,
+                  EAN: match?.EAN ?? opt.display ?? '',
+              }
+            : null;
+        clearError('EAN');
     },
 });
+
+function clearError(...fields: string[]) {
+    const next = { ...errors.value };
+    for (const field of fields) delete next[field];
+    errors.value = next;
+}
+
+function onSearch(query: string) {
+    clearError('EAN');
+    debouncedSearch(query);
+}
 
 watch(
     () => props.modelValue,
     (open) => {
         if (!open) return;
-        formData.EAN = props.item?.EAN ?? '';
-        formData.name = props.item?.name ?? '';
-        formData.change = props.item?.change ?? '';
-        formData.reason = props.item?.reason ?? '';
-        formData.product = props.item?.product ?? '';
+        const item = props.item;
+        formData.EAN = item?.EAN ?? '';
+        formData.name = '';
+        formData.change = item?.change ?? '';
+        formData.reason = item?.reason ?? '';
+        formData.product = '';
+        picked.value = item?.product
+            ? { product: item.product, name: item.name, EAN: item.EAN }
+            : null;
         errors.value = {};
         resetMatches();
     },
 );
 
 function handleSubmit() {
-    errors.value = adjustmentLineErrors(formData);
-    if (Object.keys(errors.value).length) return;
-    const payload: AddForm = { ...formData, change: Number(formData.change) };
+    errors.value = adjustmentLineErrors({
+        ...formData,
+        product: picked.value?.product ?? '',
+    });
+    if (Object.keys(errors.value).length || !picked.value) return;
+    const payload: AddForm = {
+        EAN: picked.value.EAN,
+        name: picked.value.name,
+        product: picked.value.product,
+        change: Number(formData.change),
+        reason: formData.reason,
+    };
     if (isEditMode.value) emit('update', payload);
     else emit('add', payload);
     model.value = false;

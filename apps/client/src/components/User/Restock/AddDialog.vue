@@ -32,7 +32,7 @@
                     :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :loading="isLoadingMatches"
                     :error="errors.EAN || searchError"
-                    @search="debouncedSearch"
+                    @search="onSearch"
                 />
             </template>
 
@@ -57,8 +57,9 @@
             </div>
 
             <BaseCheckbox
-                v-model="formData.isNewProduct"
+                :model-value="formData.isNewProduct"
                 label="This is a new product"
+                @update:model-value="setNewProduct"
             />
 
             <template v-if="formData.isNewProduct">
@@ -142,6 +143,7 @@ const isEditMode = computed(
 );
 
 const {
+    matches,
     options: matchOptions,
     loading: isLoadingMatches,
     error: searchError,
@@ -149,48 +151,106 @@ const {
     reset: resetMatches,
 } = useProductMatches();
 
+/** The existing product picked from the matches, as it was when picked. */
+interface PickedProduct {
+    product: string;
+    name: string;
+    EAN: string;
+}
+
 /**
- * The picked product, shown under the search box. Picking sets the line's
- * product id and name (the combobox writes its EAN back into the box);
- * typing afterwards clears both, so a stale id never rides along with
- * different text.
+ * Only a pick sets this, and only the pick's own snapshot is shown or sent:
+ * editable fields (the search text, a new product's name or EAN) never
+ * keep a product id attached (issue #17).
  */
+const picked = ref<PickedProduct | null>(null);
+
 const selectedProduct = computed<ComboboxOption | null>({
     get: () =>
-        formData.product
+        picked.value
             ? {
-                  value: formData.product,
-                  label: formData.name,
-                  subtitle: `EAN: ${formData.EAN}`,
+                  value: picked.value.product,
+                  label: picked.value.name,
+                  subtitle: `EAN: ${picked.value.EAN}`,
               }
             : null,
     set: (opt) => {
-        formData.product = opt?.value ?? '';
-        formData.name = opt?.label ?? '';
+        const match = opt
+            ? matches.value.find((m) => m.product === opt.value)
+            : undefined;
+        picked.value = opt
+            ? {
+                  product: opt.value,
+                  name: opt.label,
+                  EAN: match?.EAN ?? opt.display ?? '',
+              }
+            : null;
+        clearError('EAN');
     },
 });
+
+function clearError(...fields: string[]) {
+    const next = { ...errors.value };
+    for (const field of fields) delete next[field];
+    errors.value = next;
+}
+
+function onSearch(query: string) {
+    clearError('EAN');
+    debouncedSearch(query);
+}
+
+/**
+ * Switching between "existing" and "new product" starts that part of the
+ * line over, so nothing picked or typed for one mode leaks into the other.
+ */
+function setNewProduct(isNew: boolean) {
+    formData.isNewProduct = isNew;
+    picked.value = null;
+    formData.EAN = '';
+    formData.name = '';
+    formData.price = '';
+    formData.autoGenerateEAN = false;
+    clearError('EAN', 'name', 'price');
+    resetMatches();
+}
 
 watch(
     () => props.modelValue,
     (open) => {
         if (!open) return;
         const item = props.item;
-        formData.autoGenerateEAN = item?.autoGenerateEAN ?? false;
+        const isNew = item?.isNewProduct ?? false;
+        formData.isNewProduct = isNew;
+        formData.autoGenerateEAN = isNew
+            ? (item?.autoGenerateEAN ?? false)
+            : false;
         formData.EAN = item?.EAN ?? '';
         formData.quantity = item?.quantity ?? '';
         formData.unitCost =
             item?.unitCost != null ? centavosToPesoInput(item.unitCost) : '';
-        formData.product = item?.product ?? '';
-        formData.isNewProduct = item?.isNewProduct ?? false;
-        formData.name = item?.name ?? '';
-        formData.price = item?.price ? centavosToPesoInput(item.price) : '';
+        formData.product = '';
+        formData.name = isNew ? (item?.name ?? '') : '';
+        formData.price =
+            isNew && item?.price ? centavosToPesoInput(item.price) : '';
+        picked.value =
+            !isNew && item?.product
+                ? {
+                      product: item.product,
+                      name: item.name,
+                      EAN: item.EAN,
+                  }
+                : null;
         errors.value = {};
         resetMatches();
     },
 );
 
 const handleSubmit = async () => {
-    errors.value = restockLineErrors(formData);
+    errors.value = restockLineErrors({
+        ...formData,
+        product: formData.isNewProduct ? '' : (picked.value?.product ?? ''),
+    });
     if (Object.keys(errors.value).length) return;
 
     if (formData.isNewProduct) {
@@ -206,14 +266,30 @@ const handleSubmit = async () => {
         }
     }
 
-    const payload: AddForm = {
-        ...formData,
+    const amounts = {
         quantity: Number(formData.quantity),
         unitCost: pesosToCentavos(formData.unitCost),
-        price: formData.isNewProduct
-            ? pesosToCentavos(formData.price)
-            : undefined,
     };
+    // A new product never carries a product id; an existing one never
+    // carries new-product fields, and shows exactly what was picked.
+    const payload: AddForm =
+        formData.isNewProduct || !picked.value
+            ? {
+                  isNewProduct: true,
+                  autoGenerateEAN: formData.autoGenerateEAN,
+                  EAN: formData.EAN,
+                  name: formData.name,
+                  price: pesosToCentavos(formData.price),
+                  ...amounts,
+              }
+            : {
+                  isNewProduct: false,
+                  autoGenerateEAN: false,
+                  EAN: picked.value.EAN,
+                  name: picked.value.name,
+                  product: picked.value.product,
+                  ...amounts,
+              };
     if (isEditMode.value) emit('update', payload);
     else emit('add', payload);
     model.value = false;
