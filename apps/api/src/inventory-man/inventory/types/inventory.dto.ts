@@ -7,8 +7,9 @@ import {
     MaxLength,
     IsInt,
     Min,
+    Max,
 } from 'class-validator';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../../../constants';
+import { NUMERIC_LIMITS, STRING_LIMITS, PAGINATION } from '../../../constants';
 import { Trim, TrimLowercase } from '../../../common/validators';
 
 export class GetAllDto {
@@ -35,10 +36,14 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }

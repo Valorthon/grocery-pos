@@ -31,7 +31,10 @@ import { Roles } from '../auth/auth.decorator';
  *   POST /sales/:id/void      Admin    pays the net cash back out of a
  *   POST /sales/:id/refund    Admin    shift's drawer (`payoutShiftId`)
  *
- * Scoping is `saleScope`. Admin reports and CSV are #44.
+ * Scoping is `saleScope`. `GET /sales` also takes `cashier` and
+ * `dateFrom`/`dateTo` (#16): for an Admin they filter every sale; for anyone
+ * else they only narrow the scope above, and naming another cashier lists
+ * nothing (`salesListFilter`). Admin reports and CSV are #44.
  * sales.access.e2e.spec.ts pins this.
  */
 @Roles(Role.Seller)

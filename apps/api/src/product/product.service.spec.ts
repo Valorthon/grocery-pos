@@ -430,6 +430,8 @@ describe('ProductService.ensureValid (issue #14)', () => {
 describe('ProductService.getAll search (issue #14)', () => {
     let service: ProductService;
     let find: jest.Mock;
+    let countDocuments: jest.Mock;
+    let estimatedDocumentCount: jest.Mock;
 
     beforeEach(async () => {
         const chain = {
@@ -439,6 +441,8 @@ describe('ProductService.getAll search (issue #14)', () => {
             lean: () => Promise.resolve([]),
         };
         find = jest.fn().mockReturnValue(chain);
+        countDocuments = jest.fn().mockResolvedValue(0);
+        estimatedDocumentCount = jest.fn().mockResolvedValue(0);
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -448,8 +452,8 @@ describe('ProductService.getAll search (issue #14)', () => {
                     provide: getModelToken(Product.name),
                     useValue: {
                         find,
-                        countDocuments: jest.fn().mockResolvedValue(0),
-                        estimatedDocumentCount: jest.fn().mockResolvedValue(0),
+                        countDocuments,
+                        estimatedDocumentCount,
                     },
                 },
                 { provide: InventoryService, useValue: {} },
@@ -458,6 +462,16 @@ describe('ProductService.getAll search (issue #14)', () => {
         }).compile();
 
         service = moduleRef.get(ProductService);
+    });
+
+    it('counts exactly, never by the collection estimate, with no search (#16)', async () => {
+        countDocuments.mockResolvedValue(12);
+
+        const result = await service.getAll({ page: 1, limit: 5 } as GetAllDto);
+
+        expect(countDocuments).toHaveBeenCalledWith({});
+        expect(estimatedDocumentCount).not.toHaveBeenCalled();
+        expect(result.totalItems).toBe(12);
     });
 
     it('matches the name anywhere and the barcode as a prefix, literally', async () => {

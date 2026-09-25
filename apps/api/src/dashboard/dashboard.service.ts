@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, PipelineStage } from 'mongoose';
 import { COUNTED_SALES_FILTER, Sales } from '../sales/sales.schema';
 import { Inventory } from '../inventory-man/inventory/inventory.schema';
 import { Product } from '../product/product.schema';
@@ -8,11 +8,15 @@ import { Restock } from '../inventory-man/restock/restock.schema';
 import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { calendarDateInZone, dayRangeInZone } from '../common/utils/timezone';
+import { LOW_STOCK_THRESHOLD } from '../constants';
 
 /** What every dashboard role sees: stock and activity, no money. */
 export interface DashboardStats {
     totalProducts: number;
+    /** Products with 1 to LOW_STOCK_THRESHOLD units on hand. */
     lowStockCount: number;
+    /** Products with 0 (or fewer) units on hand. */
+    outOfStockCount: number;
     /** Store-wide count of today's sales that were not reversed. */
     todaySalesCount: number;
     /** Newest restocks; without `totalCost` unless the caller is ADMIN. */
@@ -40,6 +44,45 @@ export interface DashboardOptions {
  * field added to Restock later stays out by default.
  */
 export const RESTOCK_ACTIVITY_FIELDS = '_id description restockedBy createdAt';
+
+/**
+ * Counts the dashboard's stock tiles in one pass over the inventory rows at
+ * or below the threshold (product owner, 2026-09-25): low stock is
+ * `1 <= stock <= LOW_STOCK_THRESHOLD`, out of stock is `stock <= 0`.
+ *
+ * Orphan rows (their product gone) count toward neither: the inner
+ * `$unwind` drops them, as `inventoryListPipeline` does (issue #14). So the
+ * out-of-stock tile matches the inventory list at `maxStock=0`, and the two
+ * tiles together match `maxStock=LOW_STOCK_THRESHOLD` (0..10); the low tile
+ * alone is 1..10. Exported so specs can pin its shape; its behaviour needs
+ * a real MongoDB.
+ */
+export function stockAlertPipeline(): PipelineStage[] {
+    return [
+        { $match: { stock: { $lte: LOW_STOCK_THRESHOLD } } },
+        {
+            $lookup: {
+                from: 'products',
+                localField: 'product',
+                foreignField: '_id',
+                pipeline: [{ $project: { _id: 1 } }],
+                as: 'product',
+            },
+        },
+        { $unwind: '$product' },
+        {
+            $group: {
+                _id: null,
+                lowStockCount: {
+                    $sum: { $cond: [{ $gte: ['$stock', 1] }, 1, 0] },
+                },
+                outOfStockCount: {
+                    $sum: { $cond: [{ $lte: ['$stock', 0] }, 1, 0] },
+                },
+            },
+        },
+    ];
+}
 
 @Injectable()
 export class DashboardService {
@@ -76,14 +119,18 @@ export class DashboardService {
 
         const [
             totalProducts,
-            lowStockCount,
+            stockAlertAgg,
             todaySalesAgg,
             recentSales,
             recentRestocks,
             recentAdjustments,
         ] = await Promise.all([
-            this.productModel.estimatedDocumentCount(),
-            this.inventoryModel.countDocuments({ stock: { $lte: 10 } }),
+            // Exact: a user-facing figure (issue #16).
+            this.productModel.countDocuments(),
+            this.inventoryModel.aggregate<{
+                lowStockCount: number;
+                outOfStockCount: number;
+            }>(stockAlertPipeline()),
             this.salesModel.aggregate<{ count: number; revenue?: number }>([
                 {
                     $match: {
@@ -118,10 +165,12 @@ export class DashboardService {
         ]);
 
         const todaySales = todaySalesAgg[0];
+        const stockAlerts = stockAlertAgg[0];
 
         const stats: DashboardStats = {
             totalProducts,
-            lowStockCount,
+            lowStockCount: stockAlerts?.lowStockCount ?? 0,
+            outOfStockCount: stockAlerts?.outOfStockCount ?? 0,
             todaySalesCount: todaySales?.count ?? 0,
             recentRestocks,
             recentAdjustments,

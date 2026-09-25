@@ -139,6 +139,53 @@ Rules:
 - A non-admin reads only their own sales in their current open shift
   (none without one; others 404).
 
+**Errors** (#8)
+
+- Error bodies are `{statusCode, error, message, timestamp, path, details,
+requestId}`. A 5xx never carries details or internals.
+- `runInTransaction` classifies DB errors: a duplicate key is 400
+  `DB_DUPLICATE_KEY` with field names only, a validation failure is 400
+  `DB_VALIDATION_ERROR`, and AppErrors pass through. An HttpException keeps its
+  status, with a matching code.
+- `X-Request-Id` is on every response and exposed via CORS. A 5xx is logged
+  at error level with its stack; a 4xx is one warn line. The access log
+  (`TimingMiddleware`) prints the path without the query string, plus the id.
+
+**Text** (#15)
+
+- There's no sanitising pipe. Text is stored as typed, and Vue escapes it on
+  render. Every body string field needs a trim `@Transform` (the walker in
+  `validation.pipe.spec.ts` enforces it); password fields get none.
+- Legacy entity-encoded data is fixed by the one-off
+  `pnpm migrate:decode-entities` (README deploy notes).
+
+**Barcodes and search** (#14)
+
+- Barcodes are EAN-13, UPC-A or EAN-8 with a valid check digit, stored as
+  scanned; the rules are in contracts `barcode.ts`. Typed codes in the
+  generated 200… range are refused.
+- A restock line needs exactly one of `newProduct` or `product`.
+- Name search is "contains" and barcode search is prefix, via
+  `common/utils/regex.ts` and `product/product-search.ts`.
+- `Inventory.updatedBy` means the last writer.
+
+**Reporting** (#16)
+
+- Every paginated query caps `limit` at `PAGINATION.LIMIT_MAX` (100). Every
+  body list has an `@ArrayMaxSize` from `BATCH_LIMITS` (200 lines per sale,
+  restock, adjustment or product batch; 50 users). `limits.spec.ts` walks the
+  controllers and enforces both.
+- User-facing totals use `countDocuments`, never `estimatedDocumentCount`.
+- The dashboard's low stock is `1 ≤ stock ≤ LOW_STOCK_THRESHOLD` (10, in
+  contracts, until #40), and out of stock is `stock ≤ 0`. Neither counts
+  orphan inventory rows. Every dashboard role sees both tiles.
+- `GET /sales` takes `cashier` and `dateFrom`/`dateTo`. For ADMIN they filter
+  everything. For anyone else they only narrow the own-open-shift scope, and
+  naming another cashier returns nothing. Sales are indexed on `{createdAt}`,
+  `{cashier, createdAt}` and `{shift, createdAt}`.
+- `startOfDayInZone` returns the first of two repeated midnights on a
+  fall-back day (Amman 2021-10-29), searching back up to 3h.
+
 **Access**
 
 - An expired or invalid JWT gets 401, and every `AUTH_*` code maps to 401. Routes
@@ -163,5 +210,6 @@ Rules:
 
 ## Status
 
-Phases 1, 2 and 3 of #31 are complete. Phase 3 (#2) moved shifts and cash
-accountability to the server. The next phase is in #31.
+Phases 1–4 of #31 are complete. Phase 4 (#8, #15, #14, #16) covered errors,
+text handling, inventory integrity and reporting. Next is Phase 5, client
+correctness, starting with #33.

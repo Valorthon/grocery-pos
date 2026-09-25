@@ -4,6 +4,7 @@ import { ClientSession, Types } from 'mongoose';
 import {
     CASHIER_HIDDEN_SALE_FIELDS,
     saleScope,
+    salesListFilter,
     SalesService,
 } from './sales.service';
 import { Sales } from './sales.schema';
@@ -27,6 +28,13 @@ import {
 import { AuthUser } from '../auth/types';
 import { Role } from '@grocery-pos/contracts';
 import { ShiftService } from '../shift/shift.service';
+import { TypedConfigService } from '../common/typed-config/typed-config.service';
+
+/** The store timezone every sales spec reads days in. */
+const STORE_CONFIG = {
+    provide: TypedConfigService,
+    useValue: { get: () => 'Asia/Manila' },
+};
 
 /** The cashier's open shift in these tests. */
 const SHIFT_ID = new Types.ObjectId();
@@ -150,6 +158,7 @@ describe('SalesService.sell', () => {
                     useValue: { sell: inventorySell },
                 },
                 { provide: ShiftService, useValue: { chargeSale } },
+                STORE_CONFIG,
             ],
         }).compile();
 
@@ -1044,6 +1053,7 @@ describe('SalesService.reverse', () => {
                 { provide: ProductService, useValue: {} },
                 { provide: InventoryService, useValue: { returnStock } },
                 { provide: ShiftService, useValue: { payOutReversal } },
+                STORE_CONFIG,
             ],
         }).compile();
 
@@ -1360,6 +1370,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
                 { provide: ProductService, useValue: {} },
                 { provide: InventoryService, useValue: {} },
                 { provide: ShiftService, useValue: { openShiftIdOf } },
+                STORE_CONFIG,
             ],
         }).compile();
 
@@ -1408,12 +1419,83 @@ describe('Sales history scoping (issues #13, #2)', () => {
         expect(countDocuments).not.toHaveBeenCalled();
     });
 
-    it('lists every sale for an admin', async () => {
+    it('lists every sale for an admin, with an exact count (#16)', async () => {
         await service.getAll(ADMIN, { page: 1, limit: 10 });
 
         expect(find).toHaveBeenCalledWith({}, undefined);
-        expect(estimatedDocumentCount).toHaveBeenCalled();
+        expect(countDocuments).toHaveBeenCalledWith({});
+        expect(estimatedDocumentCount).not.toHaveBeenCalled();
         expect(openShiftIdOf).not.toHaveBeenCalled();
+    });
+
+    describe('filters (#16)', () => {
+        const OTHER = new Types.ObjectId();
+        // Manila is UTC+8: its 2026-09-25 runs from 16:00Z on the 24th.
+        const SEP_25 = {
+            $gte: new Date('2026-09-24T16:00:00.000Z'),
+            $lt: new Date('2026-09-25T16:00:00.000Z'),
+        };
+
+        it('filters an admin’s list and count by cashier and Manila day', async () => {
+            await service.getAll(ADMIN, {
+                page: 1,
+                limit: 10,
+                cashier: OTHER.toString(),
+                dateFrom: '2026-09-25',
+                dateTo: '2026-09-25',
+            });
+
+            const filter = { cashier: OTHER, createdAt: SEP_25 };
+            expect(find).toHaveBeenCalledWith(filter, undefined);
+            expect(countDocuments).toHaveBeenCalledWith(filter);
+        });
+
+        it('keeps a seller’s shift scope under a date filter', async () => {
+            await service.getAll(SELLER, {
+                page: 1,
+                limit: 10,
+                dateFrom: '2026-09-25',
+            });
+
+            expect(find).toHaveBeenCalledWith(
+                { ...OWN_SCOPE, createdAt: { $gte: SEP_25.$gte } },
+                CASHIER_HIDDEN_SALE_FIELDS,
+            );
+        });
+
+        it('lists nothing, without querying, when a seller names another cashier', async () => {
+            await expect(
+                service.getAll(SELLER, {
+                    page: 1,
+                    limit: 10,
+                    cashier: OTHER.toString(),
+                }),
+            ).resolves.toEqual({ data: [], totalItems: 0 });
+            expect(find).not.toHaveBeenCalled();
+            expect(countDocuments).not.toHaveBeenCalled();
+        });
+
+        it('lets a seller name themselves, which changes nothing', () => {
+            expect(
+                salesListFilter(
+                    OWN_SCOPE,
+                    { cashier: SELLER.userId },
+                    'Asia/Manila',
+                ),
+            ).toEqual(OWN_SCOPE);
+        });
+
+        it('adds nothing when no filter is given', () => {
+            expect(salesListFilter({}, {}, 'Asia/Manila')).toEqual({});
+        });
+
+        it('ends a dateTo day at the next Manila midnight', () => {
+            expect(
+                salesListFilter({}, { dateTo: '2026-09-24' }, 'Asia/Manila'),
+            ).toEqual({
+                createdAt: { $lt: new Date('2026-09-24T16:00:00.000Z') },
+            });
+        });
     });
 
     it('404s a sale outside the cashier’s current shift without reading its lines', async () => {

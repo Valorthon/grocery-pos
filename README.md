@@ -70,6 +70,22 @@ of the deployed commit (with `pnpm install` and the contracts built), pointed
 at the target database through `DATABASE_URL`, e.g.
 `DATABASE_URL='mongodb+srv://…' pnpm migrate:decode-entities`.
 
+### Drop the old single-field sales shift index (#16), once
+
+#16 adds the Sales indexes `createdAt_-1`, `cashier_1_createdAt_-1` and
+`shift_1_createdAt_-1`, and the Inventory index `stock_1`. The API builds them
+on its first startup after the deploy. `shift_1_createdAt_-1` replaces the
+single-field `shift_1`, which the schema no longer declares, but Mongoose never
+drops an index. Once `shift_1_createdAt_-1` exists (check with
+`db.sales.getIndexes()`), drop the old one in `mongosh`:
+
+```js
+db.sales.dropIndex('shift_1');
+```
+
+Before the new index exists, `shift_1` is still what closing a shift reads
+sales through, so don't drop it earlier.
+
 ### Decode HTML entities in stored text (#15), once
 
 Before #15 the API stored request text HTML-encoded: `M&M's` became

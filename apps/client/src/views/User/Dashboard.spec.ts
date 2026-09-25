@@ -12,6 +12,7 @@ const NOW = new Date().toISOString();
 const STATS = {
     totalProducts: 40,
     lowStockCount: 3,
+    outOfStockCount: 7,
     todaySalesCount: 2,
     recentRestocks: [
         {
@@ -92,5 +93,37 @@ describe('Dashboard money figures (issue #13)', () => {
         expect(text).toContain('40');
         expect(text).toContain("Today's Sales");
         expect(text).toContain('Restocked: weekly delivery');
+    });
+});
+
+describe('Dashboard stock tiles (issue #16)', () => {
+    function tile(title: string) {
+        return [...document.querySelectorAll('div.rounded-2xl')].find(
+            (el) => el.querySelector('.text-xs')?.textContent?.trim() === title,
+        );
+    }
+
+    it.each([
+        ['a non-admin', STATS],
+        ['an admin', WITH_MONEY],
+    ])('shows low-stock and out-of-stock counts to %s', async (_, payload) => {
+        await render(payload);
+
+        expect(
+            tile('Low Stock Items')?.querySelector('.text-2xl')?.textContent,
+        ).toContain('3');
+        expect(
+            tile('Out of Stock Items')?.querySelector('.text-2xl')?.textContent,
+        ).toContain('7');
+    });
+
+    it('shows a dash while the count is missing', async () => {
+        const { outOfStockCount: _omit, ...older } = STATS;
+        void _omit;
+        await render(older);
+
+        expect(
+            tile('Out of Stock Items')?.querySelector('.text-2xl')?.textContent,
+        ).toContain('-');
     });
 });

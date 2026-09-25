@@ -122,9 +122,46 @@ function addDays(date: CalendarDate, days: number): CalendarDate {
     };
 }
 
+function compareDates(a: CalendarDate, b: CalendarDate): number {
+    return a.year - b.year || a.month - b.month || a.day - b.day;
+}
+
+/** Whether `instant` falls on `date` or later, in `timeZone`. */
+function onOrAfter(instant: number, date: CalendarDate, timeZone: string) {
+    return (
+        compareDates(calendarDateInZone(new Date(instant), timeZone), date) >= 0
+    );
+}
+
+/** Longest real UTC offset change, with margin: 3 hours. */
+const MAX_TRANSITION_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * The first instant in `(lo, hi]` that falls on `date` or later, to the
+ * millisecond, given `lo` falls before `date` and `hi` on it.
+ */
+function firstInstantOn(
+    lo: number,
+    hi: number,
+    date: CalendarDate,
+    timeZone: string,
+): number {
+    while (hi - lo > 1) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (onOrAfter(mid, date, timeZone)) {
+            hi = mid;
+        } else {
+            lo = mid;
+        }
+    }
+    return hi;
+}
+
 /**
  * The first instant of `date` in `timeZone`. Usually local midnight; in zones
- * whose DST transition skips midnight it is the first wall time that exists.
+ * whose DST transition skips midnight it is the first wall time that exists,
+ * and where a fall-back repeats midnight (Amman 2021-10-29: 00:59 +03 is
+ * followed by 00:00 +02) it is the first of the two midnights.
  */
 export function startOfDayInZone(date: CalendarDate, timeZone: string): Date {
     const midnightAsUtc = Date.UTC(date.year, date.month - 1, date.day);
@@ -139,21 +176,27 @@ export function startOfDayInZone(date: CalendarDate, timeZone: string): Date {
         )
         .sort((a, b) => a - b);
 
-    if (onDate.length > 0) return new Date(onDate[0]);
-
-    // Midnight falls in a DST gap: the day starts at the transition, which
-    // lies between the two candidates. Binary-search it to the millisecond.
-    let lo = Math.min(first, second);
-    let hi = Math.max(first, second);
-    while (hi - lo > 1) {
-        const mid = Math.floor((lo + hi) / 2);
-        if (sameDate(calendarDateInZone(new Date(mid), timeZone), date)) {
-            hi = mid;
-        } else {
-            lo = mid;
-        }
+    if (onDate.length === 0) {
+        // Midnight falls in a DST gap: the day starts at the transition,
+        // which lies between the two candidates.
+        return new Date(
+            firstInstantOn(
+                Math.min(first, second),
+                Math.max(first, second),
+                date,
+                timeZone,
+            ),
+        );
     }
-    return new Date(hi);
+
+    // A candidate on the date may be a repeated midnight, the second of two
+    // after a fall-back. The day's true start is at most one transition
+    // earlier, so search back from it; if the instant a transition earlier
+    // is still on the date (no real zone does this), keep the candidate.
+    const candidate = onDate[0];
+    const lo = candidate - MAX_TRANSITION_MS;
+    if (onOrAfter(lo, date, timeZone)) return new Date(candidate);
+    return new Date(firstInstantOn(lo, candidate, date, timeZone));
 }
 
 /** `[start of date, start of next date)` in `timeZone`, as UTC instants. */

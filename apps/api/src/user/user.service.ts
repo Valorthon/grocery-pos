@@ -94,9 +94,8 @@ export class UserService implements OnModuleInit {
                 .select('-passwordHash -__v')
                 .lean(),
 
-            query?.name
-                ? this.model.countDocuments(query)
-                : this.model.estimatedDocumentCount(),
+            // Exact: the total is shown to the user (issue #16).
+            this.model.countDocuments(query),
         ]);
 
         return {

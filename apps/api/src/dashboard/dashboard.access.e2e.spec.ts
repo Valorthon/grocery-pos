@@ -99,13 +99,20 @@ describe('GET /dashboard access by role (e2e)', () => {
                 },
                 {
                     provide: getModelToken(Inventory.name),
-                    useValue: { countDocuments: () => Promise.resolve(3) },
+                    useValue: {
+                        aggregate: () =>
+                            Promise.resolve([
+                                {
+                                    _id: null,
+                                    lowStockCount: 3,
+                                    outOfStockCount: 1,
+                                },
+                            ]),
+                    },
                 },
                 {
                     provide: getModelToken(Product.name),
-                    useValue: {
-                        estimatedDocumentCount: () => Promise.resolve(40),
-                    },
+                    useValue: { countDocuments: () => Promise.resolve(40) },
                 },
                 {
                     provide: getModelToken(Restock.name),
@@ -141,6 +148,7 @@ describe('GET /dashboard access by role (e2e)', () => {
         expect(body).toEqual({
             totalProducts: 40,
             lowStockCount: 3,
+            outOfStockCount: 1,
             todaySalesCount: 2,
             todayRevenue: 12_500,
             recentSales: [SALE],
@@ -157,6 +165,7 @@ describe('GET /dashboard access by role (e2e)', () => {
             expect(body).toEqual({
                 totalProducts: 40,
                 lowStockCount: 3,
+                outOfStockCount: 1,
                 todaySalesCount: 2,
                 recentRestocks: [
                     {

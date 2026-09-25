@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Adjustment } from './adjustment.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -47,8 +47,6 @@ export class AdjustmentService {
             query.createdAt = createdAt;
         }
 
-        Logger.log({ query, dto });
-
         const [data, totalItems] = await Promise.all([
             this.model
                 .find(query)
@@ -61,9 +59,8 @@ export class AdjustmentService {
                 })
                 .lean(),
 
-            query?.adjustedBy || query?.createdAt
-                ? this.model.countDocuments(query)
-                : this.model.estimatedDocumentCount(),
+            // Exact: the total is shown to the user (issue #16).
+            this.model.countDocuments(query),
         ]);
 
         return {
@@ -125,8 +122,6 @@ export class AdjustmentService {
 
         const productQuery = productSearchFilter({ name, EAN }, 'product.');
 
-        Logger.log({ adjustmentQuery, productQuery });
-
         const result = await this.modelDetails.aggregate<{
             paginatedData: Adjustment[];
             metadata: Array<{ total: number }>;
@@ -154,7 +149,6 @@ export class AdjustmentService {
             },
         ]);
 
-        Logger.log({ result });
         const data = result[0]?.paginatedData ?? [];
         const totalItems = result[0]?.metadata[0]?.total ?? 0;
 

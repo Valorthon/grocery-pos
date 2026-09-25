@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Product } from './product.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -61,7 +61,6 @@ export class ProductService {
     ) {}
 
     async getByBarcode(dto: GetDto): Promise<Product> {
-        Logger.log('BARCODE');
         const { EAN } = dto;
 
         const product = await this.model.findOne({ EAN }).lean();
@@ -142,9 +141,8 @@ export class ProductService {
                 .limit(limit)
                 .lean(),
 
-            query?.name || query?.EAN
-                ? this.model.countDocuments(query)
-                : this.model.estimatedDocumentCount(),
+            // Exact: the total is shown to the user (issue #16).
+            this.model.countDocuments(query),
         ]);
 
         return {
@@ -223,7 +221,6 @@ export class ProductService {
                     session,
                 );
 
-                Logger.log({ newProducts });
                 const inserted = await this.model.insertMany(newProducts, {
                     session,
                 });
@@ -242,7 +239,6 @@ export class ProductService {
 
     async ensureValid(dto: EnsureValidDto) {
         const { EAN, name, autoGenerateEAN } = dto;
-        Logger.log({ dto });
         if (!autoGenerateEAN) {
             // The same rules as the create and import DTOs (IsBarcode).
             const message = EAN
@@ -262,7 +258,6 @@ export class ProductService {
             })
             .lean();
 
-        Logger.log({ found }, { dto });
         const duplicates: string[] = [];
         if (found) {
             if (!autoGenerateEAN && found.EAN === EAN)

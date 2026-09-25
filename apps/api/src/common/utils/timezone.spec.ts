@@ -123,6 +123,66 @@ describe('dayRangeInZone', () => {
         ).toBe(5);
     });
 
+    describe('a fall-back that repeats midnight (#16)', () => {
+        // Amman left DST on 2021-10-29 at 01:00 +03, back to 00:00 +02: that
+        // date has two local midnights, 21:00Z and 22:00Z on the 28th. The
+        // day starts at the first; the old two-pass guess returned the second.
+        const AMMAN = 'Asia/Amman';
+        const OCT_29 = { year: 2021, month: 10, day: 29 };
+
+        it('starts the day at the first of the two midnights', () => {
+            const start = startOfDayInZone(OCT_29, AMMAN);
+
+            expect(start.toISOString()).toBe('2021-10-28T21:00:00.000Z');
+            expect(calendarDateInZone(start, AMMAN)).toEqual(OCT_29);
+            expect(
+                calendarDateInZone(new Date(start.getTime() - 1), AMMAN).day,
+            ).toBe(28);
+        });
+
+        it('ends the day before at that first midnight, so no hour is in both', () => {
+            const before = dayRangeInZone(
+                { year: 2021, month: 10, day: 28 },
+                AMMAN,
+            );
+            const day = dayRangeInZone(OCT_29, AMMAN);
+
+            expect(before.end.toISOString()).toBe('2021-10-28T21:00:00.000Z');
+            expect(day.start).toEqual(before.end);
+            // 25 hours: 00:00 +03 to 00:00 +02 on the 30th.
+            expect(day.end.getTime() - day.start.getTime()).toBe(
+                25 * 60 * 60 * 1000,
+            );
+        });
+
+        it('handles Gaza’s repeated midnight too', () => {
+            expect(
+                startOfDayInZone(
+                    { year: 2020, month: 10, day: 24 },
+                    'Asia/Gaza',
+                ).toISOString(),
+            ).toBe('2020-10-23T21:00:00.000Z');
+        });
+
+        it('leaves Manila, which has no DST, at 16:00Z the day before', () => {
+            for (const [month, day] of [
+                [1, 1],
+                [3, 31],
+                [10, 29],
+                [12, 31],
+            ]) {
+                const start = startOfDayInZone(
+                    { year: 2021, month, day },
+                    MANILA,
+                );
+                const expected = new Date(
+                    Date.UTC(2021, month - 1, day) - 8 * 3600 * 1000,
+                );
+                expect(start.toISOString()).toBe(expected.toISOString());
+            }
+        });
+    });
+
     it('does not depend on the process timezone', () => {
         const original = process.env.TZ;
         try {

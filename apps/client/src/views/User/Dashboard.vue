@@ -16,7 +16,7 @@
         <!-- Stat cards -->
         <div
             class="grid grid-cols-1 sm:grid-cols-2 gap-4"
-            :class="stats.length > 3 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'"
+            :class="stats.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'"
         >
             <div
                 v-for="stat in stats"
@@ -149,7 +149,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { AlertCircle, Banknote, Package, ShoppingCart } from '@lucide/vue';
+import {
+    AlertCircle,
+    Banknote,
+    Package,
+    PackageX,
+    ShoppingCart,
+} from '@lucide/vue';
 import api from '@/axios';
 import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
@@ -166,7 +172,10 @@ const loading = ref(true);
  */
 interface DashboardData {
     totalProducts: number;
+    /** Products with 1 to LOW_STOCK_THRESHOLD (contracts) units on hand. */
     lowStockCount: number;
+    /** Products with none on hand (issue #16). */
+    outOfStockCount: number;
     todaySalesCount: number;
     /** Centavos. ADMIN only. */
     todayRevenue?: number;
@@ -211,6 +220,12 @@ const stats = computed(() => [
         value: data.value?.lowStockCount?.toLocaleString() ?? '-',
         icon: AlertCircle,
         avatarClass: 'bg-red-50 text-red-600',
+    },
+    {
+        title: 'Out of Stock Items',
+        value: data.value?.outOfStockCount?.toLocaleString() ?? '-',
+        icon: PackageX,
+        avatarClass: 'bg-slate-100 text-slate-700',
     },
     {
         title: "Today's Sales",

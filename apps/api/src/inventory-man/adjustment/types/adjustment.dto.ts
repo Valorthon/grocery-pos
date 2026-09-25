@@ -11,8 +11,15 @@ import {
     MaxLength,
     NotEquals,
     ValidateNested,
+    Max,
+    ArrayMaxSize,
 } from 'class-validator';
-import { VALIDATION, STRING_LIMITS } from '../../../constants';
+import {
+    VALIDATION,
+    STRING_LIMITS,
+    PAGINATION,
+    BATCH_LIMITS,
+} from '../../../constants';
 import {
     IsCalendarDate,
     Trim,
@@ -43,11 +50,15 @@ export class GetDetailsQueryDto {
     @IsNumber()
     @IsPositive()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsNumber()
     @IsPositive()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }
 
@@ -83,6 +94,7 @@ export class AdjustDto {
 
     @ArrayNotEmpty()
     @ValidateNested({ each: true })
+    @ArrayMaxSize(BATCH_LIMITS.ADJUSTMENT_LINES)
     @Type(() => AdjustFields)
     adjustDetails!: AdjustFields[];
 }
@@ -104,9 +116,13 @@ export class GetAllDto {
 
     @IsNumber()
     @IsPositive()
+    @IsInt()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 
     @IsNumber()
     @IsPositive()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 }

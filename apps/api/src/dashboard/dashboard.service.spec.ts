@@ -1,13 +1,17 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { DashboardService, RESTOCK_ACTIVITY_FIELDS } from './dashboard.service';
+import {
+    DashboardService,
+    RESTOCK_ACTIVITY_FIELDS,
+    stockAlertPipeline,
+} from './dashboard.service';
 import { Sales } from '../sales/sales.schema';
 import { Inventory } from '../inventory-man/inventory/inventory.schema';
 import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
 import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
-import { SaleStatus } from '@grocery-pos/contracts';
+import { LOW_STOCK_THRESHOLD, SaleStatus } from '@grocery-pos/contracts';
 
 interface RecentQuery {
     sort: () => RecentQuery;
@@ -34,6 +38,8 @@ describe('DashboardService.getDashboard', () => {
     let aggregate: jest.Mock;
     let salesFind: jest.Mock;
     let restockQuery: RecentQuery;
+    let inventoryAggregate: jest.Mock;
+    let productCount: jest.Mock;
 
     beforeEach(async () => {
         // The API container runs in UTC; the store is in Manila (UTC+8).
@@ -45,6 +51,8 @@ describe('DashboardService.getDashboard', () => {
         const find = () => recentQuery();
         salesFind = jest.fn(() => recentQuery([{ _id: 's1', amount: 500 }]));
         restockQuery = recentQuery();
+        inventoryAggregate = jest.fn().mockResolvedValue([]);
+        productCount = jest.fn().mockResolvedValue(0);
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -55,13 +63,11 @@ describe('DashboardService.getDashboard', () => {
                 },
                 {
                     provide: getModelToken(Inventory.name),
-                    useValue: { countDocuments: () => Promise.resolve(0) },
+                    useValue: { aggregate: inventoryAggregate },
                 },
                 {
                     provide: getModelToken(Product.name),
-                    useValue: {
-                        estimatedDocumentCount: () => Promise.resolve(0),
-                    },
+                    useValue: { countDocuments: productCount },
                 },
                 {
                     provide: getModelToken(Restock.name),
@@ -175,6 +181,7 @@ describe('DashboardService.getDashboard', () => {
             expect(result).toEqual({
                 totalProducts: 0,
                 lowStockCount: 0,
+                outOfStockCount: 0,
                 todaySalesCount: 1,
                 recentRestocks: [],
                 recentAdjustments: [],
@@ -191,6 +198,93 @@ describe('DashboardService.getDashboard', () => {
                 RESTOCK_ACTIVITY_FIELDS,
             );
             expect(RESTOCK_ACTIVITY_FIELDS).not.toMatch(/totalCost/);
+        });
+    });
+
+    describe('stock tiles (issue #16)', () => {
+        beforeEach(() => {
+            jest.setSystemTime(new Date('2026-01-05T02:00:00.000Z'));
+        });
+
+        it('keeps the product owner’s threshold of 10 in contracts', () => {
+            expect(LOW_STOCK_THRESHOLD).toBe(10);
+        });
+
+        it('counts products exactly, not by the collection estimate', async () => {
+            productCount.mockResolvedValue(42);
+
+            const result = await service.getDashboard({ includeMoney: false });
+
+            expect(productCount).toHaveBeenCalledWith();
+            expect(result.totalProducts).toBe(42);
+        });
+
+        it.each([true, false])(
+            'reports low and out-of-stock counts (includeMoney: %s)',
+            async (includeMoney) => {
+                inventoryAggregate.mockResolvedValue([
+                    { _id: null, lowStockCount: 4, outOfStockCount: 2 },
+                ]);
+
+                const result = await service.getDashboard({ includeMoney });
+
+                expect(inventoryAggregate).toHaveBeenCalledWith(
+                    stockAlertPipeline(),
+                );
+                expect(result).toMatchObject({
+                    lowStockCount: 4,
+                    outOfStockCount: 2,
+                });
+            },
+        );
+
+        it('reports zero for both when no row is at or below the threshold', async () => {
+            const result = await service.getDashboard({ includeMoney: false });
+
+            expect(result).toMatchObject({
+                lowStockCount: 0,
+                outOfStockCount: 0,
+            });
+        });
+
+        describe('stockAlertPipeline', () => {
+            const pipeline = stockAlertPipeline() as unknown as Array<
+                Record<string, unknown>
+            >;
+
+            it('reads only rows at or below the threshold', () => {
+                expect(pipeline[0]).toEqual({
+                    $match: { stock: { $lte: LOW_STOCK_THRESHOLD } },
+                });
+            });
+
+            it('drops orphan rows (product gone) before counting, like the inventory list', () => {
+                expect(pipeline[1]).toMatchObject({
+                    $lookup: {
+                        from: 'products',
+                        localField: 'product',
+                        foreignField: '_id',
+                        as: 'product',
+                    },
+                });
+                // No preserveNullAndEmptyArrays: an empty join drops the row.
+                expect(pipeline[2]).toEqual({ $unwind: '$product' });
+            });
+
+            it('splits 1..threshold (low) from 0 or below (out)', () => {
+                expect(pipeline[3]).toEqual({
+                    $group: {
+                        _id: null,
+                        lowStockCount: {
+                            $sum: { $cond: [{ $gte: ['$stock', 1] }, 1, 0] },
+                        },
+                        outOfStockCount: {
+                            $sum: { $cond: [{ $lte: ['$stock', 0] }, 1, 0] },
+                        },
+                    },
+                });
+                expect(pipeline).toHaveLength(4);
+            });
         });
     });
 });

@@ -2,7 +2,6 @@ import {
     Body,
     Controller,
     Get,
-    Logger,
     Param,
     Patch,
     Post,
@@ -51,7 +50,6 @@ export class ProductController {
 
     @Get('ensureValid')
     async ensureValid(@Query() dto: EnsureValidDto) {
-        Logger.log(dto);
         await this.service.ensureValid(dto);
     }
 
