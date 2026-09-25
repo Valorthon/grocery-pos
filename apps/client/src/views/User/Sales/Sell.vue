@@ -1,6 +1,8 @@
 <template>
+    <!-- Any click on the page gives the focus back to the scan box (#22). -->
     <div
         class="flex-1 flex flex-col lg:flex-row h-full overflow-hidden bg-slate-100 text-slate-900"
+        @click="sticky.onPageClick"
     >
         <!-- LEFT: scan input + live ticket -->
         <div class="flex-1 flex flex-col h-full overflow-hidden bg-white">
@@ -37,7 +39,7 @@
                         <template v-if="shiftStore.activeShift">
                             <button
                                 type="button"
-                                class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Add change when drawer coins or small bills run low"
                                 @click="
                                     shiftStore.drawerAction =
@@ -52,7 +54,7 @@
 
                             <button
                                 type="button"
-                                class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Drop excess cash safely to the back office safe"
                                 @click="
                                     shiftStore.drawerAction =
@@ -67,7 +69,7 @@
 
                             <button
                                 type="button"
-                                class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-2xs"
+                                class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-2xs focus-ring"
                                 title="Count physical cash in drawer, generate Z-Read report"
                                 @click="shiftStore.shiftOutOpen = true"
                             >
@@ -91,7 +93,9 @@
                         >
                         <select
                             v-model.number="scanMultiplier"
-                            class="bg-transparent text-slate-900 font-extrabold text-sm focus:outline-none cursor-pointer"
+                            aria-label="Quantity per scan"
+                            class="bg-transparent text-slate-900 font-extrabold text-sm cursor-pointer rounded focus-ring"
+                            @change="sticky.refocus"
                         >
                             <option v-for="q in qtyOptions" :key="q" :value="q">
                                 {{ q }}x
@@ -112,6 +116,8 @@
                             type="text"
                             placeholder="Scan barcode, enter EAN, or search item..."
                             data-testid="scan-input"
+                            aria-label="Scan barcode or search items"
+                            :aria-keyshortcuts="REGISTER_KEYS.SCAN"
                             role="combobox"
                             aria-autocomplete="list"
                             aria-controls="product-matches"
@@ -121,7 +127,7 @@
                                     ? undefined
                                     : `product-match-${search.highlighted.value}`
                             "
-                            class="w-full pl-11 pr-24 py-2.5 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
+                            class="w-full pl-11 pr-32 py-2.5 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
                             @input="onSearchChange"
                             @keydown.down.prevent="search.move(1)"
                             @keydown.up.prevent="search.move(-1)"
@@ -133,15 +139,17 @@
                             <button
                                 v-if="searchQuery"
                                 type="button"
-                                class="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
+                                aria-label="Clear search"
+                                class="p-1 text-slate-400 hover:text-slate-700 rounded-lg focus-ring"
                                 @click="clearQuery"
                             >
-                                <X class="w-4 h-4" />
+                                <X class="w-4 h-4" aria-hidden="true" />
                             </button>
+                            <KeyHint>{{ REGISTER_KEYS.SCAN }}</KeyHint>
                             <button
                                 type="submit"
                                 :disabled="isTicketLocked"
-                                class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase rounded-lg shadow-2xs transition-colors active:scale-[0.98]"
+                                class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase rounded-lg shadow-2xs transition-colors active:scale-[0.98] focus-ring"
                             >
                                 Enter / Scan
                             </button>
@@ -229,7 +237,7 @@
                         data-testid="search-match"
                         :aria-selected="i === search.highlighted.value"
                         :disabled="isTicketLocked"
-                        class="p-3 bg-white border rounded-xl hover:border-slate-800 hover:shadow-xs transition-all flex items-center justify-between text-left group"
+                        class="p-3 bg-white border rounded-xl hover:border-slate-800 hover:shadow-xs transition-all flex items-center justify-between text-left group focus-ring"
                         :class="
                             i === search.highlighted.value
                                 ? 'border-slate-900 ring-2 ring-slate-900/20'
@@ -286,7 +294,7 @@
                                 v-if="cartStore.items.length"
                                 type="button"
                                 :disabled="isTicketLocked"
-                                class="text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors"
+                                class="text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors focus-ring"
                                 @click="voidTicket"
                             >
                                 Void Ticket
@@ -378,7 +386,8 @@
                                             <button
                                                 type="button"
                                                 :disabled="isTicketLocked"
-                                                class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                                                :aria-label="`One less ${item.name}`"
+                                                class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
                                                 @click="
                                                     cartStore.setQuantity(
                                                         item.product,
@@ -386,7 +395,10 @@
                                                     )
                                                 "
                                             >
-                                                <Minus class="w-3.5 h-3.5" />
+                                                <Minus
+                                                    class="w-3.5 h-3.5"
+                                                    aria-hidden="true"
+                                                />
                                             </button>
                                             <span
                                                 class="w-8 text-center font-bold text-slate-900 text-xs"
@@ -395,7 +407,8 @@
                                             <button
                                                 type="button"
                                                 :disabled="isTicketLocked"
-                                                class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                                                :aria-label="`One more ${item.name}`"
+                                                class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
                                                 @click="
                                                     cartStore.setQuantity(
                                                         item.product,
@@ -403,7 +416,10 @@
                                                     )
                                                 "
                                             >
-                                                <Plus class="w-3.5 h-3.5" />
+                                                <Plus
+                                                    class="w-3.5 h-3.5"
+                                                    aria-hidden="true"
+                                                />
                                             </button>
                                         </div>
                                     </td>
@@ -420,12 +436,16 @@
                                         <button
                                             type="button"
                                             :disabled="isTicketLocked"
-                                            class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                            :aria-label="`Remove ${item.name}`"
+                                            class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-ring"
                                             @click="
                                                 cartStore.remove(item.product)
                                             "
                                         >
-                                            <Trash2 class="w-3.5 h-3.5" />
+                                            <Trash2
+                                                class="w-3.5 h-3.5"
+                                                aria-hidden="true"
+                                            />
                                         </button>
                                     </td>
                                 </tr>
@@ -446,7 +466,10 @@
                 >
                     <button
                         type="button"
-                        class="text-slate-600 font-bold hover:text-slate-900 flex items-center gap-1.5 underline-offset-2 hover:underline"
+                        class="text-slate-600 font-bold hover:text-slate-900 flex items-center gap-1.5 underline-offset-2 hover:underline focus-ring rounded"
+                        :aria-expanded="showDiscount"
+                        aria-controls="discount-options"
+                        :aria-keyshortcuts="REGISTER_KEYS.DISCOUNT"
                         @click="showDiscount = !showDiscount"
                     >
                         <Percent class="w-3.5 h-3.5 text-slate-500" />
@@ -455,6 +478,7 @@
                                 ? `Discount Applied (${discountPercent}%)`
                                 : '+ Apply Order Discount'
                         }}
+                        <KeyHint>{{ REGISTER_KEYS.DISCOUNT }}</KeyHint>
                     </button>
                     <span
                         v-if="discountPercent > 0"
@@ -466,6 +490,10 @@
 
                 <div
                     v-if="showDiscount"
+                    id="discount-options"
+                    ref="discountOptionsEl"
+                    role="group"
+                    aria-label="Order discount"
                     class="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
                 >
                     <span class="text-xs font-bold text-slate-500"
@@ -476,7 +504,8 @@
                         :key="d"
                         type="button"
                         :disabled="isTicketLocked"
-                        class="px-2.5 py-1 rounded-lg text-xs font-bold transition-colors active:scale-[0.98]"
+                        :aria-pressed="discountPercent === d"
+                        class="px-2.5 py-1 rounded-lg text-xs font-bold transition-colors active:scale-[0.98] focus-ring"
                         :class="
                             discountPercent === d
                                 ? 'bg-slate-900 text-white'
@@ -496,6 +525,7 @@
                     >
                     <input
                         id="discount-reason"
+                        ref="reasonInput"
                         v-model="discountReason"
                         :disabled="isTicketLocked"
                         type="text"
@@ -560,19 +590,21 @@
             <div class="p-6 pt-0 space-y-3">
                 <button
                     type="button"
-                    class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all"
+                    class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all focus-ring"
                     :disabled="!canCheckout || isTicketLocked"
+                    :aria-keyshortcuts="REGISTER_KEYS.CHARGE"
                     @click="openCheckout()"
                 >
                     <CreditCard class="w-5 h-5" />
                     <span>Tender & Charge ({{ currency(total) }})</span>
                     <ArrowRight class="w-4 h-4 ml-1" />
+                    <KeyHint tone="dark">{{ REGISTER_KEYS.CHARGE }}</KeyHint>
                 </button>
 
                 <div class="grid grid-cols-1 gap-2">
                     <button
                         type="button"
-                        class="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98]"
+                        class="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98] focus-ring"
                         :disabled="!canCheckout || isTicketLocked"
                         @click="openCheckout(PaymentType.SPLIT)"
                     >
@@ -600,7 +632,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { isAxiosError } from 'axios';
 import {
     AlertCircle,
@@ -623,6 +655,7 @@ import {
 import api from '@/axios';
 import { useCartStore } from '@/stores/cart';
 import { apiErrorCode, useShiftStore } from '@/stores/shift';
+import KeyHint from '@/components/ui/KeyHint.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
 import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
@@ -639,6 +672,11 @@ import {
     useProductSearch,
 } from '@/components/User/Sales/product-search';
 import { formatCurrency } from '@/utils/currency';
+import {
+    REGISTER_KEYS,
+    useRegisterShortcuts,
+} from '@/composables/useRegisterShortcuts';
+import { useStickyFocus } from '@/composables/useStickyFocus';
 import {
     DiscountType,
     type DiscountInput,
@@ -660,6 +698,9 @@ const cartStore = useCartStore();
 const shiftStore = useShiftStore();
 
 const scanInput = ref<HTMLInputElement | null>(null);
+const reasonInput = ref<HTMLInputElement | null>(null);
+const discountOptionsEl = ref<HTMLElement | null>(null);
+const sticky = useStickyFocus(() => scanInput.value);
 const searchQuery = ref('');
 const scanMultiplier = ref(1);
 const search = useProductSearch(
@@ -909,6 +950,13 @@ function applyDiscount(value: number) {
         return;
     }
     discountPercent.value = value;
+    // The reason is required: take the cashier straight to it.
+    if (!discountReason.value.trim()) void focusReason();
+}
+
+async function focusReason() {
+    await nextTick();
+    reasonInput.value?.focus();
 }
 
 function openCheckout(method: PaymentType = PaymentType.CASH) {
@@ -995,6 +1043,32 @@ function onNewSale() {
     receiptNotice.value = null;
     scanInput.value?.focus();
 }
+
+/**
+ * The register's keys (issue #22). Off while a modal is open; the checkout
+ * answers Enter and Escape itself. F4 and Delete come with #23.
+ */
+useRegisterShortcuts({
+    [REGISTER_KEYS.SCAN]: () => {
+        scanInput.value?.focus();
+        scanInput.value?.select();
+    },
+    [REGISTER_KEYS.DISCOUNT]: async () => {
+        showDiscount.value = true;
+        await nextTick();
+        const options = [
+            ...(discountOptionsEl.value?.querySelectorAll('button') ?? []),
+        ];
+        (
+            options.find((b) => b.getAttribute('aria-pressed') === 'true') ??
+            options[0]
+        )?.focus();
+    },
+    [REGISTER_KEYS.CHARGE]: () => {
+        if (canCheckout.value && !isTicketLocked.value) openCheckout();
+        else if (needsReason.value) void focusReason();
+    },
+});
 
 onMounted(() => {
     scanInput.value?.focus();

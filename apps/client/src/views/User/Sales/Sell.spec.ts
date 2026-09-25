@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
+import { PaymentType, SaleStatus } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import Sell from './Sell.vue';
 
 const get = vi.hoisted(() => vi.fn());
-vi.mock('@/axios', () => ({ default: { get, post: vi.fn() } }));
+const post = vi.hoisted(() => vi.fn());
+vi.mock('@/axios', () => ({ default: { get, post } }));
 
 const MILK = { product: 'p1', EAN: '2000000000015', name: 'milk' };
 const MINTS = { product: 'p2', EAN: '2000000000022', name: 'mints' };
@@ -26,6 +28,7 @@ beforeEach(() => {
     pinia = createPinia();
     setActivePinia(pinia);
     get.mockReset();
+    post.mockReset();
     localStorage.clear();
 });
 
@@ -304,5 +307,242 @@ describe('Sell register search', () => {
 
         expect(cartNames()).toEqual([]);
         expect(get).not.toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+    });
+});
+
+/** Presses `name` where the focus is, as the keyboard would. */
+async function press(name: string, init: KeyboardEventInit = {}) {
+    const event = new KeyboardEvent('keydown', {
+        key: name,
+        bubbles: true,
+        cancelable: true,
+        ...init,
+    });
+    (document.activeElement ?? document.body).dispatchEvent(event);
+    await flush();
+    return event;
+}
+
+function buttonNamed(name: string) {
+    const found = [...document.querySelectorAll('button')].find(
+        (b) =>
+            b.getAttribute('aria-label') === name ||
+            b.textContent?.trim().startsWith(name),
+    );
+    if (!found) throw new Error(`No button "${name}"`);
+    return found;
+}
+
+/** A click as the mouse makes it: the button takes the focus first. */
+async function clickButton(button: HTMLElement) {
+    // Vue drops an event older than a listener attached after it; with the
+    // clock frozen, a click would look as old as the page's own listener.
+    await vi.advanceTimersByTimeAsync(10);
+    button.focus();
+    button.click();
+    await flush();
+}
+
+/** Escape, then lets the closing modal's leave transition finish. */
+async function escape() {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+}
+
+function dialog(title: string) {
+    return (
+        [...document.querySelectorAll('[role="dialog"]')].find((d) =>
+            d.textContent?.includes(title),
+        ) ?? null
+    );
+}
+
+function withMilkOnTicket() {
+    useCartStore().add(
+        { product: 'p1', EAN: MILK.EAN, name: 'milk', unitPrice: 9500 },
+        1,
+    );
+}
+
+describe('Sell register keyboard (issue #22)', () => {
+    it('F2 puts the focus in the scan box, from anywhere', async () => {
+        withMilkOnTicket();
+        mount();
+        buttonNamed('Void Ticket').focus();
+
+        const event = await press('F2');
+        expect(event.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('F8 opens the discount with the focus on the current choice', async () => {
+        withMilkOnTicket();
+        mount();
+        expect(document.querySelector('#discount-options')).toBeNull();
+
+        await press('F8');
+        const options = document.querySelector('#discount-options')!;
+        expect(options).not.toBeNull();
+        expect(document.activeElement?.textContent?.trim()).toBe('None');
+        expect(document.activeElement?.getAttribute('aria-pressed')).toBe(
+            'true',
+        );
+    });
+
+    it('F9 opens Tender & Charge with the focus in the amount', async () => {
+        withMilkOnTicket();
+        mount();
+
+        const event = await press('F9');
+        expect(event.defaultPrevented).toBe(true);
+        expect(dialog('Complete Payment')).not.toBeNull();
+        expect(document.activeElement?.getAttribute('aria-label')).toBe(
+            'Amount tendered',
+        );
+    });
+
+    it('F9 does nothing on an empty ticket', async () => {
+        mount();
+        await press('F9');
+        expect(dialog('Complete Payment')).toBeNull();
+    });
+
+    it('leaves F5 (refresh) and modified keys to the browser', async () => {
+        withMilkOnTicket();
+        mount();
+        expect((await press('F5')).defaultPrevented).toBe(false);
+        expect((await press('F9', { ctrlKey: true })).defaultPrevented).toBe(
+            false,
+        );
+        expect(dialog('Complete Payment')).toBeNull();
+    });
+
+    it('ignores the register keys while a modal is open', async () => {
+        withMilkOnTicket();
+        mount();
+        await press('F9');
+        const amount = document.activeElement;
+
+        expect((await press('F8')).defaultPrevented).toBe(false);
+        expect(document.querySelector('#discount-options')).toBeNull();
+        await press('F2');
+        expect(document.activeElement).toBe(amount);
+    });
+
+    it('shows the keys on the buttons', async () => {
+        withMilkOnTicket();
+        mount();
+        const charge = buttonNamed('Tender & Charge');
+        expect(charge.getAttribute('aria-keyshortcuts')).toBe('F9');
+        expect(charge.querySelector('kbd')?.textContent).toBe('F9');
+        const discount = buttonNamed('+ Apply Order Discount');
+        expect(discount.getAttribute('aria-keyshortcuts')).toBe('F8');
+        expect(discount.querySelector('kbd')?.textContent).toBe('F8');
+        expect(input().getAttribute('aria-keyshortcuts')).toBe('F2');
+    });
+});
+
+describe('Sell sticky scan box (issue #22)', () => {
+    it('comes back to the scan box after a ticket button is clicked', async () => {
+        withMilkOnTicket();
+        mount();
+
+        await clickButton(buttonNamed('One more milk'));
+        expect(useCartStore().items[0].quantity).toBe(2);
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('comes back after a click on an empty spot of the ticket', async () => {
+        withMilkOnTicket();
+        mount();
+        (document.activeElement as HTMLElement).blur();
+        document.querySelector('table')!.click();
+        await flush();
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('sends a scan typed while a button has the focus to the scan box', async () => {
+        withMilkOnTicket();
+        mount();
+        buttonNamed('One more milk').focus();
+
+        await press('4');
+        expect(document.activeElement).toBe(input());
+
+        // Space still presses a focused button.
+        buttonNamed('One more milk').focus();
+        await press(' ');
+        expect(document.activeElement).toBe(buttonNamed('One more milk'));
+    });
+
+    it('never takes the focus from the discount reason being typed', async () => {
+        withMilkOnTicket();
+        mount();
+        await press('F8');
+        await clickButton(buttonNamed('10%'));
+
+        const reason =
+            document.querySelector<HTMLInputElement>('#discount-reason')!;
+        // Picking a discount goes straight to its required reason.
+        expect(document.activeElement).toBe(reason);
+
+        reason.click();
+        await flush();
+        await press('a');
+        expect(document.activeElement).toBe(reason);
+    });
+
+    it('comes back after a modal closes, even when its opener was a button', async () => {
+        withMilkOnTicket();
+        mount();
+        await clickButton(buttonNamed('Tender & Charge'));
+        expect(dialog('Complete Payment')).not.toBeNull();
+
+        await escape();
+        expect(dialog('Complete Payment')).toBeNull();
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('comes back after the receipt is closed with Escape', async () => {
+        withMilkOnTicket();
+        post.mockResolvedValue({
+            data: {
+                _id: 's1',
+                createdAt: '2026-09-25T00:00:00.000Z',
+                status: SaleStatus.COMPLETED,
+                paymentType: PaymentType.CASH,
+                referenceNumber: null,
+                tenders: [{ type: 'CASH', amount: 10000 }],
+                amountTendered: 10000,
+                changeGiven: 500,
+                cashierName: 'ana',
+                items: [{ productName: 'milk', quantity: 1, amount: 9500 }],
+                subtotal: 9500,
+                discount: null,
+                totalAmount: 9500,
+            },
+        });
+        mount();
+        await clickButton(buttonNamed('Tender & Charge'));
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '100';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await flush();
+        await vi.advanceTimersByTimeAsync(500);
+        await flush();
+
+        expect(dialog('Transaction Complete')).not.toBeNull();
+        expect(dialog('Complete Payment')).toBeNull();
+        // Enter on the receipt starts the next sale.
+        expect(document.activeElement?.textContent?.trim()).toBe('Next Sale');
+
+        await escape();
+        expect(dialog('Transaction Complete')).toBeNull();
+        expect(document.activeElement).toBe(input());
     });
 });

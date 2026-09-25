@@ -174,7 +174,7 @@
                 <Printer class="w-3.5 h-3.5" />
                 Print
             </BaseButton>
-            <BaseButton class="flex-1" @click="nextSale">
+            <BaseButton class="flex-1" data-autofocus @click="nextSale">
                 <RotateCcw class="w-3.5 h-3.5" />
                 Next Sale
             </BaseButton>
