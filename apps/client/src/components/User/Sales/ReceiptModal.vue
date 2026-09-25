@@ -67,7 +67,7 @@
                         >
                     </div>
                     <div
-                        class="text-[10px] text-slate-400 break-all text-right"
+                        class="text-[10px] text-slate-600 break-all text-right"
                         data-testid="receipt-sale-id"
                     >
                         ID {{ receipt?._id }}
