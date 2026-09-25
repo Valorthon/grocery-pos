@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { CircleCheck } from '@lucide/vue';
 import Spinner from './Spinner.vue';
 
@@ -147,6 +147,20 @@ const emit = defineEmits<{
 
 const isOpen = ref(false);
 const highlighted = ref(0);
+/**
+ * True from a keystroke until the parent answers with new options: until
+ * then the list still holds the previous query's matches, so Enter must not
+ * pick one of them.
+ */
+const awaitingOptions = ref(false);
+
+watch(
+    () => props.options,
+    () => {
+        awaitingOptions.value = false;
+        highlighted.value = 0;
+    },
+);
 
 function onInput(event: Event) {
     const value = (event.target as HTMLInputElement).value;
@@ -155,6 +169,7 @@ function onInput(event: Event) {
     emit('search', value);
     isOpen.value = true;
     highlighted.value = 0;
+    awaitingOptions.value = true;
 }
 
 function select(opt: ComboboxOption) {
@@ -172,6 +187,7 @@ function moveSelection(delta: number) {
 }
 
 function selectHighlighted() {
+    if (!isOpen.value || awaitingOptions.value || props.loading) return;
     const opt = props.options[highlighted.value];
     if (opt) select(opt);
 }

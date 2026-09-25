@@ -18,7 +18,8 @@ afterEach(() => {
 });
 
 /** Mounts `<BaseCombobox v-model="text" v-model:selected="selected" />`. */
-function mount(options: ComboboxOption[] = [MILK]) {
+function mount(initial: ComboboxOption[] = [MILK]) {
+    const options = ref<ComboboxOption[]>(initial);
     const text = ref('');
     const selected = ref<ComboboxOption | null>(null);
     const events: { select: ComboboxOption[]; search: string[] } = {
@@ -30,7 +31,7 @@ function mount(options: ComboboxOption[] = [MILK]) {
     app = createApp({
         render: () =>
             h(BaseCombobox, {
-                options,
+                options: options.value,
                 modelValue: text.value,
                 'onUpdate:modelValue': (v: string) => (text.value = v),
                 selected: selected.value,
@@ -47,11 +48,30 @@ function mount(options: ComboboxOption[] = [MILK]) {
         input.dispatchEvent(new Event('input'));
         await nextTick();
     }
+    /** The parent's answer to the last query: a fresh options array. */
+    async function answer(next: ComboboxOption[] = [MILK]) {
+        options.value = [...next];
+        await nextTick();
+    }
+    async function enter() {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+        await nextTick();
+    }
     async function pickFirst() {
         host.querySelector('li')!.dispatchEvent(new Event('mousedown'));
         await nextTick();
     }
-    return { host, input, text, selected, events, type, pickFirst };
+    return {
+        host,
+        input,
+        text,
+        selected,
+        events,
+        type,
+        answer,
+        enter,
+        pickFirst,
+    };
 }
 
 describe('BaseCombobox (#17)', () => {
@@ -77,10 +97,35 @@ describe('BaseCombobox (#17)', () => {
     it('picks the highlighted option with Enter', async () => {
         const c = mount();
         await c.type('bear');
-        c.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-        await nextTick();
+        await c.answer();
+        await c.enter();
         expect(c.selected.value).toEqual(MILK);
         expect(c.text.value).toBe('4800361002516');
+    });
+
+    it('ignores Enter while the matches are for an older query', async () => {
+        const c = mount();
+        await c.type('bear');
+        await c.answer();
+        await c.type('bear brand coffee');
+        await c.enter();
+        expect(c.selected.value).toBeNull();
+        expect(c.events.select).toEqual([]);
+        expect(c.text.value).toBe('bear brand coffee');
+    });
+
+    it('ignores Enter while the list is closed', async () => {
+        const c = mount();
+        await c.enter();
+        expect(c.selected.value).toBeNull();
+
+        await c.type('bear');
+        await c.answer();
+        c.input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        await nextTick();
+        await c.enter();
+        expect(c.selected.value).toBeNull();
+        expect(c.events.select).toEqual([]);
     });
 
     it('shows which product is picked', async () => {
