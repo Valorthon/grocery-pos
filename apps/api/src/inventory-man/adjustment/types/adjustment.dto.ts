@@ -13,7 +13,11 @@ import {
     ValidateNested,
 } from 'class-validator';
 import { VALIDATION, STRING_LIMITS } from '../../../constants';
-import { IsCalendarDate } from '../../../common/validators';
+import {
+    IsCalendarDate,
+    Trim,
+    TrimLowercase,
+} from '../../../common/validators';
 
 export class GetDetailsParamDto {
     @IsNotEmpty()
@@ -22,14 +26,18 @@ export class GetDetailsParamDto {
 }
 
 export class GetDetailsQueryDto {
+    /** Matched anywhere in the product name. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
+    @TrimLowercase()
     name!: string;
 
+    /** Matched as a barcode prefix. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.EAN)
+    @Trim()
     EAN!: string;
 
     @IsNumber()

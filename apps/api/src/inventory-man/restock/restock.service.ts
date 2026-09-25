@@ -6,6 +6,7 @@ import { RestockDetails } from './restock-details.schema';
 import { GetAllDto, GetDetailsDto, RestockDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
+import { productSearchFilter } from '../../product/product-search';
 import { dateRangeFilter } from '../../common/utils/timezone';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
@@ -126,15 +127,7 @@ export class RestockService {
             restock: new Types.ObjectId(restock),
         };
 
-        const productQuery: Record<string, unknown> = {};
-        if (name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            productQuery['product.name'] = { $regex: escaped };
-        }
-        if (EAN) {
-            const escaped = EAN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            productQuery['product.EAN'] = { $regex: `^${escaped}` };
-        }
+        const productQuery = productSearchFilter({ name, EAN }, 'product.');
 
         Logger.log({ productQuery });
 
