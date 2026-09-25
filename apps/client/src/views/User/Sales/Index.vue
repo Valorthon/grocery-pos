@@ -10,7 +10,7 @@
                     Orders & Transactions
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-                    View transaction history and reprint receipts
+                    View transaction history
                 </p>
             </div>
 

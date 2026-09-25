@@ -480,7 +480,7 @@ describe('Sell register keyboard (issue #22)', () => {
         const charge = buttonNamed('Tender & Charge');
         expect(charge.getAttribute('aria-keyshortcuts')).toBe('F9');
         expect(charge.querySelector('kbd')?.textContent).toBe('F9');
-        const discount = buttonNamed('+ Apply Order Discount');
+        const discount = buttonNamed('+ Apply Discount');
         expect(discount.getAttribute('aria-keyshortcuts')).toBe('F8');
         expect(discount.querySelector('kbd')?.textContent).toBe('F8');
         expect(input().getAttribute('aria-keyshortcuts')).toBe('F2');
@@ -874,7 +874,7 @@ describe('Sell Void Ticket (decision 2026-09-25)', () => {
         expect(cartNames()).toEqual([]);
         expect(cart.discount).toBeNull();
         expect(localStorage.getItem('grocery_pos_cart_v1:u-ana')).toBeNull();
-        expect(document.body.textContent).toContain('+ Apply Order Discount');
+        expect(document.body.textContent).toContain('+ Apply Discount');
     });
 });
 
@@ -1459,5 +1459,27 @@ describe('Sell re-review fixes (#23)', () => {
         expect(useUIStore().toasts.map((t) => t.lines.join(' '))).toEqual([
             "Couldn't put back 1x mints: a sale can't exceed ₱10,000,000.00.",
         ]);
+    });
+});
+
+describe('Sell labels (issue #24)', () => {
+    it('calls the discount "Discount" everywhere and shows no sales tax line', async () => {
+        withTicket(); // ₱215.00
+        mount();
+        expect(buttonNamed('+ Apply Discount')).toBeTruthy();
+
+        await press('F8');
+        expect(
+            document
+                .querySelector('#discount-options')
+                ?.getAttribute('aria-label'),
+        ).toBe('Discount');
+        await clickButton(buttonNamed('10%'));
+
+        const body = document.body.textContent ?? '';
+        expect(body).toContain('Discount Applied (10%)');
+        expect(body).toContain('Discount (10%)');
+        expect(body).not.toMatch(/Order Discount|Savings/i);
+        expect(body).not.toMatch(/tax/i);
     });
 });

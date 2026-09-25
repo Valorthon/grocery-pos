@@ -615,7 +615,7 @@
                         {{
                             discountLabel
                                 ? `Discount Applied (${discountLabel})`
-                                : '+ Apply Order Discount'
+                                : '+ Apply Discount'
                         }}
                         <KeyHint>{{ REGISTER_KEYS.DISCOUNT }}</KeyHint>
                     </button>
@@ -632,7 +632,7 @@
                     id="discount-options"
                     ref="discountOptionsEl"
                     role="group"
-                    aria-label="Order discount"
+                    aria-label="Discount"
                     class="flex flex-wrap items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
                 >
                     <span class="text-xs font-bold text-slate-500"
@@ -745,14 +745,6 @@
                     >
                         <span>Discount ({{ discountLabel }})</span>
                         <span>-{{ currency(discountAmount) }}</span>
-                    </div>
-                    <div class="flex justify-between font-medium">
-                        <span class="text-slate-500"
-                            >Grocery Sales Tax (Exempt)</span
-                        >
-                        <span class="text-slate-900 font-bold">{{
-                            currency(0)
-                        }}</span>
                     </div>
                 </div>
 
