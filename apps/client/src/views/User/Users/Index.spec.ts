@@ -141,6 +141,41 @@ describe('users save errors (issue #18)', () => {
         ]);
     });
 
+    it('cannot be closed while its save is in flight', async () => {
+        let finish!: () => void;
+        api.post.mockReturnValueOnce(
+            new Promise((resolve) => {
+                finish = () => resolve({ data: {} });
+            }),
+        );
+        await createUser();
+        const addTitle = () =>
+            [...document.querySelectorAll('h2')].some(
+                (h) => h.textContent === 'Add User',
+            );
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        document.body
+            .querySelector('.fixed.inset-0')!
+            .dispatchEvent(new MouseEvent('mousedown'));
+        await flush();
+        expect(addTitle()).toBe(true);
+        expect(document.body.style.overflow).toBe('hidden');
+        const cancel = [...document.querySelectorAll('button')].find(
+            (b) => b.textContent?.trim() === 'Cancel',
+        )!;
+        expect(cancel.disabled).toBe(true);
+
+        finish();
+        await flush();
+        // Closed: BaseModal releases the page scroll at once (its leave
+        // transition may keep the markup for a frame).
+        expect(document.body.style.overflow).toBe('');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User created'],
+        ]);
+    });
+
     it('no longer swallows an error that is not from axios', async () => {
         const bug = new TypeError('boom');
         api.post.mockRejectedValueOnce(bug);

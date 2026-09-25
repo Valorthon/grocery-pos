@@ -80,6 +80,13 @@ describe.each([
         await flush();
         expect(isOpen.value).toBe(true);
 
+        // Nor can the backdrop.
+        document.body
+            .querySelector('.fixed.inset-0')!
+            .dispatchEvent(new MouseEvent('mousedown'));
+        await flush();
+        expect(isOpen.value).toBe(true);
+
         pending.resolve(true);
         await flush();
         expect(isOpen.value).toBe(false);

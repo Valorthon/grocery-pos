@@ -82,6 +82,7 @@ describe('restock history errors (issue #18)', () => {
     });
 
     it('catches a malformed row instead of spinning forever', async () => {
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
         api.get.mockImplementation((url: string) =>
             Promise.resolve({
                 data:
@@ -98,6 +99,7 @@ describe('restock history errors (issue #18)', () => {
         expect(tableError()?.textContent).toContain(
             'Could not load the restocks.',
         );
+        expect(log).toHaveBeenCalledWith(expect.any(TypeError));
         expect(document.querySelector('.animate-pulse')).toBeNull();
     });
 

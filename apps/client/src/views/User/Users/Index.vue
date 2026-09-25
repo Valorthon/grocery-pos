@@ -72,7 +72,12 @@
         </BaseTable>
     </PageCard>
 
-    <BaseModal v-model="isCreateOpen" title="Add User" max-width="28rem">
+    <BaseModal
+        v-model="createModel"
+        title="Add User"
+        max-width="28rem"
+        :closable="!saving"
+    >
         <div class="space-y-4">
             <BaseInput v-model="createForm.name" label="Username" />
             <BaseInput
@@ -101,7 +106,10 @@
             </div>
         </div>
         <template #footer>
-            <BaseButton variant="outline" @click="isCreateOpen = false"
+            <BaseButton
+                variant="outline"
+                :disabled="saving"
+                @click="createModel = false"
                 >Cancel</BaseButton
             >
             <BaseButton
@@ -114,7 +122,12 @@
         </template>
     </BaseModal>
 
-    <BaseModal v-model="isEditOpen" title="Edit User" max-width="28rem">
+    <BaseModal
+        v-model="editModel"
+        title="Edit User"
+        max-width="28rem"
+        :closable="!saving"
+    >
         <div class="space-y-4">
             <BaseInput v-model="editForm.name" label="Username" disabled />
             <BaseInput
@@ -148,7 +161,10 @@
             <BaseCheckbox v-model="editForm.isActive" label="Active" />
         </div>
         <template #footer>
-            <BaseButton variant="outline" @click="isEditOpen = false"
+            <BaseButton
+                variant="outline"
+                :disabled="saving"
+                @click="editModel = false"
                 >Cancel</BaseButton
             >
             <BaseButton
@@ -226,6 +242,22 @@ const isCreateOpen = ref(false);
 const createForm = ref({ name: '', password: '', roles: [] as Role[] });
 
 const isEditOpen = ref(false);
+
+/**
+ * The dialogs' v-model: Escape, the backdrop and Cancel cannot close one
+ * while its save is in flight (as the save dialogs, issue #18).
+ */
+function guardedOpen(open: typeof isCreateOpen) {
+    return computed({
+        get: () => open.value,
+        set: (value: boolean) => {
+            if (!value && saving.value) return;
+            open.value = value;
+        },
+    });
+}
+const createModel = guardedOpen(isCreateOpen);
+const editModel = guardedOpen(isEditOpen);
 const editForm = ref({
     _id: '',
     name: '',
