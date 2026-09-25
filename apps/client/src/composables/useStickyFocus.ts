@@ -31,7 +31,17 @@ export function canTakeFocusFrom(el: Element | null): boolean {
  * so a discount reason or a quantity being typed is never interrupted,
  * and never while a modal is open.
  */
-export function useStickyFocus(target: () => HTMLElement | null | undefined) {
+export function useStickyFocus(
+    target: () => HTMLElement | null | undefined,
+    options: {
+        /**
+         * Elements a click may leave the focus on, e.g. a ticket line the
+         * cashier picked so Delete can remove it (#23). Typing a printable
+         * key there still goes to the scan box.
+         */
+        keepOnClick?: (el: Element) => boolean;
+    } = {},
+) {
     function refocus() {
         const el = target();
         if (!el || anyModalOpen.value) return;
@@ -42,7 +52,11 @@ export function useStickyFocus(target: () => HTMLElement | null | undefined) {
 
     /** Bind to the page root's `@click`: runs after the click's own work. */
     function onPageClick() {
-        void nextTick(refocus);
+        void nextTick(() => {
+            const active = document.activeElement;
+            if (active && options.keepOnClick?.(active)) return;
+            refocus();
+        });
     }
 
     function onKeydown(event: KeyboardEvent) {
