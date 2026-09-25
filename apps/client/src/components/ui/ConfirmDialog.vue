@@ -12,6 +12,7 @@
             <BaseButton
                 ref="cancelButton"
                 variant="outline"
+                :aria-describedby="messageId"
                 @click="emit('answer', false)"
                 >{{ shown.cancelLabel ?? 'Cancel' }}</BaseButton
             >
@@ -39,7 +40,8 @@ import type { ConfirmRequest } from '@/composables/useConfirm';
 /**
  * A yes/no question on top of the page (issue #19); pair it with
  * `useConfirm`. The safe choice (Cancel) takes the focus, so Enter and
- * Escape both keep things as they are.
+ * Escape both keep things as they are; the focus goes back to where it
+ * was once answered.
  */
 const props = defineProps<{ request: ConfirmRequest | null }>();
 const emit = defineEmits<{ (e: 'answer', ok: boolean): void }>();
@@ -50,10 +52,24 @@ const cancelButton = useTemplateRef<{ $el: HTMLElement }>('cancelButton');
 // Keeps the text while the modal fades out after an answer.
 const shown = ref<ConfirmRequest>({ title: '', message: '' });
 
+// Where the focus was when the question opened (the button that asked),
+// given back once it is answered.
+let returnFocus: HTMLElement | null = null;
+
 watch(
     () => props.request,
-    async (request) => {
-        if (!request) return;
+    async (request, previous) => {
+        if (!request) {
+            const target = returnFocus;
+            returnFocus = null;
+            await nextTick();
+            if (target?.isConnected) target.focus();
+            return;
+        }
+        if (!previous) {
+            const active = document.activeElement;
+            returnFocus = active instanceof HTMLElement ? active : null;
+        }
         shown.value = request;
         await nextTick();
         cancelButton.value?.$el.focus();

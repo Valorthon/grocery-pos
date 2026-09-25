@@ -102,4 +102,34 @@ describe('ConfirmDialog with useConfirm (issue #19)', () => {
         app = null;
         expect(await pending).toBe(false);
     });
+
+    it('gives the focus back to the button that asked', async () => {
+        const { confirm } = mount();
+        const trigger = document.createElement('button');
+        trigger.textContent = 'Clear Drafts';
+        document.body.appendChild(trigger);
+        trigger.focus();
+
+        const pending = ask(confirm);
+        await flush();
+        expect(document.activeElement).toBe(button('Keep'));
+        button('Keep').click();
+        await pending;
+        await flush();
+
+        expect(document.activeElement).toBe(trigger);
+    });
+
+    it('describes the question on both buttons', async () => {
+        const { confirm } = mount();
+        void ask(confirm);
+        await flush();
+
+        const id = button('Keep').getAttribute('aria-describedby');
+        expect(id).toBeTruthy();
+        expect(button('Clear').getAttribute('aria-describedby')).toBe(id);
+        expect(document.getElementById(id!)?.textContent?.trim()).toBe(
+            'Clear all 2 drafts?',
+        );
+    });
 });
