@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import api from '@/axios';
 import { useCartStore } from './cart';
 import { useShiftStore } from './shift';
+import { Color, useUIStore } from './ui';
 import { hasSessionMarker } from '@/utils/session-cookie';
 
 import { Role } from '@grocery-pos/contracts';
@@ -38,10 +39,17 @@ export const useAuthStore = defineStore('auth', () => {
         const data = response.data;
         // Immediately fetch full profile so roles are available
         await fetchMe();
+        // A new session starts with a clean screen: nothing left over from
+        // before (e.g. "Please log in to continue").
+        useUIStore().clear();
         return data;
     };
 
-    const logout = async (): Promise<void> => {
+    /**
+     * Ends the session. `reason`, when given, is shown as an error on the
+     * login page: it is queued after resetRegister clears the toasts.
+     */
+    const logout = async (reason?: string): Promise<void> => {
         try {
             await api.post('/auth/logout');
         } catch {
@@ -49,6 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
         } finally {
             clearUser();
             resetRegister();
+            if (reason) useUIStore().queueMessage(Color.ERROR, reason);
             const { default: router } = await import('@/router');
             await router.push({ name: 'Login' });
         }
@@ -60,10 +69,12 @@ export const useAuthStore = defineStore('auth', () => {
      * when the router finds it gone, so the next person at this register
      * never inherits the last cashier's basket or shift. The shift itself
      * stays open on the server; the same cashier resumes it at next login.
+     * The toasts go too: the next person never sees the last one's errors.
      */
     const resetRegister = (): void => {
         useShiftStore().reset();
         useCartStore().reset();
+        useUIStore().clear();
     };
 
     const clearUser = (): void => {

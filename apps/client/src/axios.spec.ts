@@ -285,6 +285,8 @@ describe('api when the refresh itself fails', () => {
 
         expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
         expect(logout).toHaveBeenCalledTimes(1);
+        // Logout shows it after clearing the old toasts (#18).
+        expect(logout).toHaveBeenCalledWith('Please log in to continue');
         expect(cookieWrites).toEqual([
             expect.stringMatching(/^dummy=; expires=Thu, 01 Jan 1970/),
         ]);

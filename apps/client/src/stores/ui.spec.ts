@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { Color, MAX_TOASTS, TOAST_DURATION_MS, useUIStore } from './ui';
+import {
+    Color,
+    MAX_TOASTS,
+    TOAST_DEDUPE_MS,
+    TOAST_DURATION_MS,
+    useUIStore,
+} from './ui';
 
 describe('ui store toasts', () => {
     beforeEach(() => {
@@ -61,14 +67,44 @@ describe('ui store toasts', () => {
         expect(ui.toasts).toEqual([]);
     });
 
-    it('collapses an identical message on screen into a count', () => {
+    it('reads one event reported twice as one message, without a count', () => {
         const ui = useUIStore();
 
+        // e.g. the axios interceptor and the router guard, same tick
         ui.queueMessage(Color.ERROR, 'Please log in to continue');
+        vi.advanceTimersByTime(TOAST_DEDUPE_MS - 1);
         ui.queueMessage(Color.ERROR, 'Please log in to continue');
 
         expect(ui.toasts).toHaveLength(1);
-        expect(ui.toasts[0].count).toBe(2);
+        expect(ui.toasts[0].count).toBe(1);
+    });
+
+    it('counts a genuine repeat of a message still on screen', () => {
+        const ui = useUIStore();
+
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        vi.advanceTimersByTime(TOAST_DEDUPE_MS);
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        vi.advanceTimersByTime(TOAST_DEDUPE_MS);
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+
+        expect(ui.toasts).toHaveLength(1);
+        expect(ui.toasts[0].count).toBe(3);
+    });
+
+    it('clears every toast', () => {
+        const ui = useUIStore();
+
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        ui.queueMessage(Color.SUCCESS, 'Saved');
+        ui.clear();
+        expect(ui.toasts).toEqual([]);
+
+        // Timers of cleared toasts are gone; a new one is not affected.
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        vi.advanceTimersByTime(TOAST_DURATION_MS);
+        expect(texts(ui)).toEqual(['Sale failed']);
+        expect(ui.toasts[0].count).toBe(1);
     });
 
     it('shows it again once the first one is gone', () => {
@@ -95,6 +131,7 @@ describe('ui store toasts', () => {
         vi.advanceTimersByTime(200);
 
         expect(texts(ui)).toEqual(['Saved']);
+        expect(ui.toasts[0].count).toBe(2);
     });
 
     it('never drops a different message', () => {
@@ -141,6 +178,42 @@ describe('ui store toasts', () => {
             'error 4',
             'error 5',
             'error 6',
+        ]);
+    });
+
+    it('never drops the toast just added, even when all others are errors', () => {
+        const ui = useUIStore();
+
+        for (let i = 1; i <= MAX_TOASTS; i++) {
+            ui.queueMessage(Color.ERROR, `error ${i}`);
+        }
+        ui.queueMessage(Color.SUCCESS, 'Saved');
+
+        expect(texts(ui)).toEqual([
+            'error 2',
+            'error 3',
+            'error 4',
+            'error 5',
+            'Saved',
+        ]);
+    });
+
+    it('drops an older success before an error to make room', () => {
+        const ui = useUIStore();
+
+        ui.queueMessage(Color.ERROR, 'error 1');
+        ui.queueMessage(Color.SUCCESS, 'ok 1');
+        ui.queueMessage(Color.ERROR, 'error 2');
+        ui.queueMessage(Color.ERROR, 'error 3');
+        ui.queueMessage(Color.ERROR, 'error 4');
+        ui.queueMessage(Color.INFO, 'info 1');
+
+        expect(texts(ui)).toEqual([
+            'error 1',
+            'error 2',
+            'error 3',
+            'error 4',
+            'info 1',
         ]);
     });
 });

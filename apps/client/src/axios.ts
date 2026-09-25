@@ -5,7 +5,6 @@ import axios, {
 } from 'axios';
 import constant from '@/constant';
 import { useAuthStore } from './stores/auth';
-import { Color, useUIStore } from './stores/ui';
 import { env } from './config/env';
 import { clearSessionMarker } from './utils/session-cookie';
 
@@ -144,13 +143,9 @@ api.interceptors.response.use(
 
                 if (!isSessionDialogShown) {
                     isSessionDialogShown = true;
-                    const uiStore = useUIStore();
-                    uiStore.queueMessage(
-                        Color.ERROR,
-                        'Please log in to continue',
-                    );
+                    // Shown by logout after it clears the old toasts.
                     const authStore = useAuthStore();
-                    authStore.logout();
+                    authStore.logout('Please log in to continue');
                 }
 
                 return Promise.reject(refreshError);

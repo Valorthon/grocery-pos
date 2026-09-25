@@ -27,18 +27,39 @@ export const TOAST_DURATION_MS = 4000;
  */
 export const MAX_TOASTS = 5;
 
+/**
+ * An identical message queued again within this window is the same event
+ * reported twice (e.g. a failed refresh seen by both the axios
+ * interceptor and the router guard): it is dropped, not counted.
+ */
+export const TOAST_DEDUPE_MS = 1000;
+
 const keyOf = (color: Color, lines: string[]) => `${color}|${lines.join('\n')}`;
 
 export const useUIStore = defineStore('ui', () => {
     const toasts = ref<ToastMessage[]>([]);
     const timers = new Map<number, ReturnType<typeof setTimeout>>();
+    /** When each on-screen toast was last queued (for TOAST_DEDUPE_MS). */
+    const lastQueued = new Map<number, number>();
     let nextId = 0;
 
     function dismiss(id: number) {
         const timer = timers.get(id);
         if (timer !== undefined) clearTimeout(timer);
         timers.delete(id);
+        lastQueued.delete(id);
         toasts.value = toasts.value.filter((t) => t.id !== id);
+    }
+
+    /**
+     * Removes every toast. The auth store calls it when the session
+     * changes, so one cashier's errors never stay up for the next.
+     */
+    function clear() {
+        for (const timer of timers.values()) clearTimeout(timer);
+        timers.clear();
+        lastQueued.clear();
+        toasts.value = [];
     }
 
     function scheduleExpiry(toast: ToastMessage) {
@@ -51,11 +72,12 @@ export const useUIStore = defineStore('ui', () => {
         );
     }
 
-    function enforceCap() {
+    /** Makes room for `added`, never dropping it. */
+    function enforceCap(added: number) {
         while (toasts.value.length > MAX_TOASTS) {
+            const others = toasts.value.filter((t) => t.id !== added);
             const victim =
-                toasts.value.find((t) => t.color !== Color.ERROR) ??
-                toasts.value[0];
+                others.find((t) => t.color !== Color.ERROR) ?? others[0];
             dismiss(victim.id);
         }
     }
@@ -65,10 +87,10 @@ export const useUIStore = defineStore('ui', () => {
      * as one toast for the one failed action. Errors stay until the user
      * closes them; success and info close after TOAST_DURATION_MS.
      *
-     * An identical message already on screen is not repeated: its count
-     * goes up (and a timed one restarts its clock). E.g. a failed refresh
-     * at start-up is reported by both the axios interceptor and the router
-     * guard, and reads as one "Please log in to continue".
+     * An identical message already on screen is not repeated. Queued
+     * again within TOAST_DEDUPE_MS it is the same event and is dropped;
+     * later, it is a genuine repeat: its count goes up (and a timed one
+     * restarts its clock).
      */
     function queueMessage(color: Color, text: string | string[]) {
         const lines = (Array.isArray(text) ? text : [text]).filter(
@@ -78,7 +100,11 @@ export const useUIStore = defineStore('ui', () => {
 
         const key = keyOf(color, lines);
         const same = toasts.value.find((t) => keyOf(t.color, t.lines) === key);
+        const now = Date.now();
         if (same) {
+            const last = lastQueued.get(same.id) ?? 0;
+            lastQueued.set(same.id, now);
+            if (now - last < TOAST_DEDUPE_MS) return;
             same.count += 1;
             scheduleExpiry(same);
             return;
@@ -86,9 +112,10 @@ export const useUIStore = defineStore('ui', () => {
 
         const toast: ToastMessage = { id: ++nextId, color, lines, count: 1 };
         toasts.value.push(toast);
+        lastQueued.set(toast.id, now);
         scheduleExpiry(toast);
-        enforceCap();
+        enforceCap(toast.id);
     }
 
-    return { toasts, queueMessage, dismiss };
+    return { toasts, queueMessage, dismiss, clear };
 });
