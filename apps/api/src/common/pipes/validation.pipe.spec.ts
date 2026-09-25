@@ -6,7 +6,11 @@
  * `createValidationPipe`, and whitespace is trimmed per field by the DTOs.
  * These specs run the DTOs through that exact pipe.
  */
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { ArgumentMetadata, BadRequestException, Type } from '@nestjs/common';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { plainToInstance } from 'class-transformer';
 import { defaultMetadataStorage } from 'class-transformer/cjs/storage';
 import { getMetadataStorage } from 'class-validator';
@@ -213,26 +217,63 @@ describe('createValidationPipe: passwords pass through verbatim (#15)', () => {
     });
 });
 
+type Constructor = abstract new (...args: never[]) => unknown;
+
+function controllerFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return controllerFiles(path);
+        return entry.name.endsWith('.controller.ts') ? [path] : [];
+    });
+}
+
+/** Classes decorated with `@Controller()` (as route-roles.spec.ts does). */
+function controllersIn(file: string): Constructor[] {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const exports = require(file) as Record<string, unknown>;
+    return Object.values(exports).filter(
+        (value): value is Constructor =>
+            typeof value === 'function' &&
+            Reflect.getMetadata('__controller__', value) === true,
+    );
+}
+
 /**
- * Every body DTO the controllers take. Nested DTOs are found through their
- * `@Type` metadata, so a new nested field is covered automatically; a new
- * top-level body DTO has to be added here.
+ * The declared type of every `@Body()` parameter of every route handler
+ * under src/, from Nest's route-args metadata. Nested DTOs are then found
+ * through their `@Type` metadata, so neither a new body DTO nor a new
+ * nested field can go unchecked.
  */
-const BODY_DTOS: Type<unknown>[] = [
-    LoginDto,
-    CreateBulkDto,
-    UpdateUsersDto,
-    ChangePasswordDto,
-    NewProductsDto,
-    UpdateProductsDto,
-    RestockDto,
-    AdjustDto,
-    SellDto,
-    ReverseSaleDto,
-    OpenShiftDto,
-    CloseShiftDto,
-    DrawerMovementDto,
-];
+function bodyDtos(): Type<unknown>[] {
+    const found = new Set<Type<unknown>>();
+    for (const file of controllerFiles(join(__dirname, '..', '..'))) {
+        for (const controller of controllersIn(file)) {
+            const proto = controller.prototype as object;
+            for (const name of Object.getOwnPropertyNames(proto)) {
+                const args = Reflect.getMetadata(
+                    ROUTE_ARGS_METADATA,
+                    controller,
+                    name,
+                ) as Record<string, { index: number }> | undefined;
+                const types = Reflect.getMetadata(
+                    'design:paramtypes',
+                    proto,
+                    name,
+                ) as Type<unknown>[] | undefined;
+                for (const [key, { index }] of Object.entries(args ?? {})) {
+                    if (key.split(':')[0] !== String(RouteParamtypes.BODY)) {
+                        continue;
+                    }
+                    const type = types?.[index];
+                    if (type && type !== Object) found.add(type);
+                }
+            }
+        }
+    }
+    return [...found];
+}
+
+const BODY_DTOS = bodyDtos();
 
 /** Secrets: never trimmed or otherwise transformed. */
 const VERBATIM_FIELDS = new Set(['password', 'currentPassword', 'newPassword']);
@@ -291,6 +332,27 @@ function transformed(
 
 describe('body DTO string fields (#15)', () => {
     const fields = stringFields(BODY_DTOS);
+
+    it('finds every @Body() DTO of the controllers', () => {
+        expect(BODY_DTOS.length).toBeGreaterThanOrEqual(13);
+        expect(BODY_DTOS).toEqual(
+            expect.arrayContaining([
+                LoginDto,
+                CreateBulkDto,
+                UpdateUsersDto,
+                ChangePasswordDto,
+                NewProductsDto,
+                UpdateProductsDto,
+                RestockDto,
+                AdjustDto,
+                SellDto,
+                ReverseSaleDto,
+                OpenShiftDto,
+                CloseShiftDto,
+                DrawerMovementDto,
+            ]),
+        );
+    });
 
     it('finds the nested DTOs too', () => {
         const names = fields.map(([t, f]) => `${t.name}.${f}`);
