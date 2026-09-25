@@ -3,6 +3,7 @@
         <BaseInput
             v-model="formData.description"
             label="Description"
+            :maxlength="STRING_LIMITS.DESCRIPTION"
             :error="errors.description"
         />
         <template #footer>
@@ -23,7 +24,9 @@ import { Save } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
 import { SaveForm } from './dto';
+import { restockSaveErrors } from './validation';
 
 const props = defineProps<{ modelValue: boolean }>();
 const emit = defineEmits<{
@@ -40,11 +43,8 @@ const formData = reactive<SaveForm>({ description: '' });
 const errors = ref<Record<string, string>>({});
 
 function handleSubmit() {
-    if (!formData.description.trim()) {
-        errors.value = { description: 'This field is required' };
-        return;
-    }
-    errors.value = {};
+    errors.value = restockSaveErrors(formData);
+    if (Object.keys(errors.value).length) return;
     emit('save', { ...formData });
     model.value = false;
     formData.description = '';

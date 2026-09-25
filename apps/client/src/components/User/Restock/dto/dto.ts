@@ -16,22 +16,18 @@ export interface AddForm {
 
 /**
  * The add dialog's form state: unitCost and price hold the pesos as typed
- * (a number, or '' while blank) and become centavos in AddForm on submit.
+ * text and become centavos in AddForm on submit; quantity is a number, or
+ * '' while blank (`v-model.number`). Validated by `restockLineErrors`.
  */
 export interface AddFormInput extends Omit<
     AddForm,
-    'unitCost' | 'totalCost' | 'price'
+    'quantity' | 'unitCost' | 'totalCost' | 'price'
 > {
-    unitCost: number | string;
-    price: number | string;
+    quantity: number | string;
+    unitCost: string;
+    price: string;
 }
 
 export interface SaveForm {
     description: string;
-}
-
-export interface MatchedProductsDto {
-    EAN: string;
-    name: string;
-    product: string;
 }

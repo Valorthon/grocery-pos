@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+    parsePesos,
     centavosToPesoInput,
     formatCurrency,
     pesosToCentavos,
@@ -54,5 +55,30 @@ describe('pesosToCentavos', () => {
     it('round-trips the pre-filled input value', () => {
         expect(centavosToPesoInput(11041)).toBe('110.41');
         expect(pesosToCentavos(centavosToPesoInput(11041))).toBe(11041);
+    });
+});
+
+describe('parsePesos (#17)', () => {
+    it('tells blank and mistyped input apart from a real zero', () => {
+        expect(parsePesos('0')).toBe(0);
+        expect(parsePesos('0.00')).toBe(0);
+        expect(parsePesos('')).toBeNull();
+        expect(parsePesos('   ')).toBeNull();
+        expect(parsePesos(null)).toBeNull();
+        expect(parsePesos(undefined)).toBeNull();
+        expect(parsePesos('.')).toBeNull();
+        expect(parsePesos('-')).toBeNull();
+        expect(parsePesos('abc')).toBeNull();
+        expect(parsePesos('1e3')).toBeNull();
+        expect(parsePesos('1.005')).toBeNull();
+        expect(parsePesos('1,000')).toBeNull();
+    });
+
+    it('parses whole, decimal and negative amounts exactly', () => {
+        expect(parsePesos('12')).toBe(1200);
+        expect(parsePesos(' 12.5 ')).toBe(1250);
+        expect(parsePesos('.05')).toBe(5);
+        expect(parsePesos('-3.10')).toBe(-310);
+        expect(parsePesos(19.99)).toBe(1999);
     });
 });
