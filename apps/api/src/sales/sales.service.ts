@@ -23,7 +23,7 @@ import {
 import { ProductService } from '../product/product.service';
 import { runInTransaction } from '../common/utils/db';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
-import { AuthUser } from '../auth/types';
+import { AuthUser, Role } from '../auth/types';
 import {
     ConflictError,
     ErrorCode,
@@ -32,6 +32,17 @@ import {
 } from '../common/errors';
 import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
+
+/**
+ * The sales a user may read (issue #13, product owner 2026-09-24): an ADMIN
+ * reads every sale; anyone else, including a manager who also sells, reads
+ * only the sales they rang up (`cashier = currentUser`). Shift scoping
+ * narrows this further once server shifts land (#2).
+ */
+export function saleScope(user: AuthUser): { cashier?: Types.ObjectId } {
+    if (user.roles.includes(Role.Admin)) return {};
+    return { cashier: new Types.ObjectId(user.userId) };
+}
 
 @Injectable()
 export class SalesService {
@@ -44,16 +55,22 @@ export class SalesService {
         private inventoryService: InventoryService,
     ) {}
 
+    /**
+     * A page of sales, newest first. An ADMIN sees every cashier's sales;
+     * anyone else only the sales they rang up themselves (`saleScope`).
+     */
     async getAll(
+        user: AuthUser,
         dto: GetAllDto,
     ): Promise<{ data: Sales[]; totalItems: number }> {
         const { page, limit } = dto;
 
         const skip = (page - 1) * limit;
+        const scope = saleScope(user);
 
         const [data, totalItems] = await Promise.all([
             this.model
-                .find()
+                .find(scope)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -63,7 +80,9 @@ export class SalesService {
                 })
                 .lean(),
 
-            this.model.estimatedDocumentCount(),
+            scope.cashier
+                ? this.model.countDocuments(scope)
+                : this.model.estimatedDocumentCount(),
         ]);
 
         return {
@@ -72,8 +91,26 @@ export class SalesService {
         };
     }
 
-    async getDetails(dto: GetDetailsDto): Promise<SalesDetails[]> {
+    /**
+     * The lines of one sale. A sale outside the caller's `saleScope`
+     * (another cashier's, for a non-admin) is a 404, exactly like a sale
+     * that does not exist, so its existence is not leaked.
+     */
+    async getDetails(
+        user: AuthUser,
+        dto: GetDetailsDto,
+    ): Promise<SalesDetails[]> {
         const { sales } = dto;
+
+        const visible = await this.model.exists({
+            _id: sales,
+            ...saleScope(user),
+        });
+        if (!visible) {
+            throw new NotFoundError(ErrorCode.NOT_FOUND, 'Sale not found', {
+                sale: sales,
+            });
+        }
 
         return await this.modelDetails
             .find({ sales })

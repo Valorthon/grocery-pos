@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { ClientSession, Types } from 'mongoose';
-import { SalesService } from './sales.service';
+import { saleScope, SalesService } from './sales.service';
 import { Sales } from './sales.schema';
 import { SalesDetails } from './sales-details.schema';
 import { ProductService } from '../product/product.service';
@@ -1001,5 +1001,113 @@ describe('SalesService.reverse', () => {
 
         await expect(attempt).rejects.toBeInstanceOf(NotFoundError);
         expect(returnStock).not.toHaveBeenCalled();
+    });
+});
+
+describe('Sales history scoping (issue #13)', () => {
+    const SELLER: AuthUser = {
+        userId: '507f1f77bcf86cd799439011',
+        username: 'ana',
+        roles: [Role.Seller, Role.Restocker],
+    };
+    const ADMIN: AuthUser = {
+        userId: '507f1f77bcf86cd799439012',
+        username: 'boss',
+        roles: [Role.Admin],
+    };
+
+    let service: SalesService;
+    let find: jest.Mock;
+    let countDocuments: jest.Mock;
+    let estimatedDocumentCount: jest.Mock;
+    let exists: jest.Mock;
+    let detailsFind: jest.Mock;
+
+    beforeEach(async () => {
+        const page = {
+            sort: () => page,
+            skip: () => page,
+            limit: () => page,
+            populate: () => page,
+            lean: () => Promise.resolve([]),
+        };
+        find = jest.fn(() => page);
+        countDocuments = jest.fn().mockResolvedValue(0);
+        estimatedDocumentCount = jest.fn().mockResolvedValue(0);
+        exists = jest.fn();
+        detailsFind = jest.fn(() => query([]));
+
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                SalesService,
+                { provide: getConnectionToken(), useValue: {} },
+                {
+                    provide: getModelToken(Sales.name),
+                    useValue: {
+                        find,
+                        countDocuments,
+                        estimatedDocumentCount,
+                        exists,
+                    },
+                },
+                {
+                    provide: getModelToken(SalesDetails.name),
+                    useValue: { find: detailsFind },
+                },
+                { provide: ProductService, useValue: {} },
+                { provide: InventoryService, useValue: {} },
+            ],
+        }).compile();
+
+        service = moduleRef.get(SalesService);
+    });
+
+    it('scopes a non-admin to their own sales, even with other roles', () => {
+        expect(saleScope(SELLER)).toEqual({
+            cashier: new Types.ObjectId(SELLER.userId),
+        });
+    });
+
+    it('does not scope an admin', () => {
+        expect(saleScope(ADMIN)).toEqual({});
+    });
+
+    it('lists and counts only the cashier’s own sales', async () => {
+        await service.getAll(SELLER, { page: 1, limit: 10 });
+
+        const scope = { cashier: new Types.ObjectId(SELLER.userId) };
+        expect(find).toHaveBeenCalledWith(scope);
+        expect(countDocuments).toHaveBeenCalledWith(scope);
+        expect(estimatedDocumentCount).not.toHaveBeenCalled();
+    });
+
+    it('lists every sale for an admin', async () => {
+        await service.getAll(ADMIN, { page: 1, limit: 10 });
+
+        expect(find).toHaveBeenCalledWith({});
+        expect(estimatedDocumentCount).toHaveBeenCalled();
+    });
+
+    it('404s another cashier’s sale without reading its lines', async () => {
+        exists.mockResolvedValue(null);
+        const sale = new Types.ObjectId().toString();
+
+        await expect(
+            service.getDetails(SELLER, { sales: sale }),
+        ).rejects.toBeInstanceOf(NotFoundError);
+        expect(exists).toHaveBeenCalledWith({
+            _id: sale,
+            cashier: new Types.ObjectId(SELLER.userId),
+        });
+        expect(detailsFind).not.toHaveBeenCalled();
+    });
+
+    it('returns the lines of a visible sale', async () => {
+        exists.mockResolvedValue({ _id: 's1' });
+
+        await expect(
+            service.getDetails(ADMIN, { sales: 's1' }),
+        ).resolves.toEqual([]);
+        expect(exists).toHaveBeenCalledWith({ _id: 's1' });
     });
 });
