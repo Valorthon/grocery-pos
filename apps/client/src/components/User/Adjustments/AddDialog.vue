@@ -9,19 +9,24 @@
         <div class="space-y-4">
             <BaseCombobox
                 v-model="formData.EAN"
-                :options="comboboxOptions"
+                v-model:selected="selectedProduct"
+                :options="matchOptions"
                 label="Search Product (EAN or Name)"
                 placeholder="Start typing..."
+                :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :loading="isLoadingMatches"
-                :error="errors.EAN"
-                @search="debounceSearch"
-                @select="handleProductSelect"
+                :error="errors.EAN || searchError"
+                @search="debouncedSearch"
             />
 
+            <!-- No inputmode: a numeric keypad has no minus key, and a
+                 write-off is a negative change. -->
             <BaseInput
                 v-model.number="formData.change"
                 label="Change"
                 type="number"
+                step="1"
+                placeholder="e.g. 5 or -2"
                 :error="errors.change"
             />
 
@@ -32,6 +37,7 @@
                 >
                 <textarea
                     v-model="formData.reason"
+                    :maxlength="STRING_LIMITS.REASON"
                     rows="3"
                     class="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 text-sm focus:outline-none focus:border-primary-600 focus:bg-white resize-none transition-all"
                 />
@@ -57,13 +63,15 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
-import api from '@/axios';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
-import { AddForm, MatchedProductsDto } from './dto';
+import { AddForm, AddFormInput } from './dto';
+import { adjustmentLineErrors } from './validation';
+import { useProductMatches } from '@/composables/useProductMatches';
 
 const props = defineProps<{ modelValue: boolean; item?: AddForm }>();
 
@@ -78,10 +86,10 @@ const model = computed({
     set: (val) => emit('update:modelValue', val),
 });
 
-const formData = reactive<AddForm>({
+const formData = reactive<AddFormInput>({
     EAN: '',
     name: '',
-    change: 0,
+    change: '',
     reason: '',
     product: '',
 });
@@ -91,75 +99,53 @@ const isEditMode = computed(
     () => !!props.item && Object.keys(props.item).length > 0,
 );
 
+const {
+    options: matchOptions,
+    loading: isLoadingMatches,
+    error: searchError,
+    debouncedSearch,
+    reset: resetMatches,
+} = useProductMatches();
+
+/**
+ * The picked product, shown under the search box. Picking sets the line's
+ * product id and name (the combobox writes its EAN back into the box);
+ * typing afterwards clears both, so a stale id never rides along with
+ * different text.
+ */
+const selectedProduct = computed<ComboboxOption | null>({
+    get: () =>
+        formData.product
+            ? {
+                  value: formData.product,
+                  label: formData.name,
+                  subtitle: `EAN: ${formData.EAN}`,
+              }
+            : null,
+    set: (opt) => {
+        formData.product = opt?.value ?? '';
+        formData.name = opt?.label ?? '';
+    },
+});
+
 watch(
     () => props.modelValue,
     (open) => {
         if (!open) return;
         formData.EAN = props.item?.EAN ?? '';
         formData.name = props.item?.name ?? '';
-        formData.change = props.item?.change ?? 0;
+        formData.change = props.item?.change ?? '';
         formData.reason = props.item?.reason ?? '';
         formData.product = props.item?.product ?? '';
         errors.value = {};
-        matchedProducts.value = [];
+        resetMatches();
     },
 );
 
-const matchedProducts = ref<MatchedProductsDto[]>([]);
-const isLoadingMatches = ref(false);
-
-const comboboxOptions = computed<ComboboxOption[]>(() =>
-    matchedProducts.value.map((m) => ({
-        value: m.EAN,
-        label: m.name,
-        subtitle: `EAN: ${m.EAN}`,
-    })),
-);
-
-function handleProductSelect(opt: ComboboxOption) {
-    const match = matchedProducts.value.find((m) => m.EAN === opt.value);
-    if (match) {
-        formData.name = match.name;
-        formData.product = match.product;
-    }
-}
-
-let debounceId: ReturnType<typeof setTimeout> | undefined;
-function debounceSearch(query: string) {
-    if (debounceId) clearTimeout(debounceId);
-    if (!query) {
-        matchedProducts.value = [];
-        return;
-    }
-    debounceId = setTimeout(() => search(query), 500);
-}
-
-async function search(query: string) {
-    if (!query) return;
-    isLoadingMatches.value = true;
-    const isNumeric = /^\d+$/.test(query);
-    const params: Record<string, string> = isNumeric
-        ? { EAN: query }
-        : { name: query.toUpperCase() };
-    const result = await api.get('products/matches', { params });
-    matchedProducts.value = result.data;
-    isLoadingMatches.value = false;
-}
-
-function validate(): boolean {
-    const e: Record<string, string> = {};
-    if (!formData.EAN) e.EAN = 'Select a product';
-    if (formData.change == null || formData.change === 0)
-        e.change = 'Change is required';
-    // The API requires a reason on every line (AdjustFields).
-    if (!formData.reason.trim()) e.reason = 'This field is required';
-    errors.value = e;
-    return Object.keys(e).length === 0;
-}
-
 function handleSubmit() {
-    if (!validate()) return;
-    const payload = { ...formData };
+    errors.value = adjustmentLineErrors(formData);
+    if (Object.keys(errors.value).length) return;
+    const payload: AddForm = { ...formData, change: Number(formData.change) };
     if (isEditMode.value) emit('update', payload);
     else emit('add', payload);
     model.value = false;

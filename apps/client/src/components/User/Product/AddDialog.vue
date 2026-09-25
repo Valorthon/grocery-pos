@@ -10,6 +10,9 @@
             <BaseInput
                 v-model="formData.EAN"
                 label="EAN / Barcode"
+                inputmode="numeric"
+                autocomplete="off"
+                :maxlength="STRING_LIMITS.EAN"
                 :disabled="formData.autoGenerateEAN"
                 :placeholder="
                     formData.autoGenerateEAN
@@ -25,14 +28,15 @@
             <BaseInput
                 v-model="formData.name"
                 label="Product Name"
+                :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
             />
             <BaseInput
-                v-model.number="formData.price"
+                v-model="formData.price"
                 label="Selling Price (₱)"
-                type="number"
-                min="0.01"
-                step="0.01"
+                inputmode="decimal"
+                autocomplete="off"
+                placeholder="0.00"
                 :error="errors.price"
             />
         </div>
@@ -59,9 +63,9 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
-import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
-import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
-import { barcodeFieldError } from '@/utils/rules';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
+import { productErrors, type ProductFormInput } from './validation';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
 
@@ -88,11 +92,11 @@ const model = computed({
 });
 
 const uiStore = useUIStore();
-const formData = reactive({
+const formData = reactive<ProductFormInput>({
     EAN: '',
     name: '',
     // Typed pesos; converted to centavos on submit.
-    price: null as number | null,
+    price: '',
     autoGenerateEAN: false,
 });
 
@@ -108,30 +112,17 @@ watch(
             formData.name = props.item?.name ?? '';
             formData.price =
                 props.item?.price != null
-                    ? centavosToPesos(props.item.price)
-                    : null;
+                    ? centavosToPesoInput(props.item.price)
+                    : '';
             formData.autoGenerateEAN = props.item?.autoGenerateEAN ?? false;
             errors.value = {};
         }
     },
 );
 
-function validate(): boolean {
-    const e: Record<string, string> = {};
-    const eanError = barcodeFieldError(formData.EAN, formData.autoGenerateEAN);
-    if (eanError) e.EAN = eanError;
-    if (!formData.name) e.name = 'This field is required';
-    if (
-        formData.price == null ||
-        pesosToCentavos(formData.price) < NUMERIC_LIMITS.PRICE_MIN
-    )
-        e.price = 'Enter at least ₱0.01, up to 2 decimals';
-    errors.value = e;
-    return Object.keys(e).length === 0;
-}
-
 const submitProduct = async () => {
-    if (!validate()) return;
+    errors.value = productErrors(formData);
+    if (Object.keys(errors.value).length) return;
 
     try {
         await api.get('products/ensureValid', {

@@ -11,6 +11,9 @@
                 <BaseInput
                     v-model="formData.EAN"
                     label="EAN"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    :maxlength="STRING_LIMITS.EAN"
                     :disabled="formData.autoGenerateEAN"
                     :error="errors.EAN"
                 />
@@ -22,13 +25,14 @@
             <template v-else>
                 <BaseCombobox
                     v-model="formData.EAN"
-                    :options="comboboxOptions"
+                    v-model:selected="selectedProduct"
+                    :options="matchOptions"
                     label="Search Product (EAN or Name)"
                     placeholder="Start typing..."
+                    :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :loading="isLoadingMatches"
-                    :error="errors.EAN"
-                    @search="debounceSearch"
-                    @select="handleProductSelect"
+                    :error="errors.EAN || searchError"
+                    @search="debouncedSearch"
                 />
             </template>
 
@@ -37,15 +41,17 @@
                     v-model.number="formData.quantity"
                     label="Quantity"
                     type="number"
-                    min="1"
+                    inputmode="numeric"
+                    :min="NUMERIC_LIMITS.QUANTITY_MIN"
+                    step="1"
                     :error="errors.quantity"
                 />
                 <BaseInput
-                    v-model.number="formData.unitCost"
+                    v-model="formData.unitCost"
                     label="Unit Cost (₱)"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="0.00"
                     :error="errors.unitCost"
                 />
             </div>
@@ -59,14 +65,15 @@
                 <BaseInput
                     v-model="formData.name"
                     label="Product Name"
+                    :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :error="errors.name"
                 />
                 <BaseInput
-                    v-model.number="formData.price"
+                    v-model="formData.price"
                     label="Selling Price (₱)"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
+                    inputmode="decimal"
+                    autocomplete="off"
+                    placeholder="0.00"
                     :error="errors.price"
                 />
             </template>
@@ -95,13 +102,14 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
-import { AddForm, AddFormInput, MatchedProductsDto } from './dto';
+import { AddForm, AddFormInput } from './dto';
+import { restockLineErrors } from './validation';
 import { Color, useUIStore } from '@/stores/ui';
-import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
-import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
-import { barcodeFieldError } from '@/utils/rules';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '@grocery-pos/contracts';
+import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toEnsureValidQuery } from '@/utils/payloads';
+import { useProductMatches } from '@/composables/useProductMatches';
 
 const props = defineProps<{ modelValue: boolean; item?: AddForm }>();
 
@@ -120,11 +128,11 @@ const uiStore = useUIStore();
 const formData = reactive<AddFormInput>({
     autoGenerateEAN: false,
     EAN: '',
-    quantity: 0,
-    unitCost: 0,
+    quantity: '',
+    unitCost: '',
     isNewProduct: false,
     name: '',
-    price: 0,
+    price: '',
     product: '',
 });
 
@@ -133,89 +141,57 @@ const isEditMode = computed(
     () => !!props.item && Object.keys(props.item).length > 0,
 );
 
+const {
+    options: matchOptions,
+    loading: isLoadingMatches,
+    error: searchError,
+    debouncedSearch,
+    reset: resetMatches,
+} = useProductMatches();
+
+/**
+ * The picked product, shown under the search box. Picking sets the line's
+ * product id and name (the combobox writes its EAN back into the box);
+ * typing afterwards clears both, so a stale id never rides along with
+ * different text.
+ */
+const selectedProduct = computed<ComboboxOption | null>({
+    get: () =>
+        formData.product
+            ? {
+                  value: formData.product,
+                  label: formData.name,
+                  subtitle: `EAN: ${formData.EAN}`,
+              }
+            : null,
+    set: (opt) => {
+        formData.product = opt?.value ?? '';
+        formData.name = opt?.label ?? '';
+    },
+});
+
 watch(
     () => props.modelValue,
     (open) => {
         if (!open) return;
-        formData.autoGenerateEAN = props.item?.autoGenerateEAN ?? false;
-        formData.EAN = props.item?.EAN ?? '';
-        formData.quantity = props.item?.quantity ?? 0;
-        formData.unitCost = centavosToPesos(props.item?.unitCost ?? 0);
-        formData.product = props.item?.product ?? '';
-        formData.isNewProduct = props.item?.isNewProduct ?? false;
-        formData.name = props.item?.name ?? '';
-        formData.price = centavosToPesos(props.item?.price ?? 0);
+        const item = props.item;
+        formData.autoGenerateEAN = item?.autoGenerateEAN ?? false;
+        formData.EAN = item?.EAN ?? '';
+        formData.quantity = item?.quantity ?? '';
+        formData.unitCost =
+            item?.unitCost != null ? centavosToPesoInput(item.unitCost) : '';
+        formData.product = item?.product ?? '';
+        formData.isNewProduct = item?.isNewProduct ?? false;
+        formData.name = item?.name ?? '';
+        formData.price = item?.price ? centavosToPesoInput(item.price) : '';
         errors.value = {};
-        matchedProducts.value = [];
+        resetMatches();
     },
 );
 
-const matchedProducts = ref<MatchedProductsDto[]>([]);
-const isLoadingMatches = ref(false);
-
-const comboboxOptions = computed<ComboboxOption[]>(() =>
-    matchedProducts.value.map((m) => ({
-        value: m.EAN,
-        label: m.name,
-        subtitle: `EAN: ${m.EAN}`,
-    })),
-);
-
-function handleProductSelect(opt: ComboboxOption) {
-    const match = matchedProducts.value.find((m) => m.EAN === opt.value);
-    if (match) {
-        formData.name = match.name;
-        formData.product = match.product;
-    }
-}
-
-let debounceId: ReturnType<typeof setTimeout> | undefined;
-function debounceSearch(query: string) {
-    if (debounceId) clearTimeout(debounceId);
-    if (!query) {
-        matchedProducts.value = [];
-        return;
-    }
-    debounceId = setTimeout(() => search(query), 500);
-}
-
-async function search(query: string) {
-    if (!query) return;
-    isLoadingMatches.value = true;
-    const isNumeric = /^\d+$/.test(query);
-    const params: Record<string, string> = isNumeric
-        ? { EAN: query }
-        : { name: query.toUpperCase() };
-    const result = await api.get('products/matches', { params });
-    matchedProducts.value = result.data;
-    isLoadingMatches.value = false;
-}
-
-function validate(): boolean {
-    const e: Record<string, string> = {};
-    if (!formData.isNewProduct && !formData.EAN) e.EAN = 'Select a product';
-    if (formData.isNewProduct) {
-        const eanError = barcodeFieldError(
-            formData.EAN,
-            formData.autoGenerateEAN,
-        );
-        if (eanError) e.EAN = eanError;
-    }
-    if (!formData.quantity || formData.quantity < 1)
-        e.quantity = 'Must be at least 1';
-    if (pesosToCentavos(formData.unitCost) < NUMERIC_LIMITS.PRICE_MIN)
-        e.unitCost = 'Enter at least ₱0.01, up to 2 decimals';
-    if (formData.isNewProduct) {
-        if (!formData.name) e.name = 'This field is required';
-        if (pesosToCentavos(formData.price) < NUMERIC_LIMITS.PRICE_MIN)
-            e.price = 'Enter at least ₱0.01, up to 2 decimals';
-    }
-    errors.value = e;
-    return Object.keys(e).length === 0;
-}
-
 const handleSubmit = async () => {
-    if (!validate()) return;
+    errors.value = restockLineErrors(formData);
+    if (Object.keys(errors.value).length) return;
 
     if (formData.isNewProduct) {
         try {
@@ -232,8 +208,11 @@ const handleSubmit = async () => {
 
     const payload: AddForm = {
         ...formData,
+        quantity: Number(formData.quantity),
         unitCost: pesosToCentavos(formData.unitCost),
-        price: pesosToCentavos(formData.price),
+        price: formData.isNewProduct
+            ? pesosToCentavos(formData.price)
+            : undefined,
     };
     if (isEditMode.value) emit('update', payload);
     else emit('add', payload);
