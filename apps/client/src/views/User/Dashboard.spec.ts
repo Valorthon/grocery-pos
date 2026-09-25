@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import Dashboard from './Dashboard.vue';
 
 const get = vi.hoisted(() => vi.fn());
@@ -125,5 +126,55 @@ describe('Dashboard stock tiles (issue #16)', () => {
         expect(
             tile('Out of Stock Items')?.querySelector('.text-2xl')?.textContent,
         ).toContain('-');
+    });
+});
+
+describe('Dashboard load failure (issue #18)', () => {
+    function httpError(status: number, message: string) {
+        const config = { headers: new AxiosHeaders() };
+        return new AxiosError('Request failed', 'ERR_BAD_REQUEST', config, {}, {
+            status,
+            statusText: '',
+            headers: {},
+            config,
+            data: { statusCode: status, message },
+        } as AxiosResponse);
+    }
+
+    async function settle() {
+        for (let i = 0; i < 5; i++) {
+            await Promise.resolve();
+            await nextTick();
+        }
+    }
+
+    it('shows an error with a retry instead of empty placeholders', async () => {
+        get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Dashboard);
+        app.use(createPinia());
+        app.mount(host);
+        await settle();
+
+        const banner = document.querySelector(
+            '[data-testid="dashboard-error"]',
+        );
+        expect(banner?.getAttribute('role')).toBe('alert');
+        expect(banner?.textContent).toContain('Internal server error');
+        expect(host.textContent).not.toContain('No recent activity');
+        expect(document.querySelector('.animate-spin')).toBeNull();
+
+        get.mockResolvedValueOnce({ data: STATS });
+        [...banner!.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Retry'))!
+            .click();
+        await settle();
+
+        expect(get).toHaveBeenCalledTimes(2);
+        expect(
+            document.querySelector('[data-testid="dashboard-error"]'),
+        ).toBeNull();
+        expect(host.textContent).toContain('Restocked: weekly delivery');
     });
 });
