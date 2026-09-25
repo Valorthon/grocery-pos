@@ -40,7 +40,7 @@ import {
     BATCH_LIMITS,
 } from '../../constants';
 import { normalizeReferenceNumber } from '@grocery-pos/contracts';
-import { IsCalendarDate } from '../../common/validators';
+import { IsCalendarDate, IsNotBefore } from '../../common/validators';
 
 export class GetDetailsDto {
     @IsNotEmpty()
@@ -273,6 +273,7 @@ export class GetAllDto {
     /** Inclusive end day, `YYYY-MM-DD`, read in the store timezone. */
     @IsOptional()
     @IsCalendarDate()
+    @IsNotBefore('dateFrom')
     dateTo?: string;
 
     @IsPositive()

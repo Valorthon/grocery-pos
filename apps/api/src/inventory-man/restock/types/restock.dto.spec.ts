@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { GetAllDto, GetDetailsQueryDto, RestockFields } from './restock.dto';
+import { describeDateRange } from '../../../common/testing/date-range';
 
 async function unitCostErrors(unitCost: unknown) {
     const dto = plainToInstance(RestockFields, {
@@ -116,3 +117,5 @@ describe('GetDetailsQueryDto search', () => {
         expect(dto.EAN).toBe('480');
     });
 });
+
+describeDateRange('restock GetAllDto', GetAllDto);
