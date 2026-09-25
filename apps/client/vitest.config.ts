@@ -12,6 +12,10 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
         include: ['src/**/*.spec.ts'],
+        // Vitest 4's restoreMocks only restores vi.spyOn spies; mockReset also
+        // resets every vi.fn() (calls and queued returns) between tests, as
+        // restoreMocks did on Vitest 3.
+        mockReset: true,
         restoreMocks: true,
     },
 });
