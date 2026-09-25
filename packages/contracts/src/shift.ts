@@ -41,7 +41,10 @@ export type CashierDrawerMovement = (typeof CASHIER_DRAWER_MOVEMENTS)[number];
 export const DEFAULT_TERMINAL = 'Lane #1';
 
 export interface CashDenomination {
-    /** Key used in bill counts. */
+    /**
+     * Key used in bill counts. Never contains a dot: counts are stored as
+     * plain objects, where a dotted key would read as a nested path.
+     */
     id: string;
     /** Centavos. */
     value: number;
@@ -65,7 +68,7 @@ export const CASH_DENOMINATIONS: readonly CashDenomination[] = [
     { id: 'coin-10', value: 1_000, label: '₱10', kind: 'coin' },
     { id: 'coin-5', value: 500, label: '₱5', kind: 'coin' },
     { id: 'coin-1', value: 100, label: '₱1', kind: 'coin' },
-    { id: 'coin-0.25', value: 25, label: '₱0.25', kind: 'coin' },
+    { id: 'coin-25c', value: 25, label: '₱0.25', kind: 'coin' },
 ];
 
 /** Pieces of one denomination, keyed by `CashDenomination.id`. */

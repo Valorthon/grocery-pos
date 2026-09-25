@@ -265,6 +265,7 @@ describe('Shift routes (e2e)', () => {
 
         it.each([
             ['an unknown denomination', { counts: { '5000': 1 } }],
+            ['the old dotted coin key', { counts: { 'coin-0.25': 4 } }],
             ['a negative count', { counts: { '1000': -1 } }],
             ['a fractional count', { counts: { '1000': 1.5 } }],
             ['counts as an array', { counts: [1] }],

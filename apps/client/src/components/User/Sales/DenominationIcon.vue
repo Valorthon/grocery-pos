@@ -33,7 +33,7 @@ const IMAGES: Record<string, string> = {
     'coin-10': coin10,
     'coin-5': coin5,
     'coin-1': coin1,
-    'coin-0.25': coin025,
+    'coin-25c': coin025,
 };
 
 const src = computed(() => IMAGES[props.id] ?? '');

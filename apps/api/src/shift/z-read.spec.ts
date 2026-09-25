@@ -1,4 +1,6 @@
 import {
+    billCountTotal,
+    CASH_DENOMINATIONS,
     DrawerMovementType,
     PaymentType,
     SaleStatus,
@@ -106,5 +108,19 @@ describe('computeZRead', () => {
         );
 
         expect(z.drawer.overShort).toBe(500);
+    });
+});
+
+describe('CASH_DENOMINATIONS', () => {
+    it('uses ids that are safe as Mongo field names (no dots, no $)', () => {
+        for (const { id } of CASH_DENOMINATIONS) {
+            expect(id).not.toMatch(/[.$]/);
+        }
+        expect(CASH_DENOMINATIONS.map((d) => d.id)).toContain('coin-25c');
+    });
+
+    it('counts 25-centavo coins under coin-25c', () => {
+        expect(billCountTotal({ 'coin-25c': 3, '1000': 1 })).toBe(100_075);
+        expect(billCountTotal({ 'coin-0.25': 3 })).toBe(0);
     });
 });

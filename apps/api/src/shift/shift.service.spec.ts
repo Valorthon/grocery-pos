@@ -97,7 +97,7 @@ function cashSale(amount: number, tendered = amount) {
 function countsOf(centavos: number) {
     return {
         'coin-1': Math.floor(centavos / 100),
-        'coin-0.25': (centavos % 100) / 25,
+        'coin-25c': (centavos % 100) / 25,
     };
 }
 
