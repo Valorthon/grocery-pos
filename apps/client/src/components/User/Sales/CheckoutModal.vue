@@ -141,7 +141,7 @@
                         step="0.01"
                         min="0"
                         placeholder="0.00"
-                        class="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                        class="w-full min-h-11 pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                     />
                 </div>
 
@@ -187,7 +187,7 @@
                     :aria-describedby="
                         showReferenceError ? referenceErrorId : undefined
                     "
-                    class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                    class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                     :class="
                         showReferenceError
                             ? 'border-red-400'
@@ -247,7 +247,7 @@
                             step="0.01"
                             min="0"
                             placeholder="Enter cash handed by customer"
-                            class="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                            class="w-full min-h-11 pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                         />
                     </div>
                 </div>
@@ -287,7 +287,7 @@
                                         ? referenceErrorId
                                         : undefined
                                 "
-                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                                 :class="
                                     showReferenceError
                                         ? 'border-red-400'

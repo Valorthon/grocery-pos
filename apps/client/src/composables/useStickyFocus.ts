@@ -40,6 +40,12 @@ export function useStickyFocus(
          * key there still goes to the scan box.
          */
         keepOnClick?: (el: Element) => boolean;
+        /**
+         * An element that keeps the focus it has, e.g. the tender panel
+         * control the focus was put back on after the window crossed lg
+         * (#26).
+         */
+        holdsFocus?: (el: Element | null) => boolean;
     } = {},
 ) {
     function refocus() {
@@ -47,6 +53,7 @@ export function useStickyFocus(
         if (!el || anyModalOpen.value) return;
         if (el instanceof HTMLInputElement && el.disabled) return;
         if (!canTakeFocusFrom(document.activeElement)) return;
+        if (options.holdsFocus?.(document.activeElement)) return;
         el.focus({ preventScroll: true });
     }
 

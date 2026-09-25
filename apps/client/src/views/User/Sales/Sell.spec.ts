@@ -5,6 +5,7 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import { PaymentType, SaleStatus } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import { stubMatchMedia } from '@/testing/match-media';
+import { anyModalOpen } from '@/components/ui/modal-stack';
 import Sell from './Sell.vue';
 
 const get = vi.hoisted(() => vi.fn());
@@ -1677,6 +1678,122 @@ describe('Sell below lg: sticky footer and tender sheet (#26)', () => {
         for (const name of ['One less milk', 'One more milk', 'Remove milk']) {
             expect(isTouchSize(buttonNamed(name))).toBe(true);
         }
+    });
+
+    function active() {
+        return document.activeElement as HTMLElement | null;
+    }
+
+    it('shrinking below lg with the focus in the panel opens the sheet on that field', async () => {
+        media.set(true);
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await press('F8');
+        await clickButton(buttonNamed('5%'));
+        expect(active()?.id).toBe('discount-reason');
+
+        media.set(false);
+        await settleTransitions();
+
+        expect(sheetOpen()).toBe(true);
+        expect(panel().getAttribute('role')).toBe('dialog');
+        expect(active()?.id).toBe('discount-reason');
+        // A key typed now stays in the field, not the scan box.
+        await press('a');
+        expect(active()?.id).toBe('discount-reason');
+    });
+
+    it('shrinking with the focus elsewhere leaves the sheet closed', async () => {
+        media.set(true);
+        withMilkOnTicket();
+        mount();
+        await flush();
+        expect(active()).toBe(input());
+
+        media.set(false);
+        await settleTransitions();
+
+        expect(sheetOpen()).toBe(false);
+    });
+
+    it('growing to lg keeps the focus on the field being typed in', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await press('F8');
+        await clickButton(buttonNamed('5%'));
+        const reason = active() as HTMLInputElement;
+        expect(reason.id).toBe('discount-reason');
+        reason.value = 'loyalty';
+        reason.dispatchEvent(new Event('input'));
+        await flush();
+
+        media.set(true);
+        await settleTransitions();
+
+        expect(document.querySelector('main')!.contains(panel())).toBe(true);
+        expect(active()).toBe(reason);
+        expect(reason.value).toBe('loyalty');
+        expect(anyModalOpen.value).toBe(false);
+    });
+
+    it('growing to lg keeps the focus on a panel button until the next key', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await press('F8');
+        expect(active()?.textContent?.trim()).toBe('None');
+
+        media.set(true);
+        await settleTransitions();
+
+        // Not sent back to the opener (the scan box) nor taken by it.
+        expect(active()?.textContent?.trim()).toBe('None');
+        // A scan afterwards still lands in the scan box.
+        await press('7');
+        expect(active()).toBe(input());
+    });
+
+    it('unmounting with the sheet open leaves no modal behind', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await clickButton(openButton());
+        expect(anyModalOpen.value).toBe(true);
+
+        app!.unmount();
+        app = null;
+
+        expect(anyModalOpen.value).toBe(false);
+        expect(document.querySelector('[inert]')).toBeNull();
+        expect(document.body.style.overflow).toBe('');
+    });
+
+    it('F9 does nothing while the receipt is showing', async () => {
+        withMilkOnTicket();
+        serve(() => Promise.resolve([]));
+        post.mockResolvedValue({ data: RECEIPT });
+        mount();
+        await flush();
+        await press('F9');
+        const amount = active() as HTMLInputElement;
+        amount.value = '100';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+        expect(dialog('Transaction Complete')).not.toBeNull();
+
+        // Something on the ticket again (e.g. another tab), then F9.
+        withMilkOnTicket();
+        await flush();
+        await press('F9');
+
+        expect(dialog('Complete Payment')).toBeNull();
+        expect(sheetOpen()).toBe(false);
+        expect(dialog('Transaction Complete')).not.toBeNull();
     });
 });
 

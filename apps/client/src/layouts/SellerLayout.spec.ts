@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type App, createApp, defineComponent, h, nextTick } from 'vue';
+import {
+    type App,
+    type Component,
+    createApp,
+    defineComponent,
+    h,
+    nextTick,
+    ref,
+} from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import {
     createMemoryHistory,
@@ -14,6 +22,9 @@ import {
 } from '@grocery-pos/contracts';
 import { useShiftStore } from '@/stores/shift';
 import { stubMatchMedia } from '@/testing/match-media';
+import { anyModalOpen } from '@/components/ui/modal-stack';
+import { useRegisterShortcuts } from '@/composables/useRegisterShortcuts';
+import { useStickyFocus } from '@/composables/useStickyFocus';
 import SellerLayout from './SellerLayout.vue';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -41,7 +52,7 @@ async function flush() {
     for (let i = 0; i < 5; i++) await nextTick();
 }
 
-async function mountAt(path: string) {
+async function mountAt(path: string, register: Component = Stub) {
     router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -50,7 +61,7 @@ async function mountAt(path: string) {
                 component: SellerLayout,
                 children: [
                     { path: '', name: 'SellerDashboard', component: Stub },
-                    { path: 'register', name: 'Sell', component: Stub },
+                    { path: 'register', name: 'Sell', component: register },
                     { path: 'orders', name: 'Sales', component: Stub },
                 ],
             },
@@ -325,6 +336,83 @@ describe('SellerLayout sidebar (issue #26)', () => {
 
             expect(menuButton().getAttribute('aria-expanded')).toBe('false');
             expect(sidebar().hasAttribute('inert')).toBe(false);
+            expect(anyModalOpen.value).toBe(false);
+        });
+
+        /** A register with the real sticky scan box and register keys. */
+        const charge = vi.fn();
+        // A plain options object: the file's one defineComponent is Stub.
+        const Register: Component = {
+            setup() {
+                const box = ref<HTMLInputElement | null>(null);
+                useStickyFocus(() => box.value);
+                useRegisterShortcuts({ F9: charge });
+                return () =>
+                    h('input', { ref: box, 'data-testid': 'scan-box' });
+            },
+        };
+
+        function scanBox() {
+            return document.querySelector<HTMLInputElement>(
+                '[data-testid="scan-box"]',
+            )!;
+        }
+
+        function key(name: string) {
+            const event = new KeyboardEvent('keydown', {
+                key: name,
+                bubbles: true,
+                cancelable: true,
+            });
+            (document.activeElement ?? document.body).dispatchEvent(event);
+            return event;
+        }
+
+        it('is modal: the register behind it is inert and its keys pause', async () => {
+            charge.mockReset();
+            await mountAt('/seller/register', Register);
+            menuButton().click();
+            await flush();
+
+            expect(anyModalOpen.value).toBe(true);
+            expect(sidebar().contains(document.activeElement)).toBe(true);
+            // The page (the app root) is inert; the drawer is not.
+            expect(scanBox().closest('[inert]')).not.toBeNull();
+            expect(sidebar().closest('[inert]')).toBeNull();
+
+            // A scan's keystroke doesn't go to the scan box behind it.
+            key('7');
+            await flush();
+            expect(document.activeElement).not.toBe(scanBox());
+            expect(sidebar().contains(document.activeElement)).toBe(true);
+
+            // Nor do the register keys.
+            key('F9');
+            await flush();
+            expect(charge).not.toHaveBeenCalled();
+
+            // Escape closes it through the stack; the keys work again.
+            key('Escape');
+            await flush();
+            expect(isClosed()).toBe(true);
+            expect(anyModalOpen.value).toBe(false);
+            expect(scanBox().closest('[inert]')).toBeNull();
+            key('F9');
+            expect(charge).toHaveBeenCalledTimes(1);
+        });
+
+        it('leaves nothing behind when unmounted open', async () => {
+            await mountAt('/seller/register');
+            menuButton().click();
+            await flush();
+            expect(anyModalOpen.value).toBe(true);
+
+            app!.unmount();
+            app = null;
+
+            expect(anyModalOpen.value).toBe(false);
+            expect(document.querySelector('[inert]')).toBeNull();
+            expect(document.body.style.overflow).toBe('');
         });
     });
 });

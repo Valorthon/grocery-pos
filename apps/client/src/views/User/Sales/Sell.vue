@@ -87,7 +87,7 @@
                     @submit.prevent="onScanSubmit"
                 >
                     <div
-                        class="flex items-center bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 shrink-0"
+                        class="flex items-center bg-slate-50 border border-slate-300 rounded-xl pl-3 pr-1 py-1 shrink-0"
                     >
                         <span
                             class="text-xs font-bold text-slate-500 uppercase tracking-wider mr-2"
@@ -96,7 +96,7 @@
                         <select
                             v-model.number="scanMultiplier"
                             aria-label="Quantity per scan"
-                            class="bg-transparent text-slate-900 font-extrabold text-sm cursor-pointer rounded focus-ring"
+                            class="min-h-11 min-w-11 px-1 bg-transparent text-slate-900 font-extrabold text-sm cursor-pointer rounded focus-ring"
                             @change="onMultiplierChange"
                         >
                             <option v-for="q in qtyOptions" :key="q" :value="q">
@@ -129,20 +129,20 @@
                                     ? undefined
                                     : `product-match-${search.highlighted.value}`
                             "
-                            class="w-full pl-11 pr-32 py-2.5 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
+                            class="w-full min-h-14 pl-11 pr-48 py-3 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
                             @input="onSearchChange"
                             @keydown.down.prevent="search.move(1)"
                             @keydown.up.prevent="search.move(-1)"
                             @keydown.esc="search.highlighted.value = -1"
                         />
                         <div
-                            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1"
+                            class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1"
                         >
                             <button
                                 v-if="searchQuery"
                                 type="button"
                                 aria-label="Clear search"
-                                class="p-1 text-slate-400 hover:text-slate-700 rounded-lg focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center text-slate-400 hover:text-slate-700 rounded-lg focus-ring"
                                 @click="clearQuery"
                             >
                                 <X class="w-4 h-4" aria-hidden="true" />
@@ -151,7 +151,7 @@
                             <button
                                 type="submit"
                                 :disabled="isTicketLocked"
-                                class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase rounded-lg shadow-2xs transition-colors active:scale-[0.98] focus-ring"
+                                class="min-h-11 min-w-11 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase rounded-lg shadow-2xs transition-colors active:scale-[0.98] focus-ring"
                             >
                                 Enter / Scan
                             </button>
@@ -776,7 +776,7 @@
                                         ? 'discount-amount-error'
                                         : undefined
                                 "
-                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
+                                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
                                 :class="
                                     fixedErrorShown
                                         ? 'border-red-300'
@@ -807,7 +807,7 @@
                                 type="text"
                                 :maxlength="STRING_LIMITS.REASON"
                                 placeholder="e.g. loyalty card, damaged packaging"
-                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
+                                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
                                 :class="
                                     needsReason
                                         ? 'border-red-300'
@@ -1030,6 +1030,7 @@ const discountOptionsEl = ref<HTMLElement | null>(null);
 // it; a printable key typed there still goes to the scan box.
 const sticky = useStickyFocus(() => scanInput.value, {
     keepOnClick: (el) => el.matches('[data-ticket-line]'),
+    holdsFocus: (el) => tender.holdsFocus(el),
 });
 const searchQuery = ref('');
 const scanMultiplier = ref(1);

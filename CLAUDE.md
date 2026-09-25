@@ -311,16 +311,22 @@ requestId}`. A 5xx never carries details or internals.
   the modal stack (`useTenderSheet`); the basket scrolls on its own. From
   `lg` the panel sits beside the ticket. With the sheet on top, F2/F4 close
   it and go to the ticket; F8/F9 open it first (F9 then opens the checkout).
+- Crossing `lg` with the focus in the tender panel keeps it on the same
+  control: shrinking opens the sheet, growing closes it without returning
+  the focus to its opener.
 - Seller sidebar: from `lg` it starts expanded; collapsed/expanded is kept
   in localStorage `grocery_pos_sidebar_v1:<userId>` (the only preference
-  there; storage errors fall back to expanded). Below `lg` it is a drawer
-  (menu button, backdrop, closes on Escape and navigation).
-- Register touch targets are at least 44px (`min-h-11 min-w-11` or
-  `w-11 h-11`). No text below 12px (`text-xs`); `layout-drift.spec.ts`
-  enforces it.
-- No third-party runtime assets: Poppins comes from `@fontsource/poppins`,
-  and the login photo is `public/images/login-hero.jpg`, fetched at deploy
-  (README) over a gradient, never committed.
+  there; storage errors fall back to expanded). Below `lg` it is a modal
+  drawer on the modal stack (menu button, backdrop, X, Escape, navigation
+  close it); the register behind it is inert and its keys pause.
+- Every register button and field is at least 44px (`min-h-11 min-w-11` or
+  `w-11 h-11`), including the scan box's Clear, Enter / Scan and the Qty
+  select. No text below 12px (`text-xs`); `layout-drift.spec.ts` enforces
+  it for classes and CSS `font-size`.
+- No third-party runtime assets: Poppins (400–900) comes from
+  `@fontsource/poppins`, and the login photo is
+  `public/images/login-hero.jpg`, fetched at deploy (README) over a
+  gradient, gitignored, never committed.
 
 **Scope**
 

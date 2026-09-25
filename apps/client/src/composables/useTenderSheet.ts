@@ -39,11 +39,42 @@ export function useTenderSheet(
         opener: null,
     };
 
+    /**
+     * The control that had the focus in the panel when the window crossed
+     * lg: moving the panel (the teleport) drops the focus, so it is put
+     * back once the panel is in its new place.
+     */
+    let restoreTo: HTMLElement | null = null;
+    /** Restored after a crossing; the scan box must not take it (#26). */
+    let pinned: HTMLElement | null = null;
+
+    function restoreFocus() {
+        const el = restoreTo;
+        restoreTo = null;
+        if (!el?.isConnected) return false;
+        el.focus({ preventScroll: true });
+        if (document.activeElement !== el) return false;
+        // Only until the cashier does something: a key (a scan still goes
+        // to the scan box), a tap, or the focus moving on.
+        pinned = el;
+        const unpin = () => {
+            if (pinned === el) pinned = null;
+            el.removeEventListener('focusout', unpin);
+            document.removeEventListener('keydown', unpin, true);
+            document.removeEventListener('pointerdown', unpin, true);
+        };
+        el.addEventListener('focusout', unpin);
+        document.addEventListener('keydown', unpin, true);
+        document.addEventListener('pointerdown', unpin, true);
+        return true;
+    }
+
     watch(
         isSheet,
         (on) => {
             if (!on) {
                 removeModal(entry);
+                restoreFocus();
                 return;
             }
             const active = document.activeElement;
@@ -52,16 +83,42 @@ export function useTenderSheet(
                     ? active
                     : null;
             pushModal(entry);
-            // The sheet itself, not a control: a stray Enter presses nothing.
-            panel.value?.focus();
+            // Else the sheet itself, not a control: a stray Enter presses
+            // nothing.
+            if (!restoreFocus()) panel.value?.focus();
         },
         { flush: 'post' },
     );
 
-    // Grown to lg: the panel is beside the ticket again.
-    watch(isLarge, (large) => {
-        if (large) hide();
-    });
+    /**
+     * Crossing lg, before the panel moves: with the focus in the panel,
+     * shrinking opens the sheet (so the focused field stays visible) and
+     * growing closes it without sending the focus back to its opener;
+     * either way the focus goes back to the same control. Grown to lg,
+     * the panel is beside the ticket again.
+     */
+    watch(
+        isLarge,
+        (large) => {
+            const active = document.activeElement;
+            const el = panel.value;
+            restoreTo =
+                el &&
+                active instanceof HTMLElement &&
+                active !== el &&
+                el.contains(active)
+                    ? active
+                    : null;
+            if (large) {
+                if (!open.value) restoreTo = null;
+                if (restoreTo) entry.opener = null;
+                hide();
+            } else if (restoreTo) {
+                open.value = true;
+            }
+        },
+        { flush: 'pre' },
+    );
 
     onBeforeUnmount(() => removeModal(entry));
 
@@ -80,6 +137,12 @@ export function useTenderSheet(
         isSheet,
         show,
         hide,
+        /**
+         * True for the control the focus was put back on after crossing
+         * lg, until it loses the focus: the register's sticky scan box
+         * must leave it there.
+         */
+        holdsFocus: (el: Element | null) => !!el && el === pinned,
         /** True while the sheet is the topmost modal (not under a dialog). */
         isTop: () => isSheet.value && isTopmost(entry),
     };
