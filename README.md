@@ -59,9 +59,9 @@ Seeded users are named after their role (`ADMIN`, `SELLER`, `RESTOCKER`,
 inactive copy of each (`ADMIN1`, `SELLER1`, ...). Development only.
 
 `pnpm seed` drops every collection of the database in `DATABASE_URL` and
-prints which host and database that is first. It refuses to run when
-`NODE_ENV` is `prod` or `stage` unless you pass `--force-destroy-data`
-(`pnpm seed --force-destroy-data`).
+prints which host and database that is first. It runs freely only when
+`NODE_ENV` is `dev` or `test`; anything else (including `prod`, `stage` or
+unset) needs `--force-destroy-data` (`pnpm seed --force-destroy-data`).
 
 Passwords must be at least 8 characters when set (new users, admin resets,
 self-service changes). Login does not check the length, so older, shorter
