@@ -275,6 +275,15 @@ export class ReverseSaleDto {
         typeof value === 'string' ? value.trim() : (value as unknown),
     )
     reason!: string;
+
+    /**
+     * The open shift whose drawer pays the sale's cash back (issue #2).
+     * Only used, and then required, when the sale has cash to pay back and
+     * its own shift is closed or it predates shifts.
+     */
+    @IsOptional()
+    @IsMongoId()
+    payoutShiftId?: string;
 }
 
 export type ReverseSaleInput = ReverseSaleDto & { type: ReversalType };

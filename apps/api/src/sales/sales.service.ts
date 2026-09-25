@@ -14,7 +14,11 @@ import {
     SaleStatus,
     SellDto,
 } from './types';
-import { discountAmount, REVERSAL_STATUS } from '@grocery-pos/contracts';
+import {
+    discountAmount,
+    REVERSAL_STATUS,
+    saleNetCash,
+} from '@grocery-pos/contracts';
 import {
     DISCOUNT_LIMITS,
     NUMERIC_LIMITS,
@@ -32,16 +36,24 @@ import {
 } from '../common/errors';
 import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
+import { ShiftService } from '../shift/shift.service';
+
+/** A sales filter, or null when the caller may read no sale at all. */
+export type SaleScope = { cashier?: Types.ObjectId; shift?: Types.ObjectId };
 
 /**
- * The sales a user may read (issue #13, product owner 2026-09-24): an ADMIN
- * reads every sale; anyone else, including a manager who also sells, reads
- * only the sales they rang up (`cashier = currentUser`). Shift scoping
- * narrows this further once server shifts land (#2).
+ * The sales a user may read (issue #13, narrowed by #2): an ADMIN reads every
+ * sale; anyone else, including a manager who also sells, reads only the
+ * sales they rang up in their current open shift (`openShift`). With no open
+ * shift they read none (null).
  */
-export function saleScope(user: AuthUser): { cashier?: Types.ObjectId } {
+export function saleScope(
+    user: AuthUser,
+    openShift: Types.ObjectId | null,
+): SaleScope | null {
     if (user.roles.includes(Role.Admin)) return {};
-    return { cashier: new Types.ObjectId(user.userId) };
+    if (!openShift) return null;
+    return { cashier: new Types.ObjectId(user.userId), shift: openShift };
 }
 
 @Injectable()
@@ -53,11 +65,22 @@ export class SalesService {
         private modelDetails: Model<SalesDetails>,
         private productService: ProductService,
         private inventoryService: InventoryService,
+        private shiftService: ShiftService,
     ) {}
+
+    /** `saleScope` for the caller, looking up their open shift if needed. */
+    private async scopeFor(user: AuthUser): Promise<SaleScope | null> {
+        if (user.roles.includes(Role.Admin)) return {};
+        return saleScope(
+            user,
+            await this.shiftService.openShiftIdOf(user.userId),
+        );
+    }
 
     /**
      * A page of sales, newest first. An ADMIN sees every cashier's sales;
-     * anyone else only the sales they rang up themselves (`saleScope`).
+     * anyone else only the sales they rang up in their current open shift
+     * (`saleScope`), and nothing without one.
      */
     async getAll(
         user: AuthUser,
@@ -66,7 +89,8 @@ export class SalesService {
         const { page, limit } = dto;
 
         const skip = (page - 1) * limit;
-        const scope = saleScope(user);
+        const scope = await this.scopeFor(user);
+        if (!scope) return { data: [], totalItems: 0 };
 
         const [data, totalItems] = await Promise.all([
             this.model
@@ -80,7 +104,7 @@ export class SalesService {
                 })
                 .lean(),
 
-            scope.cashier
+            Object.keys(scope).length > 0
                 ? this.model.countDocuments(scope)
                 : this.model.estimatedDocumentCount(),
         ]);
@@ -93,8 +117,9 @@ export class SalesService {
 
     /**
      * The lines of one sale. A sale outside the caller's `saleScope`
-     * (another cashier's, for a non-admin) is a 404, exactly like a sale
-     * that does not exist, so its existence is not leaked.
+     * (another cashier's, or their own from another shift, for a
+     * non-admin) is a 404, exactly like a sale that does not exist, so its
+     * existence is not leaked.
      */
     async getDetails(
         user: AuthUser,
@@ -102,10 +127,9 @@ export class SalesService {
     ): Promise<SalesDetails[]> {
         const { sales } = dto;
 
-        const visible = await this.model.exists({
-            _id: sales,
-            ...saleScope(user),
-        });
+        const scope = await this.scopeFor(user);
+        const visible =
+            scope && (await this.model.exists({ _id: sales, ...scope }));
         if (!visible) {
             throw new NotFoundError(ErrorCode.NOT_FOUND, 'Sale not found', {
                 sale: sales,
@@ -122,7 +146,9 @@ export class SalesService {
     }
 
     /**
-     * Records a sale, idempotently on `dto.idempotencyKey`.
+     * Records a sale into the cashier's open shift, idempotently on
+     * `dto.idempotencyKey`. With no open shift it is a 409 SHIFT_NOT_OPEN
+     * and nothing is written (`ShiftService.chargeSale`).
      *
      * - A key that already recorded a sale returns that sale's receipt, built
      *   from what was stored, and changes nothing: no second sale, no second
@@ -135,6 +161,8 @@ export class SalesService {
      *   or reference failure caused by the winner) looks the key up again and
      *   returns the winner's receipt; if the winner is not visible yet it
      *   gets a 409 SALE_IN_PROGRESS and should retry with the same key.
+     * - A replay needs no open shift: it records nothing, so a retry that
+     *   arrives after the shift closed still gets its receipt.
      */
     async sell(
         user: AuthUser,
@@ -285,6 +313,13 @@ export class SalesService {
             createdAt,
         } = await runInTransaction(
             async (session) => {
+                // First, so a cashier with no open shift is refused before
+                // anything else is read or written.
+                const shift = await this.shiftService.chargeSale(
+                    user.userId,
+                    session,
+                );
+
                 const { subtotal, fullSellDetails } = await this.prepareSell(
                     dto,
                     session,
@@ -304,6 +339,7 @@ export class SalesService {
                     {
                         amount: totalAmount,
                         cashier: user.userId,
+                        shift,
                         paymentType,
                         referenceNumber,
                         tenders: settlement.tenders,
@@ -405,14 +441,21 @@ export class SalesService {
 
     /**
      * Voids or refunds a whole sale: marks it, records who reversed it and
-     * why, and puts every sold unit back into inventory, all in one
-     * transaction. Void and refund differ only in meaning (a mis-ring vs a
-     * customer return). Partial / per-line refunds are not supported.
+     * why, pays its net cash back out of a drawer, and puts every sold unit
+     * back into inventory, all in one transaction. Void and refund differ
+     * only in meaning (a mis-ring vs a customer return). Partial / per-line
+     * refunds are not supported.
+     *
+     * The cash (cash tender less change) is paid out of the sale's own
+     * shift while it is open, otherwise out of the open shift the ADMIN
+     * names in `payoutShiftId` (see `ShiftService.payOutReversal`). A
+     * refusal there rolls the whole reversal back: no status change, no
+     * stock returned.
      */
     async reverse(
         user: AuthUser,
         saleId: string,
-        { type, reason }: ReverseSaleInput,
+        { type, reason, payoutShiftId }: ReverseSaleInput,
         session?: ClientSession,
     ) {
         return runInTransaction(
@@ -461,6 +504,33 @@ export class SalesService {
                     );
                 }
 
+                const payoutAmount = saleNetCash(sale);
+                const payoutShift = await this.shiftService.payOutReversal(
+                    {
+                        saleId: String(sale._id),
+                        saleShift: sale.shift ?? null,
+                        amount: payoutAmount,
+                        payoutShiftId,
+                        type,
+                        reason,
+                        admin: user,
+                    },
+                    session,
+                );
+
+                if (payoutShift) {
+                    await this.model.updateOne(
+                        { _id: sale._id },
+                        {
+                            $set: {
+                                'reversal.payoutShift': payoutShift,
+                                'reversal.payoutAmount': payoutAmount,
+                            },
+                        },
+                        { session },
+                    );
+                }
+
                 const lines = await this.modelDetails
                     .find({ sales: saleId }, { product: 1, quantity: 1 })
                     .session(session)
@@ -474,7 +544,13 @@ export class SalesService {
                     session,
                 );
 
-                return sale;
+                return {
+                    ...sale,
+                    reversal: {
+                        ...sale.reversal!,
+                        ...(payoutShift && { payoutShift, payoutAmount }),
+                    },
+                };
             },
             this.connection,
             session,

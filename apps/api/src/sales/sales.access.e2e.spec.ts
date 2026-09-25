@@ -1,8 +1,9 @@
 /**
- * Cashier scoping of the sales history, over real HTTP (issue #13). The
+ * Cashier scoping of the sales history, over real HTTP (issues #13, #2). The
  * real SalesController and SalesService run behind the real guards and
  * filter; the Sales and SalesDetails models are in-memory fakes that apply
- * the `cashier` and `_id` filters the service sends.
+ * the `cashier`, `shift` and `_id` filters the service sends, and
+ * ShiftService answers each cashier's open shift from a fixed table.
  */
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
@@ -20,30 +21,45 @@ import { SalesController } from './sales.controller';
 import { SalesDetails } from './sales-details.schema';
 import { Sales } from './sales.schema';
 import { SalesService } from './sales.service';
+import { ShiftService } from '../shift/shift.service';
 
 interface SaleRow {
     _id: Types.ObjectId;
     cashier: Types.ObjectId;
+    shift: Types.ObjectId;
     amount: number;
 }
 
 const SELLER_A = caller(Role.Seller);
 const SELLER_B = caller(Role.Seller);
+/** A cashier with sales from a closed shift and no open one. */
+const SELLER_C = caller(Role.Seller);
 const ADMIN = caller(Role.Admin);
 
+const A_OLD_SHIFT = new Types.ObjectId();
+const OPEN_SHIFTS: Record<string, Types.ObjectId> = {
+    [SELLER_A.userId]: new Types.ObjectId(),
+    [SELLER_B.userId]: new Types.ObjectId(),
+};
+
+function sale(who: typeof SELLER_A, shift: Types.ObjectId, amount: number) {
+    return {
+        _id: new Types.ObjectId(),
+        cashier: new Types.ObjectId(who.userId),
+        shift,
+        amount,
+    };
+}
+
 const SALES: SaleRow[] = [
-    ...[1, 2].map((n) => ({
-        _id: new Types.ObjectId(),
-        cashier: new Types.ObjectId(SELLER_A.userId),
-        amount: n * 100,
-    })),
-    {
-        _id: new Types.ObjectId(),
-        cashier: new Types.ObjectId(SELLER_B.userId),
-        amount: 900,
-    },
+    sale(SELLER_A, OPEN_SHIFTS[SELLER_A.userId], 100),
+    sale(SELLER_A, OPEN_SHIFTS[SELLER_A.userId], 200),
+    sale(SELLER_B, OPEN_SHIFTS[SELLER_B.userId], 900),
+    // A's sale from an earlier, closed shift.
+    sale(SELLER_A, A_OLD_SHIFT, 300),
+    sale(SELLER_C, new Types.ObjectId(), 400),
 ];
-const [A_SALE, , B_SALE] = SALES;
+const [A_SALE, , B_SALE, A_OLD_SALE, C_SALE] = SALES;
 
 function matches(row: SaleRow, filter: Record<string, unknown>): boolean {
     return Object.entries(filter).every(
@@ -100,6 +116,13 @@ describe('Sales history scoping (e2e)', () => {
                 },
                 { provide: ProductService, useValue: {} },
                 { provide: InventoryService, useValue: {} },
+                {
+                    provide: ShiftService,
+                    useValue: {
+                        openShiftIdOf: (cashier: string) =>
+                            Promise.resolve(OPEN_SHIFTS[cashier] ?? null),
+                    },
+                },
             ],
         );
     });
@@ -117,7 +140,7 @@ describe('Sales history scoping (e2e)', () => {
         };
     }
 
-    it('lists only the seller’s own sales, and counts only those', async () => {
+    it('lists only the seller’s own sales in their open shift, and counts only those', async () => {
         const body = await list(SELLER_A);
 
         expect(body.totalItems).toBe(2);
@@ -143,11 +166,25 @@ describe('Sales history scoping (e2e)', () => {
         expect(body.totalItems).toBe(2);
     });
 
+    it('never lists the seller’s sales from an earlier shift', async () => {
+        const body = await list(SELLER_A);
+
+        expect(body.data.map((s) => s._id)).not.toContain(
+            String(A_OLD_SALE._id),
+        );
+    });
+
+    it('lists nothing for a seller with no open shift', async () => {
+        const body = await list(SELLER_C);
+
+        expect(body).toEqual({ data: [], totalItems: 0 });
+    });
+
     it('lets an admin list every sale', async () => {
         const body = await list(ADMIN);
 
-        expect(body.totalItems).toBe(3);
-        expect(body.data).toHaveLength(3);
+        expect(body.totalItems).toBe(SALES.length);
+        expect(body.data).toHaveLength(SALES.length);
     });
 
     it('shows a seller the details of their own sale', async () => {
@@ -181,6 +218,26 @@ describe('Sales history scoping (e2e)', () => {
         ];
         expect(a.error).toBe(ErrorCode.NOT_FOUND);
         expect(a.message).toBe(b.message);
+    });
+
+    it('answers the seller’s own sale from an earlier shift with 404', async () => {
+        const res = await harness.call(
+            SELLER_A,
+            'GET',
+            `/sales/details/${String(A_OLD_SALE._id)}`,
+        );
+
+        expect(res.status).toBe(404);
+    });
+
+    it('answers every sale with 404 for a seller with no open shift', async () => {
+        const res = await harness.call(
+            SELLER_C,
+            'GET',
+            `/sales/details/${String(C_SALE._id)}`,
+        );
+
+        expect(res.status).toBe(404);
     });
 
     it('lets an admin read any sale’s details', async () => {
