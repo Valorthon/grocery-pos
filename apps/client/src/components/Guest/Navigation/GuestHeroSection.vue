@@ -1,10 +1,11 @@
 <template>
     <section
         class="relative flex items-center min-h-[70vh] bg-cover bg-center"
-        style="
-            background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?w=1600');
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-        "
+        :style="{
+            backgroundColor: '#0a303c',
+            backgroundImage: `url('${LOGIN_HERO_URL}'), linear-gradient(90deg, #0a303c 0%, #11606f 100%)`,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+        }"
     >
         <div
             class="absolute inset-0"
@@ -40,4 +41,6 @@
     </section>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { LOGIN_HERO_URL } from '@/constant';
+</script>

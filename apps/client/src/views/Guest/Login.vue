@@ -1,11 +1,17 @@
 <template>
     <div class="min-h-screen grid grid-cols-1 md:grid-cols-2">
-        <!-- Left: image panel -->
+        <!--
+            Left: image panel. The photo is self-hosted (#26) and not in the
+            repo (README, "Login hero photo"); the gradient under it keeps
+            the panel intentional when the file is missing.
+        -->
         <div
+            data-testid="login-hero"
             class="hidden md:flex items-start relative bg-cover bg-center"
-            style="
-                background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?w=1200');
-            "
+            :style="{
+                backgroundColor: '#0a303c',
+                backgroundImage: `url('${LOGIN_HERO_URL}'), linear-gradient(160deg, #11606f 0%, #0a303c 100%)`,
+            }"
         >
             <div
                 class="absolute inset-0"
@@ -151,6 +157,7 @@ import { ArrowRight, Eye, EyeOff, Lock, User as UserIcon } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { useAuthStore } from '@/stores/auth';
 import { homeRouteFor } from '@/router/access';
+import { LOGIN_HERO_URL } from '@/constant';
 import logo from '@/assets/logo-icon.svg';
 import { loginErrorMessage } from './login-error';
 

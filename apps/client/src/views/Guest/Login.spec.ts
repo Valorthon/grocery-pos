@@ -232,3 +232,16 @@ describe('loginErrorMessage', () => {
         );
     });
 });
+
+describe('Login hero photo (#26)', () => {
+    it('is self-hosted, over a solid colour for when the file is missing', async () => {
+        const host = await mount();
+        const hero = host.querySelector<HTMLElement>(
+            '[data-testid="login-hero"]',
+        )!;
+
+        expect(hero.style.backgroundImage).toContain('/images/login-hero.jpg');
+        expect(hero.style.backgroundImage).not.toContain('unsplash');
+        expect(hero.style.backgroundColor).not.toBe('');
+    });
+});

@@ -25,7 +25,7 @@
                     </div>
                     <div class="border-t border-slate-100 px-5 py-4">
                         <div
-                            class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2"
+                            class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2"
                         >
                             Permissions
                         </div>

@@ -69,7 +69,7 @@
                 <template v-for="section in sections" :key="section.title">
                     <div
                         v-if="!rail"
-                        class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400"
+                        class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400"
                     >
                         {{ section.title }}
                     </div>

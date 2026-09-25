@@ -74,7 +74,7 @@
                     <span>Sell</span>
                     <span
                         v-if="cartCount > 0"
-                        class="ml-0.5 bg-white text-primary-600 text-[11px] font-black px-1.5 py-0.2 rounded-full"
+                        class="ml-0.5 bg-white text-primary-600 text-xs font-black px-1.5 py-0.2 rounded-full"
                     >
                         {{ cartCount }}
                     </span>

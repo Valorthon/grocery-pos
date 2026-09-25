@@ -103,7 +103,7 @@
                     class="flex items-center justify-between rounded-xl bg-slate-900 p-3.5 text-white"
                 >
                     <span
-                        class="text-[10px] font-bold uppercase tracking-wider text-slate-400"
+                        class="text-xs font-bold uppercase tracking-wider text-slate-400"
                         >Counted cash</span
                     >
                     <span class="font-mono text-xl font-black text-primary-300">

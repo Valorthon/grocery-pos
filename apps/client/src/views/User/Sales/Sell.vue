@@ -1,11 +1,13 @@
 <template>
     <!-- Any click on the page gives the focus back to the scan box (#22). -->
     <div
-        class="flex-1 flex flex-col lg:flex-row h-full overflow-hidden bg-slate-100 text-slate-900"
+        class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden bg-slate-100 text-slate-900"
         @click="sticky.onPageClick"
     >
-        <!-- LEFT: scan input + live ticket -->
-        <div class="flex-1 flex flex-col h-full overflow-hidden bg-white">
+        <!-- LEFT: scan input + live ticket (+ the tender footer below lg) -->
+        <div
+            class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-white"
+        >
             <div class="p-4 sm:p-5 bg-white shrink-0 border-b border-slate-200">
                 <div
                     class="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-100"
@@ -14,13 +16,13 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <span
                                 v-if="shiftStore.activeShift"
-                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold"
+                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold"
                             >
                                 <span>Shift Active</span>
                             </span>
                             <span
                                 v-else
-                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-bold"
+                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold"
                             >
                                 <AlertCircle
                                     class="w-3.5 h-3.5 text-amber-600"
@@ -39,7 +41,7 @@
                         <template v-if="shiftStore.activeShift">
                             <button
                                 type="button"
-                                class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
+                                class="min-h-11 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Add change when drawer coins or small bills run low"
                                 @click="
                                     shiftStore.drawerAction =
@@ -54,7 +56,7 @@
 
                             <button
                                 type="button"
-                                class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
+                                class="min-h-11 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Drop excess cash safely to the back office safe"
                                 @click="
                                     shiftStore.drawerAction =
@@ -69,7 +71,7 @@
 
                             <button
                                 type="button"
-                                class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-2xs focus-ring"
+                                class="min-h-11 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-2xs focus-ring"
                                 title="Count physical cash in drawer, generate Z-Read report"
                                 @click="shiftStore.shiftOutOpen = true"
                             >
@@ -224,7 +226,7 @@
                             }})</span
                         >
                     </div>
-                    <span class="text-[11px] text-slate-500"
+                    <span class="text-xs text-slate-500"
                         >Click an item, or pick with ↑/↓ and press Enter</span
                     >
                 </div>
@@ -284,9 +286,7 @@
                             >
                                 {{ m.name }}
                             </h4>
-                            <p
-                                class="text-[11px] font-mono text-slate-500 mt-0.5"
-                            >
+                            <p class="text-xs font-mono text-slate-500 mt-0.5">
                                 EAN: {{ m.EAN }}
                             </p>
                         </div>
@@ -327,7 +327,7 @@
                                 v-if="cartStore.items.length"
                                 type="button"
                                 :disabled="isTicketLocked"
-                                class="text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 px-2 py-0.5 rounded-md transition-colors focus-ring"
+                                class="min-h-11 text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors focus-ring"
                                 @click="voidTicket"
                             >
                                 Void Ticket
@@ -359,7 +359,7 @@
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr
-                                    class="border-b border-slate-200 bg-slate-50 text-slate-500 text-[11px] font-bold uppercase tracking-wider"
+                                    class="border-b border-slate-200 bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider"
                                 >
                                     <th class="py-2.5 px-4 w-10 text-center">
                                         #
@@ -452,7 +452,7 @@
                                                 type="button"
                                                 :disabled="isTicketLocked"
                                                 :aria-label="`One less ${item.name}`"
-                                                class="w-8 h-8 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
+                                                class="w-11 h-11 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
                                                 @click="decrement(item)"
                                             >
                                                 <Minus
@@ -489,7 +489,7 @@
                                                         : undefined
                                                 "
                                                 data-testid="line-quantity"
-                                                class="w-14 h-8 text-center font-bold text-slate-900 text-sm rounded border focus:outline-none focus:border-slate-800"
+                                                class="w-14 h-11 text-center font-bold text-slate-900 text-sm rounded border focus:outline-none focus:border-slate-800"
                                                 :class="
                                                     qtyErrors[item.product]
                                                         ? 'border-red-400 bg-red-50'
@@ -518,7 +518,7 @@
                                                 type="button"
                                                 :disabled="isTicketLocked"
                                                 :aria-label="`One more ${item.name}`"
-                                                class="w-8 h-8 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
+                                                class="w-11 h-11 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
                                                 @click="increment(item)"
                                             >
                                                 <Plus
@@ -553,7 +553,7 @@
                                             :aria-keyshortcuts="
                                                 REGISTER_KEYS.REMOVE_LINE
                                             "
-                                            class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-ring"
+                                            class="min-h-11 min-w-11 inline-flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-ring"
                                             @click="removeLine(item.product)"
                                         >
                                             <Trash2
@@ -584,7 +584,7 @@
                             <button
                                 type="button"
                                 :disabled="isTicketLocked"
-                                class="px-3 py-1.5 rounded-lg bg-white text-slate-900 text-sm font-extrabold hover:bg-slate-100 focus-ring"
+                                class="min-h-11 px-4 py-2 rounded-lg bg-white text-slate-900 text-sm font-extrabold hover:bg-slate-100 focus-ring"
                                 @click="undoRemove"
                             >
                                 Undo
@@ -593,211 +593,308 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- RIGHT: tender panel -->
-        <div
-            class="w-full lg:w-[400px] bg-white border-l border-slate-200 flex flex-col justify-between shrink-0 shadow-xs z-30"
-        >
-            <div class="p-6 space-y-4">
-                <div
-                    class="flex items-center justify-between text-xs sm:text-sm"
-                >
-                    <button
-                        type="button"
-                        class="text-slate-600 font-bold hover:text-slate-900 flex items-center gap-1.5 underline-offset-2 hover:underline focus-ring rounded"
-                        :aria-expanded="showDiscount"
-                        aria-controls="discount-options"
-                        :aria-keyshortcuts="REGISTER_KEYS.DISCOUNT"
-                        @click="showDiscount = !showDiscount"
-                    >
-                        <Percent class="w-3.5 h-3.5 text-slate-500" />
-                        {{
-                            discountLabel
-                                ? `Discount Applied (${discountLabel})`
-                                : '+ Apply Discount'
-                        }}
-                        <KeyHint>{{ REGISTER_KEYS.DISCOUNT }}</KeyHint>
-                    </button>
-                    <span
-                        v-if="discountAmount > 0"
-                        class="text-emerald-600 font-extrabold text-sm"
-                    >
-                        -{{ currency(discountAmount) }}
-                    </span>
-                </div>
-
-                <div
-                    v-if="showDiscount"
-                    id="discount-options"
-                    ref="discountOptionsEl"
-                    role="group"
-                    aria-label="Discount"
-                    class="flex flex-wrap items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
-                >
-                    <span class="text-xs font-bold text-slate-500"
-                        >Discount:</span
-                    >
-                    <button
-                        v-for="d in discountOptions"
-                        :key="d"
-                        type="button"
-                        :disabled="isTicketLocked"
-                        :aria-pressed="discountChoice === d"
-                        class="min-h-8 px-2.5 py-1 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
-                        :class="
-                            discountChoice === d
-                                ? 'bg-slate-900 text-white'
-                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                        "
-                        @click="applyDiscount(d)"
-                    >
-                        {{ d === 0 ? 'None' : `${d}%` }}
-                    </button>
-                    <!-- A fixed peso amount (#52 follow-up, #23). -->
-                    <button
-                        type="button"
-                        :disabled="isTicketLocked"
-                        :aria-pressed="discountChoice === 'FIXED'"
-                        class="min-h-8 px-2.5 py-1 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
-                        :class="
-                            discountChoice === 'FIXED'
-                                ? 'bg-slate-900 text-white'
-                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                        "
-                        @click="applyDiscount('FIXED')"
-                    >
-                        ₱ Amount
-                    </button>
-                </div>
-
-                <div v-if="discountChoice === 'FIXED'" class="space-y-1">
-                    <label
-                        for="discount-amount"
-                        class="block text-xs font-bold text-slate-500"
-                        >Discount amount (₱)</label
-                    >
-                    <input
-                        id="discount-amount"
-                        ref="fixedInput"
-                        v-model="fixedText"
-                        :disabled="isTicketLocked"
-                        type="text"
-                        inputmode="decimal"
-                        autocomplete="off"
-                        placeholder="0.00"
-                        :aria-invalid="!!fixedErrorShown"
-                        :aria-describedby="
-                            fixedErrorShown
-                                ? 'discount-amount-error'
-                                : undefined
-                        "
-                        class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
-                        :class="
-                            fixedErrorShown
-                                ? 'border-red-300'
-                                : 'border-slate-300'
-                        "
-                    />
+            <!--
+                Below lg (product decision 2026-09-25, #26): the total and
+                a button that opens the tender panel as a sheet over the
+                ticket. The ticket above takes the rest and scrolls.
+            -->
+            <div
+                v-if="!isLarge"
+                data-testid="tender-footer"
+                class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 shadow-[0_-2px_8px_rgba(15,23,42,0.06)]"
+            >
+                <div class="min-w-0">
                     <p
-                        v-if="fixedErrorShown"
-                        id="discount-amount-error"
-                        data-testid="discount-amount-error"
-                        class="text-xs font-semibold text-red-600"
+                        class="text-xs font-bold uppercase tracking-wider text-slate-500"
                     >
-                        {{ fixedErrorShown }}
+                        Amount Due · {{ cartStore.totalUnits }} Units
+                    </p>
+                    <p
+                        data-testid="footer-total"
+                        class="text-2xl font-black text-slate-900 tracking-tight truncate"
+                    >
+                        {{ currency(total) }}
                     </p>
                 </div>
-
-                <div v-if="discountChoice !== 0" class="space-y-1">
-                    <label
-                        for="discount-reason"
-                        class="block text-xs font-bold text-slate-500"
-                        >Discount reason (required)</label
-                    >
-                    <input
-                        id="discount-reason"
-                        ref="reasonInput"
-                        v-model="discountReason"
-                        :disabled="isTicketLocked"
-                        type="text"
-                        :maxlength="STRING_LIMITS.REASON"
-                        placeholder="e.g. loyalty card, damaged packaging"
-                        class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
-                        :class="
-                            needsReason ? 'border-red-300' : 'border-slate-300'
-                        "
-                    />
-                </div>
-
-                <div class="space-y-2.5 text-slate-600 text-xs sm:text-sm pt-1">
-                    <div class="flex justify-between font-medium">
-                        <span class="text-slate-500"
-                            >Subtotal ({{ cartStore.totalUnits }} Items)</span
-                        >
-                        <span class="text-slate-900 font-bold">{{
-                            currency(subtotal)
-                        }}</span>
-                    </div>
-                    <div
-                        v-if="discountAmount > 0"
-                        class="flex justify-between text-emerald-600 font-semibold"
-                    >
-                        <span>Discount ({{ discountLabel }})</span>
-                        <span>-{{ currency(discountAmount) }}</span>
-                    </div>
-                </div>
-
-                <div
-                    class="p-5 rounded-2xl bg-slate-50 border border-slate-200 shadow-2xs mt-3"
-                >
-                    <span
-                        class="text-[11px] font-black uppercase tracking-wider text-slate-500"
-                    >
-                        Amount Due
-                    </span>
-                    <div class="flex items-baseline justify-between mt-1.5">
-                        <span
-                            class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight"
-                        >
-                            {{ currency(total) }}
-                        </span>
-                        <span
-                            class="text-xs font-bold text-slate-700 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs"
-                        >
-                            {{ cartStore.totalUnits }} Units
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="p-6 pt-0 space-y-3">
                 <button
                     type="button"
-                    class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all focus-ring"
-                    :disabled="!canCheckout || isTicketLocked"
-                    :aria-keyshortcuts="REGISTER_KEYS.CHARGE"
-                    @click="openCheckout()"
+                    data-testid="open-tender"
+                    aria-haspopup="dialog"
+                    :aria-expanded="tender.isSheet.value"
+                    aria-controls="tender-panel"
+                    class="min-h-11 min-w-11 px-5 py-3 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-xl font-extrabold text-base flex items-center justify-center gap-2 shadow-xs transition-all focus-ring shrink-0"
+                    @click="tender.show()"
                 >
-                    <CreditCard class="w-5 h-5" />
-                    <span>Tender & Charge ({{ currency(total) }})</span>
-                    <ArrowRight class="w-4 h-4 ml-1" />
-                    <KeyHint tone="dark">{{ REGISTER_KEYS.CHARGE }}</KeyHint>
+                    <CreditCard class="w-5 h-5" aria-hidden="true" />
+                    <span>Tender</span>
                 </button>
-
-                <div class="grid grid-cols-1 gap-2">
-                    <button
-                        type="button"
-                        class="py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98] focus-ring"
-                        :disabled="!canCheckout || isTicketLocked"
-                        @click="openCheckout(PaymentType.SPLIT)"
-                    >
-                        <Split class="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Split Payment</span>
-                    </button>
-                </div>
             </div>
         </div>
+
+        <!--
+            RIGHT: the tender panel. From lg up it sits beside the ticket
+            (the teleport is off, the wrapper is display: contents). Below
+            lg it lives under <body> as a sheet on the modal stack, shown
+            from the footer's Tender button (#26).
+        -->
+        <Teleport to="body" :disabled="isLarge">
+            <div
+                ref="tenderRoot"
+                data-testid="tender-root"
+                :class="
+                    isLarge
+                        ? 'contents'
+                        : tender.isSheet.value
+                          ? 'fixed inset-0 z-50 flex flex-col justify-end bg-black/40 backdrop-blur-sm'
+                          : 'hidden'
+                "
+                @mousedown.self="tender.hide()"
+            >
+                <div
+                    id="tender-panel"
+                    ref="tenderPanel"
+                    data-testid="tender-panel"
+                    :role="isLarge ? undefined : 'dialog'"
+                    :aria-modal="isLarge ? undefined : 'true'"
+                    :aria-label="isLarge ? undefined : 'Tender'"
+                    :tabindex="isLarge ? undefined : -1"
+                    class="w-full lg:w-[400px] bg-white lg:border-l border-slate-200 flex flex-col justify-between shrink-0 shadow-xs z-30 max-h-[90vh] overflow-y-auto rounded-t-2xl lg:max-h-none lg:overflow-visible lg:rounded-none focus:outline-none"
+                >
+                    <div
+                        v-if="!isLarge"
+                        class="flex items-center justify-between px-6 pt-4"
+                    >
+                        <h2
+                            class="text-base font-extrabold text-slate-900 uppercase tracking-wide"
+                        >
+                            Tender
+                        </h2>
+                        <button
+                            type="button"
+                            aria-label="Back to ticket"
+                            data-testid="close-tender"
+                            class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                            @click="tender.hide()"
+                        >
+                            <X class="w-5 h-5" aria-hidden="true" />
+                        </button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <div
+                            class="flex items-center justify-between text-xs sm:text-sm"
+                        >
+                            <button
+                                type="button"
+                                class="min-h-11 text-slate-600 font-bold hover:text-slate-900 flex items-center gap-1.5 underline-offset-2 hover:underline focus-ring rounded"
+                                :aria-expanded="showDiscount"
+                                aria-controls="discount-options"
+                                :aria-keyshortcuts="REGISTER_KEYS.DISCOUNT"
+                                @click="showDiscount = !showDiscount"
+                            >
+                                <Percent class="w-3.5 h-3.5 text-slate-500" />
+                                {{
+                                    discountLabel
+                                        ? `Discount Applied (${discountLabel})`
+                                        : '+ Apply Discount'
+                                }}
+                                <KeyHint>{{ REGISTER_KEYS.DISCOUNT }}</KeyHint>
+                            </button>
+                            <span
+                                v-if="discountAmount > 0"
+                                class="text-emerald-600 font-extrabold text-sm"
+                            >
+                                -{{ currency(discountAmount) }}
+                            </span>
+                        </div>
+
+                        <div
+                            v-if="showDiscount"
+                            id="discount-options"
+                            ref="discountOptionsEl"
+                            role="group"
+                            aria-label="Discount"
+                            class="flex flex-wrap items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
+                        >
+                            <span class="text-xs font-bold text-slate-500"
+                                >Discount:</span
+                            >
+                            <button
+                                v-for="d in discountOptions"
+                                :key="d"
+                                type="button"
+                                :disabled="isTicketLocked"
+                                :aria-pressed="discountChoice === d"
+                                class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                                :class="
+                                    discountChoice === d
+                                        ? 'bg-slate-900 text-white'
+                                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                                "
+                                @click="applyDiscount(d)"
+                            >
+                                {{ d === 0 ? 'None' : `${d}%` }}
+                            </button>
+                            <!-- A fixed peso amount (#52 follow-up, #23). -->
+                            <button
+                                type="button"
+                                :disabled="isTicketLocked"
+                                :aria-pressed="discountChoice === 'FIXED'"
+                                class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                                :class="
+                                    discountChoice === 'FIXED'
+                                        ? 'bg-slate-900 text-white'
+                                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                                "
+                                @click="applyDiscount('FIXED')"
+                            >
+                                ₱ Amount
+                            </button>
+                        </div>
+
+                        <div
+                            v-if="discountChoice === 'FIXED'"
+                            class="space-y-1"
+                        >
+                            <label
+                                for="discount-amount"
+                                class="block text-xs font-bold text-slate-500"
+                                >Discount amount (₱)</label
+                            >
+                            <input
+                                id="discount-amount"
+                                ref="fixedInput"
+                                v-model="fixedText"
+                                :disabled="isTicketLocked"
+                                type="text"
+                                inputmode="decimal"
+                                autocomplete="off"
+                                placeholder="0.00"
+                                :aria-invalid="!!fixedErrorShown"
+                                :aria-describedby="
+                                    fixedErrorShown
+                                        ? 'discount-amount-error'
+                                        : undefined
+                                "
+                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
+                                :class="
+                                    fixedErrorShown
+                                        ? 'border-red-300'
+                                        : 'border-slate-300'
+                                "
+                            />
+                            <p
+                                v-if="fixedErrorShown"
+                                id="discount-amount-error"
+                                data-testid="discount-amount-error"
+                                class="text-xs font-semibold text-red-600"
+                            >
+                                {{ fixedErrorShown }}
+                            </p>
+                        </div>
+
+                        <div v-if="discountChoice !== 0" class="space-y-1">
+                            <label
+                                for="discount-reason"
+                                class="block text-xs font-bold text-slate-500"
+                                >Discount reason (required)</label
+                            >
+                            <input
+                                id="discount-reason"
+                                ref="reasonInput"
+                                v-model="discountReason"
+                                :disabled="isTicketLocked"
+                                type="text"
+                                :maxlength="STRING_LIMITS.REASON"
+                                placeholder="e.g. loyalty card, damaged packaging"
+                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
+                                :class="
+                                    needsReason
+                                        ? 'border-red-300'
+                                        : 'border-slate-300'
+                                "
+                            />
+                        </div>
+
+                        <div
+                            class="space-y-2.5 text-slate-600 text-xs sm:text-sm pt-1"
+                        >
+                            <div class="flex justify-between font-medium">
+                                <span class="text-slate-500"
+                                    >Subtotal ({{
+                                        cartStore.totalUnits
+                                    }}
+                                    Items)</span
+                                >
+                                <span class="text-slate-900 font-bold">{{
+                                    currency(subtotal)
+                                }}</span>
+                            </div>
+                            <div
+                                v-if="discountAmount > 0"
+                                class="flex justify-between text-emerald-600 font-semibold"
+                            >
+                                <span>Discount ({{ discountLabel }})</span>
+                                <span>-{{ currency(discountAmount) }}</span>
+                            </div>
+                        </div>
+
+                        <div
+                            class="p-5 rounded-2xl bg-slate-50 border border-slate-200 shadow-2xs mt-3"
+                        >
+                            <span
+                                class="text-xs font-black uppercase tracking-wider text-slate-500"
+                            >
+                                Amount Due
+                            </span>
+                            <div
+                                class="flex items-baseline justify-between mt-1.5"
+                            >
+                                <span
+                                    class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight"
+                                >
+                                    {{ currency(total) }}
+                                </span>
+                                <span
+                                    class="text-xs font-bold text-slate-700 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs"
+                                >
+                                    {{ cartStore.totalUnits }} Units
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-6 pt-0 space-y-3">
+                        <button
+                            type="button"
+                            class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all focus-ring"
+                            :disabled="!canCheckout || isTicketLocked"
+                            :aria-keyshortcuts="REGISTER_KEYS.CHARGE"
+                            @click="openCheckout()"
+                        >
+                            <CreditCard class="w-5 h-5" />
+                            <span>Tender & Charge ({{ currency(total) }})</span>
+                            <ArrowRight class="w-4 h-4 ml-1" />
+                            <KeyHint tone="dark">{{
+                                REGISTER_KEYS.CHARGE
+                            }}</KeyHint>
+                        </button>
+
+                        <div class="grid grid-cols-1 gap-2">
+                            <button
+                                type="button"
+                                class="min-h-11 py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98] focus-ring"
+                                :disabled="!canCheckout || isTicketLocked"
+                                @click="openCheckout(PaymentType.SPLIT)"
+                            >
+                                <Split class="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Split Payment</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
 
         <CheckoutModal
             v-model="isCheckoutOpen"
@@ -827,6 +924,7 @@ import {
     reactive,
     ref,
     shallowRef,
+    useTemplateRef,
     watch,
 } from 'vue';
 import { isAxiosError } from 'axios';
@@ -885,6 +983,8 @@ import {
     useRegisterShortcuts,
 } from '@/composables/useRegisterShortcuts';
 import { useStickyFocus } from '@/composables/useStickyFocus';
+import { useIsLarge } from '@/composables/useMediaQuery';
+import { useTenderSheet } from '@/composables/useTenderSheet';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     DiscountType,
@@ -916,6 +1016,13 @@ const uiStore = useUIStore();
 const shiftStore = useShiftStore();
 
 const scanInput = ref<HTMLInputElement | null>(null);
+/** Side by side from lg up; below lg the tender panel is a sheet (#26). */
+const isLarge = useIsLarge();
+const tender = useTenderSheet(
+    isLarge,
+    useTemplateRef<HTMLElement>('tenderRoot'),
+    useTemplateRef<HTMLElement>('tenderPanel'),
+);
 const reasonInput = ref<HTMLInputElement | null>(null);
 const fixedInput = ref<HTMLInputElement | null>(null);
 const discountOptionsEl = ref<HTMLElement | null>(null);
@@ -1594,6 +1701,8 @@ async function submitSale(payment: PaymentRequest) {
     dismissUndo();
     for (const product of Object.keys(qtyDrafts)) delete qtyDrafts[product];
     selectedLine.value = null;
+    // The ticket is sold: back to it (an empty one) under the receipt.
+    tender.hide();
     isReceiptOpen.value = true;
 }
 
@@ -1649,34 +1758,67 @@ function onNewSale() {
 }
 
 /**
+ * The ticket is behind the tender sheet (below lg, #26): close it first,
+ * so the focus can go to the scan box or a line.
+ */
+async function backToTicket() {
+    if (!tender.isSheet.value) return;
+    tender.hide();
+    await nextTick();
+}
+
+/**
  * The register's keys (issues #22, #23). Off while a modal is open; the
  * checkout answers Enter and Escape itself. Delete never fires in a text
  * field (it deletes text there): it removes the selected line when the
  * focus is on the line or one of its buttons.
+ *
+ * Below lg (#26) they also work while the tender sheet is on top (not
+ * under a dialog): F2 and F4 close it and go to the ticket; F8 and F9
+ * open it first when it is closed, then do what they do at lg (F9 then
+ * opens the checkout over it). Delete does nothing in the sheet: no line
+ * has the focus there.
  */
-useRegisterShortcuts({
-    [REGISTER_KEYS.SCAN]: () => {
-        scanInput.value?.focus();
-        scanInput.value?.select();
+useRegisterShortcuts(
+    {
+        [REGISTER_KEYS.SCAN]: async () => {
+            await backToTicket();
+            scanInput.value?.focus();
+            scanInput.value?.select();
+        },
+        [REGISTER_KEYS.DISCOUNT]: async () => {
+            await tender.show();
+            showDiscount.value = true;
+            await nextTick();
+            const options = [
+                ...(discountOptionsEl.value?.querySelectorAll('button') ?? []),
+            ];
+            (
+                options.find(
+                    (b) => b.getAttribute('aria-pressed') === 'true',
+                ) ?? options[0]
+            )?.focus();
+        },
+        [REGISTER_KEYS.CHARGE]: async () => {
+            if (canCheckout.value && !isTicketLocked.value) {
+                await tender.show();
+                openCheckout();
+            } else if (needsReason.value) {
+                await tender.show();
+                void focusField(reasonInput);
+            }
+        },
+        [REGISTER_KEYS.LINE_QUANTITY]: async () => {
+            await backToTicket();
+            focusLineQuantity();
+        },
+        [REGISTER_KEYS.REMOVE_LINE]: {
+            run: removeSelected,
+            whileTyping: false,
+        },
     },
-    [REGISTER_KEYS.DISCOUNT]: async () => {
-        showDiscount.value = true;
-        await nextTick();
-        const options = [
-            ...(discountOptionsEl.value?.querySelectorAll('button') ?? []),
-        ];
-        (
-            options.find((b) => b.getAttribute('aria-pressed') === 'true') ??
-            options[0]
-        )?.focus();
-    },
-    [REGISTER_KEYS.CHARGE]: () => {
-        if (canCheckout.value && !isTicketLocked.value) openCheckout();
-        else if (needsReason.value) void focusField(reasonInput);
-    },
-    [REGISTER_KEYS.LINE_QUANTITY]: focusLineQuantity,
-    [REGISTER_KEYS.REMOVE_LINE]: { run: removeSelected, whileTyping: false },
-});
+    { activeWhile: tender.isTop },
+);
 
 /**
  * A scan typed while the receipt was up (issue #22): the receipt closes,

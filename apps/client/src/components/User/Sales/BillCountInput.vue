@@ -3,7 +3,7 @@
         <div class="flex justify-end -mb-3">
             <button
                 type="button"
-                class="text-[11px] font-bold text-slate-600 hover:text-slate-900 hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
+                class="text-xs font-bold text-slate-600 hover:text-slate-900 hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
                 data-testid="count-clear-all"
                 :disabled="!hasAnything"
                 @click="clearAll"
@@ -28,7 +28,7 @@
                 </div>
                 <span class="font-mono text-xs font-bold text-slate-600">
                     <span
-                        class="font-sans text-[11px] font-semibold text-slate-500 mr-1.5"
+                        class="font-sans text-xs font-semibold text-slate-500 mr-1.5"
                         :data-testid="`count-${group.key}-pieces`"
                         >{{ group.pieces }}
                         {{ group.pieces === 1 ? 'pc' : 'pcs' }} ·</span
@@ -39,7 +39,7 @@
                 </span>
             </div>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <div
                     v-for="d in group.denoms"
                     :key="d.id"
@@ -73,7 +73,7 @@
                             >
                                 {{ formatCurrency(count(d.id) * d.value) }}
                                 <span
-                                    class="text-[11px] font-bold"
+                                    class="text-xs font-bold"
                                     :class="group.countClass"
                                 >
                                     ({{ count(d.id) }}
@@ -82,21 +82,21 @@
                             </span>
                             <span
                                 v-else
-                                class="text-[11px] text-slate-400 font-medium"
+                                class="text-xs text-slate-400 font-medium"
                                 >0 pcs</span
                             >
                         </div>
                     </div>
 
                     <div
-                        class="flex items-center justify-between gap-1 bg-white border rounded-xl p-1 shadow-2xs"
+                        class="flex items-center justify-between gap-0.5 bg-white border rounded-xl p-0.5 shadow-2xs"
                         :class="
                             errors[d.id] ? 'border-red-400' : 'border-slate-300'
                         "
                     >
                         <button
                             type="button"
-                            class="w-8 h-8 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg disabled:opacity-30 text-sm font-black transition-colors"
+                            class="w-11 h-11 shrink-0 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg disabled:opacity-30 text-sm font-black transition-colors"
                             :aria-label="`One less ${d.label} ${d.kind}`"
                             :data-testid="`count-minus-${d.id}`"
                             :disabled="count(d.id) <= 0"
@@ -108,7 +108,7 @@
                             type="text"
                             inputmode="numeric"
                             autocomplete="off"
-                            class="w-14 min-w-0 text-center font-mono font-black text-sm focus:outline-none"
+                            class="flex-1 w-full min-w-0 text-center font-mono font-black text-sm focus:outline-none"
                             :class="
                                 errors[d.id] ? 'text-red-700' : 'text-slate-900'
                             "
@@ -124,7 +124,7 @@
                         />
                         <button
                             type="button"
-                            class="w-8 h-8 flex items-center justify-center rounded-lg text-sm font-black transition-colors disabled:opacity-30"
+                            class="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg text-sm font-black transition-colors disabled:opacity-30"
                             :class="group.plusClass"
                             :aria-label="`One more ${d.label} ${d.kind}`"
                             :data-testid="`count-plus-${d.id}`"
@@ -137,7 +137,7 @@
                     <p
                         v-if="errors[d.id]"
                         :id="`count-error-${d.id}`"
-                        class="-mt-1.5 text-[11px] font-semibold text-red-600 text-center"
+                        class="-mt-1.5 text-xs font-semibold text-red-600 text-center"
                         :data-testid="`count-error-${d.id}`"
                     >
                         {{ errors[d.id] }}

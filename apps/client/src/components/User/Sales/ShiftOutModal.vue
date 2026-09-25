@@ -8,7 +8,7 @@
         :closable="!submitting"
     >
         <div
-            class="flex items-center gap-1.5 text-slate-600 font-semibold text-[11px] mb-3"
+            class="flex items-center gap-1.5 text-slate-600 font-semibold text-xs mb-3"
         >
             <ShieldCheck class="w-3.5 h-3.5 text-slate-500" />
             <span
@@ -24,7 +24,7 @@
         >
             <div>
                 <div
-                    class="text-[10px] text-slate-400 font-bold uppercase tracking-wider"
+                    class="text-xs text-slate-400 font-bold uppercase tracking-wider"
                 >
                     Total Physical Counted Cash ({{ totalPieces }} pieces)
                 </div>
@@ -36,7 +36,7 @@
                 </div>
             </div>
             <div class="text-right">
-                <span class="text-[11px] text-slate-400">Cashier:</span>
+                <span class="text-xs text-slate-400">Cashier:</span>
                 <div class="text-xs font-bold text-slate-200">
                     {{ shiftStore.activeShift?.cashierName }}
                 </div>

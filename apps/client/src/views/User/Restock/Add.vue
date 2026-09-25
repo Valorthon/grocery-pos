@@ -47,7 +47,7 @@
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr
-                        class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                        class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
                     >
                         <th class="py-2.5 px-5">Name</th>
                         <th class="py-2.5 px-5 text-right">Quantity</th>

@@ -19,7 +19,7 @@
                     class="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl text-right"
                 >
                     <span
-                        class="text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                        class="text-xs font-bold uppercase tracking-wider text-slate-500"
                         >Transactions</span
                     >
                     <p class="text-base font-extrabold text-slate-900">
@@ -77,7 +77,7 @@
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr
-                        class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                        class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
                     >
                         <th class="py-2.5 px-4">Product</th>
                         <th class="py-2.5 px-4">Qty</th>

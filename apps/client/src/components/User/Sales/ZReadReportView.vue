@@ -8,23 +8,23 @@
             >
                 Grocery POS
             </div>
-            <div class="text-[11px] text-slate-500 font-sans mt-0.5">
+            <div class="text-xs text-slate-500 font-sans mt-0.5">
                 <span data-testid="zread-terminal">{{ report.terminal }}</span>
                 • Shift Close Report (Z-Read)
             </div>
-            <div class="text-[10px] text-slate-400 mt-1">
+            <div class="text-xs text-slate-400 mt-1">
                 {{ formatStoreDateTime(report.openedAt) }} —
                 {{ formatStoreDateTime(report.closedAt) }}
             </div>
             <div
-                class="text-[11px] font-bold text-slate-700 mt-1"
+                class="text-xs font-bold text-slate-700 mt-1"
                 data-testid="zread-cashier"
             >
                 Cashier: {{ report.cashierName }}
             </div>
             <div
                 v-if="report.closedByAdmin"
-                class="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-[10px] font-sans font-bold text-amber-800"
+                class="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-xs font-sans font-bold text-amber-800"
                 data-testid="zread-closed-by-admin"
             >
                 Closed by admin {{ report.closedByName }}
@@ -32,11 +32,9 @@
         </div>
 
         <section
-            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-[11px]"
+            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
         >
-            <div
-                class="font-sans font-bold text-slate-800 uppercase text-[10px]"
-            >
+            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
                 Sales
             </div>
             <Row label="Transactions" :value="String(report.sales.count)" />
@@ -57,11 +55,9 @@
         </section>
 
         <section
-            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-[11px]"
+            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
         >
-            <div
-                class="font-sans font-bold text-slate-800 uppercase text-[10px]"
-            >
+            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
                 By Tender
             </div>
             <Row
@@ -72,11 +68,9 @@
         </section>
 
         <section
-            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-[11px]"
+            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
         >
-            <div
-                class="font-sans font-bold text-slate-800 uppercase text-[10px]"
-            >
+            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
                 Drawer
             </div>
             <Row
@@ -105,7 +99,7 @@
         </section>
 
         <div
-            class="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1.5 text-[11px]"
+            class="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1.5 text-xs"
         >
             <div class="flex justify-between font-bold text-slate-900">
                 <span>Physical Cash Counted:</span>
@@ -125,11 +119,9 @@
 
         <section
             v-if="report.movements.length > 0"
-            class="space-y-1 text-[10px] text-slate-600"
+            class="space-y-1 text-xs text-slate-600"
         >
-            <div
-                class="font-sans font-bold text-slate-800 uppercase text-[10px]"
-            >
+            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
                 Drawer Movements
             </div>
             <div
@@ -145,7 +137,7 @@
             </div>
         </section>
 
-        <div class="text-center text-[10px] text-slate-400 font-sans pt-1">
+        <div class="text-center text-xs text-slate-400 font-sans pt-1">
             --- END OF SHIFT CLOSE REPORT ---
         </div>
     </div>

@@ -14,7 +14,7 @@
         >
             <div>
                 <div
-                    class="text-[10px] uppercase font-bold text-slate-400 tracking-wider"
+                    class="text-xs uppercase font-bold text-slate-400 tracking-wider"
                 >
                     Total Opening Float ({{ totalPieces }} pieces)
                 </div>

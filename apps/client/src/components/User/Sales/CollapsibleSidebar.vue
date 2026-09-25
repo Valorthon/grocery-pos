@@ -1,7 +1,38 @@
 <template>
+    <!--
+        Below lg the sidebar is a drawer (issue #26), like UserSidebar: a
+        menu button opens it; the backdrop, Escape and any navigation close
+        it. From lg up it is a rail the cashier collapses or expands; the
+        choice is remembered per user on this device.
+    -->
+    <Transition
+        enter-active-class="transition-opacity duration-200"
+        enter-from-class="opacity-0"
+        enter-to-class="opacity-100"
+        leave-active-class="transition-opacity duration-200"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+    >
+        <div
+            v-if="drawerOpen"
+            data-testid="sidebar-backdrop"
+            class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+            @click="closeDrawer"
+        />
+    </Transition>
+
     <aside
-        class="bg-white border-r border-slate-200/90 h-screen flex flex-col justify-between shrink-0 transition-[width] duration-300 z-30 select-none"
-        :class="isCollapsed ? 'w-20' : 'w-64'"
+        id="seller-sidebar"
+        ref="aside"
+        data-testid="seller-sidebar"
+        class="bg-white border-r border-slate-200/90 flex flex-col justify-between shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
+        :class="[
+            isCollapsed ? 'lg:w-20' : 'lg:w-64',
+            drawerOpen ? 'translate-x-0' : '-translate-x-full',
+        ]"
+        :inert="hiddenDrawer || undefined"
+        :aria-hidden="hiddenDrawer ? 'true' : undefined"
+        :aria-label="isLarge ? undefined : 'Navigation menu'"
     >
         <div class="overflow-hidden">
             <!-- Brand + collapse toggle -->
@@ -20,28 +51,41 @@
                             GroceryPOS
                         </span>
                         <span
-                            class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block"
+                            class="text-xs text-slate-400 font-bold uppercase tracking-wider block"
                         >
                             {{ terminal }} Terminal
                         </span>
                     </div>
 
                     <button
+                        v-if="isLarge"
                         type="button"
-                        class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                        class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
                         aria-label="Collapse sidebar"
-                        @click="isCollapsed = !isCollapsed"
+                        data-testid="sidebar-collapse"
+                        @click="toggle"
                     >
                         <PanelLeftClose class="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button
+                        v-else
+                        type="button"
+                        class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                        aria-label="Close navigation menu"
+                        data-testid="sidebar-close"
+                        @click="closeDrawer"
+                    >
+                        <X class="w-5 h-5" aria-hidden="true" />
                     </button>
                 </div>
 
                 <button
                     v-else
                     type="button"
-                    class="w-10 h-10 rounded-xl bg-primary-600/10 text-primary-600 hover:bg-primary-600 hover:text-white flex items-center justify-center border border-primary-600/20 hover:border-primary-600 transition-all duration-200 group relative focus-ring"
+                    class="w-11 h-11 rounded-xl bg-primary-600/10 text-primary-600 hover:bg-primary-600 hover:text-white flex items-center justify-center border border-primary-600/20 hover:border-primary-600 transition-all duration-200 group relative focus-ring"
                     aria-label="Expand sidebar"
-                    @click="isCollapsed = !isCollapsed"
+                    data-testid="sidebar-expand"
+                    @click="toggle"
                 >
                     <Store class="w-5 h-5 group-hover:hidden" />
                     <PanelLeft class="w-5 h-5 hidden group-hover:block" />
@@ -88,7 +132,7 @@
 
                     <span
                         v-if="item.id === 'register' && cartCount > 0"
-                        class="text-[10px] font-black px-2 py-0.5 rounded-full"
+                        class="text-xs font-black px-2 py-0.5 rounded-full"
                         :class="
                             isActive(item.id)
                                 ? 'bg-white text-primary-600'
@@ -108,8 +152,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    useTemplateRef,
+    watch,
+} from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import {
     LayoutDashboard,
     PanelLeft,
@@ -117,22 +168,82 @@ import {
     ReceiptText,
     ShoppingCart,
     Store,
+    X,
 } from '@lucide/vue';
 import { DEFAULT_TERMINAL } from '@grocery-pos/contracts';
+import { useAuthStore } from '@/stores/auth';
 import { useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
+import { useIsLarge } from '@/composables/useMediaQuery';
+import { useSidebarPreference } from '@/composables/useSidebarPreference';
+import { anyModalOpen } from '@/components/ui/modal-stack';
 import UserProfileMenu from './UserProfileMenu.vue';
 
+/** `modelValue`: whether the drawer is open (below lg only). */
+const props = defineProps<{ modelValue: boolean }>();
+const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
+
 const router = useRouter();
+const route = useRoute();
+const authStore = useAuthStore();
 const cartStore = useCartStore();
 const shiftStore = useShiftStore();
+const aside = useTemplateRef<HTMLElement>('aside');
 
-const isCollapsed = ref(true);
+const isLarge = useIsLarge();
+const { collapsed, toggle } = useSidebarPreference(
+    () => authStore.user?.userId,
+);
+/** The rail: collapsed only applies from lg up; the drawer shows labels. */
+const isCollapsed = computed(() => isLarge.value && collapsed.value);
+const drawerOpen = computed(() => !isLarge.value && props.modelValue);
+/** Below lg and closed: off screen, and out of the tab order. */
+const hiddenDrawer = computed(() => !isLarge.value && !props.modelValue);
+
 // A label until terminals get an identity of their own (#47).
 const terminal = computed(
     () => shiftStore.activeShift?.terminal ?? DEFAULT_TERMINAL,
 );
 const cartCount = computed(() => cartStore.totalUnits);
+
+function closeDrawer() {
+    if (props.modelValue) emit('update:modelValue', false);
+}
+
+/** What had the focus when the drawer opened (the menu button). */
+let opener: HTMLElement | null = null;
+
+watch(drawerOpen, async (open) => {
+    if (open) {
+        const active = document.activeElement;
+        opener = active instanceof HTMLElement ? active : null;
+        await nextTick();
+        aside.value?.querySelector<HTMLElement>('nav button')?.focus();
+        return;
+    }
+    const el = aside.value;
+    const focusInside =
+        !!el && !!document.activeElement && el.contains(document.activeElement);
+    if (focusInside && opener?.isConnected) opener.focus();
+    opener = null;
+});
+
+// Any navigation closes the drawer; so does growing to lg.
+watch(() => route.fullPath, closeDrawer);
+watch(isLarge, (large) => {
+    if (large) closeDrawer();
+});
+
+function onKeydown(event: KeyboardEvent) {
+    if (event.key !== 'Escape' || !drawerOpen.value) return;
+    // A dialog over the page answers its own Escape.
+    if (event.defaultPrevented || anyModalOpen.value) return;
+    event.preventDefault();
+    closeDrawer();
+}
+
+onMounted(() => document.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => document.removeEventListener('keydown', onKeydown));
 
 const navItems = [
     {
@@ -164,6 +275,7 @@ function isActive(id: string) {
 }
 
 function handleClick(item: { id: string; route: string }) {
+    closeDrawer();
     if (item.id === 'register') {
         shiftStore.goToRegister();
         return;

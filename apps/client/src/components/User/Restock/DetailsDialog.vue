@@ -5,7 +5,7 @@
         >
             <div>
                 <div
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
                 >
                     Description
                 </div>
@@ -13,7 +13,7 @@
             </div>
             <div>
                 <div
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
                 >
                     Restocked By
                 </div>
@@ -23,7 +23,7 @@
             </div>
             <div>
                 <div
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
                 >
                     Date
                 </div>
@@ -31,7 +31,7 @@
             </div>
             <div>
                 <div
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
                 >
                     Grand Total
                 </div>

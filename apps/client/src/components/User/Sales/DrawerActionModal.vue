@@ -61,7 +61,7 @@
                         v-for="q in quickAmounts"
                         :key="q"
                         type="button"
-                        class="px-2.5 py-1 rounded-lg border font-bold text-[11px] transition-colors active:scale-[0.98]"
+                        class="px-2.5 py-1 rounded-lg border font-bold text-xs transition-colors active:scale-[0.98]"
                         :class="
                             amountCentavos === q
                                 ? 'bg-slate-900 text-white border-slate-900'

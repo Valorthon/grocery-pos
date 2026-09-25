@@ -4,6 +4,7 @@ import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { PaymentType, SaleStatus } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
+import { stubMatchMedia } from '@/testing/match-media';
 import Sell from './Sell.vue';
 
 const get = vi.hoisted(() => vi.fn());
@@ -1481,5 +1482,214 @@ describe('Sell labels (issue #24)', () => {
         expect(body).toContain('Discount (10%)');
         expect(body).not.toMatch(/Order Discount|Savings/i);
         expect(body).not.toMatch(/tax/i);
+    });
+});
+
+describe('Sell below lg: sticky footer and tender sheet (#26)', () => {
+    let media: ReturnType<typeof stubMatchMedia>;
+
+    beforeEach(() => {
+        media = stubMatchMedia(false);
+    });
+
+    afterEach(() => media.restore());
+
+    function footer() {
+        return document.querySelector<HTMLElement>(
+            '[data-testid="tender-footer"]',
+        );
+    }
+    function openButton() {
+        return document.querySelector<HTMLButtonElement>(
+            '[data-testid="open-tender"]',
+        )!;
+    }
+    function tenderRoot() {
+        return document.querySelector<HTMLElement>(
+            '[data-testid="tender-root"]',
+        )!;
+    }
+    function panel() {
+        return document.querySelector<HTMLElement>(
+            '[data-testid="tender-panel"]',
+        )!;
+    }
+    function sheetOpen() {
+        return !tenderRoot().classList.contains('hidden');
+    }
+    /** The 44px touch size (#26): h-11/w-11 or min-h-11/min-w-11. */
+    function isTouchSize(el: Element) {
+        const c = el.className;
+        return /\b(min-)?h-11\b/.test(c) && /\b(min-)?w-11\b/.test(c);
+    }
+
+    it('shows the total in a footer, with the tender panel out of the page', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+
+        expect(footer()).not.toBeNull();
+        expect(text('footer-total')).toContain('95.00');
+        expect(isTouchSize(openButton())).toBe(true);
+        // The panel waits under <body>, hidden, not beside the ticket.
+        expect(document.querySelector('main')!.contains(panel())).toBe(false);
+        expect(tenderRoot().parentElement).toBe(document.body);
+        expect(sheetOpen()).toBe(false);
+    });
+
+    it('Tender opens the panel as a dialog; Escape closes it', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+
+        await clickButton(openButton());
+        expect(sheetOpen()).toBe(true);
+        expect(panel().getAttribute('role')).toBe('dialog');
+        expect(panel().getAttribute('aria-modal')).toBe('true');
+        expect(openButton().getAttribute('aria-expanded')).toBe('true');
+        expect(panel().contains(document.activeElement)).toBe(true);
+        // The page behind is inert while the sheet is up.
+        expect(document.querySelector('main')!.hasAttribute('inert')).toBe(
+            true,
+        );
+
+        await escape();
+        expect(sheetOpen()).toBe(false);
+        expect(document.querySelector('main')!.hasAttribute('inert')).toBe(
+            false,
+        );
+        // Back to the scan box, ready for the next scan.
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('charges from the sheet, and a recorded sale closes it', async () => {
+        withMilkOnTicket();
+        serve(() => Promise.resolve([]));
+        post.mockResolvedValue({ data: RECEIPT });
+        mount();
+        await flush();
+
+        await clickButton(openButton());
+        await clickButton(buttonNamed('Tender & Charge'));
+        expect(dialog('Complete Payment')).not.toBeNull();
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '100';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+
+        expect(dialog('Transaction Complete')).not.toBeNull();
+        expect(sheetOpen()).toBe(false);
+    });
+
+    it('F9 opens the sheet first, then the checkout over it', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+
+        const event = await press('F9');
+        expect(event.defaultPrevented).toBe(true);
+        expect(sheetOpen()).toBe(true);
+        expect(dialog('Complete Payment')).not.toBeNull();
+        expect(document.activeElement?.getAttribute('aria-label')).toBe(
+            'Amount tendered',
+        );
+
+        // Closing the checkout goes back to the sheet, not the ticket.
+        await escape();
+        expect(dialog('Complete Payment')).toBeNull();
+        expect(sheetOpen()).toBe(true);
+    });
+
+    it('F9 in the open sheet charges', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await clickButton(openButton());
+
+        await press('F9');
+        expect(dialog('Complete Payment')).not.toBeNull();
+    });
+
+    it('F8 opens the sheet with the focus on the discount', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+
+        await press('F8');
+        expect(sheetOpen()).toBe(true);
+        expect(document.activeElement?.textContent?.trim()).toBe('None');
+        const chips = [
+            ...document.querySelectorAll('#discount-options button'),
+        ];
+        expect(chips.length).toBeGreaterThan(0);
+        expect(chips.every(isTouchSize)).toBe(true);
+    });
+
+    it('F2 from the sheet goes back to the scan box', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await clickButton(openButton());
+
+        await press('F2');
+        expect(sheetOpen()).toBe(false);
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('F4 from the sheet goes back to the line quantity', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await clickButton(openButton());
+
+        await press('F4');
+        expect(sheetOpen()).toBe(false);
+        expect(document.activeElement?.getAttribute('data-testid')).toBe(
+            'line-quantity',
+        );
+    });
+
+    it('growing to lg puts the panel beside the ticket again', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        await clickButton(openButton());
+
+        media.set(true);
+        await settleTransitions();
+
+        expect(footer()).toBeNull();
+        expect(document.querySelector('main')!.contains(panel())).toBe(true);
+        expect(panel().hasAttribute('role')).toBe(false);
+        expect(document.querySelector('main')!.hasAttribute('inert')).toBe(
+            false,
+        );
+    });
+
+    it('ticket line controls are 44px touch targets', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+
+        for (const name of ['One less milk', 'One more milk', 'Remove milk']) {
+            expect(isTouchSize(buttonNamed(name))).toBe(true);
+        }
+    });
+});
+
+describe('Sell at lg (#26)', () => {
+    it('has no footer: the panel sits beside the ticket', () => {
+        withMilkOnTicket();
+        mount();
+
+        expect(
+            document.querySelector('[data-testid="tender-footer"]'),
+        ).toBeNull();
+        const panel = document.querySelector('[data-testid="tender-panel"]')!;
+        expect(document.querySelector('main')!.contains(panel)).toBe(true);
+        expect(panel.hasAttribute('role')).toBe(false);
     });
 });
