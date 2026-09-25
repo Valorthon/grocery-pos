@@ -100,4 +100,25 @@ describe('router guard and the start-up profile fetch', () => {
         expect(api.get).not.toHaveBeenCalled();
         expect(router.currentRoute.value.name).toBe('Login');
     });
+
+    it('lets Sign out through to Login, and only then ends the session (#19)', async () => {
+        const { api, router } = await boot(async () => ({
+            data: { username: 'boss', roles: [Role.Admin] },
+        }));
+        await router.push('/admin/users');
+
+        // A signed-in user who merely visits Login is sent home.
+        await router.push({ name: 'Login' });
+        expect(router.currentRoute.value.name).toBe('Dashboard');
+        expect(api.post).not.toHaveBeenCalled();
+
+        const { useAuthStore } = await import('@/stores/auth');
+        const auth = useAuthStore();
+        expect(await auth.requestLogout()).toBe(true);
+
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(vi.mocked(api.post).mock.calls).toEqual([['/auth/logout']]);
+        expect(auth.user).toBeNull();
+        expect(auth.userLogoutPending).toBe(false);
+    });
 });

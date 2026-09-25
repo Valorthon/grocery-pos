@@ -17,12 +17,22 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { flush, type } from '@/testing/form-dom';
 import { nextDraft } from '@/testing/stub-add-dialog';
 import { Color, useUIStore } from '@/stores/ui';
+import { Role, useAuthStore } from '@/stores/auth';
 import ProductsAdd from './Products/Add.vue';
 import RestockAdd from './Restock/Add.vue';
 import AdjustmentAdd from './Adjustments/Add.vue';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
+
+// The auth store logs out through the app router: point it at this
+// spec's router.
+const routerRef = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock('@/router', () => ({
+    get default() {
+        return routerRef.current;
+    },
+}));
 
 vi.mock('@/components/User/Product/AddDialog.vue', async () =>
     (await import('@/testing/stub-add-dialog')).stubAddDialogModule(),
@@ -133,6 +143,12 @@ beforeEach(() => {
     setActivePinia(pinia);
     api.post.mockReset();
     nextDraft.value = {};
+    // Signed in: a user and the session marker cookie.
+    Object.defineProperty(document, 'cookie', {
+        configurable: true,
+        get: () => 'dummy=true',
+    });
+    useAuthStore().user = { username: 'ana', roles: [Role.Admin] };
 });
 
 afterEach(() => {
@@ -155,6 +171,7 @@ async function mountPage(page: Component) {
             { path: '/adjustments', name: 'Adjustments', component: Elsewhere },
         ],
     });
+    routerRef.current = router;
     await router.push('/draft');
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -267,6 +284,7 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         await addDraft(c, 'First');
         await addDraft(c, 'Second');
 
+        button('Clear Drafts').focus();
         await press('Clear Drafts');
         expect(confirmText()).toBe(
             'Clear all 2 drafts? This cannot be undone.',
@@ -275,6 +293,8 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         expect(document.activeElement).toBe(button('Keep'));
         await press('Keep');
         expect(rows()).toHaveLength(2);
+        // The focus goes back to the button that asked.
+        expect(document.activeElement).toBe(button('Clear Drafts'));
 
         await press('Clear Drafts');
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -323,14 +343,164 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         expect(router.currentRoute.value.name).toBe('Other');
     });
 
-    it('never holds up the way to Login (logout, or the session ended)', async () => {
+    it('asks before Sign out: Stay keeps the session and the drafts', async () => {
         await mountPage(c.page);
+        const auth = useAuthStore();
         await addDraft(c, 'First');
 
+        const stayed = auth.requestLogout();
+        await flush();
+        expect(confirmText()).toBe(
+            'You have 1 unsaved draft. Log out and discard it?',
+        );
+        expect(document.activeElement).toBe(button('Stay'));
+        await press('Stay');
+
+        expect(await stayed).toBe(false);
+        expect(router.currentRoute.value.name).toBe('Draft');
+        expect(api.post).not.toHaveBeenCalled();
+        expect(auth.user).not.toBeNull();
+        expect(auth.userLogoutPending).toBe(false);
+        expect(rows()).toHaveLength(1);
+    });
+
+    it('logs out once "Log out" is chosen', async () => {
+        api.post.mockResolvedValue({});
+        await mountPage(c.page);
+        const auth = useAuthStore();
+        await addDraft(c, 'First');
+
+        const done = auth.requestLogout();
+        await flush();
+        await press('Log out');
+
+        expect(await done).toBe(true);
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(api.post.mock.calls).toEqual([['/auth/logout']]);
+        expect(auth.user).toBeNull();
+        expect(useUIStore().toasts).toEqual([]);
+    });
+
+    it('signs out without asking when there are no drafts', async () => {
+        api.post.mockResolvedValue({});
+        await mountPage(c.page);
+        const auth = useAuthStore();
+
+        expect(await auth.requestLogout()).toBe(true);
+
+        expect(confirmText()).toBeUndefined();
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(api.post.mock.calls).toEqual([['/auth/logout']]);
+    });
+
+    it('never holds up a forced logout (the session ended)', async () => {
+        api.post.mockResolvedValue({});
+        await mountPage(c.page);
+        const auth = useAuthStore();
+        await addDraft(c, 'First');
+
+        // What the axios interceptor runs when the refresh gets a 401.
+        await auth.logout('Please log in to continue');
+
+        expect(confirmText()).toBeUndefined();
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(api.post.mock.calls).toEqual([['/auth/logout']]);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['Please log in to continue'],
+        ]);
+    });
+
+    it('never holds up the way to Login when the session is gone', async () => {
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+        useAuthStore().user = null;
+
+        // The router guard's redirect when no session is left.
         await router.push({ name: 'Login' });
 
         expect(router.currentRoute.value.name).toBe('Login');
         expect(confirmText()).toBeUndefined();
+    });
+
+    it('still asks on the way to Login while signed in (not a logout)', async () => {
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+
+        const leaving = router.push('/login');
+        await flush();
+        expect(confirmText()).toBe(
+            'You have 1 unsaved draft. Leave and discard it?',
+        );
+        await press('Stay');
+        await leaving;
+        expect(router.currentRoute.value.name).toBe('Draft');
+    });
+
+    it('holds navigation without asking while the save is in flight', async () => {
+        const pending = deferred<{ data: object }>();
+        api.post.mockReturnValueOnce(pending.promise);
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+        useUIStore().clear(); // "Product added"
+        await save(c);
+        expect(api.post).toHaveBeenCalledTimes(1);
+
+        await router.push('/other');
+        expect(router.currentRoute.value.name).toBe('Draft');
+        expect(confirmText()).toBeUndefined();
+        expect(useUIStore().toasts.map((t) => [t.color, t.lines])).toEqual([
+            [Color.INFO, ['Saving… please wait']],
+        ]);
+
+        // Sign out waits too.
+        expect(await useAuthStore().requestLogout()).toBe(false);
+        expect(router.currentRoute.value.name).toBe('Draft');
+        expect(api.post).toHaveBeenCalledTimes(1);
+
+        pending.resolve({ data: {} });
+        await flush();
+        expect(router.currentRoute.value.name).toBe(c.list);
+    });
+
+    it('stays on Login when a save settles after a forced logout', async () => {
+        const pending = deferred<{ data: object }>();
+        api.post.mockReturnValueOnce(pending.promise);
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+        await save(c);
+
+        api.post.mockResolvedValue({});
+        await useAuthStore().logout('Please log in to continue');
+        expect(router.currentRoute.value.name).toBe('Login');
+
+        pending.resolve({ data: {} });
+        await flush();
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['Please log in to continue'],
+        ]);
+    });
+
+    it('reports nothing when a save fails after a forced logout', async () => {
+        let fail!: (e: unknown) => void;
+        api.post.mockReturnValueOnce(
+            new Promise((_, reject) => {
+                fail = reject;
+            }),
+        );
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+        await save(c);
+
+        api.post.mockResolvedValue({});
+        await useAuthStore().logout('Please log in to continue');
+        fail(httpError(401, 'Unauthorized'));
+        await flush();
+
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['Please log in to continue'],
+        ]);
     });
 
     it('goes to the list without asking once saved', async () => {
@@ -343,6 +513,8 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
 
         expect(router.currentRoute.value.name).toBe(c.list);
         expect(confirmText()).toBeUndefined();
+        // Every dialog closed: the page scrolls again.
+        expect(document.body.style.overflow).toBe('');
         expect(useUIStore().toasts.map((t) => t.color)).toEqual([
             Color.SUCCESS,
         ]);
@@ -365,6 +537,7 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
                 t.textContent?.trim(),
             );
             expect(titles).toContain(c.dialogTitle);
+            expect(document.body.style.overflow).toBe('hidden');
         }
         expect(useUIStore().toasts.map((t) => [t.color, t.lines])).toEqual([
             [Color.ERROR, ['Items too many']],
@@ -444,5 +617,40 @@ describe('products Save All (issue #19)', () => {
 
         expect(button('Save All').disabled).toBe(false);
         expect(rows()).toHaveLength(1);
+    });
+});
+
+describe('a confirmation over the save dialog (issue #19)', () => {
+    it.each([
+        ['restock', cases[1][1]],
+        ['adjustment', cases[2][1]],
+    ])('%s: Escape closes only the confirmation', async (_, c) => {
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+        await press(c.saveLabel);
+        await type('Description', 'weekly delivery');
+
+        // The back button while the save dialog is open.
+        const leaving = router.push('/other');
+        await flush();
+        expect(confirmText()).toBe(
+            'You have 1 unsaved draft. Leave and discard it?',
+        );
+
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        await leaving;
+        await flush();
+
+        // The confirmation answered "Stay"; the save dialog is still open.
+        expect(router.currentRoute.value.name).toBe('Draft');
+        const titles = [...document.querySelectorAll('h2')].map((t) =>
+            t.textContent?.trim(),
+        );
+        expect(titles).toContain(c.dialogTitle);
+        expect(
+            document.body.querySelector<HTMLInputElement>('input[maxlength]')
+                ?.value,
+        ).toBe('weekly delivery');
+        expect(document.body.style.overflow).toBe('hidden');
     });
 });

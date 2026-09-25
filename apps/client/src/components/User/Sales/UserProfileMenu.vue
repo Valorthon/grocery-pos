@@ -133,7 +133,9 @@ const roleLabel = computed(() => {
         .join(', ');
 });
 
+// Through the page's leave guard: a draft page asks first (issue #19).
 function logout() {
-    authStore.logout();
+    open.value = false;
+    void authStore.requestLogout();
 }
 </script>

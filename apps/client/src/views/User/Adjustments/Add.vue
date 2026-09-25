@@ -103,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ClipboardEdit, Pencil, Plus, Save, Trash2 } from '@lucide/vue';
 import api from '@/axios';
@@ -135,6 +135,8 @@ const search = ref('');
 const { items, add, replace, remove, clear } = useDraftList<AddForm>();
 const editItem = ref<AddForm>();
 const editingId = ref<string | null>(null);
+/** True while the save request is in flight (the save dialog is busy). */
+const saving = ref(false);
 
 const uiStore = useUIStore();
 const router = useRouter();
@@ -144,7 +146,18 @@ const {
     confirm,
     answer: answerConfirm,
 } = useConfirm();
-useUnsavedDraftsGuard(() => items.value.length, confirm);
+useUnsavedDraftsGuard({
+    count: () => items.value.length,
+    saving: () => saving.value,
+    confirm,
+});
+
+// A save that settles after the page is gone (only a forced logout can
+// take it away mid-save) must not navigate or report here.
+let unmounted = false;
+onBeforeUnmount(() => {
+    unmounted = true;
+});
 
 const filteredItems = computed(() => {
     const q = search.value.trim().toLowerCase();
@@ -171,19 +184,24 @@ const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
         uiStore.queueMessage(Color.ERROR, NOTHING_TO_SAVE);
         return false;
     }
+    saving.value = true;
     try {
         await api.post(
             '/adjustments',
             toAdjustmentBody(items.value, saveForm.description),
         );
     } catch (error) {
+        if (unmounted) return false;
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(error, 'Error saving. Try again.'),
         );
         return false;
+    } finally {
+        saving.value = false;
     }
 
+    if (unmounted) return true;
     // Saved: nothing is left unsaved, so the leave guard lets this go.
     clear();
     uiStore.queueMessage(Color.SUCCESS, 'Adjustments saved.');

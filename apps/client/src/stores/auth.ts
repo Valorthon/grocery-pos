@@ -64,6 +64,38 @@ export const useAuthStore = defineStore('auth', () => {
     };
 
     /**
+     * True while a user-initiated logout (`requestLogout`) is navigating to
+     * Login: the router lets an authenticated user through to Login then,
+     * and a draft page asks before discarding its drafts (issue #19).
+     */
+    const userLogoutPending = ref(false);
+
+    /**
+     * The Sign out button. Leaves the page first, so a page's leave guard
+     * can ask (a draft page with unsaved drafts does); only once the
+     * navigation to Login has gone through does the session end. "Stay"
+     * cancels it: nothing is sent and the session goes on. Resolves true
+     * when logged out.
+     *
+     * A forced end (the refresh failed, or the session is gone) calls
+     * `logout` directly: the user is cleared before it navigates, so no
+     * page asks and nothing can hold it up.
+     */
+    const requestLogout = async (): Promise<boolean> => {
+        if (userLogoutPending.value) return false;
+        const { default: router } = await import('@/router');
+        userLogoutPending.value = true;
+        try {
+            await router.push({ name: 'Login' });
+        } finally {
+            userLogoutPending.value = false;
+        }
+        if (router.currentRoute.value.name !== 'Login') return false;
+        await logout();
+        return true;
+    };
+
+    /**
      * Forgets this browser's register state: the shift (and any Z-read on
      * screen) and the cart. Called whenever the session ends, on logout or
      * when the router finds it gone, so the next person at this register
@@ -132,6 +164,8 @@ export const useAuthStore = defineStore('auth', () => {
         isAuthenticated,
         login,
         logout,
+        requestLogout,
+        userLogoutPending,
         resetRegister,
         fetchMe,
         initSession,

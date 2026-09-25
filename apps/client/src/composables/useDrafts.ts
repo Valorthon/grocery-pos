@@ -1,5 +1,7 @@
 import { onBeforeUnmount, ref, watch, type Ref } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
+import { Color, useUIStore } from '@/stores/ui';
 import type { ConfirmRequest } from './useConfirm';
 
 /** A draft row with its page-local id (issue #19). Never sent to the API. */
@@ -55,33 +57,65 @@ export function unsavedDrafts(count: number): string {
     return `${count} unsaved draft${count === 1 ? '' : 's'}`;
 }
 
+/** What a draft page tells its guard. */
+export interface DraftGuardOptions {
+    /** How many unsaved rows the page holds. */
+    count: () => number;
+    /** True while the page's save request is in flight. */
+    saving: () => boolean;
+    /** The page's `useConfirm().confirm`. */
+    confirm: (request: ConfirmRequest) => Promise<boolean>;
+}
+
 /**
- * Guards a draft page's unsaved rows (issue #19) while `count()` is
- * above zero:
+ * Guards a draft page's unsaved rows (issue #19) while it has any:
  *
- * - leaving for another page asks first (in-app, through `confirm`);
+ * - leaving for another page asks first (in-app, through `confirm`), and
+ *   so does Sign out (`requestLogout` navigates to Login before it ends
+ *   the session): "Stay" keeps the drafts and the session;
+ * - while a save is in flight nobody leaves, and nobody is asked: the
+ *   save's own outcome decides (it goes to the list, or reports the error
+ *   here with the drafts kept);
  * - closing or reloading the tab gets the browser's own prompt
  *   (`beforeunload`), registered only while there are drafts and always
  *   removed on unmount.
  *
  * A page empties its list once the drafts are saved or cleared, so its
- * own navigation after a save is never stopped. Navigation to Login is
- * never stopped either: every way there from a back-office page is the
- * session ending (Logout, or a 401 the refresh could not fix, which runs
- * the same logout). The server session is already gone by then, so the
- * drafts could not be saved anyway, and a "Stay" would only strand the
- * user on a page that cannot save.
+ * own navigation after a save is never stopped. A forced end of the
+ * session is never stopped either: the refresh that failed and the
+ * router's "no session" redirect both leave the user signed out before
+ * they navigate, the server session is already gone, and the drafts
+ * could not be saved anyway.
  */
-export function useUnsavedDraftsGuard(
-    count: () => number,
-    confirm: (request: ConfirmRequest) => Promise<boolean>,
-): void {
-    onBeforeRouteLeave((to) => {
+export function useUnsavedDraftsGuard({
+    count,
+    saving,
+    confirm,
+}: DraftGuardOptions): void {
+    const authStore = useAuthStore();
+    const uiStore = useUIStore();
+
+    onBeforeRouteLeave(() => {
         const n = count();
-        if (n === 0 || to.name === 'Login') return true;
+        if (n === 0 || !authStore.isAuthenticated) return true;
+        if (saving()) {
+            uiStore.queueMessage(Color.INFO, 'Saving… please wait');
+            return false;
+        }
+        const drafts = `You have ${unsavedDrafts(n)}`;
+        const them = n === 1 ? 'it' : 'them';
+        if (authStore.userLogoutPending) {
+            return confirm({
+                title: 'Log out?',
+                message: `${drafts}. Log out and discard ${them}?`,
+                confirmLabel: 'Log out',
+                cancelLabel: 'Stay',
+                danger: true,
+            });
+        }
         return confirm({
             title: 'Leave this page?',
-            message: `You have ${unsavedDrafts(n)}. Leave and discard ${n === 1 ? 'it' : 'them'}?`,
+            message: `${drafts}. Leave and discard ${them}?`,
             confirmLabel: 'Leave',
             cancelLabel: 'Stay',
             danger: true,

@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
     clearDraftsRequest,
     newDraftId,
     unsavedDrafts,
     useDraftList,
 } from './useDrafts';
+
+vi.mock('@/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 
 describe('useDraftList (issue #19)', () => {
     it('gives each row its own id, even when every field is the same', () => {

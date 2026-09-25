@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Pencil, Plus, Save, Trash2 } from '@lucide/vue';
 import api from '@/axios';
@@ -150,7 +150,18 @@ const {
     confirm,
     answer: answerConfirm,
 } = useConfirm();
-useUnsavedDraftsGuard(() => items.value.length, confirm);
+useUnsavedDraftsGuard({
+    count: () => items.value.length,
+    saving: () => saving.value,
+    confirm,
+});
+
+// A save that settles after the page is gone (only a forced logout can
+// take it away mid-save) must not navigate or report here.
+let unmounted = false;
+onBeforeUnmount(() => {
+    unmounted = true;
+});
 
 const filteredItems = computed(() => {
     const q = search.value.trim().toLowerCase();
@@ -175,6 +186,7 @@ const saveToDB = async () => {
     try {
         await api.post('/products/bulk', toNewProductsBody(items.value));
     } catch (err: unknown) {
+        if (unmounted) return;
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(err, 'Error saving products. Please try again'),
@@ -184,6 +196,7 @@ const saveToDB = async () => {
         saving.value = false;
     }
 
+    if (unmounted) return;
     // Saved: nothing is left unsaved, so the leave guard lets this go.
     clear();
     router.push({ name: 'Products' });
