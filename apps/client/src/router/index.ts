@@ -2,6 +2,7 @@ import { useAuthStore, Role } from '@/stores/auth';
 import { Color, useUIStore } from '@/stores/ui';
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
+import { DASHBOARD_ROLES, homeRouteFor } from './access';
 
 const routes: RouteRecordRaw[] = [
     // GUEST LAYOUT
@@ -54,9 +55,12 @@ const routes: RouteRecordRaw[] = [
         meta: { requiresAuth: true },
         children: [
             {
+                // Management roles only; money tiles are ADMIN-only (the
+                // API leaves them out). See DASHBOARD_ROLES.
                 path: '',
                 name: 'Dashboard',
                 component: () => import('@/views/User/Dashboard.vue'),
+                meta: { roles: [...DASHBOARD_ROLES] },
             },
             {
                 // Admins void and refund sales from here; sellers see the
@@ -144,8 +148,7 @@ const router = createRouter({
 });
 
 function homeFor(authStore: ReturnType<typeof useAuthStore>) {
-    const isSeller = authStore.hasRole(Role.Seller) && !authStore.isAdmin;
-    return { name: isSeller ? 'SellerDashboard' : 'Dashboard' };
+    return homeRouteFor(authStore.user?.roles ?? []);
 }
 
 // Navigation Guard

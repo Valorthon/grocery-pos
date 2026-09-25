@@ -14,7 +14,10 @@
         </div>
 
         <!-- Stat cards -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div
+            class="grid grid-cols-1 sm:grid-cols-2 gap-4"
+            :class="stats.length > 3 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'"
+        >
             <div
                 v-for="stat in stats"
                 :key="stat.title"
@@ -36,8 +39,10 @@
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Recent sales -->
+            <!-- Recent sales: ADMIN only, absent from the API otherwise -->
             <div
+                v-if="showsMoney"
+                data-testid="recent-sales"
                 class="md:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden"
             >
                 <div
@@ -108,6 +113,7 @@
 
             <!-- Recent activity -->
             <div
+                :class="showsMoney ? '' : 'md:col-span-3'"
                 class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5"
             >
                 <div class="text-sm font-bold text-slate-900 mb-4">
@@ -153,12 +159,19 @@ import { formatCurrency } from '@/utils/currency';
 const authStore = useAuthStore();
 const loading = ref(true);
 
+/**
+ * GET /dashboard. `todayRevenue` and `recentSales` are money figures the
+ * API returns to ADMIN only (issue #13); for other management roles they
+ * are absent and their tiles are not shown.
+ */
 interface DashboardData {
     totalProducts: number;
     lowStockCount: number;
     todaySalesCount: number;
-    todayRevenue: number;
-    recentSales: Array<{
+    /** Centavos. ADMIN only. */
+    todayRevenue?: number;
+    /** ADMIN only. */
+    recentSales?: Array<{
         _id: string;
         amount: number;
         paymentType: string;
@@ -183,6 +196,9 @@ interface DashboardData {
 
 const data = ref<DashboardData | null>(null);
 
+/** Whether the API sent money figures, i.e. the caller is an ADMIN. */
+const showsMoney = computed(() => data.value?.todayRevenue !== undefined);
+
 const stats = computed(() => [
     {
         title: 'Total Products',
@@ -202,12 +218,16 @@ const stats = computed(() => [
         icon: ShoppingCart,
         avatarClass: 'bg-emerald-50 text-emerald-600',
     },
-    {
-        title: "Today's Revenue",
-        value: formatCurrency(data.value?.todayRevenue ?? 0),
-        icon: Banknote,
-        avatarClass: 'bg-amber-50 text-amber-600',
-    },
+    ...(showsMoney.value
+        ? [
+              {
+                  title: "Today's Revenue",
+                  value: formatCurrency(data.value?.todayRevenue ?? 0),
+                  icon: Banknote,
+                  avatarClass: 'bg-amber-50 text-amber-600',
+              },
+          ]
+        : []),
 ]);
 
 const recentSales = computed(() => data.value?.recentSales ?? []);
@@ -221,7 +241,7 @@ const activities = computed(() => {
         color: string;
     }> = [];
 
-    data.value.recentSales.forEach((s) => {
+    (data.value.recentSales ?? []).forEach((s) => {
         items.push({
             id: `sale-${s._id}`,
             title: `Sale: ${formatCurrency(s.amount ?? 0)}`,

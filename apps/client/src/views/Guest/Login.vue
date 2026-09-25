@@ -156,7 +156,8 @@ import { useRouter } from 'vue-router';
 import { ArrowRight, Eye, EyeOff, Lock, Mail } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
-import { useAuthStore, Role } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
+import { homeRouteFor } from '@/router/access';
 import logo from '@/assets/logo-icon.svg';
 
 const router = useRouter();
@@ -179,8 +180,7 @@ const handleLogin = async () => {
 
     try {
         await authStore.login(form.username, form.password);
-        const isSeller = authStore.hasRole(Role.Seller) && !authStore.isAdmin;
-        router.push({ name: isSeller ? 'SellerDashboard' : 'Dashboard' });
+        router.push(homeRouteFor(authStore.user?.roles ?? []));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
         errorMsg.value =
