@@ -47,10 +47,12 @@
             :headers="headers"
             :items="serverItems"
             :loading="loading"
+            :error="loadError"
             empty-text="No restocks found"
             :items-length="totalItems"
             row-click
             @click:row="showDetails"
+            @retry="fetchRestock"
         />
     </PageCard>
 
@@ -75,11 +77,14 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import { useListFetch } from '@/composables/useListFetch';
+import { Color, useUIStore } from '@/stores/ui';
+import { apiErrorMessages } from '@/utils/api-error';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
 import { formatCurrency } from '@/utils/currency';
 
 const router = useRouter();
-const loading = ref(true);
+const uiStore = useUIStore();
 const limit = ref(5);
 const totalItems = ref(0);
 const page = ref(1);
@@ -98,14 +103,23 @@ const searchDateStart = ref('');
 const searchDateEnd = ref('');
 const userOptions = ref<Array<{ label: string; value: string }>>([]);
 
+// Only fills the filter's options: a failure is a toast, and the list
+// itself still loads.
 const fetchUserOptions = async () => {
-    const result = await api.get('/restocks/users');
-    userOptions.value = result.data.map(
-        ({ _id, name }: { _id: string; name: string }) => ({
-            label: name,
-            value: _id,
-        }),
-    );
+    try {
+        const result = await api.get('/restocks/users');
+        userOptions.value = result.data.map(
+            ({ _id, name }: { _id: string; name: string }) => ({
+                label: name,
+                value: _id,
+            }),
+        );
+    } catch (error) {
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Could not load the user filter.'),
+        );
+    }
 };
 
 onMounted(() => {
@@ -124,40 +138,44 @@ const resetFilters = () => {
     resetSearch();
 };
 
-async function fetchRestock() {
-    loading.value = true;
-
-    const result = await api.get(`/restocks`, {
-        params: {
-            page: page.value,
-            limit: limit.value,
-            restockedBy: searchRestockedBy.value,
-            // Calendar days as YYYY-MM-DD (the date input's value). The
-            // server reads them in the store timezone; either may be blank.
-            dateFrom: searchDateStart.value || undefined,
-            dateTo: searchDateEnd.value || undefined,
-        },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    serverItems.value = result.data.data.map((restock: any) => ({
-        id: restock._id,
-        description: restock.description,
-        restockedBy: restock.restockedBy.name,
-        totalCost: formatCurrency(restock.totalCost ?? 0),
-        date: new Date(restock.createdAt).toLocaleString('en-PH', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true,
+const {
+    loading,
+    error: loadError,
+    load: fetchRestock,
+} = useListFetch(
+    () =>
+        api.get(`/restocks`, {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                restockedBy: searchRestockedBy.value,
+                // Calendar days as YYYY-MM-DD (the date input's value). The
+                // server reads them in the store timezone; either may be blank.
+                dateFrom: searchDateStart.value || undefined,
+                dateTo: searchDateEnd.value || undefined,
+            },
         }),
-    }));
+    (result) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        serverItems.value = result.data.data.map((restock: any) => ({
+            id: restock._id,
+            description: restock.description,
+            restockedBy: restock.restockedBy.name,
+            totalCost: formatCurrency(restock.totalCost ?? 0),
+            date: new Date(restock.createdAt).toLocaleString('en-PH', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true,
+            }),
+        }));
 
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the restocks.',
+);
 
 fetchRestock();
 

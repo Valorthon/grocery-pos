@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 import { isAxiosError, isCancel } from 'axios';
 import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { apiErrorText } from '@/utils/api-error';
 
 /** One row of `GET /products/matches`. */
 export interface Match {
@@ -36,18 +37,15 @@ export function parseScan(
     return { qty: defaultQty, query: text };
 }
 
-/** Why a search failed, in the server's words where it gave some. */
+/**
+ * Why a search failed, in the server's words where it gave some
+ * (`apiErrorText`, issue #18), else its status.
+ */
 export function searchErrorMessage(error: unknown): string {
     if (!isAxiosError(error)) {
         return error instanceof Error ? error.message : 'Unknown error';
     }
-    if (!error.response) return 'No response from the server';
-
-    const data = error.response.data as { message?: unknown } | undefined;
-    const message = data?.message;
-    if (typeof message === 'string' && message) return message;
-    if (Array.isArray(message) && message.length) return message.join(', ');
-    return `Request failed (${error.response.status})`;
+    return apiErrorText(error, `Request failed (${error.response?.status})`);
 }
 
 export type FetchMatches = (

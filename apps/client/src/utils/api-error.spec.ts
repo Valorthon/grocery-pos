@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { apiErrorMessages, NETWORK_ERROR_MESSAGE } from './api-error';
+import {
+    apiErrorMessages,
+    apiErrorText,
+    NETWORK_ERROR_MESSAGE,
+} from './api-error';
 import { newProductLines } from './payloads';
 
 /** An axios error carrying `data` as the response body. */
@@ -230,5 +234,24 @@ describe('apiErrorMessages', () => {
                 'Item 2: name: Already exists',
             ]);
         });
+    });
+});
+
+describe('apiErrorText', () => {
+    it('joins the messages into one line', () => {
+        expect(
+            apiErrorText(
+                httpError(
+                    400,
+                    body('Validation failed', { messages: ['a', 'b'] }),
+                ),
+            ),
+        ).toBe('a; b');
+    });
+
+    it('uses the fallback for an error that is not from axios', () => {
+        expect(
+            apiErrorText(new TypeError('x is undefined'), 'Could not load'),
+        ).toBe('Could not load');
     });
 });

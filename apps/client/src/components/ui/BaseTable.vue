@@ -36,6 +36,38 @@
                         </tr>
                     </template>
 
+                    <template v-else-if="error">
+                        <tr>
+                            <td
+                                :colspan="headers.length"
+                                class="py-12 text-center"
+                            >
+                                <div
+                                    role="alert"
+                                    data-testid="table-error"
+                                    class="flex flex-col items-center gap-3"
+                                >
+                                    <AlertCircle
+                                        :size="32"
+                                        class="text-red-400"
+                                        aria-hidden="true"
+                                    />
+                                    <p class="font-bold text-slate-800 text-sm">
+                                        {{ error }}
+                                    </p>
+                                    <BaseButton
+                                        variant="outline"
+                                        size="sm"
+                                        @click="emit('retry')"
+                                    >
+                                        <RotateCw class="w-4 h-4" />
+                                        Retry
+                                    </BaseButton>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+
                     <template v-else-if="items.length === 0">
                         <tr>
                             <td
@@ -145,6 +177,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { AlertCircle, RotateCw } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import type { Component } from 'vue';
 
@@ -161,6 +194,11 @@ const props = withDefaults(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         items: any[];
         loading?: boolean;
+        /**
+         * Why the rows could not be loaded (issue #18): shown in their
+         * place with a Retry button, which emits `retry`.
+         */
+        error?: string;
         emptyText?: string;
         emptyIcon?: Component;
         rowClick?: boolean;
@@ -172,6 +210,7 @@ const props = withDefaults(
     }>(),
     {
         loading: false,
+        error: '',
         emptyText: 'No data found',
         rowClick: false,
         itemsLength: 0,
@@ -188,6 +227,7 @@ const emit = defineEmits<{
     (e: 'update:itemsPerPage', value: number): void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (e: 'click:row', row: any): void;
+    (e: 'retry'): void;
 }>();
 
 function alignClass(align?: string): string {

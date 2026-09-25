@@ -45,10 +45,12 @@
                 :headers="headers"
                 :items="serverItems"
                 :loading="loading"
+                :error="loadError"
                 empty-text="No orders found"
                 :items-length="totalItems"
                 row-click
                 @click:row="showDetails"
+                @retry="fetchSales"
             >
                 <template #cell-amount="{ value }">
                     <span class="font-bold">{{ value }}</span>
@@ -86,6 +88,25 @@
                     <tr v-if="detailsLoading">
                         <td colspan="4" class="py-4 text-center">
                             <Spinner class="mx-auto text-slate-400" />
+                        </td>
+                    </tr>
+                    <tr v-else-if="detailsError">
+                        <td colspan="4" class="py-4 text-center">
+                            <div
+                                role="alert"
+                                data-testid="details-error"
+                                class="flex flex-col items-center gap-2 text-sm"
+                            >
+                                <p class="font-bold text-red-700">
+                                    {{ detailsError }}
+                                </p>
+                                <BaseButton
+                                    variant="outline"
+                                    size="sm"
+                                    @click="loadDetails"
+                                    >Retry</BaseButton
+                                >
+                            </div>
                         </td>
                     </tr>
                     <tr v-for="d in details" :key="d._id">
@@ -327,7 +348,8 @@ import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
-import { isAxiosError } from 'axios';
+import { apiErrorMessages, apiErrorText } from '@/utils/api-error';
+import { useListFetch } from '@/composables/useListFetch';
 import {
     DiscountType,
     ErrorCode,
@@ -371,7 +393,6 @@ const uiStore = useUIStore();
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
-const loading = ref(true);
 const limit = ref(5);
 const page = ref(1);
 const totalItems = ref(0);
@@ -405,37 +426,42 @@ function reversalLabel(type: ReversalType): string {
     return type === ReversalType.VOID ? 'Void' : 'Refund';
 }
 
-async function fetchSales() {
-    loading.value = true;
-    const result = await api.get(`/sales`, {
-        params: { page: page.value, limit: limit.value },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    serverItems.value = result.data.data.map((sale: any) => ({
-        id: sale._id,
-        cashier: sale.cashier?.name ?? 'N/A',
-        amount: formatCurrency(sale.amount ?? 0),
-        totals: {
-            amount: sale.amount ?? 0,
-            discount: sale.discount ?? null,
-            // Sales from before statuses existed are completed.
-            status: sale.status ?? SaleStatus.COMPLETED,
+const {
+    loading,
+    error: loadError,
+    load: fetchSales,
+} = useListFetch(
+    () =>
+        api.get(`/sales`, {
+            params: { page: page.value, limit: limit.value },
+        }),
+    (result) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        serverItems.value = result.data.data.map((sale: any) => ({
+            id: sale._id,
+            cashier: sale.cashier?.name ?? 'N/A',
+            amount: formatCurrency(sale.amount ?? 0),
+            totals: {
+                amount: sale.amount ?? 0,
+                discount: sale.discount ?? null,
+                // Sales from before statuses existed are completed.
+                status: sale.status ?? SaleStatus.COMPLETED,
+                paymentType: sale.paymentType,
+                tenders: sale.tenders ?? [],
+                changeGiven: sale.changeGiven ?? 0,
+                referenceNumber: sale.referenceNumber ?? null,
+                reversal: sale.reversal ?? null,
+                shift: sale.shift ?? null,
+            } satisfies SaleTotals,
             paymentType: sale.paymentType,
-            tenders: sale.tenders ?? [],
-            changeGiven: sale.changeGiven ?? 0,
-            referenceNumber: sale.referenceNumber ?? null,
-            reversal: sale.reversal ?? null,
-            shift: sale.shift ?? null,
-        } satisfies SaleTotals,
-        paymentType: sale.paymentType,
-        status: sale.status ?? SaleStatus.COMPLETED,
-        date: formatDate(sale.createdAt),
-    }));
+            status: sale.status ?? SaleStatus.COMPLETED,
+            date: formatDate(sale.createdAt),
+        }));
 
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the sales.',
+);
 
 fetchSales();
 watch([page, limit], fetchSales);
@@ -444,6 +470,7 @@ const isDialogOpen = ref(false);
 const detailsLoading = ref(false);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const details = ref<any[]>([]);
+const detailsError = ref('');
 const selectedId = ref('');
 const selectedSale = ref<SaleTotals | null>(null);
 
@@ -581,8 +608,7 @@ async function confirmReversal() {
         }
         uiStore.queueMessage(
             Color.ERROR,
-            (isAxiosError(error) && error.response?.data?.message) ||
-                `Could not ${action} the sale`,
+            apiErrorMessages(error, `Could not ${action} the sale`),
         );
     } finally {
         reversing.value = false;
@@ -595,12 +621,21 @@ async function showDetails(row: any) {
     selectedId.value = row.id;
     selectedSale.value = row.totals ?? null;
     isDialogOpen.value = true;
+    await loadDetails();
+}
+
+async function loadDetails() {
     detailsLoading.value = true;
+    detailsError.value = '';
+    details.value = [];
     try {
-        const res = await api.get(`/sales/details/${row.id}`);
+        const res = await api.get(`/sales/details/${selectedId.value}`);
         details.value = res.data;
-    } catch {
-        details.value = [];
+    } catch (error) {
+        detailsError.value = apiErrorText(
+            error,
+            'Could not load the sale details.',
+        );
     } finally {
         detailsLoading.value = false;
     }

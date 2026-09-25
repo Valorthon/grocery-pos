@@ -13,6 +13,27 @@
             </div>
         </div>
 
+        <div
+            v-if="loadError"
+            role="alert"
+            data-testid="dashboard-error"
+            class="flex flex-wrap items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800"
+        >
+            <AlertCircle :size="18" class="shrink-0" aria-hidden="true" />
+            <p class="flex-1 font-bold">
+                The dashboard could not be loaded: {{ loadError }}
+            </p>
+            <BaseButton
+                variant="outline"
+                size="sm"
+                :loading="loading"
+                @click="loadDashboard"
+            >
+                <RotateCw class="w-4 h-4" />
+                Retry
+            </BaseButton>
+        </div>
+
         <!-- Stat cards -->
         <div
             class="grid grid-cols-1 sm:grid-cols-2 gap-4"
@@ -139,6 +160,12 @@
                         </div>
                     </div>
                 </div>
+                <div v-else-if="loading" class="py-2">
+                    <Spinner class="mx-auto text-slate-400" />
+                </div>
+                <div v-else-if="!data" class="text-slate-400 text-sm">
+                    Unavailable
+                </div>
                 <div v-else class="text-slate-400 text-sm">
                     No recent activity
                 </div>
@@ -148,22 +175,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed } from 'vue';
 import {
     AlertCircle,
     Banknote,
     Package,
     PackageX,
+    RotateCw,
     ShoppingCart,
 } from '@lucide/vue';
 import api from '@/axios';
 import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
+import { useListFetch } from '@/composables/useListFetch';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency } from '@/utils/currency';
 
 const authStore = useAuthStore();
-const loading = ref(true);
 
 /**
  * GET /dashboard. `todayRevenue` and `recentSales` are money figures the
@@ -324,14 +353,21 @@ function formatRelative(iso: string) {
     return `${days} day${days > 1 ? 's' : ''} ago`;
 }
 
-onMounted(async () => {
-    try {
-        const res = await api.get('/dashboard');
+/**
+ * A failure shows an error banner with Retry (issue #18); the tiles keep
+ * their last figures, or "-" when there are none.
+ */
+const {
+    loading,
+    error: loadError,
+    load: loadDashboard,
+} = useListFetch(
+    () => api.get<DashboardData>('/dashboard'),
+    (res) => {
         data.value = res.data;
-    } catch (e) {
-        console.error('Dashboard load failed', e);
-    } finally {
-        loading.value = false;
-    }
-});
+    },
+    'Please try again.',
+);
+
+loadDashboard();
 </script>

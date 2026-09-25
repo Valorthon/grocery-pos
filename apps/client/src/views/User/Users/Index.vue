@@ -35,8 +35,10 @@
             :headers="headers"
             :items="serverItems"
             :loading="loading"
+            :error="loadError"
             empty-text="No users found"
             :items-length="totalItems"
+            @retry="fetchUsers"
         >
             <template #cell-roles="{ value }">
                 <div class="flex flex-wrap gap-1">
@@ -180,9 +182,9 @@ import {
     canManageUser,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
-import { isAxiosError } from 'axios';
+import { useListFetch } from '@/composables/useListFetch';
+import { apiErrorMessages } from '@/utils/api-error';
 
-const loading = ref(true);
 const limit = ref(5);
 const page = ref(1);
 const totalItems = ref(0);
@@ -265,20 +267,25 @@ const resetFilters = () => {
     resetSearch();
 };
 
-async function fetchUsers() {
-    loading.value = true;
-    const result = await api.get(`/users`, {
-        params: {
-            page: page.value,
-            limit: limit.value,
-            name: searchName.value?.toLowerCase(),
-        },
-    });
-
-    serverItems.value = result.data.data;
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+const {
+    loading,
+    error: loadError,
+    load: fetchUsers,
+} = useListFetch(
+    () =>
+        api.get(`/users`, {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                name: searchName.value?.toLowerCase(),
+            },
+        }),
+    (result) => {
+        serverItems.value = result.data.data;
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the users.',
+);
 
 fetchUsers();
 watch([page, limit], fetchUsers);
@@ -300,12 +307,10 @@ async function createUser() {
         createForm.value = { name: '', password: '', roles: [] };
         fetchUsers();
     } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error.response?.data?.message ?? 'Create failed',
-            );
-        }
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Could not create the user.'),
+        );
     } finally {
         saving.value = false;
     }
@@ -345,12 +350,10 @@ async function updateUser() {
         isEditOpen.value = false;
         fetchUsers();
     } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error.response?.data?.message ?? 'Update failed',
-            );
-        }
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Could not update the user.'),
+        );
     } finally {
         saving.value = false;
     }

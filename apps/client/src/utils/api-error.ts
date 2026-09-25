@@ -105,3 +105,15 @@ export function apiErrorMessages(
     if (nonEmpty(data.message)) return [data.message];
     return [fallback];
 }
+
+/**
+ * `apiErrorMessages` as one line, for a single inline error (a list-fetch
+ * error state or a modal's error line).
+ */
+export function apiErrorText(
+    error: unknown,
+    fallback?: string,
+    options?: ApiErrorOptions,
+): string {
+    return apiErrorMessages(error, fallback, options).join('; ');
+}

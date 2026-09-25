@@ -29,10 +29,12 @@
                 :headers="headers"
                 :items="rows"
                 :loading="loading"
+                :error="loadError"
                 empty-text="No shifts found"
                 :items-length="totalItems"
                 row-click
                 @click:row="select"
+                @retry="fetchShifts"
             >
                 <template #cell-status="{ value }">
                     <Badge
@@ -151,6 +153,7 @@ import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
 import { apiErrorMessage } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
+import { useListFetch } from '@/composables/useListFetch';
 
 /**
  * ADMIN only (issue #2): every shift, open and closed, with each closed
@@ -159,7 +162,6 @@ import { formatCurrency } from '@/utils/currency';
  */
 const uiStore = useUIStore();
 
-const loading = ref(true);
 const page = ref(1);
 const limit = ref(10);
 const totalItems = ref(0);
@@ -213,27 +215,25 @@ function overShortClass(report: ZReadReport): string {
     return v > 0 ? 'text-amber-700' : 'text-rose-700';
 }
 
-async function fetchShifts() {
-    loading.value = true;
-    try {
-        const res = await api.get<Paginated<ShiftListItem>>('/shifts', {
+const {
+    loading,
+    error: loadError,
+    load: fetchShifts,
+} = useListFetch(
+    () =>
+        api.get<Paginated<ShiftListItem>>('/shifts', {
             params: {
                 page: page.value,
                 limit: limit.value,
                 ...(statusFilter.value && { status: statusFilter.value }),
             },
-        });
+        }),
+    (res) => {
         shifts.value = res.data.data;
         totalItems.value = res.data.totalItems;
-    } catch (err) {
-        uiStore.queueMessage(
-            Color.ERROR,
-            apiErrorMessage(err, 'Could not load shifts'),
-        );
-    } finally {
-        loading.value = false;
-    }
-}
+    },
+    'Could not load the shifts.',
+);
 
 fetchShifts();
 watch([page, limit], fetchShifts);
