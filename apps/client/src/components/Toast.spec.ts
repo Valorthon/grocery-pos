@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { Color, TOAST_DURATION_MS, useUIStore } from '@/stores/ui';
+import {
+    Color,
+    TOAST_DEDUPE_MS,
+    TOAST_DURATION_MS,
+    useUIStore,
+} from '@/stores/ui';
 import Toast from './Toast.vue';
 
 let app: App | null = null;
@@ -51,7 +56,53 @@ describe('Toast (issue #18)', () => {
 
         const [error, success] = toasts();
         expect(error.getAttribute('role')).toBe('alert');
-        expect(success.getAttribute('role')).toBe('status');
+        // Success sits in one persistent polite live region, not its own.
+        expect(success.getAttribute('role')).toBeNull();
+        const region = document.querySelector('[data-testid="toast-status"]')!;
+        expect(region.getAttribute('aria-live')).toBe('polite');
+        expect(region.contains(success)).toBe(true);
+    });
+
+    it('keeps the polite live region in the page while it is empty', () => {
+        expect(
+            document
+                .querySelector('[data-testid="toast-status"]')
+                ?.getAttribute('aria-live'),
+        ).toBe('polite');
+    });
+
+    it('removes an expired success from the page', async () => {
+        useUIStore().queueMessage(Color.SUCCESS, 'Saved');
+        await nextTick();
+        expect(toasts()).toHaveLength(1);
+
+        vi.advanceTimersByTime(TOAST_DURATION_MS);
+        await nextTick();
+        // Let the leave transition finish.
+        vi.advanceTimersByTime(1000);
+        await nextTick();
+
+        expect(toasts()).toHaveLength(0);
+    });
+
+    it('reads a repeat count as text, not an aria-label', async () => {
+        const ui = useUIStore();
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        vi.advanceTimersByTime(TOAST_DEDUPE_MS);
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        await nextTick();
+
+        const toast = toasts()[0];
+        expect(toast.querySelector('.sr-only')?.textContent).toBe(
+            '(repeated 2 times)',
+        );
+        expect(toast.querySelector('[aria-label^="shown"]')).toBeNull();
+    });
+
+    it('scrolls a long stack instead of covering the page', () => {
+        const stack = document.querySelector('[data-testid="toast-stack"]')!;
+        expect(stack.className).toContain('overflow-y-auto');
+        expect(stack.className).toMatch(/max-h-/);
     });
 
     it('keeps an error on screen and lets a success expire', async () => {
