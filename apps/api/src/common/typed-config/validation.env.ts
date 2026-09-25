@@ -42,8 +42,9 @@ const secretSchema = (name: string) =>
 /**
  * generate() builds prefix * 10^digits + counter, then appends one check
  * digit. For the result to be an EAN-13, prefix and counter digits together
- * must fill exactly 12 digits. Fewer makes calculateChecksum() throw on every
- * product create; more yields 14+ digits that ensureValid() rejects.
+ * must fill exactly 12 digits, or generate() throws (its length guard) on
+ * every product create. Generated codes are the reserved range that typed
+ * barcodes may not use (`isReservedBarcode` in @grocery-pos/contracts).
  */
 export const EAN_DATA_DIGITS = 12 - String(EAN_COUNTER.PREFIX).length;
 

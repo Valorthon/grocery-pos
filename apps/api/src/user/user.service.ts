@@ -13,6 +13,7 @@ import {
 } from './types';
 import { holdsRole } from '@grocery-pos/contracts';
 import { runInTransaction } from '../common/utils/db';
+import { prefixRegex } from '../common/utils/regex';
 import type { AuthUser } from '../auth/types';
 import { ErrorCode, ForbiddenError, NotFoundError } from '../common/errors';
 import {
@@ -81,8 +82,7 @@ export class UserService implements OnModuleInit {
 
         const query: Record<string, unknown> = {};
         if (name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query.name = { $regex: `^${escaped}` };
+            query.name = prefixRegex(name);
         }
 
         const [data, totalItems] = await Promise.all([

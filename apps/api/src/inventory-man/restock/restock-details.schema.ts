@@ -26,6 +26,10 @@ export class RestockDetails {
         type: Number,
         required: true,
         min: NUMERIC_LIMITS.STOCK_MIN,
+        validate: {
+            validator: Number.isInteger,
+            message: 'quantity must be an integer',
+        },
     })
     quantity!: number;
 

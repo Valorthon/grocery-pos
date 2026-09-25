@@ -3,11 +3,13 @@ import {
     ArrayNotEmpty,
     IsArray,
     IsBoolean,
+    IsDefined,
     IsEnum,
     IsInt,
     IsMongoId,
     IsNotEmpty,
     IsNumber,
+    IsObject,
     IsOptional,
     IsPositive,
     IsString,
@@ -18,24 +20,24 @@ import {
 } from 'class-validator';
 import { Category } from './product.types';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
+import {
+    AtLeastOneOf,
+    IsBarcode,
+    Trim,
+    TrimLowercase,
+} from '../../common/validators';
 
 export class EnsureValidDto {
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.EAN)
-    @Transform(({ value }) =>
-        typeof value === 'string' ? value.trim() : (value as unknown),
-    )
+    @Trim()
     EAN!: string;
 
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @Transform(({ value }) =>
-        typeof value === 'string'
-            ? value.trim().toLowerCase()
-            : (value as unknown),
-    )
+    @TrimLowercase()
     name!: string;
 
     @IsOptional()
@@ -55,22 +57,25 @@ export class EnsureValidDto {
 }
 
 export class NewProductFields {
+    /**
+     * The barcode as scanned: EAN-13, UPC-A or EAN-8 with a valid check
+     * digit, outside the store's generated range (`IsBarcode`). Omitted or
+     * blank: the server generates one.
+     */
     @IsOptional()
     @IsString()
-    @MaxLength(STRING_LIMITS.EAN)
-    @Transform(({ value }) =>
-        typeof value === 'string' ? value.trim() : (value as unknown),
-    )
-    EAN!: string;
+    @IsBarcode()
+    @Transform(({ value }) => {
+        if (typeof value !== 'string') return value as unknown;
+        const trimmed = value.trim();
+        return trimmed === '' ? undefined : trimmed;
+    })
+    EAN?: string;
 
     @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @Transform(({ value }) =>
-        typeof value === 'string'
-            ? value.trim().toLowerCase()
-            : (value as unknown),
-    )
+    @TrimLowercase()
     name!: string;
 
     @IsOptional()
@@ -98,20 +103,16 @@ export class GetDto {
     @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.EAN)
-    @Transform(({ value }) =>
-        typeof value === 'string' ? value.trim() : (value as unknown),
-    )
+    @Trim()
     EAN!: string;
 }
+/** A product edit: at least one field, never an empty `$set` (issue #14). */
+@AtLeastOneOf(['name', 'price'])
 class UpdateFields {
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @Transform(({ value }) =>
-        typeof value === 'string'
-            ? value.trim().toLowerCase()
-            : (value as unknown),
-    )
+    @TrimLowercase()
     @IsNotEmpty()
     name?: string;
 
@@ -127,6 +128,10 @@ class UpdateBulkFields {
     @IsMongoId()
     product!: string;
 
+    // Without these a line with no `update` skips ValidateNested (and so
+    // AtLeastOneOf) and reaches the service as `update: undefined`.
+    @IsDefined()
+    @IsObject()
     @ValidateNested()
     @Type(() => UpdateFields)
     update!: UpdateFields;
@@ -140,22 +145,18 @@ export class UpdateBulkDto {
 }
 
 export class GetAllDto {
+    /** Matched anywhere in the name. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @Transform(({ value }) =>
-        typeof value === 'string'
-            ? value.trim().toLowerCase()
-            : (value as unknown),
-    )
+    @TrimLowercase()
     name!: string;
 
+    /** Matched as a barcode prefix. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.EAN)
-    @Transform(({ value }) =>
-        typeof value === 'string' ? value.trim() : (value as unknown),
-    )
+    @Trim()
     EAN!: string;
 
     @IsPositive()
@@ -173,19 +174,13 @@ export class MatchesDto {
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.EAN)
-    @Transform(({ value }) =>
-        typeof value === 'string' ? value.trim() : (value as unknown),
-    )
+    @Trim()
     EAN!: string;
 
     /** A name fragment; a digits-only term also matches part of an EAN. */
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @Transform(({ value }) =>
-        typeof value === 'string'
-            ? value.trim().toLowerCase()
-            : (value as unknown),
-    )
+    @TrimLowercase()
     name!: string;
 }

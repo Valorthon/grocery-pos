@@ -3,7 +3,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { EANCounter } from './ean-counter.schema';
 import { ClientSession, Model } from 'mongoose';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
-import { ErrorCode, InternalError, ValidationError } from '../common/errors';
+import { InternalError } from '../common/errors';
+import { BARCODE_LENGTHS, gtinCheckDigit } from '@grocery-pos/contracts';
 
 @Injectable()
 export class EanCounterService {
@@ -27,48 +28,28 @@ export class EanCounterService {
             )
             .lean();
 
-        const tempEAN =
-            counterDoc.prefix *
-                Math.pow(10, this.configService.get('EAN_COUNTER_DIGITS')) +
-            counterDoc.counter;
+        const range = Math.pow(
+            10,
+            this.configService.get('EAN_COUNTER_DIGITS'),
+        );
 
-        const checksum = this.calculateChecksum(tempEAN.toString());
-        const result = tempEAN * 10 + checksum;
-        return result.toString();
-    }
+        // Past its digits the counter would spill into the prefix (200 ->
+        // 201...) and leave the reserved range, where it could collide with
+        // a typed barcode.
+        if (counterDoc.counter >= range) {
+            throw new InternalError('EAN counter exhausted');
+        }
 
-    ensureValid(EAN: string) {
-        if (!/^\d{13}$/.test(EAN))
-            throw new ValidationError(
-                ErrorCode.VALIDATION_EAN_INVALID,
-                'EAN must be 13 digits (numbers) long',
-            );
+        const tempEAN = counterDoc.prefix * range + counterDoc.counter;
 
-        const correctChecksum = this.calculateChecksum(EAN.slice(0, -1));
-
-        if (correctChecksum.toString() !== EAN.at(-1))
-            throw new ValidationError(
-                ErrorCode.VALIDATION_EAN_INVALID,
-                'EAN checksum is invalid',
-            );
-    }
-
-    private calculateChecksum(tempEAN: string): number {
-        if (tempEAN.length < 12) {
+        // Always 12 data digits: the env schema pins EAN_COUNTER_DIGITS so
+        // prefix + counter fill them. Every generated code is therefore a
+        // 13-digit EAN-13 starting with the prefix, the range that typed
+        // barcodes may not use (`isReservedBarcode` in contracts).
+        const body = tempEAN.toString();
+        if (body.length !== BARCODE_LENGTHS.EAN_13 - 1) {
             throw new InternalError('EAN Generation Error');
         }
-
-        let oddSum = 0;
-        let evenSum = 0;
-
-        for (let x = 0; x < tempEAN.length; ++x) {
-            const num = Number(tempEAN[x]);
-            if (x % 2 === 0) oddSum += num;
-            else evenSum += num;
-        }
-
-        evenSum *= 3;
-
-        return (10 - ((oddSum + evenSum) % 10)) % 10;
+        return `${body}${gtinCheckDigit(body)}`;
     }
 }

@@ -254,7 +254,38 @@ describe('SalesService.sell', () => {
         await service.sell(CASHIER, sellDto([{ product: 'p1', quantity: 4 }]));
 
         expect(inventorySell).toHaveBeenCalledTimes(1);
+        expect(inventorySell).toHaveBeenCalledWith(
+            'u1',
+            expect.anything(),
+            expect.anything(),
+        );
         expect(detailsBulkWrite).toHaveBeenCalledTimes(1);
+    });
+
+    it('prices duplicate lines for one product and leaves the stock check to the netted total (issue #14)', async () => {
+        // InventoryService.sell nets these into one guarded decrement of 7
+        // and reports a shortfall as `requested: 7` (see its spec).
+        getMany.mockResolvedValue(
+            new Map([['p1', { name: 'bread', price: 500 }]]),
+        );
+        const shortfall = new ValidationError(
+            ErrorCode.VALIDATION_INVALID_INPUT,
+            'Insufficient stock for one or more products',
+            [{ product: 'p1', name: 'bread', requested: 7, available: 5 }],
+        );
+        inventorySell.mockRejectedValue(shortfall);
+        const dto = sellDto([
+            { product: 'p1', quantity: 3 },
+            { product: 'p1', quantity: 4 },
+        ]);
+
+        await expect(service.sell(CASHIER, dto)).rejects.toBe(shortfall);
+        // Both lines reach the inventory write unmerged; it does the netting.
+        expect(inventorySell).toHaveBeenCalledWith(
+            'u1',
+            expect.objectContaining({ sellDetails: dto.sellDetails }),
+            expect.anything(),
+        );
     });
 
     describe('shift (issue #2)', () => {
@@ -1050,7 +1081,9 @@ describe('SalesService.reverse', () => {
         expect(String(update.$set.reversal.approvedBy)).toBe(ADMIN.userId);
         expect(update.$set.reversal.at).toBeInstanceOf(Date);
 
+        // The admin who reversed the sale is the rows' updatedBy (#14).
         expect(returnStock).toHaveBeenCalledWith(
+            ADMIN.userId,
             [
                 { product: P1, quantity: 2 },
                 { product: P2, quantity: 5 },

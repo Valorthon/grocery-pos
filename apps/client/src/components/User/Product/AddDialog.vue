@@ -62,6 +62,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { isAxiosError } from 'axios';
 import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
 import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
+import { barcodeFieldError } from '@/utils/rules';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -116,8 +117,8 @@ watch(
 
 function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!formData.autoGenerateEAN && !formData.EAN)
-        e.EAN = 'This field is required';
+    const eanError = barcodeFieldError(formData.EAN, formData.autoGenerateEAN);
+    if (eanError) e.EAN = eanError;
     if (!formData.name) e.name = 'This field is required';
     if (
         formData.price == null ||

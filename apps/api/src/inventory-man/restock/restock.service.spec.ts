@@ -2,7 +2,8 @@ import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { RestockService } from './restock.service';
 import { Restock } from './restock.schema';
-import { RestockDetails } from './restock-details.schema';
+import mongoose from 'mongoose';
+import { RestockDetails, RestockDetailsSchema } from './restock-details.schema';
 import { InventoryService } from '../inventory/inventory.service';
 import { ProductService } from '../../product/product.service';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
@@ -106,5 +107,30 @@ describe('RestockService.getAll date filter', () => {
         await service.getAll(dto);
 
         expect(dto).toEqual(snapshot);
+    });
+});
+
+describe('RestockDetails schema quantity (issue #14)', () => {
+    const DetailsModel = mongoose.model(
+        RestockDetails.name,
+        RestockDetailsSchema,
+    );
+
+    function quantityError(quantity: number) {
+        const doc = new DetailsModel({
+            restock: new mongoose.Types.ObjectId(),
+            product: new mongoose.Types.ObjectId(),
+            quantity,
+            unitCost: 100,
+        });
+        return doc.validateSync()?.errors.quantity?.kind;
+    }
+
+    it('accepts a whole quantity', () => {
+        expect(quantityError(3)).toBeUndefined();
+    });
+
+    it('rejects a fractional quantity, as SalesDetails does', () => {
+        expect(quantityError(1.5)).toBe('user defined');
     });
 });

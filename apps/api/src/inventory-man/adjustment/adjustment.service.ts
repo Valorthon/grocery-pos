@@ -6,6 +6,7 @@ import { AdjustmentDetails } from './adjustment-details.schema';
 import { AdjustDto, GetAllDto, GetDetailsDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
+import { productSearchFilter } from '../../product/product-search';
 import { dateRangeFilter } from '../../common/utils/timezone';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
@@ -93,7 +94,7 @@ export class AdjustmentService {
                 // Apply the stock change before recording it. adjust() throws
                 // for a missing inventory row or negative stock, so a rejected
                 // adjustment never leaves an AdjustmentDetails row.
-                await this.inventoryService.adjust(dto, session);
+                await this.inventoryService.adjust(user.userId, dto, session);
 
                 const inserts = adjustDetails.map((detail) => ({
                     insertOne: {
@@ -122,15 +123,7 @@ export class AdjustmentService {
             adjustment: new Types.ObjectId(adjustment),
         };
 
-        const productQuery: Record<string, unknown> = {};
-        if (name) {
-            const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            productQuery['product.name'] = { $regex: escaped };
-        }
-        if (EAN) {
-            const escaped = EAN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            productQuery['product.EAN'] = { $regex: `^${escaped}` };
-        }
+        const productQuery = productSearchFilter({ name, EAN }, 'product.');
 
         Logger.log({ adjustmentQuery, productQuery });
 

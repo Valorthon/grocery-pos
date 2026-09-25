@@ -1,4 +1,4 @@
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { barcodeError, STRING_LIMITS } from '@grocery-pos/contracts';
 
 export const rules = {
     required: (v: unknown) => !!v || 'This field is required',
@@ -21,4 +21,21 @@ export function passwordError(value: string, optional = false): string {
     if (value.length > STRING_LIMITS.PASSWORD)
         return `At most ${STRING_LIMITS.PASSWORD} characters`;
     return '';
+}
+
+/**
+ * Why a typed or scanned product barcode is refused, or '' when it is
+ * accepted (or auto-generated, so not typed at all). The same rules as the
+ * API's create and import validation (`barcodeError` in contracts, #14):
+ * EAN-13, UPC-A or EAN-8 with a valid check digit, outside the store's
+ * generated range.
+ */
+export function barcodeFieldError(
+    value: string,
+    autoGenerate: boolean,
+): string {
+    if (autoGenerate) return '';
+    const code = value.trim();
+    if (!code) return 'This field is required';
+    return barcodeError(code) ?? '';
 }

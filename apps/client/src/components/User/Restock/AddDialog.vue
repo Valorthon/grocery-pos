@@ -100,6 +100,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { isAxiosError } from 'axios';
 import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
 import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
+import { barcodeFieldError } from '@/utils/rules';
 
 const props = defineProps<{ modelValue: boolean; item?: AddForm }>();
 
@@ -192,8 +193,13 @@ async function search(query: string) {
 function validate(): boolean {
     const e: Record<string, string> = {};
     if (!formData.isNewProduct && !formData.EAN) e.EAN = 'Select a product';
-    if (formData.isNewProduct && !formData.autoGenerateEAN && !formData.EAN)
-        e.EAN = 'This field is required';
+    if (formData.isNewProduct) {
+        const eanError = barcodeFieldError(
+            formData.EAN,
+            formData.autoGenerateEAN,
+        );
+        if (eanError) e.EAN = eanError;
+    }
     if (!formData.quantity || formData.quantity < 1)
         e.quantity = 'Must be at least 1';
     if (pesosToCentavos(formData.unitCost) < NUMERIC_LIMITS.PRICE_MIN)

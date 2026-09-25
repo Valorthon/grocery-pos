@@ -3,7 +3,8 @@ import { getModelToken } from '@nestjs/mongoose';
 import { EanCounterService } from './ean-counter.service';
 import { EANCounter } from './ean-counter.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
-import { ValidationError } from '../common/errors';
+import { InternalError } from '../common/errors';
+import { hasValidCheckDigit, isReservedBarcode } from '@grocery-pos/contracts';
 
 const CONFIG: Record<string, unknown> = {
     EAN_COUNTER_ID: 'EAN_COUNTER_ID',
@@ -35,47 +36,41 @@ describe('EanCounterService', () => {
     });
 
     describe('generate', () => {
-        it('produces a 13-digit EAN that passes its own validation', async () => {
+        it('produces a 13-digit EAN-13 with a valid check digit', async () => {
             findByIdAndUpdate.mockReturnValue({
                 lean: () => Promise.resolve({ prefix: 200, counter: 1 }),
             });
 
             const ean = await service.generate();
 
-            expect(ean).toHaveLength(13);
-            expect(ean).toMatch(/^\d{13}$/);
-            // generate() and ensureValid() must agree, or every generated
-            // barcode would be rejected at scan time.
-            expect(() => service.ensureValid(ean)).not.toThrow();
+            expect(ean).toBe('2000000000015');
+            // Generated codes must scan as valid barcodes, and sit in the
+            // reserved range that typed barcodes may not take (issue #14).
+            expect(hasValidCheckDigit(ean)).toBe(true);
+            expect(isReservedBarcode(ean)).toBe(true);
         });
 
-        it('stays self-consistent across a range of counter values', async () => {
-            for (const counter of [0, 7, 42, 999, 123456789]) {
+        it('stays valid and reserved across a range of counter values', async () => {
+            for (const counter of [0, 7, 42, 999, 123456789, 999999999]) {
                 findByIdAndUpdate.mockReturnValue({
                     lean: () => Promise.resolve({ prefix: 200, counter }),
                 });
 
                 const ean = await service.generate();
-                expect(() => service.ensureValid(ean)).not.toThrow();
+                expect(ean).toMatch(/^200\d{10}$/);
+                expect(hasValidCheckDigit(ean)).toBe(true);
+                expect(isReservedBarcode(ean)).toBe(true);
             }
         });
-    });
 
-    describe('ensureValid', () => {
-        it.each([
-            ['too short', '12345'],
-            ['non-numeric', 'abcdefghijklm'],
-            ['14 digits', '01234567890123'],
-            ['empty', ''],
-        ])('rejects a %s EAN', (_label, ean) => {
-            expect(() => service.ensureValid(ean)).toThrow(ValidationError);
-        });
+        it('refuses to hand out a code once the counter overflows its digits', async () => {
+            findByIdAndUpdate.mockReturnValue({
+                lean: () =>
+                    Promise.resolve({ prefix: 200, counter: 1_000_000_000 }),
+            });
 
-        it('rejects a 13-digit EAN with a bad checksum', () => {
-            // Known-good EAN-13 with its final check digit deliberately altered.
-            expect(() => service.ensureValid('4006381333931')).not.toThrow();
-            expect(() => service.ensureValid('4006381333932')).toThrow(
-                ValidationError,
+            await expect(service.generate()).rejects.toBeInstanceOf(
+                InternalError,
             );
         });
     });

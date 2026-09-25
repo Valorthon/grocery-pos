@@ -154,7 +154,8 @@ const saveToDB = async (saveForm: SaveForm) => {
 
             if (item.isNewProduct) {
                 result.newProduct = {
-                    EAN: item.EAN,
+                    // Blank or omitted: the server generates the barcode.
+                    EAN: item.autoGenerateEAN ? undefined : item.EAN,
                     name: item.name,
                     price: item.price,
                 };
