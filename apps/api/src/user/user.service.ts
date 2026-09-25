@@ -10,6 +10,7 @@ import {
     GetAllDto,
     UpdateBulkDto,
 } from './types';
+import { holdsRole } from '@grocery-pos/contracts';
 import { runInTransaction } from '../common/utils/db';
 import type { AuthUser } from '../auth/types';
 import { ErrorCode, ForbiddenError, NotFoundError } from '../common/errors';
@@ -177,7 +178,7 @@ export class UserService {
     }
 
     /**
-     * Writes every active ADMIN document, so two transactions that could
+     * Bumps a dedicated counter on every active ADMIN document, so two transactions that could
      * each remove a different admin write-conflict instead of both passing
      * the "someone else is still admin" check on their own snapshot (write
      * skew). The loser is retried by `withTransaction` and then sees the
@@ -186,12 +187,17 @@ export class UserService {
     private async lockActiveAdmins(session: ClientSession): Promise<void> {
         await this.model.updateMany(
             { roles: Role.Admin, isActive: true },
-            { $set: { updatedAt: new Date() } },
+            { $inc: { adminLock: 1 } },
+            // Not a user-visible edit: leave updatedAt alone.
             { session, timestamps: false },
         );
     }
 
-    /** The actor's stored roles; a deleted or deactivated actor gets none. */
+    /**
+     * The actor's stored state. RoleGuard only saw the JWT's roles, so a
+     * user deleted, deactivated or stripped of USER_MANAGER since the token
+     * was issued is refused here (ADMIN implies USER_MANAGER).
+     */
     private async loadActor(
         actor: AuthUser,
         session: ClientSession,
@@ -202,7 +208,7 @@ export class UserService {
             .session(session)
             .lean();
 
-        if (!doc || !doc.isActive) {
+        if (!doc || !doc.isActive || !holdsRole(doc.roles, Role.UserManager)) {
             throw new ForbiddenError(
                 ErrorCode.FORBIDDEN,
                 'Your account can no longer manage users',

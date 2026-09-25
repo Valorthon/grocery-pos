@@ -206,12 +206,54 @@ describe('Users (e2e)', () => {
         expect(model.rows.some((r) => r.name === 'mole')).toBe(false);
     });
 
-    it('USER_MANAGER creating a USER_MANAGER -> 201', async () => {
+    it('USER_MANAGER creating a USER_MANAGER -> 403', async () => {
         const res = await call(manager, 'POST', '/users', {
             users: [{ name: 'm2', password: 'pw', roles: [Role.UserManager] }],
         });
 
+        expect(res.status).toBe(403);
+        expect(res.body).toMatchObject({
+            error: ErrorCode.USER_ROLE_NOT_GRANTABLE,
+        });
+    });
+
+    it('USER_MANAGER creating a cashier -> 201', async () => {
+        const res = await call(manager, 'POST', '/users', {
+            users: [{ name: 'till2', password: 'pw', roles: [Role.Seller] }],
+        });
+
         expect(res.status).toBe(201);
+    });
+
+    it('USER_MANAGER re-roling and deactivating a cashier -> 200', async () => {
+        const res = await patchUsers(manager, [
+            {
+                user: id(cashier),
+                update: { roles: [Role.Restocker], isActive: false },
+            },
+        ]);
+
+        expect(res.status).toBe(200);
+        expect(model.byId(cashier._id)).toMatchObject({
+            roles: [Role.Restocker],
+            isActive: false,
+        });
+    });
+
+    it('USER_MANAGER deactivating another manager -> 403', async () => {
+        const other = model.seed({
+            name: 'manager2',
+            roles: [Role.UserManager],
+        });
+
+        const res = await patchUsers(manager, [
+            { user: id(other), update: { isActive: false } },
+        ]);
+
+        expect(res.status).toBe(403);
+        expect(res.body).toMatchObject({
+            error: ErrorCode.USER_TARGET_FORBIDDEN,
+        });
     });
 
     it('USER_MANAGER deactivating the ADMIN -> 403', async () => {
@@ -226,14 +268,9 @@ describe('Users (e2e)', () => {
         expect(model.byId(admin._id)?.isActive).toBe(true);
     });
 
-    it("USER_MANAGER resetting a fellow manager's password -> 403", async () => {
-        const other = model.seed({
-            name: 'manager2',
-            roles: [Role.UserManager],
-        });
-
+    it("USER_MANAGER resetting a cashier's password -> 403", async () => {
         const res = await patchUsers(manager, [
-            { user: id(other), update: { password: 'pw' } },
+            { user: id(cashier), update: { password: 'pw' } },
         ]);
 
         expect(res.status).toBe(403);
@@ -296,6 +333,11 @@ describe('Users (e2e)', () => {
             expect(model.byId(admin._id)?.isActive).toBe(true);
         });
 
+        // The fake model serializes transactions, so this checks that the
+        // second request sees the first one's commit and is refused, not
+        // snapshot isolation. The admin write-lock that prevents write skew
+        // on a real replica set is covered by user.service.spec.ts (lock
+        // ordering) and was verified manually against mongo:7 (see PR #58).
         it('two concurrent cross-demotions -> one 200, one 403', async () => {
             const [a, b] = await Promise.all([
                 patchUsers(admin, [
@@ -340,6 +382,25 @@ describe('Users (e2e)', () => {
                         roles: [Role.Unauthenticated],
                     },
                 ],
+            });
+
+            expect(res.status).toBe(400);
+        });
+
+        it('PATCH with a blank name', async () => {
+            const res = await patchUsers(admin, [
+                { user: id(cashier), update: { name: '   ' } },
+            ]);
+
+            expect(res.status).toBe(400);
+        });
+
+        it.each([
+            ['a string', 'x'],
+            ['an array', [{ name: 'x' }]],
+        ])('PATCH with update as %s', async (_label, update) => {
+            const res = await call(admin, 'PATCH', '/users', {
+                updates: [{ user: id(cashier), update }],
             });
 
             expect(res.status).toBe(400);

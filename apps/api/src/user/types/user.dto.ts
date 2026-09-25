@@ -9,6 +9,7 @@ import {
     IsMongoId,
     IsNotEmpty,
     IsNumber,
+    IsObject,
     IsOptional,
     IsPositive,
     IsString,
@@ -55,6 +56,7 @@ export class CreateBulkDto {
 class UpdateFields {
     @IsOptional()
     @IsString()
+    @IsNotEmpty()
     @MaxLength(STRING_LIMITS.USERNAME)
     @Transform(({ value }) =>
         typeof value === 'string'
@@ -89,6 +91,7 @@ class UpdateBulkFields {
     user!: string;
 
     @ValidateNested()
+    @IsObject()
     @IsNotEmpty()
     @Type(() => UpdateFields)
     update!: UpdateFields;

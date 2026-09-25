@@ -113,6 +113,32 @@ describe('UserService', () => {
             });
         });
 
+        it('refuses a manager demoted since their JWT was issued', async () => {
+            model.byId(manager._id)!.roles = [Role.Seller];
+            const stale = as(manager, [Role.UserManager]);
+
+            await expect(
+                rejection(
+                    update(stale, [
+                        {
+                            user: cashier._id.toString(),
+                            update: { isActive: false },
+                        },
+                    ]),
+                ),
+            ).resolves.toEqual({ status: 403, code: ErrorCode.FORBIDDEN });
+            await expect(
+                rejection(
+                    service.create(stale, {
+                        users: [
+                            { name: 'x', password: 'pw', roles: [Role.Seller] },
+                        ],
+                    }),
+                ),
+            ).resolves.toEqual({ status: 403, code: ErrorCode.FORBIDDEN });
+            expect(model.byId(cashier._id)?.isActive).toBe(true);
+        });
+
         it('refuses a deactivated or deleted actor', async () => {
             model.byId(manager._id)!.isActive = false;
             const body = [
@@ -144,16 +170,11 @@ describe('UserService', () => {
         });
 
         it('rolls back the whole batch when one entry is forbidden', async () => {
-            const manager2 = model.seed({
-                name: 'manager2',
-                roles: [Role.UserManager],
-            });
-
             await expect(
                 rejection(
                     update(as(manager), [
                         {
-                            user: manager2._id.toString(),
+                            user: cashier._id.toString(),
                             update: { isActive: false },
                         },
                         {
@@ -166,7 +187,7 @@ describe('UserService', () => {
                 status: 403,
                 code: ErrorCode.USER_TARGET_FORBIDDEN,
             });
-            expect(model.byId(manager2._id)?.isActive).toBe(true);
+            expect(model.byId(cashier._id)?.isActive).toBe(true);
             expect(model.writes.some((w) => w.op === 'updateOne')).toBe(false);
         });
 
@@ -210,6 +231,8 @@ describe('UserService', () => {
             expect(first).toMatchObject({
                 op: 'updateMany',
                 filter: { roles: Role.Admin, isActive: true },
+                update: { $inc: { adminLock: 1 } },
+                options: { timestamps: false },
             });
             expect(first.options?.session).toBeDefined();
             expect(second).toMatchObject({ op: 'updateOne' });
@@ -316,10 +339,33 @@ describe('UserService', () => {
             expect(model.rows.some((r) => r.name === 'mole')).toBe(false);
         });
 
-        it('lets a manager create a fellow manager and an admin create anyone', async () => {
+        it('refuses a manager creating another USER_MANAGER', async () => {
+            await expect(
+                rejection(
+                    service.create(as(manager), {
+                        users: [
+                            {
+                                name: 'm3',
+                                password: 'pw',
+                                roles: [Role.UserManager],
+                            },
+                        ],
+                    }),
+                ),
+            ).resolves.toEqual({
+                status: 403,
+                code: ErrorCode.USER_ROLE_NOT_GRANTABLE,
+            });
+        });
+
+        it('lets a manager create staff and an admin create anyone', async () => {
             await service.create(as(manager), {
                 users: [
-                    { name: 'm3', password: 'pw', roles: [Role.UserManager] },
+                    {
+                        name: 'm3',
+                        password: 'pw',
+                        roles: [Role.Seller, Role.Adjuster, Role.Restocker],
+                    },
                 ],
             });
             await service.create(as(admin), {

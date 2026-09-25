@@ -1,4 +1,4 @@
-import { holdsRole } from '@grocery-pos/contracts';
+import { canGrantRole, canManageUser } from '@grocery-pos/contracts';
 import { Role } from '../auth/types';
 import { ErrorCode, ForbiddenError } from '../common/errors';
 
@@ -8,7 +8,10 @@ import { ErrorCode, ForbiddenError } from '../common/errors';
  * The actor's roles come from the database, not the JWT, so a demotion takes
  * effect on the next request instead of when the access token expires.
  *
- * ADMIN holds every role implicitly, as in RoleGuard.
+ * An ADMIN may grant any role and modify anyone. A USER_MANAGER without
+ * ADMIN may grant only MANAGEABLE_ROLES (SELLER, ADJUSTER, RESTOCKER) and
+ * modify only users whose roles all fall in that set, so ADMIN and
+ * USER_MANAGER holders (other managers included) are ADMIN-only.
  */
 export interface PolicyUser {
     id: string;
@@ -33,16 +36,16 @@ export function sameRoles(a: readonly Role[], b: readonly Role[]): boolean {
     return left.size === right.size && [...left].every((r) => right.has(r));
 }
 
-/** Rule 1: an actor can only grant roles they hold. */
+/** Rule 1: which roles the actor may give out. */
 export function assertCanGrant(
     actorRoles: readonly Role[],
     roles: readonly Role[],
 ): void {
-    const denied = roles.filter((role) => !holdsRole(actorRoles, role));
+    const denied = roles.filter((role) => !canGrantRole(actorRoles, role));
     if (denied.length > 0) {
         throw new ForbiddenError(
             ErrorCode.USER_ROLE_NOT_GRANTABLE,
-            `You cannot grant a role you do not hold: ${denied.join(', ')}`,
+            `You cannot grant these roles: ${denied.join(', ')}`,
             { roles: denied },
         );
     }
@@ -56,17 +59,14 @@ export function assertCanUpdate(
 ): void {
     const self = actor.id === target.id;
 
-    // Rule 3: a non-admin cannot touch anyone holding a role they lack
-    // (e.g. a USER_MANAGER cannot rename, reset, demote or deactivate an
-    // ADMIN).
-    const outranking = target.roles.filter(
-        (role) => !holdsRole(actor.roles, role),
-    );
-    if (outranking.length > 0) {
+    // Rule 3: a USER_MANAGER cannot touch an ADMIN or another USER_MANAGER
+    // (name, roles, password or isActive). Your own account is the
+    // exception: rules 2 and 4 below cover what you may change on it.
+    if (!self && !canManageUser(actor.roles, target.roles)) {
         throw new ForbiddenError(
             ErrorCode.USER_TARGET_FORBIDDEN,
-            `You cannot modify a user holding a role you do not hold: ${outranking.join(', ')}`,
-            { user: target.id, roles: outranking },
+            'Only an admin can modify an admin or a user manager',
+            { user: target.id },
         );
     }
 

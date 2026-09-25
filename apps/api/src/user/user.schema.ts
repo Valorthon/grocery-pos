@@ -35,6 +35,14 @@ export class User {
         default: true,
     })
     isActive!: boolean;
+
+    /**
+     * Write-lock counter, bumped on every active ADMIN by a transaction that
+     * may remove an admin, so concurrent ones write-conflict (issue #3).
+     * Carries no meaning of its own.
+     */
+    @Prop({ type: Number, default: 0, select: false })
+    adminLock?: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

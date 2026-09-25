@@ -19,7 +19,7 @@ export interface FakeUserRow {
     roles: Role[];
     passwordHash: string;
     isActive: boolean;
-    updatedAt?: Date;
+    adminLock?: number;
 }
 
 type Filter = Record<string, unknown>;
@@ -131,12 +131,21 @@ export class FakeUserModel {
 
     updateMany(
         filter: Filter,
-        update: { $set: Record<string, unknown> },
+        update: {
+            $set?: Record<string, unknown>;
+            $inc?: Record<string, number>;
+        },
         options: Record<string, unknown> = {},
     ): Promise<{ matchedCount: number }> {
         this.writes.push({ op: 'updateMany', filter, update, options });
         const hit = this.rows.filter((r) => matches(r, filter));
-        hit.forEach((row) => Object.assign(row, update.$set));
+        for (const row of hit) {
+            Object.assign(row, update.$set);
+            const fields = row as unknown as Record<string, number>;
+            for (const [key, by] of Object.entries(update.$inc ?? {})) {
+                fields[key] = (fields[key] ?? 0) + by;
+            }
+        }
         return Promise.resolve({ matchedCount: hit.length });
     }
 

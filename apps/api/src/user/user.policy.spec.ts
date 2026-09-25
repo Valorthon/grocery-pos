@@ -42,27 +42,31 @@ describe('assertCanGrant (rule 1)', () => {
         ).toBeNull();
     });
 
-    it('lets a manager grant only roles they hold', () => {
-        expect(
-            denied(() => assertCanGrant(MANAGER.roles, [Role.UserManager])),
-        ).toBeNull();
-        expect(
-            denied(() => assertCanGrant(MANAGER.roles, [Role.Admin])),
-        ).toEqual(forbidden(ErrorCode.USER_ROLE_NOT_GRANTABLE));
-        expect(
-            denied(() => assertCanGrant(MANAGER.roles, [Role.Seller])),
-        ).toEqual(forbidden(ErrorCode.USER_ROLE_NOT_GRANTABLE));
-    });
-
-    it('lets a manager who also sells grant SELLER', () => {
+    it('lets a manager grant SELLER, ADJUSTER and RESTOCKER', () => {
         expect(
             denied(() =>
-                assertCanGrant(
-                    [Role.UserManager, Role.Seller],
-                    [Role.Seller, Role.UserManager],
-                ),
+                assertCanGrant(MANAGER.roles, [
+                    Role.Seller,
+                    Role.Adjuster,
+                    Role.Restocker,
+                ]),
             ),
         ).toBeNull();
+    });
+
+    it.each([Role.Admin, Role.UserManager])(
+        'refuses a manager granting %s',
+        (role) => {
+            expect(denied(() => assertCanGrant(MANAGER.roles, [role]))).toEqual(
+                forbidden(ErrorCode.USER_ROLE_NOT_GRANTABLE),
+            );
+        },
+    );
+
+    it('refuses anyone without USER_MANAGER or ADMIN', () => {
+        expect(
+            denied(() => assertCanGrant(STOCKER.roles, [Role.Restocker])),
+        ).toEqual(forbidden(ErrorCode.USER_ROLE_NOT_GRANTABLE));
     });
 });
 
@@ -71,12 +75,21 @@ describe('assertCanUpdate', () => {
         denied(() => assertCanUpdate(actor, target, change));
 
     describe('rule 1: granting', () => {
-        it('refuses a manager promoting someone to ADMIN', () => {
+        it.each([Role.Admin, Role.UserManager])(
+            'refuses a manager promoting a cashier to %s',
+            (role) => {
+                expect(
+                    check(MANAGER, CASHIER, { roles: [Role.Seller, role] }),
+                ).toEqual(forbidden(ErrorCode.USER_ROLE_NOT_GRANTABLE));
+            },
+        );
+
+        it('lets a manager move a cashier between staff roles', () => {
             expect(
-                check(MANAGER, MANAGER2, {
-                    roles: [Role.UserManager, Role.Admin],
+                check(MANAGER, CASHIER, {
+                    roles: [Role.Adjuster, Role.Restocker],
                 }),
-            ).toEqual(forbidden(ErrorCode.USER_ROLE_NOT_GRANTABLE));
+            ).toBeNull();
         });
 
         it('lets an admin promote anyone', () => {
@@ -126,18 +139,46 @@ describe('assertCanUpdate', () => {
             );
         });
 
-        it('refuses a manager touching a user with roles they lack', () => {
-            expect(check(MANAGER, CASHIER, { isActive: false })).toEqual(
+        it.each<[string, UserChange]>([
+            ['name', { name: 'x' }],
+            ['roles', { roles: [Role.Seller] }],
+            ['isActive', { isActive: false }],
+        ])("refuses a manager touching another manager's %s", (_f, change) => {
+            expect(check(MANAGER, MANAGER2, change)).toEqual(
                 forbidden(ErrorCode.USER_TARGET_FORBIDDEN),
             );
         });
 
-        it('lets a manager manage a fellow manager', () => {
-            expect(check(MANAGER, MANAGER2, { isActive: false })).toBeNull();
+        it('refuses a manager touching a staff member who also manages', () => {
+            const lead = user('lead', Role.Seller, Role.UserManager);
+            expect(check(MANAGER, lead, { isActive: false })).toEqual(
+                forbidden(ErrorCode.USER_TARGET_FORBIDDEN),
+            );
+        });
+
+        it.each<[string, UserChange]>([
+            ['rename', { name: 'till2' }],
+            ['deactivate', { isActive: false }],
+            ['re-role', { roles: [Role.Restocker] }],
+        ])('lets a manager %s a cashier or stocker', (_label, change) => {
+            expect(check(MANAGER, CASHIER, change)).toBeNull();
+            expect(check(MANAGER, STOCKER, change)).toBeNull();
+        });
+
+        it('lets a manager edit their own name and active flag', () => {
+            expect(
+                check(MANAGER, MANAGER, { name: 'boss', isActive: true }),
+            ).toBeNull();
         });
 
         it('lets an admin touch another admin', () => {
             expect(check(ADMIN, ADMIN2, { isActive: false })).toBeNull();
+        });
+
+        it('refuses a non-manager outright', () => {
+            expect(check(STOCKER, CASHIER, { name: 'x' })).toEqual(
+                forbidden(ErrorCode.USER_TARGET_FORBIDDEN),
+            );
         });
     });
 
@@ -145,7 +186,7 @@ describe('assertCanUpdate', () => {
         it('lets only an admin reset one', () => {
             expect(check(ADMIN, CASHIER, { password: 'new' })).toBeNull();
             expect(check(ADMIN, ADMIN2, { password: 'new' })).toBeNull();
-            expect(check(MANAGER, MANAGER2, { password: 'new' })).toEqual(
+            expect(check(MANAGER, CASHIER, { password: 'new' })).toEqual(
                 forbidden(ErrorCode.USER_PASSWORD_RESET_FORBIDDEN),
             );
         });
