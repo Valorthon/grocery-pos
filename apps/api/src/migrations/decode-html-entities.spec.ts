@@ -9,8 +9,14 @@ import {
     guardUnique,
     MIGRATION_ID,
     MigrationCollection,
+    MigrationMarker,
+    MigrationRun,
     planDocument,
+    ProgressRecord,
+    progressId,
+    progressState,
     runMigration,
+    valueAt,
     stringsAt,
     summarize,
     TARGETS,
@@ -327,73 +333,88 @@ describe('TARGETS', () => {
 
 type Row = Record<string, unknown> & { _id: unknown };
 
-/** Reads a concrete dotted path (`movements.1.reason`). */
-function getPath(doc: unknown, path: string): unknown {
-    return path
-        .split('.')
-        .reduce<unknown>(
-            (node, key) =>
-                node !== null && typeof node === 'object'
-                    ? (node as Record<string, unknown>)[key]
-                    : undefined,
-            doc,
-        );
-}
-
-function setPath(doc: Row, path: string, value: string): void {
+function setPath(doc: Row, path: string, value: unknown): void {
     const keys = path.split('.');
     const last = keys.pop()!;
-    const parent = keys.reduce<Record<string, unknown>>(
-        (node, key) => node[key] as Record<string, unknown>,
-        doc,
-    );
-    parent[last] = value;
+    let node = doc as Record<string, unknown>;
+    for (const key of keys) {
+        node[key] ??= {};
+        node = node[key] as Record<string, unknown>;
+    }
+    node[last] = value;
+}
+
+/** The fakes use string ids, so plain equality is enough. */
+const same = (a: unknown, b: unknown) => a === b;
+
+/** Does `row` match a filter of equalities, `$in`s and a (skipped) `$or`? */
+function matches(row: Row, filter: Record<string, unknown>): boolean {
+    return Object.entries(filter).every(([path, cond]) => {
+        if (path === '$or') return true; // planDocument does the filtering
+        if (path === 'runs.runId') {
+            return ((row.runs as Row[]) ?? []).some((r) => r.runId === cond);
+        }
+        const value = valueAt(row, path);
+        if (cond !== null && typeof cond === 'object' && '$in' in cond) {
+            return (cond as { $in: unknown[] }).$in.some((v) => same(value, v));
+        }
+        return same(value, cond);
+    });
 }
 
 /**
- * An in-memory collection: `find` returns every row for the candidate
- * query (planDocument does the filtering) and honours `{field: {$in}}` for
- * the unique-owner lookup; `updateOne` matches `_id` plus old values.
+ * An in-memory collection with the slice of MongoDB semantics the
+ * migration uses: equality/`$in` filters, `$set` (dotted and `runs.$.x`
+ * positional), `$push`, upsert.
  */
-class FakeCollection implements MigrationCollection {
-    /** Called before each write, to simulate concurrent changes. */
-    beforeWrite?: (id: unknown) => void;
-    /** Ids whose write throws this error. */
+class FakeCollection<T extends Row = Row> {
+    /** Called before each `updateOne`, with its filter. */
+    beforeWrite?: (filter: Record<string, unknown>) => void;
+    /** Ids whose document write throws this error. */
     readonly throwOn = new Map<string, unknown>();
+    readonly writes: Record<string, unknown>[] = [];
 
     constructor(
         readonly collectionName: string,
-        readonly rows: Row[],
+        readonly rows: T[] = [],
     ) {}
 
     find(filter: Record<string, unknown>) {
-        const rows = this.rows.filter((row) =>
-            Object.entries(filter).every(([key, cond]) => {
-                if (key === '$or') return true;
-                const values = (cond as { $in: unknown[] }).$in;
-                return values.includes(row[key]);
-            }),
-        );
+        const rows = this.rows.filter((row) => matches(row, filter));
         return { toArray: () => Promise.resolve(structuredClone(rows)) };
     }
 
     updateOne(
         filter: Record<string, unknown>,
-        update: { $set: Record<string, string> },
+        update: Record<string, unknown>,
+        options?: { upsert?: boolean },
     ) {
-        this.beforeWrite?.(filter._id);
+        this.beforeWrite?.(filter);
         const error = this.throwOn.get(String(filter._id));
         if (error) return Promise.reject(error as Error);
-        const row = this.rows.find((r) =>
-            Object.entries(filter).every(([path, value]) =>
-                path === '_id'
-                    ? String(r._id) === String(value)
-                    : getPath(r, path) === value,
-            ),
-        );
-        if (!row) return Promise.resolve({ matchedCount: 0 });
-        for (const [path, value] of Object.entries(update.$set)) {
-            setPath(row, path, value);
+        this.writes.push(filter);
+
+        let row = this.rows.find((r) => matches(r, filter));
+        if (!row) {
+            if (!options?.upsert) return Promise.resolve({ matchedCount: 0 });
+            row = { _id: filter._id } as T;
+            this.rows.push(row);
+        }
+        const $set = (update.$set ?? {}) as Record<string, unknown>;
+        for (const [path, value] of Object.entries($set)) {
+            if (path.startsWith('runs.$.')) {
+                const run = (row.runs as Row[]).find(
+                    (r) => r.runId === filter['runs.runId'],
+                )!;
+                run[path.slice('runs.$.'.length)] = value;
+            } else {
+                setPath(row, path, structuredClone(value));
+            }
+        }
+        const $push = (update.$push ?? {}) as Record<string, unknown>;
+        for (const [path, value] of Object.entries($push)) {
+            const list = (valueAt(row, path) as unknown[]) ?? [];
+            setPath(row, path, [...list, value]);
         }
         return Promise.resolve({ matchedCount: 1 });
     }
@@ -401,31 +422,35 @@ class FakeCollection implements MigrationCollection {
 
 describe('runMigration', () => {
     let collections: Record<string, FakeCollection>;
-    let applied: Record<string, unknown>[];
-
-    const migrations = {
-        findOne: ({ _id }: { _id: string }) =>
-            Promise.resolve(applied.find((m) => m._id === _id) ?? null),
-        insertOne: (doc: Record<string, unknown>) => {
-            applied.push(doc);
-            return Promise.resolve();
-        },
-    };
+    let migrations: FakeCollection<MigrationMarker & Row>;
+    let progress: FakeCollection<ProgressRecord & Row>;
+    let runs = 0;
 
     function run(apply: boolean) {
+        runs += 1;
         return runMigration({
             apply,
-            migrations,
-            collectionFor: (model) => collections[model],
+            runId: `run-${runs}`,
+            migrations: migrations as unknown as MigrationRun['migrations'],
+            progress: progress as unknown as MigrationRun['progress'],
+            collectionFor: (model) =>
+                collections[model] as unknown as MigrationCollection,
         });
     }
 
+    const reversal = () =>
+        valueAt(collections.Sales.rows[0], 'reversal.reason');
+    const drop = () => valueAt(collections.Shift.rows[0], 'movements.1.reason');
+    const marker = () => migrations.rows[0];
+
     beforeEach(() => {
-        applied = [];
+        runs = 0;
+        migrations = new FakeCollection('migrations');
+        progress = new FakeCollection('migration_progress');
         collections = Object.fromEntries(
             TARGETS.map((t) => [
                 t.model,
-                new FakeCollection(t.model.toLowerCase(), []),
+                new FakeCollection(t.model.toLowerCase()),
             ]),
         );
         collections.Product.rows.push(
@@ -437,6 +462,8 @@ describe('runMigration', () => {
         collections.Sales.rows.push({
             _id: 's1',
             discount: { reason: 'Tom &amp; Jerry' },
+            // The pipe's encoding of a typed `&amp;lt;`: decodes to `&lt;`,
+            // and must never become `<`.
             reversal: { reason: 'typed &amp;lt; literally' },
         });
         collections.Shift.rows.push({
@@ -456,7 +483,8 @@ describe('runMigration', () => {
 
         expect(outcome.exitCode).toBe(0);
         expect(collections).toEqual(before);
-        expect(applied).toEqual([]);
+        expect(migrations.rows).toEqual([]);
+        expect(progress.rows).toEqual([]);
         expect(outcome.lines).toEqual(
             expect.arrayContaining([
                 'product: 1 document(s) would change',
@@ -470,7 +498,7 @@ describe('runMigration', () => {
         expect(outcome.skipped).toBe(1);
     });
 
-    it('--apply decodes, skips the collision and records itself', async () => {
+    it('--apply decodes, skips the collision and marks itself complete', async () => {
         const outcome = await run(true);
 
         expect(outcome.exitCode).toBe(0);
@@ -485,42 +513,148 @@ describe('runMigration', () => {
             discount: { reason: 'Tom & Jerry' },
             reversal: { reason: 'typed &lt; literally' },
         });
-        expect(getPath(collections.Shift.rows[0], 'movements.1.reason')).toBe(
-            'drop > 5k',
-        );
-        expect(applied).toEqual([
-            expect.objectContaining({
-                _id: MIGRATION_ID,
-                skipped: 1,
-                documents: expect.objectContaining({
-                    product: 1,
-                    sales: 1,
-                    shift: 1,
+        expect(drop()).toBe('drop > 5k');
+        expect(marker()).toMatchObject({
+            _id: MIGRATION_ID,
+            status: 'complete',
+            runs: [
+                expect.objectContaining({
+                    runId: 'run-1',
+                    written: 3,
+                    skipped: 1,
+                    failed: 0,
                 }),
-            }),
+            ],
+        });
+        expect(progress.rows.map((r) => [r._id, r.status])).toEqual([
+            [progressId('product', 'p1'), 'done'],
+            [progressId('sales', 's1'), 'done'],
+            [progressId('shift', 'h1'), 'done'],
         ]);
     });
 
-    it('refuses a second apply, which would decode twice', async () => {
+    it('marks the run started and records each edit before writing it', async () => {
+        const order: string[] = [];
+        migrations.beforeWrite = () => order.push('marker');
+        progress.beforeWrite = (f) => order.push(`progress ${String(f._id)}`);
+        collections.Sales.beforeWrite = (f) =>
+            order.push(`write ${String(f._id)}`);
+
         await run(true);
-        const reversal = getPath(collections.Sales.rows[0], 'reversal.reason');
+
+        expect(order.slice(0, 1)).toEqual(['marker']);
+        const s1 = progressId('sales', 's1');
+        expect(order.indexOf(`progress ${s1}`)).toBeLessThan(
+            order.indexOf('write s1'),
+        );
+        expect(order.at(-1)).toBe('marker');
+    });
+
+    it('refuses another apply once complete: it would decode twice', async () => {
+        await run(true);
 
         const again = await run(true);
 
         expect(again.exitCode).toBe(1);
-        expect(again.lines[0]).toMatch(/^Refusing: .*already applied/);
-        expect(getPath(collections.Sales.rows[0], 'reversal.reason')).toBe(
-            reversal,
-        );
+        expect(again.lines[0]).toMatch(/^Refusing: .*already complete/);
+        expect(reversal()).toBe('typed &lt; literally');
         // A dry run afterwards still works, with a warning.
         const dry = await run(false);
         expect(dry.exitCode).toBe(0);
         expect(dry.lines[0]).toMatch(/^WARNING: /);
     });
 
+    describe('a crash mid-apply', () => {
+        const crash = new Error('process killed');
+
+        /**
+         * Kills the run on the Sales document, after products were written:
+         * the process dies on the progress update that follows s1's write
+         * attempt. 'before-write': the write itself never landed (it threw,
+         * as a killed process would not have written). 'after-write': the
+         * write landed but its `done` mark was never stored.
+         */
+        async function crashAt(where: 'before-write' | 'after-write') {
+            const id = progressId('sales', 's1');
+            if (where === 'before-write') {
+                collections.Sales.throwOn.set('s1', crash);
+            }
+            progress.beforeWrite = (filter) => {
+                const earlier = progress.writes.filter((w) => w._id === id);
+                if (filter._id === id && earlier.length === 1) throw crash;
+            };
+            await expect(run(true)).rejects.toBe(crash);
+            collections.Sales.throwOn.clear();
+            progress.beforeWrite = undefined;
+        }
+
+        it('leaves the marker running and the edit recorded', async () => {
+            await crashAt('before-write');
+
+            expect(marker().status).toBe('running');
+            expect(collections.Product.rows[0].name).toBe('m&m peanut');
+            expect(reversal()).toBe('typed &amp;lt; literally');
+            expect(
+                progress.rows.find((r) => r._id === progressId('sales', 's1'))
+                    ?.status,
+            ).toBe('pending');
+        });
+
+        it.each(['before-write', 'after-write'] as const)(
+            'crashed %s: a rerun finishes without decoding anything twice',
+            async (where) => {
+                await crashAt(where);
+
+                const rerun = await run(true);
+
+                expect(rerun.exitCode).toBe(0);
+                expect(rerun.lines[0]).toMatch(/^Resuming: /);
+                // Decoded exactly once: `&lt;`, not `<`.
+                expect(reversal()).toBe('typed &lt; literally');
+                expect(collections.Product.rows[0].name).toBe('m&m peanut');
+                expect(drop()).toBe('drop > 5k');
+                expect(marker().status).toBe('complete');
+                expect(rerun.lines).toContain(
+                    '  already decoded by an earlier run: 1',
+                );
+            },
+        );
+    });
+
+    it('a failed write exits 1, stays incomplete, and a rerun retries only it', async () => {
+        collections.Sales.throwOn.set('s1', new Error('boom'));
+
+        const first = await run(true);
+
+        expect(first.exitCode).toBe(1);
+        expect(first.failed).toBe(1);
+        expect(first.lines).toContain(
+            '  FAILED sales s1: boom (a rerun retries it)',
+        );
+        expect(marker().status).toBe('incomplete');
+        // Everything else was still written.
+        expect(drop()).toBe('drop > 5k');
+
+        collections.Sales.throwOn.clear();
+        const productWrites = collections.Product.writes.length;
+        const retry = await run(true);
+
+        expect(retry.exitCode).toBe(0);
+        expect(reversal()).toBe('typed &lt; literally');
+        expect(drop()).toBe('drop > 5k');
+        expect(collections.Product.writes.length).toBe(productWrites);
+        expect(marker()).toMatchObject({
+            status: 'complete',
+            runs: [
+                expect.objectContaining({ runId: 'run-1', failed: 1 }),
+                expect.objectContaining({ runId: 'run-2', written: 1 }),
+            ],
+        });
+    });
+
     it('skips a document changed since it was read, and carries on', async () => {
-        collections.Sales.beforeWrite = (id) => {
-            if (id === 's1') {
+        collections.Sales.beforeWrite = (filter) => {
+            if (filter._id === 's1') {
                 (
                     collections.Sales.rows[0].discount as { reason: string }
                 ).reason = 'edited meanwhile';
@@ -529,38 +663,42 @@ describe('runMigration', () => {
 
         const outcome = await run(true);
 
+        expect(outcome.exitCode).toBe(0);
         expect(collections.Sales.rows[0].discount).toEqual({
             reason: 'edited meanwhile',
         });
         expect(outcome.lines).toContain(
             '  SKIPPED sales s1: changed since it was read; check it by hand',
         );
-        // Later collections were still migrated.
-        expect(getPath(collections.Shift.rows[0], 'movements.1.reason')).toBe(
-            'drop > 5k',
-        );
+        expect(drop()).toBe('drop > 5k');
         expect(outcome.skipped).toBe(2);
     });
 
-    it('reports a duplicate-key race and an unexpected error without stopping', async () => {
+    it('reports a duplicate-key race as a skipped collision', async () => {
         collections.Product.throwOn.set(
             'p1',
             Object.assign(new Error('E11000 duplicate key'), { code: 11000 }),
         );
-        collections.Sales.throwOn.set('s1', new Error('boom'));
 
         const outcome = await run(true);
 
-        expect(outcome.lines).toEqual(
-            expect.arrayContaining([
-                '  SKIPPED p1 (name): "m&amp;m peanut" -> "m&m peanut" would duplicate (unique index); rename one of them by hand',
-                '  FAILED sales s1: boom',
-            ]),
+        expect(outcome.exitCode).toBe(0);
+        expect(outcome.lines).toContain(
+            '  SKIPPED p1 (name): "m&amp;m peanut" -> "m&m peanut" would duplicate (unique index); rename one of them by hand',
         );
-        expect(getPath(collections.Shift.rows[0], 'movements.1.reason')).toBe(
-            'drop > 5k',
-        );
-        expect(outcome.skipped).toBe(3);
-        expect(applied).toHaveLength(1);
+        expect(outcome.skipped).toBe(2);
+    });
+});
+
+describe('progressState', () => {
+    const changes = [{ path: 'a.b', from: 'x &amp; y', to: 'x & y' }];
+
+    it.each([
+        [{ a: { b: 'x & y' } }, 'done'],
+        [{ a: { b: 'x &amp; y' } }, 'pending'],
+        [{ a: { b: 'edited' } }, 'moved'],
+        [undefined, 'moved'],
+    ])('%j -> %s', (doc, state) => {
+        expect(progressState(doc, changes)).toBe(state);
     });
 });

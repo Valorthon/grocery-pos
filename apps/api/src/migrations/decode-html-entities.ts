@@ -8,16 +8,20 @@
  * to plan the writes. It never talks to the database, so it is unit-tested
  * on plain objects.
  *
- * Which entities: sanitize-html 2.17 (with `allowedTags: []`) decodes its
- * input and re-encodes text with its `escapeHtml`, which in text emits only
- * `&amp;`, `&lt;` and `&gt;` (checked against every code point up to
- * U+3000; `"` and `'` pass through, `&nbsp;`/`&copy;` come out as the
- * characters). `&quot;` is decoded as well, in case an older version wrote
- * it: the pipe never let a bare `&quot;` through (typed, it was stored as
- * `&amp;quot;`), so decoding it cannot damage anything the pipe stored.
+ * What the pipe stored: sanitize-html 2.17 (with `allowedTags: []`) first
+ * DECODES its input, then re-encodes the text, and in text it emits only
+ * `&amp;`, `&lt;` and `&gt;` (checked with the real library against every
+ * code point up to U+3000; `"` and `'` pass through, `&nbsp;`/`&copy;` come
+ * out as the characters). So stored = encode(decode(typed)): `M&M's` became
+ * `M&amp;M's`, a typed `&lt;` was stored as `&lt;`, a typed `&quot;` as `"`,
+ * and a typed `&amp;lt;` as `&amp;lt;`. Decoding the stored text once gives
+ * back decode(typed): what the user typed, except that a literal entity
+ * they typed had already been turned into its character by the pipe. That
+ * loss happened on ingest and cannot be undone. `&quot;` is decoded too, in
+ * case an older version wrote it; 2.17 never stores one.
  */
 
-/** Marks the migration as applied (collection `migrations`). */
+/** Names the run marker (`migrations`) and the progress records. */
 export const MIGRATION_ID = 'issue-15-decode-html-entities';
 
 const ENTITIES: Readonly<Record<string, string>> = {
@@ -33,9 +37,10 @@ export const ENTITY_SOURCE = '&(?:amp|lt|gt|quot);';
 const ENTITY_PATTERN = new RegExp(ENTITY_SOURCE, 'g');
 
 /**
- * Decodes the entities the pipe produced, in ONE pass: `&amp;lt;` (the user
- * typed `&lt;`) becomes `&lt;`, never `<`. Running it twice would decode
- * that a second time, which is why the migration refuses a second apply.
+ * Decodes the entities the pipe produced, in ONE pass, so a stored
+ * `&amp;lt;` becomes `&lt;`, never `<`. Running it twice would decode that
+ * a second time, which is why the migration records every document it
+ * writes and never decodes one twice (see `runMigration`).
  */
 export function decodeEntities(text: string): string {
     return text.replace(ENTITY_PATTERN, (entity) => ENTITIES[entity]);
@@ -240,6 +245,8 @@ export interface CollectionReport {
     /** Documents that would be (or were) written. */
     documents: number;
     collisions: Collision[];
+    /** Documents an earlier, interrupted run already decoded. */
+    alreadyDone: number;
 }
 
 const EXAMPLES_PER_FIELD = 3;
@@ -250,6 +257,7 @@ export function summarize(
     target: CollectionTarget,
     edits: DocumentEdit[],
     collisions: Collision[],
+    alreadyDone = 0,
 ): CollectionReport {
     const fields = target.fields.map((field): FieldReport => {
         const touched = edits.filter((edit) =>
@@ -261,7 +269,13 @@ export function summarize(
             .map(({ from, to }) => ({ from, to }));
         return { field, documents: touched.length, examples };
     });
-    return { collection, fields, documents: edits.length, collisions };
+    return {
+        collection,
+        fields,
+        documents: edits.length,
+        collisions,
+        alreadyDone,
+    };
 }
 
 /** The operator-facing report, one line per entry. */
@@ -275,6 +289,11 @@ export function formatReport(
         lines.push(
             `${report.collection}: ${report.documents} document(s) ${verb}`,
         );
+        if (report.alreadyDone > 0) {
+            lines.push(
+                `  already decoded by an earlier run: ${report.alreadyDone}`,
+            );
+        }
         for (const field of report.fields) {
             lines.push(`  ${field.field}: ${field.documents}`);
             for (const { from, to } of field.examples) {
@@ -295,86 +314,222 @@ export function formatReport(
     return lines;
 }
 
+/** The value at a concrete dotted path (`movements.1.reason`). */
+export function valueAt(doc: unknown, path: string): unknown {
+    return path
+        .split('.')
+        .reduce<unknown>(
+            (node, key) =>
+                node !== null && typeof node === 'object'
+                    ? (node as Record<string, unknown>)[key]
+                    : undefined,
+            doc,
+        );
+}
+
+/**
+ * Where a document with a progress record stands now: `done` when it holds
+ * the decoded values, `pending` when it still holds the values the plan was
+ * made from (the write never landed, or failed), `moved` when it holds
+ * neither (someone edited it, or it is gone).
+ */
+export function progressState(
+    doc: unknown,
+    changes: Pick<FieldChange, 'path' | 'from' | 'to'>[],
+): 'done' | 'pending' | 'moved' {
+    if (doc === undefined || doc === null) return 'moved';
+    if (changes.every((c) => valueAt(doc, c.path) === c.to)) return 'done';
+    if (changes.every((c) => valueAt(doc, c.path) === c.from)) {
+        return 'pending';
+    }
+    return 'moved';
+}
+
+type Filter = Record<string, unknown>;
+
 /** The slice of a MongoDB collection the migration uses (fakeable). */
-export interface MigrationCollection {
+export interface MigrationCollection<T = Doc> {
     collectionName: string;
     find(
-        filter: Record<string, unknown>,
+        filter: Filter,
         options?: { projection?: Record<string, 1> },
-    ): { toArray(): Promise<Doc[]> };
+    ): { toArray(): Promise<T[]> };
     updateOne(
-        filter: Record<string, unknown>,
-        update: { $set: Record<string, string> },
+        filter: Filter,
+        update: Record<string, unknown>,
+        options?: { upsert?: boolean },
     ): Promise<{ matchedCount: number }>;
 }
 
-/** The `migrations` collection, where a finished apply records itself. */
-export interface MigrationLog {
-    findOne(filter: { _id: string }): Promise<unknown>;
-    insertOne(doc: { _id: string } & Record<string, unknown>): Promise<unknown>;
+export type ProgressStatus =
+    'pending' | 'done' | 'moved' | 'collision' | 'failed';
+
+/**
+ * One document's planned edit, written to `migration_progress` BEFORE the
+ * document itself is touched, and given the outcome afterwards.
+ */
+export interface ProgressRecord {
+    _id: string;
+    migration: string;
+    collection: string;
+    doc: unknown;
+    changes: FieldChange[];
+    status: ProgressStatus;
+    runId: string;
+    error?: string;
+}
+
+/** The run marker in `migrations`. */
+export interface MigrationMarker {
+    _id: string;
+    status: 'running' | 'incomplete' | 'complete';
+    runs: Record<string, unknown>[];
 }
 
 export interface MigrationRun {
     /** Maps a `CollectionTarget.model` to its collection. */
     collectionFor(model: string): MigrationCollection;
-    migrations: MigrationLog;
+    /** The `migrations` collection: the run marker. */
+    migrations: MigrationCollection<MigrationMarker>;
+    /** The `migration_progress` collection: one record per planned write. */
+    progress: MigrationCollection<ProgressRecord>;
     apply: boolean;
+    /** Identifies this run in the marker and the progress records. */
+    runId: string;
 }
 
 export interface MigrationOutcome {
-    /** 0 when it ran, 1 when a second apply was refused. */
+    /** 0 when it ran cleanly; 1 when a write failed or apply was refused. */
     exitCode: number;
     /** Everything to print, in order. */
     lines: string[];
     reports: CollectionReport[];
-    /** Documents that need a change but were left as they were. */
+    /** Documents that need a change but were left for the operator. */
     skipped: number;
+    /** Writes that errored; a rerun retries them. */
+    failed: number;
 }
 
 function isDuplicateKey(err: unknown): boolean {
     return (err as { code?: unknown } | null)?.code === 11000;
 }
 
+export function progressId(collection: string, id: unknown): string {
+    return `${MIGRATION_ID}/${collection}/${String(id)}`;
+}
+
 /**
  * Plans every target collection and, with `apply`, writes the plan one
- * document at a time. A write that matches nothing (the document changed
- * since it was read), hits the unique index, or fails otherwise is reported
- * and skipped; the run always goes on. A finished apply is recorded in
- * `migrations`, and a second apply is refused.
+ * document at a time. Crash-safe and resumable:
+ *
+ * - The run marker (`migrations`, status `running`, with the run id) is
+ *   written before any document is.
+ * - Before a document is written, its exact edit (paths, old and new
+ *   values) is recorded in `migration_progress`; the write itself filters
+ *   on the old values.
+ * - A document with a progress record is never planned again. A rerun
+ *   compares it with its record instead: holding the new values, it is done
+ *   and is NOT decoded again; holding the old values, the write never
+ *   landed (a crash, or a failure) and it is retried; holding neither, it
+ *   was edited meanwhile and is reported. So a crash between the record
+ *   and the write, or between the write and its `done` status, is harmless.
+ * - The marker ends `complete` only when no write failed, and then further
+ *   applies are refused: text typed after the fix may legitimately contain
+ *   `&amp;`. With failed writes it ends `incomplete`, the exit code is 1,
+ *   and a rerun retries exactly those documents.
+ *
+ * A unique-name collision or a document edited meanwhile is skipped and
+ * reported, not failed: it needs the operator, not a retry.
  */
 export async function runMigration(
     run: MigrationRun,
 ): Promise<MigrationOutcome> {
     const lines: string[] = [];
-    const done = await run.migrations.findOne({ _id: MIGRATION_ID });
-    if (done) {
+    const [marker] = await run.migrations.find({ _id: MIGRATION_ID }).toArray();
+    if (marker?.status === 'complete') {
         const message =
-            `${MIGRATION_ID} was already applied (${JSON.stringify(done)}); ` +
-            'running it again would decode a second time.';
+            `${MIGRATION_ID} is already complete; running it again would ` +
+            'decode text typed since the fix.';
         if (run.apply) {
             return {
                 exitCode: 1,
                 lines: [`Refusing: ${message}`],
                 reports: [],
                 skipped: 0,
+                failed: 0,
             };
         }
         lines.push(`WARNING: ${message}`);
+    } else if (marker) {
+        lines.push(
+            `Resuming: an earlier run ended ${marker.status}. Documents it ` +
+                'decoded are not decoded again; failed ones are retried.',
+        );
+    }
+
+    if (run.apply) {
+        await run.migrations.updateOne(
+            { _id: MIGRATION_ID },
+            {
+                $set: { status: 'running' },
+                $push: { runs: { runId: run.runId, startedAt: new Date() } },
+            },
+            { upsert: true },
+        );
     }
 
     const reports: CollectionReport[] = [];
     const problems: string[] = [];
     let skipped = 0;
+    let failed = 0;
+    let written = 0;
 
     for (const target of TARGETS) {
         const collection = run.collectionFor(target.model);
         const name = collection.collectionName;
+
+        // What earlier runs planned here, and where those documents stand.
+        const records = await run.progress
+            .find({ migration: MIGRATION_ID, collection: name })
+            .toArray();
+        const recorded = new Set(records.map((r) => String(r.doc)));
+        const current =
+            records.length > 0
+                ? await collection
+                      .find({ _id: { $in: records.map((r) => r.doc) } })
+                      .toArray()
+                : [];
+        const byId = new Map(current.map((d) => [String(d._id), d]));
+
+        let alreadyDone = 0;
+        const retries: DocumentEdit[] = [];
+        for (const record of records) {
+            const state = progressState(
+                byId.get(String(record.doc)),
+                record.changes,
+            );
+            if (state === 'done') {
+                alreadyDone += 1;
+            } else if (state === 'pending') {
+                retries.push({ _id: record.doc, changes: record.changes });
+            } else {
+                skipped += 1;
+                problems.push(
+                    `  SKIPPED ${name} ${String(record.doc)}: changed since it was planned; check it by hand`,
+                );
+            }
+        }
+
         const docs = await collection
             .find(candidateFilter(target.fields))
             .toArray();
-        let edits = docs
-            .map((doc) => planDocument(target.fields, doc))
-            .filter((edit): edit is DocumentEdit => edit !== null);
+        let edits: DocumentEdit[] = [
+            ...retries,
+            ...docs
+                .filter((doc) => !recorded.has(String(doc._id)))
+                .map((doc) => planDocument(target.fields, doc))
+                .filter((edit): edit is DocumentEdit => edit !== null),
+        ];
 
         let collisions: Collision[] = [];
         if (target.unique && edits.length > 0) {
@@ -393,14 +548,40 @@ export async function runMigration(
         skipped += collisions.length;
 
         if (run.apply) {
-            const written: DocumentEdit[] = [];
+            const done: DocumentEdit[] = [];
             for (const edit of edits) {
+                const _id = progressId(name, edit._id);
+                const mark = (status: ProgressStatus, error?: string) =>
+                    run.progress.updateOne(
+                        { _id },
+                        { $set: { status, ...(error ? { error } : {}) } },
+                    );
+
+                // The record first: whatever happens next, a rerun can tell.
+                await run.progress.updateOne(
+                    { _id },
+                    {
+                        $set: {
+                            migration: MIGRATION_ID,
+                            collection: name,
+                            doc: edit._id,
+                            changes: edit.changes,
+                            status: 'pending',
+                            runId: run.runId,
+                        },
+                    },
+                    { upsert: true },
+                );
+
                 const { filter, update } = editToUpdate(edit);
                 try {
                     const res = await collection.updateOne(filter, update);
                     if (res.matchedCount === 1) {
-                        written.push(edit);
+                        done.push(edit);
+                        await mark('done');
                     } else {
+                        skipped += 1;
+                        await mark('moved');
                         problems.push(
                             `  SKIPPED ${name} ${String(edit._id)}: changed since it was read; check it by hand`,
                         );
@@ -409,6 +590,8 @@ export async function runMigration(
                     const change = edit.changes[0];
                     if (isDuplicateKey(err)) {
                         // Another write took the name after the plan.
+                        skipped += 1;
+                        await mark('collision');
                         collisions.push({
                             _id: edit._id,
                             field: change.field,
@@ -417,36 +600,55 @@ export async function runMigration(
                             conflictsWith: ['(unique index)'],
                         });
                     } else {
+                        failed += 1;
+                        const message =
+                            err instanceof Error ? err.message : String(err);
+                        await mark('failed', message);
                         problems.push(
-                            `  FAILED ${name} ${String(edit._id)}: ${err instanceof Error ? err.message : String(err)}`,
+                            `  FAILED ${name} ${String(edit._id)}: ${message} (a rerun retries it)`,
                         );
                     }
                 }
             }
-            skipped += edits.length - written.length;
-            edits = written;
+            written += done.length;
+            edits = done;
         }
 
-        reports.push(summarize(name, target, edits, collisions));
+        reports.push(summarize(name, target, edits, collisions, alreadyDone));
     }
 
     lines.push(...formatReport(reports, run.apply), ...problems);
 
     if (run.apply) {
-        await run.migrations.insertOne({
-            _id: MIGRATION_ID,
-            appliedAt: new Date(),
-            documents: Object.fromEntries(
-                reports.map((r) => [r.collection, r.documents]),
-            ),
-            skipped,
-        });
-        lines.push(`Recorded ${MIGRATION_ID} in the migrations collection.`);
+        const status = failed > 0 ? 'incomplete' : 'complete';
+        await run.migrations.updateOne(
+            { _id: MIGRATION_ID, 'runs.runId': run.runId },
+            {
+                $set: {
+                    status,
+                    'runs.$.finishedAt': new Date(),
+                    'runs.$.written': written,
+                    'runs.$.skipped': skipped,
+                    'runs.$.failed': failed,
+                },
+            },
+        );
+        lines.push(`Marked ${MIGRATION_ID} ${status} in 'migrations'.`);
     }
     if (skipped > 0) {
+        lines.push(`${skipped} document(s) left unchanged: see SKIPPED above.`);
+    }
+    if (failed > 0) {
         lines.push(
-            `${skipped} document(s) left unchanged: see SKIPPED/FAILED above.`,
+            `${failed} write(s) FAILED: fix the cause and run --apply again. ` +
+                'It retries them and decodes nothing twice.',
         );
     }
-    return { exitCode: 0, lines, reports, skipped };
+    return {
+        exitCode: failed > 0 ? 1 : 0,
+        lines,
+        reports,
+        skipped,
+        failed,
+    };
 }

@@ -29,7 +29,11 @@ import {
 import { Sales, SalesSchema } from './src/sales/sales.schema';
 import { Shift, ShiftSchema } from './src/shift/shift.schema';
 import { describeDatabase } from './src/common/utils/seed-guard';
-import { runMigration } from './src/migrations/decode-html-entities';
+import {
+    MigrationMarker,
+    ProgressRecord,
+    runMigration,
+} from './src/migrations/decode-html-entities';
 
 const APPLY_FLAG = '--apply';
 
@@ -68,7 +72,9 @@ async function main(): Promise<number> {
             if (!name) throw new Error(`No model registered for ${model}`);
             return db.collection(name);
         },
-        migrations: db.collection<{ _id: string }>('migrations'),
+        migrations: db.collection<MigrationMarker>('migrations'),
+        progress: db.collection<ProgressRecord>('migration_progress'),
+        runId: new mongoose.Types.ObjectId().toString(),
     });
 
     for (const line of outcome.lines) console.log(line);
