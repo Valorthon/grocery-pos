@@ -148,7 +148,23 @@ const router = createRouter({
 });
 
 function homeFor(authStore: ReturnType<typeof useAuthStore>) {
-    return homeRouteFor(authStore.user?.roles ?? []);
+    const home = homeRouteFor(authStore.user?.roles ?? []);
+
+    if (home.name === 'Login') {
+        // A session whose roles open no page (none, or only legacy ones).
+        // Drop the local user now, synchronously, so the redirect to Login
+        // is not bounced straight back here as "already signed in"; then
+        // end the server session too (best-effort, as logout always is).
+        authStore.user = null;
+        localStorage.removeItem('user');
+        void authStore.logout();
+        useUIStore().queueMessage(
+            Color.ERROR,
+            'Your account has no access. Please sign in again.',
+        );
+    }
+
+    return home;
 }
 
 // Navigation Guard

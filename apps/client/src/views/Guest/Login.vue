@@ -180,7 +180,14 @@ const handleLogin = async () => {
 
     try {
         await authStore.login(form.username, form.password);
-        router.push(homeRouteFor(authStore.user?.roles ?? []));
+        const home = homeRouteFor(authStore.user?.roles ?? []);
+        if (home.name === 'Login') {
+            // No role opens any page: do not stay half signed in.
+            await authStore.logout();
+            errorMsg.value = 'This account has no access to the app.';
+            return;
+        }
+        router.push(home);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
         errorMsg.value =

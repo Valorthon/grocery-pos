@@ -4,7 +4,12 @@ import { createPinia, setActivePinia } from 'pinia';
 import { ASSIGNABLE_ROLES, Role } from '@grocery-pos/contracts';
 import { canViewDashboard, DASHBOARD_ROLES, homeRouteFor } from './access';
 
-vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
+const post = vi.hoisted(() => vi.fn());
+vi.mock('@/axios', () => ({ default: { post, get: vi.fn() } }));
+
+/** Roles a stale session may still carry that open no page. */
+const LEGACY_ONLY: Role[] = ['CASHIER' as Role];
+const NO_PAGE_SETS: Role[][] = [[], LEGACY_ONLY, [Role.Unauthenticated]];
 
 // The views are lazy-loaded; stub them so a navigation resolves without
 // pulling in each page.
@@ -33,14 +38,17 @@ async function freshRouter() {
     return router;
 }
 
-/** Every non-empty combination of assignable roles. */
+/**
+ * Every combination of assignable roles, including none, plus sessions
+ * holding only legacy or unassignable roles.
+ */
 function roleSets(): Role[][] {
     const roles = [...ASSIGNABLE_ROLES];
     const sets: Role[][] = [];
-    for (let mask = 1; mask < 1 << roles.length; mask++) {
+    for (let mask = 0; mask < 1 << roles.length; mask++) {
         sets.push(roles.filter((_, i) => mask & (1 << i)));
     }
-    return sets;
+    return [...sets, LEGACY_ONLY, [Role.Unauthenticated]];
 }
 
 describe('dashboard access (issue #13)', () => {
@@ -77,8 +85,44 @@ describe('dashboard access (issue #13)', () => {
             const home = homeRouteFor(roles);
             if (home.name === 'Dashboard') {
                 expect(canViewDashboard(roles)).toBe(true);
-            } else {
+            } else if (home.name === 'SellerDashboard') {
                 expect(roles).toContain(Role.Seller);
+            } else {
+                // Login: only when no role opens any page.
+                expect(roles).not.toContain(Role.Seller);
+                expect(canViewDashboard(roles)).toBe(false);
+            }
+        },
+    );
+
+    it.each(NO_PAGE_SETS.map((roles) => [JSON.stringify(roles), roles]))(
+        'sends a session with roles %s to Login once and ends it',
+        async (_label, roles) => {
+            for (const path of ['/', '/admin']) {
+                post.mockClear();
+                signIn(roles as Role[]);
+                const router = await freshRouter();
+                const settled = vi.fn();
+                router.afterEach(settled);
+                const { useAuthStore } = await import('@/stores/auth');
+
+                await router.push(path);
+
+                // Let logout() finish; its own push to Login is a no-op.
+                await new Promise((resolve) => setTimeout(resolve, 0));
+
+                expect(router.currentRoute.value.name).toBe('Login');
+                // One completed navigation; logout's duplicate push to Login
+                // settles as a failure without navigating. No loop.
+                const completed = settled.mock.calls.filter(
+                    ([, , failure]) => !failure,
+                );
+                expect(completed).toHaveLength(1);
+                expect(settled.mock.calls.length).toBeLessThanOrEqual(2);
+                expect(useAuthStore().user).toBeNull();
+                expect(useAuthStore().isAuthenticated).toBe(false);
+                expect(localStorage.getItem('user')).toBeNull();
+                expect(post).toHaveBeenCalledWith('/auth/logout');
             }
         },
     );

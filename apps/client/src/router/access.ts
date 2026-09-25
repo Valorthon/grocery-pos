@@ -15,7 +15,8 @@ export const DASHBOARD_ROLES: readonly Role[] = [
     Role.UserManager,
 ];
 
-export type HomeRoute = { name: 'SellerDashboard' } | { name: 'Dashboard' };
+export type HomeRoute =
+    { name: 'SellerDashboard' } | { name: 'Dashboard' } | { name: 'Login' };
 
 /**
  * Where a signed-in user lands: after login, on `/`, and whenever the
@@ -23,14 +24,18 @@ export type HomeRoute = { name: 'SellerDashboard' } | { name: 'Dashboard' };
  *
  * - A cashier (SELLER without ADMIN) lands on the register, even if they
  *   also hold a management role.
- * - Everyone else holds a role in DASHBOARD_ROLES (every stored user has at
- *   least one assignable role, and every assignable role other than SELLER
- *   is a dashboard role), so the dashboard never bounces them back here.
+ * - A user holding a role in DASHBOARD_ROLES lands on the dashboard.
+ * - Anyone else (a stale session with no roles, or only legacy ones) has no
+ *   page at all and goes to Login. The router ends such a session as it
+ *   sends them there (see `homeFor` in ./index.ts); otherwise Login, seeing
+ *   a signed-in user, would send them straight back here in a loop.
  */
 export function homeRouteFor(roles: readonly Role[]): HomeRoute {
-    const isCashier =
-        roles.includes(Role.Seller) && !roles.includes(Role.Admin);
-    return { name: isCashier ? 'SellerDashboard' : 'Dashboard' };
+    if (roles.includes(Role.Seller) && !roles.includes(Role.Admin)) {
+        return { name: 'SellerDashboard' };
+    }
+    if (canViewDashboard(roles)) return { name: 'Dashboard' };
+    return { name: 'Login' };
 }
 
 /** Whether `roles` may open the dashboard. */
