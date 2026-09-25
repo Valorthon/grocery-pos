@@ -84,7 +84,7 @@
         </ul>
 
         <div
-            v-else-if="isOpen && !loading && modelValue"
+            v-else-if="isOpen && !loading && !error && modelValue"
             class="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-lg"
         >
             No matching products.

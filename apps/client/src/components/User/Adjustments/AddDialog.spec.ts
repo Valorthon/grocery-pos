@@ -148,6 +148,7 @@ describe('Adjustments AddDialog (#17)', () => {
             'Could not search products. Try again.',
         );
         expect(document.body.querySelector('.animate-spin')).toBeNull();
+        expect(document.body.textContent).not.toContain('No matching');
     });
 
     it('passes the contracts reason limit to the textarea', async () => {
