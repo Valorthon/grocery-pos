@@ -62,7 +62,12 @@ function amountInput() {
     )!;
 }
 
-/** Enter in a field: the browser submits the form (jsdom does not). */
+/**
+ * Enter in a field. jsdom has no implicit form submission, so this fires
+ * the `submit` the browser would; that Enter really submits (through the
+ * footer's Confirm, joined by its `form` attribute) is in the PR's manual
+ * keyboard checks.
+ */
 async function pressEnter() {
     amountInput().form!.dispatchEvent(
         new Event('submit', { bubbles: true, cancelable: true }),
@@ -214,6 +219,33 @@ describe('CheckoutModal', () => {
             expect(document.activeElement?.getAttribute('aria-label')).toBe(
                 'GCash reference number',
             );
+        });
+
+        it('puts the focus back in the tender field after a failed sale', async () => {
+            let fail!: (e: Error) => void;
+            const submit = vi.fn(
+                () => new Promise((_, reject) => (fail = reject)),
+            );
+            mount(submit);
+            await flush();
+
+            await pressEnter();
+            // A browser silently drops the focus of a field its fieldset
+            // disables, to <body>; jsdom does not, so move it there.
+            const swallow = (e: Event) => e.stopPropagation();
+            document.addEventListener('focusin', swallow, true);
+            const away = document.body.appendChild(
+                document.createElement('button'),
+            );
+            away.focus();
+            away.remove();
+            document.removeEventListener('focusin', swallow, true);
+            expect(document.activeElement).toBe(document.body);
+            fail(new Error('Could not record the sale'));
+            await flush();
+
+            expect(errorText()).toContain('Could not record the sale');
+            expect(document.activeElement).toBe(amountInput());
         });
     });
 });

@@ -495,6 +495,10 @@ async function finish() {
     } catch (err) {
         processing.value = false;
         error.value = err instanceof Error ? err.message : 'Sale failed';
+        // The disabled fieldset dropped the focus to <body>: back to the
+        // tender field, so a fix and Enter retry from the keyboard.
+        await nextTick();
+        fields.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     }
 }
 </script>
