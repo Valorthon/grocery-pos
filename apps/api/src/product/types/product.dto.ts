@@ -170,11 +170,14 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
     @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }

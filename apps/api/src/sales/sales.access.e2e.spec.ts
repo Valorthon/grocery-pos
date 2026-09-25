@@ -474,6 +474,20 @@ describe('Sales history scoping (e2e)', () => {
             expect(res.status).toBe(200);
         });
 
+        it.each([
+            ['a fractional page', 'page=1.5&limit=10'],
+            [
+                'a page past PAGE_MAX',
+                `page=${PAGINATION.PAGE_MAX + 1}&limit=10`,
+            ],
+            ['page=1e20', 'page=1e20&limit=10'],
+            ['a fractional limit', 'page=1&limit=2.5'],
+        ])('refuses %s with a 400', async (_, query) => {
+            const res = await harness.call(ADMIN, 'GET', `/sales?${query}`);
+
+            expect(res.status).toBe(400);
+        });
+
         it.each([PAGINATION.LIMIT_MAX + 1, 1_000_000])(
             'refuses limit=%s with a 400',
             async (limit) => {

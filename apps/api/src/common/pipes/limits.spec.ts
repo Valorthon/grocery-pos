@@ -152,6 +152,50 @@ describe('pagination cap (#16)', () => {
         },
     );
 
+    it('keeps the page cap at 10,000, a skip of at most 999,900 rows', () => {
+        expect(PAGINATION.PAGE_MAX).toBe(10_000);
+    });
+
+    it.each(paginated.map((t) => [t.name, t] as const))(
+        '%s takes whole numbers only, and caps page at PAGINATION.PAGE_MAX',
+        async (_, target) => {
+            const errorsOf = async (
+                field: 'page' | 'limit',
+                query: Record<string, string>,
+            ) =>
+                (
+                    await validate(
+                        plainToInstance(target, query, {
+                            enableImplicitConversion: true,
+                        }) as object,
+                    )
+                ).find((e) => e.property === field)?.constraints;
+
+            expect(constraint(target, 'page', 'max')).toBe(PAGINATION.PAGE_MAX);
+            expect(
+                await errorsOf('page', {
+                    page: String(PAGINATION.PAGE_MAX),
+                    limit: '5',
+                }),
+            ).toBeUndefined();
+            expect(
+                await errorsOf('page', {
+                    page: String(PAGINATION.PAGE_MAX + 1),
+                    limit: '5',
+                }),
+            ).toHaveProperty('max');
+            expect(
+                await errorsOf('page', { page: '1e20', limit: '5' }),
+            ).toHaveProperty('max');
+            expect(
+                await errorsOf('page', { page: '1.5', limit: '5' }),
+            ).toHaveProperty('isInt');
+            expect(
+                await errorsOf('limit', { page: '1', limit: '2.5' }),
+            ).toHaveProperty('isInt');
+        },
+    );
+
     it('answers limit=1000000 with a 400 through the global pipe', async () => {
         await expect(
             pipe.transform(

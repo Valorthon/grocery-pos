@@ -101,6 +101,7 @@ export class DrawerMovementDto {
 export class ListShiftsDto {
     @IsInt()
     @Min(1)
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsInt()

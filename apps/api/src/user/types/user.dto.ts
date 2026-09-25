@@ -18,6 +18,7 @@ import {
     ValidateNested,
     Max,
     ArrayMaxSize,
+    IsInt,
 } from 'class-validator';
 import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from '../../auth/types';
@@ -145,11 +146,14 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
     @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }

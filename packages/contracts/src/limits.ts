@@ -67,6 +67,13 @@ export const REFERENCE_NUMBER_LIMITS = {
  */
 export const PAGINATION = {
     LIMIT_MAX: 100,
+    /**
+     * Highest page number. With LIMIT_MAX it bounds `skip` at 999,900
+     * documents: past any real list here (a busy register rings well under
+     * a million sales a decade), while a typo like `page=1e20` is a 400
+     * rather than an absurd skip reaching Mongo.
+     */
+    PAGE_MAX: 10_000,
 } as const;
 
 /**

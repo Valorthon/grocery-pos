@@ -51,11 +51,14 @@ export class GetDetailsQueryDto {
     @IsNumber()
     @IsPositive()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsNumber()
     @IsPositive()
     @IsNotEmpty()
+    @IsInt()
     @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }
@@ -126,11 +129,14 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
+    @Max(PAGINATION.PAGE_MAX)
     page!: number;
 
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @IsInt()
     @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }
