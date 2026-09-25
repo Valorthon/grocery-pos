@@ -314,6 +314,28 @@ describe('Product route access by role (e2e)', () => {
             });
         });
 
+        it.each([Role.Restocker, Role.Admin])(
+            'refuses a line with no update object as %s: 400, not a 500, and no write',
+            async (role) => {
+                updateOne.mockClear();
+
+                const res = await harness.call(
+                    caller(role),
+                    'PATCH',
+                    '/products',
+                    {
+                        updates: [{ product: new Types.ObjectId().toString() }],
+                    },
+                );
+
+                expect(res.status).toBe(400);
+                expect(await res.json()).toMatchObject({
+                    error: ErrorCode.VALIDATION_INVALID_INPUT,
+                });
+                expect(updateOne).not.toHaveBeenCalled();
+            },
+        );
+
         it('refuses an empty update with a 400 instead of writing $set: {}', async () => {
             updateOne.mockClear();
 

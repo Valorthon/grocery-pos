@@ -173,6 +173,29 @@ describe('UpdateBulkDto: no empty updates (issue #14)', () => {
         );
     });
 
+    it('rejects a line with no update object at all', async () => {
+        const errors = await validate(
+            plainToInstance(UpdateBulkDto, {
+                updates: [{ product: '507f1f77bcf86cd799439011' }],
+            }),
+        );
+        const [line] = errors[0]?.children?.[0]?.children ?? [];
+
+        expect(line?.property).toBe('update');
+        expect(line?.constraints).toHaveProperty('isDefined');
+    });
+
+    it('rejects an update that is not an object', async () => {
+        const errors = await validate(
+            plainToInstance(UpdateBulkDto, {
+                updates: [{ product: '507f1f77bcf86cd799439011', update: 'x' }],
+            }),
+        );
+        const [line] = errors[0]?.children?.[0]?.children ?? [];
+
+        expect(line?.constraints).toHaveProperty('isObject');
+    });
+
     it('accepts a name or a price', async () => {
         expect(await messages({ name: 'milk' })).toEqual([]);
         expect(await messages({ price: 1999 })).toEqual([]);
