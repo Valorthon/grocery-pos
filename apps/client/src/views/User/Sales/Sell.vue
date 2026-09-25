@@ -627,6 +627,7 @@
             :receipt="receipt"
             :notice="receiptNotice"
             @new-sale="onNewSale"
+            @scan="onReceiptScan"
         />
     </div>
 </template>
@@ -1081,6 +1082,17 @@ useRegisterShortcuts({
         else if (needsReason.value) void focusReason();
     },
 });
+
+/**
+ * A scan typed while the receipt was up (issue #22): the receipt closes,
+ * the next sale starts, and the code goes through the scan box's own flow
+ * as if it had been scanned there.
+ */
+function onReceiptScan(code: string) {
+    onNewSale();
+    searchQuery.value = code;
+    void onScanSubmit();
+}
 
 onMounted(() => {
     scanInput.value?.focus();

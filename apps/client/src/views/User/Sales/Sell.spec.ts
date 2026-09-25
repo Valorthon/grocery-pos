@@ -74,8 +74,9 @@ function serve(
     );
 }
 
+/** Mounts the register in a `<main>`, as SellerLayout does. */
 function mount() {
-    const host = document.createElement('div');
+    const host = document.createElement('main');
     document.body.appendChild(host);
     app = createApp(Sell);
     app.use(pinia);
@@ -343,6 +344,48 @@ async function clickButton(button: HTMLElement) {
     await flush();
 }
 
+/** Lets a closing modal's leave transition finish. */
+async function settleTransitions() {
+    await flush();
+    await vi.advanceTimersByTimeAsync(500);
+    await flush();
+}
+
+const RECEIPT = {
+    _id: 's1',
+    createdAt: '2026-09-25T00:00:00.000Z',
+    status: SaleStatus.COMPLETED,
+    paymentType: PaymentType.CASH,
+    referenceNumber: null,
+    tenders: [{ type: 'CASH', amount: 10000 }],
+    amountTendered: 10000,
+    changeGiven: 500,
+    cashierName: 'ana',
+    items: [{ productName: 'milk', quantity: 1, amount: 9500 }],
+    subtotal: 9500,
+    discount: null,
+    totalAmount: 9500,
+};
+
+/** Rings up milk and pays ₱100 cash: the receipt is left on screen. */
+async function completeSale() {
+    withMilkOnTicket();
+    serve(() => Promise.resolve([]));
+    post.mockResolvedValue({ data: RECEIPT });
+    mount();
+    await clickButton(buttonNamed('Tender & Charge'));
+    const amount = document.activeElement as HTMLInputElement;
+    amount.value = '100';
+    amount.dispatchEvent(new Event('input'));
+    amount.form!.dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await settleTransitions();
+    expect(dialog('Transaction Complete')).not.toBeNull();
+    expect(dialog('Complete Payment')).toBeNull();
+    expect(useCartStore().items).toEqual([]);
+}
+
 /** Escape, then lets the closing modal's leave transition finish. */
 async function escape() {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
@@ -506,41 +549,7 @@ describe('Sell sticky scan box (issue #22)', () => {
     });
 
     it('comes back after the receipt is closed with Escape', async () => {
-        withMilkOnTicket();
-        post.mockResolvedValue({
-            data: {
-                _id: 's1',
-                createdAt: '2026-09-25T00:00:00.000Z',
-                status: SaleStatus.COMPLETED,
-                paymentType: PaymentType.CASH,
-                referenceNumber: null,
-                tenders: [{ type: 'CASH', amount: 10000 }],
-                amountTendered: 10000,
-                changeGiven: 500,
-                cashierName: 'ana',
-                items: [{ productName: 'milk', quantity: 1, amount: 9500 }],
-                subtotal: 9500,
-                discount: null,
-                totalAmount: 9500,
-            },
-        });
-        mount();
-        await clickButton(buttonNamed('Tender & Charge'));
-        const amount = document.activeElement as HTMLInputElement;
-        amount.value = '100';
-        amount.dispatchEvent(new Event('input'));
-        amount.form!.dispatchEvent(
-            new Event('submit', { bubbles: true, cancelable: true }),
-        );
-        await flush();
-        await vi.advanceTimersByTimeAsync(500);
-        await flush();
-
-        expect(dialog('Transaction Complete')).not.toBeNull();
-        expect(dialog('Complete Payment')).toBeNull();
-        // Enter on the receipt starts the next sale.
-        expect(document.activeElement?.textContent?.trim()).toBe('Next Sale');
-
+        await completeSale();
         await escape();
         expect(dialog('Transaction Complete')).toBeNull();
         expect(document.activeElement).toBe(input());
@@ -572,5 +581,42 @@ describe('Sell scan box after the other controls (issue #22 review)', () => {
 
         await press('4');
         expect(document.activeElement).toBe(input());
+    });
+});
+
+describe('Sell receipt on screen (issue #22 review, decision 2026-09-25)', () => {
+    it('takes the focus on the receipt itself, so Enter alone does nothing', async () => {
+        await completeSale();
+        const receipt = dialog('Transaction Complete');
+        expect(document.activeElement).toBe(receipt);
+
+        await press('Enter');
+        await settleTransitions();
+        expect(dialog('Transaction Complete')).not.toBeNull();
+        expect(get).not.toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+    });
+
+    it('starts the next sale with a scan typed on the receipt', async () => {
+        await completeSale();
+
+        for (const digit of MILK.EAN) await press(digit);
+        const enter = await press('Enter');
+        await settleTransitions();
+
+        expect(enter.defaultPrevented).toBe(true);
+        expect(dialog('Transaction Complete')).toBeNull();
+        expect(get).toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(input().value).toBe('');
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('keeps Next Sale and Escape closing it', async () => {
+        await completeSale();
+        await clickButton(buttonNamed('Next Sale'));
+        await settleTransitions();
+        expect(dialog('Transaction Complete')).toBeNull();
+        expect(document.activeElement).toBe(input());
+        expect(cartNames()).toEqual([]);
     });
 });

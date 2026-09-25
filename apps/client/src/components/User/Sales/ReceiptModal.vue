@@ -1,5 +1,16 @@
 <template>
-    <BaseModal v-model="model" max-width="28rem" scrollable>
+    <!--
+        The dialog itself takes the focus (issue #22): a stray Enter (a
+        double Enter on checkout, a scanner's trailing Enter) presses
+        nothing, so the change due stays on screen. A scan typed here
+        starts the next sale (see onKeydown).
+    -->
+    <BaseModal
+        v-model="model"
+        max-width="28rem"
+        scrollable
+        initial-focus="dialog"
+    >
         <template #header>
             <div class="flex items-center gap-2 text-emerald-700">
                 <CheckCircle2 class="w-4 h-4 text-emerald-600" />
@@ -174,7 +185,7 @@
                 <Printer class="w-3.5 h-3.5" />
                 Print
             </BaseButton>
-            <BaseButton class="flex-1" data-autofocus @click="nextSale">
+            <BaseButton class="flex-1" @click="nextSale">
                 <RotateCcw class="w-3.5 h-3.5" />
                 Next Sale
             </BaseButton>
@@ -183,7 +194,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, watch } from 'vue';
 import { Barcode, CheckCircle2, Printer, RotateCcw } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -203,6 +214,8 @@ const props = defineProps<{
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
     (e: 'new-sale'): void;
+    /** A code typed or scanned while the receipt is up; see onKeydown. */
+    (e: 'scan', code: string): void;
 }>();
 
 const model = computed({
@@ -249,4 +262,40 @@ function nextSale() {
     model.value = false;
     emit('new-sale');
 }
+
+/**
+ * The next customer's first scan while the receipt is up (product
+ * decision, 2026-09-25): printable keys are collected, and the Enter that
+ * ends them emits `scan` with the code; the register then starts the next
+ * sale and adds it through its usual scan path, so the scan is never lost.
+ * An Enter with nothing collected is left alone: on the dialog it does
+ * nothing, and on a button the cashier tabbed to it presses that button.
+ */
+let collected = '';
+
+function onKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented) return;
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.key === 'Enter') {
+        if (!collected) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const code = collected;
+        collected = '';
+        emit('scan', code);
+    } else if (event.key === 'Backspace') {
+        collected = collected.slice(0, -1);
+    } else if (event.key.length === 1 && event.key !== ' ') {
+        collected += event.key;
+    }
+}
+
+function listen(on: boolean) {
+    collected = '';
+    if (on) document.addEventListener('keydown', onKeydown);
+    else document.removeEventListener('keydown', onKeydown);
+}
+
+watch(() => props.modelValue, listen, { immediate: true });
+onBeforeUnmount(() => listen(false));
 </script>

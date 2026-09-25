@@ -126,7 +126,8 @@ import {
  *
  * - Initial focus: the first element marked `data-autofocus`, else the
  *   first focusable element (the header's close button last), else the
- *   dialog itself.
+ *   dialog itself. `initialFocus="dialog"` always focuses the dialog, so
+ *   a stray Enter presses nothing (the receipt); Tab still moves inside.
  * - On close, the focus goes back to what had it when the modal opened
  *   (see ./modal-stack.ts for when that is gone).
  * - `closable: false` (busy, e.g. a save in flight) hides the close button
@@ -142,6 +143,8 @@ const props = withDefaults(
         scrollable?: boolean;
         /** The accessible name when there is no title or header slot. */
         ariaLabel?: string;
+        /** `dialog`: focus the dialog itself on open, not a control. */
+        initialFocus?: 'auto' | 'dialog';
     }>(),
     {
         title: '',
@@ -150,6 +153,7 @@ const props = withDefaults(
         closable: true,
         scrollable: false,
         ariaLabel: '',
+        initialFocus: 'auto',
     },
 );
 
@@ -183,7 +187,7 @@ const entry: ModalEntry = {
     opener: null,
 };
 
-function initialFocus(el: HTMLElement): HTMLElement {
+function firstFocusTarget(el: HTMLElement): HTMLElement {
     const items = focusables(el);
     return (
         items.find((i) => i.hasAttribute('data-autofocus')) ??
@@ -206,7 +210,7 @@ async function open() {
     if (!el || !props.modelValue || el.contains(document.activeElement)) {
         return;
     }
-    initialFocus(el).focus();
+    (props.initialFocus === 'dialog' ? el : firstFocusTarget(el)).focus();
 }
 
 watch(

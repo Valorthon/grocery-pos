@@ -280,10 +280,9 @@ describe('BaseModal dialog semantics (issue #22)', () => {
         },
     );
 
-    it('falls back to the page, not <body>, when the opener is gone', async () => {
+    it('falls back to <main>, not <body>, when the opener is gone', async () => {
         const main = document.createElement('main');
-        const first = document.createElement('button');
-        main.append(first);
+        main.append(document.createElement('button'));
         document.body.prepend(main);
         const { open, trigger } = await mountOne();
         // e.g. a menu item that unmounted while its confirmation was open.
@@ -291,10 +290,11 @@ describe('BaseModal dialog semantics (issue #22)', () => {
 
         open.value = false;
         await flush();
-        expect(document.activeElement).toBe(first);
+        expect(document.activeElement).toBe(main);
+        expect(main.getAttribute('tabindex')).toBe('-1');
     });
 
-    it('falls back to the page when the opener is now disabled', async () => {
+    it('falls back to the first focusable element without a <main>', async () => {
         const { open, trigger, host } = await mountOne();
         const other = document.createElement('button');
         host.append(other);

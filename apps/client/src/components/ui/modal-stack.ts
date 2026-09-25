@@ -15,8 +15,9 @@
  * - Focus return: closing the topmost modal gives the focus back to what
  *   was focused when it opened. If that is gone (e.g. a menu item that
  *   unmounted) or disabled, the focus goes into the modal below, else to
- *   the first focusable element of the page's `<main>` (else of the app),
- *   never to `<body>`. The register then moves it on to its scan box.
+ *   the page's `<main>` (made focusable with tabindex -1; else the app's
+ *   first focusable element), never to `<body>`. The register then moves
+ *   it on to its scan box.
  *
  * `anyModalOpen` lets a page (the register) pause its own keyboard
  * handling while a modal is up and react when the last one closes.
@@ -220,18 +221,19 @@ export function removeModal(entry: ModalEntry): void {
     }
 }
 
-/** The page's first focusable element: in `<main>`, else anywhere. */
+/** The page's `<main>` landmark, else its first focusable element. */
 function focusPage(): void {
     const main = document.querySelector<HTMLElement>('main');
-    const candidates = [
-        ...(main ? focusables(main) : []),
-        ...[...document.body.children].flatMap((child) =>
-            child instanceof HTMLElement &&
-            !child.hasAttribute('data-inert-exempt')
-                ? focusables(child)
-                : [],
-        ),
-    ];
+    if (main && !main.closest('[inert]')) {
+        if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');
+        main.focus({ preventScroll: true });
+        if (document.activeElement === main) return;
+    }
+    const candidates = [...document.body.children].flatMap((child) =>
+        child instanceof HTMLElement && !child.hasAttribute('data-inert-exempt')
+            ? focusables(child)
+            : [],
+    );
     for (const el of candidates) {
         el.focus({ preventScroll: true });
         if (document.activeElement === el) return;

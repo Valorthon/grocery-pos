@@ -3,22 +3,17 @@ import { anyModalOpen } from '@/components/ui/modal-stack';
 import { isTextEntry } from './useRegisterShortcuts';
 
 /**
- * Whether the focus may be taken from `el` (issue #22): only from nowhere
- * (the page body), a button or a link (e.g. a nav link). Never from a
- * field the user is typing in (a text input or textarea), a select, or an
- * open menu.
+ * Whether the focus may be taken from `el` (issue #22): from anything but
+ * a field the user is typing in (a text input, textarea or contenteditable),
+ * a select, or an open menu. So from nowhere (`<body>`), a button, a link,
+ * or a landmark the focus was parked on (`<main>` after a modal closed).
  */
 export function canTakeFocusFrom(el: Element | null): boolean {
     if (!el || el === document.body || el === document.documentElement) {
         return true;
     }
     if (isTextEntry(el) || el instanceof HTMLSelectElement) return false;
-    if (el.closest('[role="menu"]')) return false;
-    return (
-        el instanceof HTMLButtonElement ||
-        el instanceof HTMLAnchorElement ||
-        el.getAttribute('role') === 'button'
-    );
+    return !el.closest('[role="menu"]');
 }
 
 /**
