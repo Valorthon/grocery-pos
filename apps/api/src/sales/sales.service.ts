@@ -37,6 +37,8 @@ import {
 import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
 import { ShiftService } from '../shift/shift.service';
+import { TypedConfigService } from '../common/typed-config/typed-config.service';
+import { dateRangeFilter } from '../common/utils/timezone';
 
 /**
  * Sale fields a non-admin never reads: which shift paid a reversal back and
@@ -66,6 +68,34 @@ export function saleScope(
     return { cashier: new Types.ObjectId(user.userId), shift: openShift };
 }
 
+/**
+ * The `GET /sales` filter: the caller's `scope` narrowed by the query's
+ * `cashier` and `dateFrom`/`dateTo` (inclusive store-timezone days, the same
+ * convention as restocks, adjustments and the dashboard).
+ *
+ * A filter can only narrow: a scope that already names a cashier (a
+ * non-admin's own) combined with a different `cashier` matches nothing, so
+ * this returns null and the caller lists no sales.
+ */
+export function salesListFilter(
+    scope: SaleScope,
+    dto: Pick<GetAllDto, 'cashier' | 'dateFrom' | 'dateTo'>,
+    timeZone: string,
+): Record<string, unknown> | null {
+    const filter: Record<string, unknown> = { ...scope };
+
+    if (dto.cashier) {
+        const cashier = new Types.ObjectId(dto.cashier);
+        if (scope.cashier && !scope.cashier.equals(cashier)) return null;
+        filter.cashier = cashier;
+    }
+
+    const createdAt = dateRangeFilter(dto.dateFrom, dto.dateTo, timeZone);
+    if (createdAt) filter.createdAt = createdAt;
+
+    return filter;
+}
+
 @Injectable()
 export class SalesService {
     constructor(
@@ -76,6 +106,7 @@ export class SalesService {
         private productService: ProductService,
         private inventoryService: InventoryService,
         private shiftService: ShiftService,
+        private config: TypedConfigService,
     ) {}
 
     /** `saleScope` for the caller, looking up their open shift if needed. */
@@ -90,7 +121,8 @@ export class SalesService {
     /**
      * A page of sales, newest first. An ADMIN sees every cashier's sales;
      * anyone else only the sales they rang up in their current open shift
-     * (`saleScope`), and nothing without one.
+     * (`saleScope`), and nothing without one. The `cashier` and date
+     * filters narrow that scope (`salesListFilter`) and never widen it.
      */
     async getAll(
         user: AuthUser,
@@ -102,13 +134,20 @@ export class SalesService {
         const scope = await this.scopeFor(user);
         if (!scope) return { data: [], totalItems: 0 };
 
+        const filter = salesListFilter(
+            scope,
+            dto,
+            this.config.get('STORE_TIMEZONE'),
+        );
+        if (!filter) return { data: [], totalItems: 0 };
+
         const projection = user.roles.includes(Role.Admin)
             ? undefined
             : CASHIER_HIDDEN_SALE_FIELDS;
 
         const [data, totalItems] = await Promise.all([
             this.model
-                .find(scope, projection)
+                .find(filter, projection)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -118,9 +157,9 @@ export class SalesService {
                 })
                 .lean(),
 
-            Object.keys(scope).length > 0
-                ? this.model.countDocuments(scope)
-                : this.model.estimatedDocumentCount(),
+            // Exact, never estimatedDocumentCount: the total is shown to
+            // the user and must match the pages (issue #16).
+            this.model.countDocuments(filter),
         ]);
 
         return {

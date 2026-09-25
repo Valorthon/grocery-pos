@@ -22,12 +22,14 @@ import { SalesDetails } from './sales-details.schema';
 import { Sales } from './sales.schema';
 import { SalesService } from './sales.service';
 import { ShiftService } from '../shift/shift.service';
+import { PAGINATION } from '../constants';
 
 interface SaleRow {
     _id: Types.ObjectId;
     cashier: Types.ObjectId;
     shift: Types.ObjectId;
     amount: number;
+    createdAt: Date;
     reversal?: {
         type: string;
         payoutShift?: Types.ObjectId;
@@ -47,22 +49,30 @@ const OPEN_SHIFTS: Record<string, Types.ObjectId> = {
     [SELLER_B.userId]: new Types.ObjectId(),
 };
 
-function sale(who: typeof SELLER_A, shift: Types.ObjectId, amount: number) {
+function sale(
+    who: typeof SELLER_A,
+    shift: Types.ObjectId,
+    amount: number,
+    createdAt: string,
+) {
     return {
         _id: new Types.ObjectId(),
         cashier: new Types.ObjectId(who.userId),
         shift,
         amount,
+        createdAt: new Date(createdAt),
     };
 }
 
 const SALES: SaleRow[] = [
-    sale(SELLER_A, OPEN_SHIFTS[SELLER_A.userId], 100),
-    sale(SELLER_A, OPEN_SHIFTS[SELLER_A.userId], 200),
-    sale(SELLER_B, OPEN_SHIFTS[SELLER_B.userId], 900),
+    // 23:59:59 on 2026-09-24 in Manila (UTC+8)...
+    sale(SELLER_A, OPEN_SHIFTS[SELLER_A.userId], 100, '2026-09-24T15:59:59Z'),
+    // ...and one second later, 00:00:00 on 2026-09-25 in Manila.
+    sale(SELLER_A, OPEN_SHIFTS[SELLER_A.userId], 200, '2026-09-24T16:00:00Z'),
+    sale(SELLER_B, OPEN_SHIFTS[SELLER_B.userId], 900, '2026-09-25T03:00:00Z'),
     // A's sale from an earlier, closed shift.
-    sale(SELLER_A, A_OLD_SHIFT, 300),
-    sale(SELLER_C, new Types.ObjectId(), 400),
+    sale(SELLER_A, A_OLD_SHIFT, 300, '2026-09-20T02:00:00Z'),
+    sale(SELLER_C, new Types.ObjectId(), 400, '2026-09-10T02:00:00Z'),
 ];
 const [A_SALE, A_REFUNDED, B_SALE, A_OLD_SALE, C_SALE] = SALES;
 // Refunded, with the cash paid back from another cashier's drawer.
@@ -72,12 +82,29 @@ A_REFUNDED.reversal = {
     payoutAmount: 200,
 };
 
-function matches(row: SaleRow, filter: Record<string, unknown>): boolean {
-    return Object.entries(filter).every(
-        ([key, expected]) =>
-            String(row[key as keyof SaleRow] as Types.ObjectId | number) ===
-            String(expected),
+type Range = { $gte?: Date; $lt?: Date };
+
+function isRange(value: unknown): value is Range {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        ('$gte' in value || '$lt' in value)
     );
+}
+
+/** Equality on ids and numbers, and `$gte`/`$lt` on dates, as Mongo would. */
+function matches(row: SaleRow, filter: Record<string, unknown>): boolean {
+    return Object.entries(filter).every(([key, expected]) => {
+        const actual = row[key as keyof SaleRow];
+        if (isRange(expected)) {
+            const t = (actual as Date).getTime();
+            return (
+                (!expected.$gte || t >= expected.$gte.getTime()) &&
+                (!expected.$lt || t < expected.$lt.getTime())
+            );
+        }
+        return String(actual as Types.ObjectId | number) === String(expected);
+    });
 }
 
 /** Applies an exclusion projection of dotted paths, as Mongo would. */
@@ -115,9 +142,9 @@ const salesModel = {
         };
         return chain;
     },
+    // No estimatedDocumentCount: every total is an exact count (#16).
     countDocuments: (filter: Record<string, unknown>) =>
         Promise.resolve(SALES.filter((row) => matches(row, filter)).length),
-    estimatedDocumentCount: () => Promise.resolve(SALES.length),
     exists: (filter: Record<string, unknown>) => {
         const row = SALES.find((r) => matches(r, filter));
         return Promise.resolve(row ? { _id: row._id } : null);
@@ -346,4 +373,118 @@ describe('Sales history scoping (e2e)', () => {
             expect(res.status).toBe(403);
         },
     );
+    describe('filters (#16)', () => {
+        async function listWith(who: typeof SELLER_A, query: string) {
+            const res = await harness.call(
+                who,
+                'GET',
+                `/sales?page=1&limit=10&${query}`,
+            );
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                data: Array<{ _id: string }>;
+                totalItems: number;
+            };
+            return {
+                ids: body.data.map((s) => s._id).sort(),
+                totalItems: body.totalItems,
+            };
+        }
+
+        const ids = (...rows: SaleRow[]) =>
+            rows.map((row) => String(row._id)).sort();
+
+        it('filters an admin’s list by cashier across all shifts', async () => {
+            const body = await listWith(ADMIN, `cashier=${SELLER_A.userId}`);
+
+            expect(body.ids).toEqual(ids(A_SALE, A_REFUNDED, A_OLD_SALE));
+            expect(body.totalItems).toBe(3);
+        });
+
+        it('filters an admin’s list by Manila day, across all cashiers', async () => {
+            const today = await listWith(
+                ADMIN,
+                'dateFrom=2026-09-25&dateTo=2026-09-25',
+            );
+            const before = await listWith(ADMIN, 'dateTo=2026-09-24');
+
+            // 16:00:00Z on the 24th is already the 25th in Manila;
+            // 15:59:59Z is still the 24th.
+            expect(today.ids).toEqual(ids(A_REFUNDED, B_SALE));
+            expect(today.totalItems).toBe(2);
+            expect(before.ids).toEqual(ids(A_SALE, A_OLD_SALE, C_SALE));
+        });
+
+        it('combines the cashier and date filters for an admin', async () => {
+            const body = await listWith(
+                ADMIN,
+                `cashier=${SELLER_A.userId}&dateFrom=2026-09-21`,
+            );
+
+            expect(body.ids).toEqual(ids(A_SALE, A_REFUNDED));
+        });
+
+        it('returns nothing, not the other cashier’s sales, when a seller names someone else', async () => {
+            const body = await listWith(SELLER_A, `cashier=${SELLER_B.userId}`);
+
+            expect(body).toEqual({ ids: [], totalItems: 0 });
+        });
+
+        it('keeps a seller inside their open shift when they name themselves', async () => {
+            const body = await listWith(SELLER_A, `cashier=${SELLER_A.userId}`);
+
+            expect(body.ids).toEqual(ids(A_SALE, A_REFUNDED));
+        });
+
+        it('lets a date filter only narrow a seller’s current shift', async () => {
+            const today = await listWith(SELLER_A, 'dateFrom=2026-09-25');
+            const earlier = await listWith(
+                SELLER_A,
+                'dateFrom=2026-09-01&dateTo=2026-09-20',
+            );
+
+            expect(today.ids).toEqual(ids(A_REFUNDED));
+            // A's sale on the 20th is from a closed shift: still hidden.
+            expect(earlier).toEqual({ ids: [], totalItems: 0 });
+        });
+
+        it.each([
+            ['a malformed cashier id', 'cashier=ana'],
+            ['an impossible date', 'dateFrom=2026-02-30'],
+            ['a date in another format', 'dateTo=25/09/2026'],
+        ])('refuses %s with a 400', async (_, query) => {
+            const res = await harness.call(
+                ADMIN,
+                'GET',
+                `/sales?page=1&limit=10&${query}`,
+            );
+
+            expect(res.status).toBe(400);
+        });
+    });
+
+    describe('pagination cap (#16)', () => {
+        it('accepts a page of PAGINATION.LIMIT_MAX rows', async () => {
+            const res = await harness.call(
+                ADMIN,
+                'GET',
+                `/sales?page=1&limit=${PAGINATION.LIMIT_MAX}`,
+            );
+
+            expect(res.status).toBe(200);
+        });
+
+        it.each([PAGINATION.LIMIT_MAX + 1, 1_000_000])(
+            'refuses limit=%s with a 400',
+            async (limit) => {
+                const res = await harness.call(
+                    ADMIN,
+                    'GET',
+                    `/sales?page=1&limit=${limit}`,
+                );
+
+                expect(res.status).toBe(400);
+            },
+        );
+    });
 });

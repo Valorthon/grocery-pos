@@ -156,9 +156,10 @@ export class Sales {
 
     /**
      * The cashier's open shift the sale was rung into (issue #2). Sales
-     * recorded before shifts existed have none.
+     * recorded before shifts existed have none. Indexed by the compound
+     * `{ shift, createdAt }` index below.
      */
-    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Shift', index: true })
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Shift' })
     shift?: Types.ObjectId;
 
     @Prop({
@@ -249,6 +250,22 @@ SalesSchema.index(
         partialFilterExpression: { idempotencyKey: { $type: 'string' } },
     },
 );
+
+// Read paths (issue #16). Every sales list is sorted newest first, so each
+// index ends in `createdAt: -1` and serves the sort as well as the filter:
+//
+// - `{ createdAt }`: the admin's `GET /sales` (all sales, or a date range)
+//   and the dashboard's "today" match and recent-sales feed.
+// - `{ cashier, createdAt }`: the admin's `GET /sales?cashier=` filter,
+//   with or without dates.
+// - `{ shift, createdAt }`: a non-admin's `GET /sales`, scoped to
+//   `{ cashier, shift }` (`saleScope`). A shift belongs to one cashier, so
+//   `shift` alone is as selective as the pair and `cashier` is checked on
+//   the few matching documents. Its `shift` prefix also serves the Z-read's
+//   `find({ shift })` at close and replaces the old single-field `shift_1`.
+SalesSchema.index({ createdAt: -1 });
+SalesSchema.index({ cashier: 1, createdAt: -1 });
+SalesSchema.index({ shift: 1, createdAt: -1 });
 
 /**
  * Matches sales that count toward revenue. Written as "not reversed" rather
