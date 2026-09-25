@@ -76,7 +76,7 @@ describe('Error responses (e2e, issue #8)', () => {
 
     const restocker = caller(Role.Restocker);
     const newProducts = {
-        newProducts: [{ EAN: '2000000000015', name: 'Milk', price: 1999 }],
+        newProducts: [{ EAN: '4006381333931', name: 'Milk', price: 1999 }],
     };
 
     beforeAll(async () => {

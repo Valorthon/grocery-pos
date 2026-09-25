@@ -12,6 +12,9 @@ import {
     MatchesDto,
 } from './types';
 import { runInTransaction } from '../common/utils/db';
+import { containsRegex, prefixRegex } from '../common/utils/regex';
+import { productSearchFilter } from './product-search';
+import { barcodeError } from '@grocery-pos/contracts';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
 import { AuthUser, Role } from '../auth/types';
 import { EanCounterService } from '../ean-counter/ean-counter.service';
@@ -24,11 +27,6 @@ import {
 
 /** Most rows `GET /products/matches` returns: it feeds a pick list. */
 export const MAX_MATCHES = 10;
-
-/** Escapes user input so it matches literally inside a `$regex`. */
-export function escapeRegex(value: string): string {
-    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
 
 /**
  * Throws a 403 PRODUCT_PRICE_CHANGE_FORBIDDEN if `dto` changes a price and
@@ -134,13 +132,7 @@ export class ProductService {
 
         const skip = (page - 1) * limit;
 
-        const query: Record<string, unknown> = {};
-        if (name) {
-            query.name = { $regex: `^${escapeRegex(name)}` };
-        }
-        if (EAN) {
-            query.EAN = { $regex: `^${escapeRegex(EAN)}` };
-        }
+        const query = productSearchFilter({ name, EAN });
 
         const [data, totalItems] = await Promise.all([
             this.model
@@ -161,59 +153,62 @@ export class ProductService {
         };
     }
 
-    async getAllExec(
-        dto: GetAllDto,
-    ): Promise<{ productIds: Types.ObjectId[]; totalItems: number }> {
-        const { page, limit, name, EAN } = dto;
-
-        const skip = (page - 1) * limit;
-
-        const query: Record<string, unknown> = {};
-        if (name) {
-            query.name = { $regex: escapeRegex(name) };
+    /**
+     * The new products as they will be inserted: a copy of each, with its
+     * barcode checked or, if it has none, one generated from the counter.
+     *
+     * Never writes to the caller's objects. `runInTransaction` retries the
+     * whole callback on a transient error, rolling the counter back; a
+     * generated EAN written into the DTO would be reused on the retry while
+     * the counter is back at N-1, and a later `generate()` would collide.
+     */
+    private async withEANs(
+        products: NewProductFields[],
+        session: ClientSession,
+    ): Promise<(NewProductFields & { EAN: string })[]> {
+        const invalid = products
+            .map((product, index) => ({
+                index,
+                EAN: product.EAN,
+                message: product.EAN ? barcodeError(product.EAN) : null,
+            }))
+            .filter((entry) => entry.message !== null);
+        if (invalid.length > 0) {
+            throw new ValidationError(
+                ErrorCode.VALIDATION_EAN_INVALID,
+                'Invalid barcode',
+                invalid,
+            );
         }
-        if (EAN) {
-            query.EAN = { $regex: `^${escapeRegex(EAN)}` };
+
+        const withEANs = [];
+        for (const product of products) {
+            withEANs.push({
+                ...product,
+                EAN:
+                    product.EAN ||
+                    (await this.EANCounterService.generate(session)),
+            });
         }
-
-        Logger.log({ query, dto });
-
-        const [data, totalItems] = await Promise.all([
-            this.model
-                .find(query, '_id')
-                .sort({ name: 1, _id: 1 })
-                .skip(skip)
-                .limit(limit)
-                .lean() as Promise<Array<{ _id: Types.ObjectId }>>,
-
-            query?.name || query?.EAN
-                ? this.model.countDocuments(query)
-                : this.model.estimatedDocumentCount(),
-        ]);
-
-        const productIds = data.map((x) => x._id);
-        Logger.log(data, productIds);
-
-        return {
-            productIds,
-            totalItems,
-        };
+        return withEANs;
     }
 
-    async createMany(dto: NewProductFields[], session: ClientSession) {
-        for (const product of dto) {
-            if (!product.EAN)
-                product.EAN = await this.EANCounterService.generate(session);
-        }
+    /**
+     * Inserts new products (no inventory rows: a restock upserts those) and
+     * returns their ids in the order given. The caller's DTO is not changed.
+     */
+    async createMany(
+        products: NewProductFields[],
+        session: ClientSession,
+    ): Promise<Types.ObjectId[]> {
+        if (products.length === 0) return [];
 
-        const inserted = await this.model.insertMany(dto, { session });
+        const inserted = await this.model.insertMany(
+            await this.withEANs(products, session),
+            { session },
+        );
 
-        const EANMap: Record<string, string> = {};
-        inserted.forEach(({ _id, EAN }) => {
-            EANMap[EAN] = _id.toString();
-        });
-
-        return EANMap;
+        return inserted.map((doc) => doc._id);
     }
 
     async addMany(
@@ -223,17 +218,10 @@ export class ProductService {
     ) {
         await runInTransaction(
             async (session) => {
-                const newProducts = [];
-                for (const product of dto.newProducts) {
-                    const EAN =
-                        product?.EAN ||
-                        (await this.EANCounterService.generate(session));
-
-                    newProducts.push({
-                        ...product,
-                        EAN,
-                    });
-                }
+                const newProducts = await this.withEANs(
+                    dto.newProducts,
+                    session,
+                );
 
                 Logger.log({ newProducts });
                 const inserted = await this.model.insertMany(newProducts, {
@@ -256,7 +244,16 @@ export class ProductService {
         const { EAN, name, autoGenerateEAN } = dto;
         Logger.log({ dto });
         if (!autoGenerateEAN) {
-            this.EANCounterService.ensureValid(EAN);
+            // The same rules as the create and import DTOs (IsBarcode).
+            const message = EAN
+                ? barcodeError(EAN)
+                : 'Barcode is required unless it is auto-generated';
+            if (message) {
+                throw new ValidationError(
+                    ErrorCode.VALIDATION_EAN_INVALID,
+                    message,
+                );
+            }
         }
 
         const found = await this.model
@@ -288,15 +285,15 @@ export class ProductService {
 
         let query: Record<string, unknown>;
         if (EAN) {
-            query = { EAN: { $regex: `^${escapeRegex(EAN)}` } };
+            query = { EAN: prefixRegex(EAN) };
         } else if (name) {
             // Names are stored lowercase and MatchesDto lowercases the term,
             // so a plain substring match is already case-insensitive.
-            const byName = { name: { $regex: escapeRegex(name) } };
+            const byName = { name: containsRegex(name) };
             // A digits-only term may also be part of a barcode, e.g. the
             // legible half of a torn label.
             query = /^\d+$/.test(name)
-                ? { $or: [byName, { EAN: { $regex: escapeRegex(name) } }] }
+                ? { $or: [byName, { EAN: containsRegex(name) }] }
                 : byName;
         } else {
             return [];

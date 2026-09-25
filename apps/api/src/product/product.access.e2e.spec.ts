@@ -272,6 +272,73 @@ describe('Product route access by role (e2e)', () => {
         });
     });
 
+    describe('write validation (issue #14)', () => {
+        it.each([
+            ['letters', 'abc'],
+            ['a bad check digit', '4006381333932'],
+            ['a code in the generated range', '2000000000015'],
+        ])(
+            'refuses a new product whose barcode has %s',
+            async (_label, badEAN) => {
+                service.addMany.mockClear();
+
+                const res = await harness.call(
+                    caller(Role.Restocker),
+                    'POST',
+                    '/products/bulk',
+                    { newProducts: [{ name: 'milk', price: 1, EAN: badEAN }] },
+                );
+
+                expect(res.status).toBe(400);
+                expect(service.addMany).not.toHaveBeenCalled();
+            },
+        );
+
+        it('accepts a UPC-A as scanned', async () => {
+            service.addMany.mockClear();
+
+            const res = await harness.call(
+                caller(Role.Restocker),
+                'POST',
+                '/products/bulk',
+                {
+                    newProducts: [
+                        { name: 'milk', price: 1, EAN: '036000291452' },
+                    ],
+                },
+            );
+
+            expect(res.status).toBe(201);
+            expect(service.addMany).toHaveBeenCalledWith(expect.anything(), {
+                newProducts: [{ name: 'milk', price: 1, EAN: '036000291452' }],
+            });
+        });
+
+        it('refuses an empty update with a 400 instead of writing $set: {}', async () => {
+            updateOne.mockClear();
+
+            const res = await harness.call(
+                caller(Role.Admin),
+                'PATCH',
+                '/products',
+                {
+                    updates: [
+                        {
+                            product: new Types.ObjectId().toString(),
+                            update: {},
+                        },
+                    ],
+                },
+            );
+
+            expect(res.status).toBe(400);
+            expect(await res.json()).toMatchObject({
+                error: ErrorCode.VALIDATION_INVALID_INPUT,
+            });
+            expect(updateOne).not.toHaveBeenCalled();
+        });
+    });
+
     it('answers an over-long search with 400, not a 500', async () => {
         const name = 'x'.repeat(STRING_LIMITS.PRODUCT_NAME + 1);
 

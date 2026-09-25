@@ -18,6 +18,7 @@ import {
 } from 'class-validator';
 import { Category } from './product.types';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
+import { AtLeastOneOf, IsBarcode } from '../../common/validators';
 
 export class EnsureValidDto {
     @IsOptional()
@@ -55,13 +56,20 @@ export class EnsureValidDto {
 }
 
 export class NewProductFields {
+    /**
+     * The barcode as scanned: EAN-13, UPC-A or EAN-8 with a valid check
+     * digit, outside the store's generated range (`IsBarcode`). Omitted or
+     * blank: the server generates one.
+     */
     @IsOptional()
     @IsString()
-    @MaxLength(STRING_LIMITS.EAN)
-    @Transform(({ value }) =>
-        typeof value === 'string' ? value.trim() : (value as unknown),
-    )
-    EAN!: string;
+    @IsBarcode()
+    @Transform(({ value }) => {
+        if (typeof value !== 'string') return value as unknown;
+        const trimmed = value.trim();
+        return trimmed === '' ? undefined : trimmed;
+    })
+    EAN?: string;
 
     @IsNotEmpty()
     @IsString()
@@ -103,6 +111,8 @@ export class GetDto {
     )
     EAN!: string;
 }
+/** A product edit: at least one field, never an empty `$set` (issue #14). */
+@AtLeastOneOf(['name', 'price'])
 class UpdateFields {
     @IsOptional()
     @IsString()
@@ -140,6 +150,7 @@ export class UpdateBulkDto {
 }
 
 export class GetAllDto {
+    /** Matched anywhere in the name. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
@@ -150,6 +161,7 @@ export class GetAllDto {
     )
     name!: string;
 
+    /** Matched as a barcode prefix. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.EAN)

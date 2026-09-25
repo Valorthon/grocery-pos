@@ -1,8 +1,13 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
+import { validate, ValidationError } from 'class-validator';
 import { STRING_LIMITS } from '../../constants';
-import { GetDto, MatchesDto, NewProductFields } from './product.dto';
+import {
+    GetDto,
+    MatchesDto,
+    NewProductFields,
+    UpdateBulkDto,
+} from './product.dto';
 
 async function priceErrors(price: unknown) {
     const dto = plainToInstance(NewProductFields, { name: 'bread', price });
@@ -92,5 +97,84 @@ describe('GetDto', () => {
         );
 
         expect(error?.constraints).toHaveProperty('maxLength');
+    });
+});
+
+describe('NewProductFields.EAN (issue #14)', () => {
+    async function eanErrors(EAN: unknown) {
+        return propertyErrors(
+            NewProductFields,
+            { name: 'bread', price: 1999, EAN },
+            'EAN',
+        );
+    }
+
+    it.each([
+        ['EAN-13', '4006381333931'],
+        ['UPC-A', '036000291452'],
+        ['EAN-8', '96385074'],
+    ])('accepts a valid %s, stored as scanned', async (_kind, EAN) => {
+        const dto = plainToInstance(NewProductFields, {
+            name: 'bread',
+            price: 1999,
+            EAN: ` ${EAN} `,
+        });
+
+        expect(dto.EAN).toBe(EAN);
+        expect(await eanErrors(EAN)).toHaveLength(0);
+    });
+
+    it.each([
+        ['letters', 'abc'],
+        ['a bad check digit', '4006381333932'],
+        ['a code in the generated range', '2000000000015'],
+        ['a wrong length', '12345'],
+    ])('rejects %s', async (_label, EAN) => {
+        const [error] = await eanErrors(EAN);
+
+        expect(error?.constraints).toHaveProperty('isBarcode');
+    });
+
+    it('treats a blank barcode as absent, so the server generates one', async () => {
+        const dto = plainToInstance(NewProductFields, {
+            name: 'bread',
+            price: 1999,
+            EAN: '   ',
+        });
+
+        expect(dto.EAN).toBeUndefined();
+        expect(await validate(dto)).toHaveLength(0);
+    });
+});
+
+describe('UpdateBulkDto: no empty updates (issue #14)', () => {
+    async function messages(update: Record<string, unknown>) {
+        const errors = await validate(
+            plainToInstance(UpdateBulkDto, {
+                updates: [{ product: '507f1f77bcf86cd799439011', update }],
+            }),
+        );
+        const flat = (e: ValidationError): string[] => [
+            ...Object.values(e.constraints ?? {}),
+            ...(e.children ?? []).flatMap(flat),
+        ];
+        return errors.flatMap(flat);
+    }
+
+    it('rejects an update with no fields, which would be an empty $set', async () => {
+        expect(await messages({})).toEqual([
+            'At least one of the following must be provided: name, price',
+        ]);
+    });
+
+    it('rejects an update whose only field is null', async () => {
+        expect(await messages({ price: null })).toContain(
+            'At least one of the following must be provided: name, price',
+        );
+    });
+
+    it('accepts a name or a price', async () => {
+        expect(await messages({ name: 'milk' })).toEqual([]);
+        expect(await messages({ price: 1999 })).toEqual([]);
     });
 });
