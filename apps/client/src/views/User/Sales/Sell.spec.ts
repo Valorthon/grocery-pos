@@ -620,3 +620,515 @@ describe('Sell receipt on screen (issue #22 review, decision 2026-09-25)', () =>
         expect(cartNames()).toEqual([]);
     });
 });
+
+function withTicket() {
+    const cart = useCartStore();
+    cart.add(
+        { product: 'p1', EAN: MILK.EAN, name: 'milk', unitPrice: 9500 },
+        2,
+    );
+    cart.add(
+        { product: 'p2', EAN: MINTS.EAN, name: 'mints', unitPrice: 2500 },
+        1,
+    );
+}
+
+function qtyInputs() {
+    return [
+        ...document.querySelectorAll<HTMLInputElement>(
+            '[data-testid="line-quantity"]',
+        ),
+    ];
+}
+
+function line(index: number) {
+    return document.querySelector<HTMLElement>(
+        `[data-testid="ticket-line-${index}"]`,
+    )!;
+}
+
+async function typeQty(el: HTMLInputElement, value: string) {
+    el.focus();
+    el.value = value;
+    el.dispatchEvent(new Event('input'));
+    el.dispatchEvent(new Event('change'));
+    await flush();
+}
+
+async function clickLine(index: number) {
+    await vi.advanceTimersByTimeAsync(10);
+    line(index).querySelector('td')!.click();
+    await flush();
+}
+
+describe('Sell ticket quantity (#23)', () => {
+    it('edits a line quantity directly', async () => {
+        withTicket();
+        mount();
+
+        await typeQty(qtyInputs()[1], '12');
+        expect(cartNames()).toEqual(['2x milk', '12x mints']);
+    });
+
+    it.each([
+        ['0', 'Must be at least 1'],
+        ['-3', 'Must be at least 1'],
+        ['1.5', 'Enter a whole number'],
+        ['abc', 'Enter a whole number'],
+        ['', 'This field is required'],
+    ])('refuses %j inline and holds the charge', async (value, message) => {
+        withTicket();
+        mount();
+
+        const qty = qtyInputs()[0];
+        await typeQty(qty, value);
+
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+        const error = document.querySelector(
+            '[data-testid="line-quantity-error"]',
+        )!;
+        expect(error.textContent).toContain(message);
+        expect(qty.getAttribute('aria-invalid')).toBe('true');
+        expect(qty.getAttribute('aria-describedby')).toBe(error.id);
+        expect(buttonNamed('Tender & Charge').disabled).toBe(true);
+
+        // Escape puts the line's quantity back.
+        await press('Escape');
+        expect(qty.value).toBe('2');
+        expect(
+            document.querySelector('[data-testid="line-quantity-error"]'),
+        ).toBeNull();
+    });
+
+    it('commits with Enter and goes back to the scan box', async () => {
+        withTicket();
+        mount();
+        const qty = qtyInputs()[0];
+        qty.focus();
+        qty.value = '4';
+        qty.dispatchEvent(new Event('input'));
+        await press('Enter');
+        expect(cartNames()).toEqual(['4x milk', '1x mints']);
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('F9 while a quantity is being typed charges the typed quantity', async () => {
+        withTicket();
+        mount();
+        const qty = qtyInputs()[1];
+        qty.focus();
+        qty.value = '3';
+        qty.dispatchEvent(new Event('input'));
+
+        await press('F9');
+        expect(cartNames()).toEqual(['2x milk', '3x mints']);
+        expect(dialog('Complete Payment')?.textContent).toContain('₱265.00');
+    });
+
+    it('F4 focuses the quantity of the last line, from the scan box', async () => {
+        withTicket();
+        mount();
+        expect(document.activeElement).toBe(input());
+
+        const event = await press('F4');
+        expect(event.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(qtyInputs()[1]);
+    });
+
+    it('F4 focuses the quantity of the selected line', async () => {
+        withTicket();
+        mount();
+        await clickLine(0);
+        expect(line(0).getAttribute('aria-current')).toBe('true');
+
+        await press('F4');
+        expect(document.activeElement).toBe(qtyInputs()[0]);
+    });
+
+    it('selects the line just scanned', async () => {
+        withTicket();
+        serve(() => Promise.resolve([]));
+        mount();
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+
+        expect(line(0).getAttribute('aria-current')).toBe('true');
+        await press('F4');
+        expect(document.activeElement).toBe(qtyInputs()[0]);
+    });
+});
+
+describe('Sell line removal with Undo (decision 2026-09-25)', () => {
+    function undoBar() {
+        return document.querySelector('[data-testid="undo-bar"]');
+    }
+
+    it('Delete removes the selected line at once, and Undo puts it back', async () => {
+        withTicket();
+        useCartStore().add(
+            {
+                product: 'p3',
+                EAN: '2000000000039',
+                name: 'bread',
+                unitPrice: 6000,
+            },
+            3,
+        );
+        mount();
+
+        await clickLine(1);
+        // The clicked line keeps the focus, so Delete reaches it.
+        expect(document.activeElement).toBe(line(1));
+        const event = await press('Delete');
+
+        expect(event.defaultPrevented).toBe(true);
+        expect(cartNames()).toEqual(['2x milk', '3x bread']);
+        expect(undoBar()?.textContent).toContain('Removed 1× mints');
+        expect(undoBar()?.closest('[aria-live="polite"]')).not.toBeNull();
+
+        await clickButton(buttonNamed('Undo'));
+        expect(cartNames()).toEqual(['2x milk', '1x mints', '3x bread']);
+        expect(undoBar()).toBeNull();
+    });
+
+    it('the trash button removes with Undo too', async () => {
+        withTicket();
+        mount();
+        await clickButton(buttonNamed('Remove milk'));
+        expect(cartNames()).toEqual(['1x mints']);
+
+        await clickButton(buttonNamed('Undo'));
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('One less on a single unit removes the line with Undo', async () => {
+        withTicket();
+        mount();
+        await clickButton(buttonNamed('One less mints'));
+        expect(cartNames()).toEqual(['2x milk']);
+        expect(undoBar()).not.toBeNull();
+    });
+
+    it('offers Undo for a few seconds only', async () => {
+        withTicket();
+        mount();
+        await clickButton(buttonNamed('Remove milk'));
+        expect(undoBar()).not.toBeNull();
+
+        await vi.advanceTimersByTimeAsync(4900);
+        await flush();
+        expect(undoBar()).not.toBeNull();
+
+        await vi.advanceTimersByTimeAsync(200);
+        await flush();
+        expect(undoBar()).toBeNull();
+        expect(cartNames()).toEqual(['1x mints']);
+    });
+
+    it('Delete never fires while typing in the scan box', async () => {
+        withTicket();
+        mount();
+        await clickLine(0);
+        input().focus();
+
+        const event = await press('Delete');
+        expect(event.defaultPrevented).toBe(false);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+});
+
+describe('Sell Void Ticket (decision 2026-09-25)', () => {
+    it('asks first, and Keep Ticket keeps it', async () => {
+        withTicket();
+        mount();
+
+        await clickButton(buttonNamed('Void Ticket'));
+        const asked = dialog('Void this ticket of 3 items?');
+        expect(asked).not.toBeNull();
+
+        await clickButton(buttonNamed('Keep Ticket'));
+        await settleTransitions();
+        expect(dialog('Void this ticket')).toBeNull();
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('voids the ticket, its discount and the saved basket once confirmed', async () => {
+        const cart = useCartStore();
+        cart.setOwner('u-ana');
+        withTicket();
+        mount();
+        await press('F8');
+        await clickButton(buttonNamed('10%'));
+        expect(
+            localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+        ).not.toBeNull();
+
+        await clickButton(buttonNamed('Void Ticket'));
+        const confirmButton = [
+            ...dialog('Void this ticket')!.querySelectorAll('button'),
+        ].find((b) => b.textContent?.trim() === 'Void Ticket')!;
+        await clickButton(confirmButton);
+        await settleTransitions();
+
+        expect(cartNames()).toEqual([]);
+        expect(cart.discount).toBeNull();
+        expect(localStorage.getItem('grocery_pos_cart_v1:u-ana')).toBeNull();
+        expect(document.body.textContent).toContain('+ Apply Order Discount');
+    });
+});
+
+describe('Sell quantity multiplier (decision 2026-09-25)', () => {
+    function badge() {
+        return (
+            document
+                .querySelector('[data-testid="multiplier-badge"]')
+                ?.textContent?.trim() ?? null
+        );
+    }
+
+    it('shows the picked multiplier, applies it to one scan, then resets', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        expect(badge()).toBeNull();
+
+        const select = document.querySelector<HTMLSelectElement>(
+            'select[aria-label="Quantity per scan"]',
+        )!;
+        select.value = '12';
+        select.dispatchEvent(new Event('change'));
+        await flush();
+        expect(badge()).toBe('×12 on next scan');
+
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+        expect(cartNames()).toEqual(['12x milk']);
+        expect(badge()).toBeNull();
+        expect(select.value).toBe('1');
+
+        input().value = MINTS.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+        expect(cartNames()).toEqual(['12x milk', '1x mints']);
+    });
+
+    it('shows a typed 12* multiplier too', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await type('6*milk');
+        expect(badge()).toBe('×6 on next scan');
+    });
+});
+
+describe('Sell scan feedback (#23)', () => {
+    it('announces a success politely, and it fades', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+
+        const status = document.querySelector('[data-testid="scan-status"]')!;
+        expect(status.getAttribute('aria-live')).toBe('polite');
+        expect(status.textContent).toContain('Scanned: milk');
+
+        await vi.advanceTimersByTimeAsync(3000);
+        await flush();
+        expect(status.textContent?.trim()).toBe('');
+    });
+
+    it('announces an error assertively and keeps it until the next scan', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await type('bread');
+        await pressEnter();
+
+        const alert = document.querySelector('[data-testid="scan-alert"]')!;
+        expect(alert.getAttribute('aria-live')).toBe('assertive');
+        expect(alert.getAttribute('role')).toBe('alert');
+        expect(alert.textContent).toContain('No item matching "bread"');
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        await flush();
+        expect(alert.textContent).toContain('No item matching "bread"');
+
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+        expect(alert.textContent?.trim()).toBe('');
+        expect(cartNames()).toEqual(['1x milk']);
+    });
+});
+
+describe('Sell match list (#22 follow-up)', () => {
+    it('scrolls the highlighted match into view', async () => {
+        const scroll = vi.fn();
+        Element.prototype.scrollIntoView = scroll;
+        try {
+            serve(() => Promise.resolve([MILK, MINTS]));
+            mount();
+            await type('mi');
+            await key('ArrowDown');
+            await key('ArrowDown');
+            expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+            expect(scroll.mock.contexts[scroll.mock.contexts.length - 1]).toBe(
+                document.getElementById('product-match-1'),
+            );
+        } finally {
+            delete (Element.prototype as Partial<Element>).scrollIntoView;
+        }
+    });
+});
+
+describe('Sell discount (#23)', () => {
+    async function openFixed() {
+        await press('F8');
+        await clickButton(buttonNamed('₱ Amount'));
+        return document.querySelector<HTMLInputElement>('#discount-amount')!;
+    }
+
+    async function typeText(el: HTMLInputElement, value: string) {
+        el.value = value;
+        el.dispatchEvent(new Event('input'));
+        await flush();
+    }
+
+    it('takes a fixed peso amount with a reason and sends it as FIXED centavos', async () => {
+        withTicket(); // ₱215.00
+        post.mockResolvedValue({
+            data: { ...RECEIPT, subtotal: 21500, totalAmount: 20000 },
+        });
+        mount();
+
+        const amount = await openFixed();
+        expect(document.activeElement).toBe(amount);
+        await typeText(amount, '15');
+        await typeText(
+            document.querySelector<HTMLInputElement>('#discount-reason')!,
+            ' damaged box ',
+        );
+
+        expect(document.body.textContent).toContain(
+            'Discount Applied (₱15.00)',
+        );
+        expect(buttonNamed('Tender & Charge').textContent).toContain('₱200.00');
+
+        await press('F2');
+        await press('F9');
+        const cash = document.activeElement as HTMLInputElement;
+        cash.value = '200';
+        cash.dispatchEvent(new Event('input'));
+        cash.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+
+        const body = post.mock.calls[0][1];
+        expect(body.discount).toEqual({
+            type: 'FIXED',
+            value: 1500,
+            reason: 'damaged box',
+        });
+        expect(body.sellDetails).toEqual([
+            { product: 'p1', quantity: 2 },
+            { product: 'p2', quantity: 1 },
+        ]);
+        // No price changed: no notice.
+        expect(
+            document.querySelector('[data-testid="receipt-notice"]'),
+        ).toBeNull();
+    });
+
+    it('refuses a fixed amount above the subtotal, as the server does', async () => {
+        withTicket();
+        mount();
+        const amount = await openFixed();
+        await typeText(amount, '300');
+        await typeText(
+            document.querySelector<HTMLInputElement>('#discount-reason')!,
+            'x',
+        );
+
+        expect(
+            document.querySelector('[data-testid="discount-amount-error"]')
+                ?.textContent,
+        ).toContain("Can't be more than the subtotal (₱215.00)");
+        expect(amount.getAttribute('aria-invalid')).toBe('true');
+        expect(buttonNamed('Tender & Charge').disabled).toBe(true);
+    });
+
+    it('keeps the discount across leaving the register and coming back', async () => {
+        withTicket();
+        mount();
+        await press('F8');
+        await clickButton(buttonNamed('10%'));
+        const reason =
+            document.querySelector<HTMLInputElement>('#discount-reason')!;
+        await typeText(reason, 'senior');
+
+        app!.unmount();
+        app = null;
+        document.body.innerHTML = '';
+        mount();
+
+        expect(document.body.textContent).toContain('Discount Applied (10%)');
+        expect(
+            document.querySelector<HTMLInputElement>('#discount-reason')!.value,
+        ).toBe('senior');
+        expect(buttonNamed('Tender & Charge').textContent).toContain('₱193.50');
+    });
+
+    it('keeps a fixed amount across leaving the register', async () => {
+        withTicket();
+        mount();
+        await typeText(await openFixed(), '15.50');
+
+        app!.unmount();
+        app = null;
+        document.body.innerHTML = '';
+        mount();
+
+        expect(
+            document.querySelector<HTMLInputElement>('#discount-amount')!.value,
+        ).toBe('15.50');
+    });
+});
+
+describe('Sell price change notice (#23)', () => {
+    it('says so on the receipt when the server charged a different total', async () => {
+        withMilkOnTicket();
+        serve(() => Promise.resolve([]));
+        post.mockResolvedValue({
+            data: {
+                ...RECEIPT,
+                items: [{ productName: 'milk', quantity: 1, amount: 9900 }],
+                subtotal: 9900,
+                totalAmount: 9900,
+            },
+        });
+        mount();
+        await clickButton(buttonNamed('Tender & Charge'));
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '100';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+
+        expect(
+            document.querySelector('[data-testid="receipt-notice"]')
+                ?.textContent,
+        ).toContain(
+            'Prices changed since scanning; the receipt shows the charged amounts.',
+        );
+    });
+
+    it('shows no notice when the totals agree', async () => {
+        await completeSale();
+        expect(
+            document.querySelector('[data-testid="receipt-notice"]'),
+        ).toBeNull();
+    });
+});
