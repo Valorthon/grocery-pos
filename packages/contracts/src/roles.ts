@@ -69,6 +69,14 @@ export interface JWTPayload {
     userId: string;
     username: string;
     roles: Role[];
+    /**
+     * Session id: the refresh-token family this access token was issued
+     * from. Stable across refresh rotations, so the API can tell the
+     * caller's own session apart from their others (e.g. to keep it when a
+     * password change revokes the rest). Absent on tokens issued before it
+     * existed.
+     */
+    sid?: string;
 }
 
 export type AuthUser = JWTPayload;
