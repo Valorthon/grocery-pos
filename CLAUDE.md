@@ -241,10 +241,19 @@ requestId}`. A 5xx never carries details or internals.
 
 **Draft screens** (#19)
 
-- Draft pages key rows by a generated draft id, confirm Clear and leaving
-  with unsaved drafts, and block double submits.
-- A manual Logout with unsaved drafts asks first: "Stay" keeps them, "Log
-  out" discards them. A logout because the session expired doesn't ask.
+- Draft rows are keyed by a page-local `draftId` (a counter, never sent),
+  via `useDraftList`.
+- `ConfirmDialog` + `useConfirm()` confirm Clear and leaving with drafts
+  (`useUnsavedDraftsGuard`). `beforeunload` is registered only while drafts
+  exist.
+- Sign out (`authStore.requestLogout`) navigates to Login first, so a draft
+  page asks "Log out and discard?"; "Stay" keeps the drafts and the
+  session. A forced logout (the session already ended) never asks.
+- While a save is in flight, navigation is held with an info toast, no
+  prompt. Products Save All submits once; empty restock/adjustment lists
+  are refused.
+- In `BaseModal`, only the topmost modal answers Escape, and the scroll
+  lock is ref-counted.
 
 **List views** (#20)
 
