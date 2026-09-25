@@ -22,6 +22,12 @@ export interface CreatedRefresh {
     refreshId: string;
     /** The session (token family) id, carried in the access token as `sid`. */
     sid: string;
+    /**
+     * When the session ends: `REFRESH_EXPIRY_S` after login, carried over
+     * unchanged by every rotation. Cookies are set to expire at this moment
+     * too, so the browser and the server agree (#21).
+     */
+    expiry: Date;
 }
 
 const loginAgain = (code: ErrorCode) =>
@@ -56,7 +62,7 @@ export class RefreshTokenService {
             { user: userId, expiry, family },
         ]);
 
-        return { refreshId: created._id.toString(), sid: family };
+        return { refreshId: created._id.toString(), sid: family, expiry };
     }
 
     /**
@@ -78,7 +84,7 @@ export class RefreshTokenService {
      */
     async rotate(
         refreshId: string,
-    ): Promise<{ refreshId: string; jwtPayload: JWTPayload }> {
+    ): Promise<{ refreshId: string; jwtPayload: JWTPayload; expiry: Date }> {
         const found = await this.model
             .findById(refreshId)
             .populate({ path: 'user', select: 'name roles isActive' })
@@ -128,6 +134,7 @@ export class RefreshTokenService {
 
         return {
             refreshId: next.refreshId,
+            expiry: next.expiry,
             jwtPayload: {
                 userId: user._id.toString(),
                 username: user.name,
@@ -165,9 +172,7 @@ export class RefreshTokenService {
     }
 
     private checkValid(refreshToken: FoundRefresh): boolean {
-        return (
-            refreshToken.expiry.getTime() > Date.now() && refreshToken.isValid
-        );
+        return refreshToken.expiry.getTime() > Date.now();
     }
 
     /** Cleanup that must not turn the real answer into a 500. */

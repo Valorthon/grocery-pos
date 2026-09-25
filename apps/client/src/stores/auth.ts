@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import api from '@/axios';
 import { useCartStore } from './cart';
 import { useShiftStore } from './shift';
+import { hasSessionMarker } from '@/utils/session-cookie';
 
 import { Role } from '@grocery-pos/contracts';
 
@@ -25,8 +26,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     const user = ref<User | null>(initialUser);
 
-    const hasSessionCookie = (): boolean =>
-        document.cookie.split('; ').some((row) => row.startsWith('dummy'));
+    const hasSessionCookie = (): boolean => hasSessionMarker(document.cookie);
 
     const isAuthenticated = computed(() => !!user.value && hasSessionCookie());
 

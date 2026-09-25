@@ -7,6 +7,7 @@ import constant from '@/constant';
 import { useAuthStore } from './stores/auth';
 import { Color, useUIStore } from './stores/ui';
 import { env } from './config/env';
+import { clearSessionMarker } from './utils/session-cookie';
 
 interface QueuePromise {
     resolve: (value?: unknown) => void;
@@ -68,7 +69,8 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 // under it, never record a second one. (A 401 also comes from the auth
 // guard before the handler runs, so the first attempt was not recorded.)
 // Any new non-idempotent POST must carry a key the same way before it can
-// go through this path. The queued-replay `_retry` bug is tracked in #21.
+// go through this path. Queued replays are marked `_retry` too, so each
+// request is refreshed for at most once: a second 401 is final.
 api.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
@@ -87,6 +89,9 @@ api.interceptors.response.use(
                     failedQueue.push({ resolve, reject });
                 })
                     .then(() => {
+                        // One refresh per request: if the replay 401s too,
+                        // it is rejected instead of refreshing again.
+                        originalRequest._retry = true;
                         return api(originalRequest);
                     })
                     .catch((err) => {
@@ -98,18 +103,19 @@ api.interceptors.response.use(
             isRefreshing = true;
 
             try {
-                // Call refresh endpoint
-                const response = await axios.post(
+                // Bare axios, so a 401 here cannot recurse into this
+                // interceptor. Bounded like every other call (bare axios
+                // defaults to no timeout, which would park every queued
+                // request forever). Any 2xx is success: axios rejects
+                // anything else.
+                await axios.post(
                     `${env.VITE_API_URL}${constant.refresh}`,
                     {},
                     {
                         withCredentials: true, // Send cookies with refresh token
+                        timeout: env.VITE_API_TIMEOUT,
                     },
                 );
-
-                if (response.status !== 201) {
-                    throw new Error('Refresh failed');
-                }
 
                 // Process queued requests
                 processQueue(null);
@@ -134,10 +140,7 @@ api.interceptors.response.use(
                     refreshError.response?.status === 401;
                 if (!sessionOver) return Promise.reject(refreshError);
 
-                const domainString = env.VITE_DOMAIN
-                    ? `; domain=${env.VITE_DOMAIN}`
-                    : '';
-                document.cookie = `dummy=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${domainString}`;
+                clearSessionMarker(env.VITE_DOMAIN);
 
                 if (!isSessionDialogShown) {
                     isSessionDialogShown = true;

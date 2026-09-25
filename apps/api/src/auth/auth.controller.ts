@@ -51,12 +51,12 @@ export class AuthController {
         // Keyed on the username as it will be checked, after the pipes.
         await this.loginLimiter.hit(res, clientIp(req), dto.username);
 
-        const { refreshPayload, jwtPayload, user } =
+        const { refreshPayload, jwtPayload, sessionExpiry, user } =
             await this.service.login(dto);
 
-        this.cookieService.createJwt(res, jwtPayload);
-        this.cookieService.createRefresh(res, refreshPayload);
-        this.cookieService.createDummy(res);
+        this.cookieService.createJwt(res, jwtPayload, sessionExpiry);
+        this.cookieService.createRefresh(res, refreshPayload, sessionExpiry);
+        this.cookieService.createDummy(res, sessionExpiry);
 
         return { user };
     }
@@ -90,12 +90,18 @@ export class AuthController {
                     'Please log in again',
                 );
 
-            const { refreshPayload, jwtPayload } =
+            // Rotation keeps the session's end, so the cookies expire when
+            // it does rather than a full REFRESH_EXPIRY_S from now (#21).
+            const { refreshPayload, jwtPayload, sessionExpiry } =
                 await this.service.refresh(refreshId);
 
-            this.cookieService.createRefresh(res, refreshPayload);
-            this.cookieService.createJwt(res, jwtPayload);
-            this.cookieService.createDummy(res);
+            this.cookieService.createRefresh(
+                res,
+                refreshPayload,
+                sessionExpiry,
+            );
+            this.cookieService.createJwt(res, jwtPayload, sessionExpiry);
+            this.cookieService.createDummy(res, sessionExpiry);
         } catch (err) {
             if (err instanceof AppError && err.statusCode === 401) {
                 this.cookieService.removeRefresh(res);
