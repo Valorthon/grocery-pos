@@ -92,4 +92,18 @@ describe('JWTAuthGuard.handleRequest', () => {
             ).not.toThrow();
         },
     );
+
+    it('gives an anonymous caller on a public route an array of roles', () => {
+        const ctx = contextFor(AuthController, 'login');
+
+        const user = guard.handleRequest<{ roles: unknown }>(
+            null,
+            false,
+            undefined,
+            ctx,
+        );
+
+        expect(user).toEqual({ roles: [Role.Unauthenticated] });
+        expect(Array.isArray(user.roles)).toBe(true);
+    });
 });

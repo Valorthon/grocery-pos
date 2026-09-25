@@ -16,7 +16,17 @@ export {
  */
 export const API_VERSION = '1';
 export const API_VERSION_PREFIX = `/v${API_VERSION}`;
-export const REFRESH_ROUTE = `${API_VERSION_PREFIX}/auth/refresh`;
+/**
+ * Path of the refresh cookie: every auth route, so the browser sends it to
+ * both `/auth/refresh` and `/auth/logout` (which must see it to revoke the
+ * session), and to nothing else.
+ */
+export const REFRESH_COOKIE_PATH = `${API_VERSION_PREFIX}/auth`;
+/**
+ * Where the refresh cookie used to live (issue #12). Cleared whenever the
+ * refresh cookie is set or removed, so browsers still holding one migrate.
+ */
+export const LEGACY_REFRESH_COOKIE_PATH = `${API_VERSION_PREFIX}/auth/refresh`;
 
 /** Cookie maxAge and Date arithmetic are milliseconds; config expiries are seconds. */
 export const MS_PER_SECOND = 1000;

@@ -1,7 +1,7 @@
 import { ArgumentsHost } from '@nestjs/common';
 import { GlobalFilter } from './global.filter';
 import { JWTInvalidError } from '../../auth/types';
-import { AuthError, ErrorCode } from '../errors';
+import { AuthError, ErrorCode, RateLimitError } from '../errors';
 
 function hostFor(url: string) {
     const res = {
@@ -62,5 +62,26 @@ describe('GlobalFilter on auth errors', () => {
         filter.catch(new Error('boom'), host);
 
         expect(res.status).toHaveBeenCalledWith(500);
+    });
+});
+
+describe('GlobalFilter on rate limiting', () => {
+    it('answers a RateLimitError with an AppError-shaped 429', () => {
+        const { host, res } = hostFor('/v1/auth/login');
+
+        new GlobalFilter().catch(
+            new RateLimitError('Too many attempts', { retryAfterS: 60 }),
+            host,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(429);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({
+                statusCode: 429,
+                error: ErrorCode.RATE_LIMITED,
+                path: '/v1/auth/login',
+                details: { retryAfterS: 60 },
+            }),
+        );
     });
 });

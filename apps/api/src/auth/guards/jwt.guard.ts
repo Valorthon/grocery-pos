@@ -22,7 +22,9 @@ export class JWTAuthGuard extends AuthGuard('jwt') {
         );
 
         if (err || !user) {
-            if (isPublic) return { roles: Role.Unauthenticated } as TUser;
+            // Always an array, like a real user's roles: a bare string
+            // would make `roles.includes(x)` a substring test.
+            if (isPublic) return { roles: [Role.Unauthenticated] } as TUser;
 
             // passport-jwt reports a missing, expired or bad token through
             // `info` (user = false). `err` is only set when something broke

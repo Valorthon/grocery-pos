@@ -60,6 +60,8 @@ export class AppError extends Error {
             case ErrorCode.SALE_IDEMPOTENCY_MISMATCH:
             case ErrorCode.SALE_IN_PROGRESS:
                 return HttpStatus.CONFLICT;
+            case ErrorCode.RATE_LIMITED:
+                return HttpStatus.TOO_MANY_REQUESTS;
             case ErrorCode.INTERNAL_ERROR:
                 return HttpStatus.INTERNAL_SERVER_ERROR;
             default:
@@ -98,6 +100,18 @@ export class ForbiddenError extends AppError {
 export class ConflictError extends AppError {
     constructor(code: ErrorCode, message: string, details: unknown = null) {
         super(code, AppError.getHttpStatus(code), message, details);
+    }
+}
+
+/** 429: too many attempts on a rate-limited route (see `RateLimitGuard`). */
+export class RateLimitError extends AppError {
+    constructor(message: string, details: unknown = null) {
+        super(
+            ErrorCode.RATE_LIMITED,
+            AppError.getHttpStatus(ErrorCode.RATE_LIMITED),
+            message,
+            details,
+        );
     }
 }
 
