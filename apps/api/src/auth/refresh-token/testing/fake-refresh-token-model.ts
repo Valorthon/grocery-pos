@@ -18,7 +18,6 @@ export interface StoredToken {
     _id: Types.ObjectId;
     user: Types.ObjectId;
     expiry: Date;
-    isValid: boolean;
     family?: Types.ObjectId;
 }
 
@@ -85,7 +84,6 @@ export class FakeRefreshTokenModel {
             _id: new Types.ObjectId(),
             user: user instanceof Types.ObjectId ? user : user._id,
             expiry: opts.expiry ?? new Date(Date.now() + HOUR_MS),
-            isValid: true,
             ...(opts.family === null
                 ? {}
                 : { family: opts.family ?? new Types.ObjectId() }),
@@ -107,7 +105,6 @@ export class FakeRefreshTokenModel {
                         _id: new Types.ObjectId(),
                         user: new Types.ObjectId(doc.user),
                         expiry: doc.expiry,
-                        isValid: true,
                         family: new Types.ObjectId(doc.family),
                     };
                     this.rows.set(row._id.toString(), row);

@@ -6,6 +6,7 @@ import { JWTPayload } from './types/auth.types';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
 import { AuthError, ErrorCode } from '../common/errors';
+import { MS_PER_SECOND } from '../constants';
 
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid username or password';
 
@@ -21,6 +22,8 @@ export class AuthService {
     async login(dto: LoginDto): Promise<{
         refreshPayload: string;
         jwtPayload: string;
+        /** When the session ends; see `CreatedRefresh.expiry`. */
+        sessionExpiry: Date;
         user: {
             username: string;
         };
@@ -44,9 +47,8 @@ export class AuthService {
             );
         }
 
-        const { refreshId, sid } = await this.refreshTokenService.create(
-            userInfo._id.toString(),
-        );
+        const { refreshId, sid, expiry } =
+            await this.refreshTokenService.create(userInfo._id.toString());
 
         const jwtPayload = {
             userId: userInfo._id.toString(),
@@ -57,17 +59,19 @@ export class AuthService {
 
         return {
             refreshPayload: JSON.stringify({ refreshId }),
-            jwtPayload: this.signJWT(jwtPayload),
+            jwtPayload: this.signJWT(jwtPayload, expiry),
+            sessionExpiry: expiry,
             user: { username },
         };
     }
 
     async refresh(oldRefreshId: string) {
-        const { refreshId, jwtPayload } =
+        const { refreshId, jwtPayload, expiry } =
             await this.refreshTokenService.rotate(oldRefreshId);
         return {
             refreshPayload: JSON.stringify({ refreshId }),
-            jwtPayload: this.signJWT(jwtPayload),
+            jwtPayload: this.signJWT(jwtPayload, expiry),
+            sessionExpiry: expiry,
         };
     }
 
@@ -75,10 +79,26 @@ export class AuthService {
         await this.refreshTokenService.invalidate(refreshTokenId);
     }
 
-    signJWT(payload: JWTPayload): string {
+    /**
+     * Signs an access token that lives `JWT_EXPIRY_S`, but never past the
+     * end of its session: sessions are a fixed length (#21), so the last
+     * access token of one must not outlive it.
+     */
+    signJWT(payload: JWTPayload, sessionExpiry: Date): string {
         return this.jwtService.sign(payload, {
-            expiresIn: this.config.get('JWT_EXPIRY_S'),
+            expiresIn: this.accessTokenLifetimeS(sessionExpiry),
             secret: this.config.get('JWT_SECRET'),
         });
+    }
+
+    /** Seconds the access token lives: `JWT_EXPIRY_S`, capped at the session end. */
+    accessTokenLifetimeS(sessionExpiry: Date): number {
+        const remainingS = Math.ceil(
+            (sessionExpiry.getTime() - Date.now()) / MS_PER_SECOND,
+        );
+        return Math.max(
+            1,
+            Math.min(this.config.get('JWT_EXPIRY_S'), remainingS),
+        );
     }
 }

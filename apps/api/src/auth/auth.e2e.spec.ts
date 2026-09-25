@@ -131,6 +131,50 @@ function pathOfSet(res: Response, name: string): string | undefined {
     return header && /Path=([^;]*)/.exec(header)?.[1];
 }
 
+/** The Max-Age (seconds) and Expires a response gives the cookie it sets as `name`. */
+function lifetimeOf(
+    res: Response,
+    name: string,
+): { maxAgeS: number; expires: number } | undefined {
+    const header = res.headers
+        .getSetCookie()
+        .find(
+            (h) =>
+                h.startsWith(`${name}=`) &&
+                !h.includes('Expires=Thu, 01 Jan 1970'),
+        );
+    if (!header) return undefined;
+    return {
+        maxAgeS: Number(/Max-Age=(\d+)/.exec(header)?.[1]),
+        expires: Date.parse(/Expires=([^;]*)/.exec(header)?.[1] ?? ''),
+    };
+}
+
+/** Fakes only the clock, so real sockets and timers keep working. */
+function fakeClock(now: Date): void {
+    jest.useFakeTimers({
+        now,
+        doNotFake: [
+            'hrtime',
+            'nextTick',
+            'performance',
+            'queueMicrotask',
+            'requestAnimationFrame',
+            'cancelAnimationFrame',
+            'requestIdleCallback',
+            'cancelIdleCallback',
+            'setImmediate',
+            'clearImmediate',
+            'setInterval',
+            'clearInterval',
+            'setTimeout',
+            'clearTimeout',
+        ],
+    });
+}
+
+const HOUR_S = 3600;
+
 describe('Auth session flow (e2e)', () => {
     let app: INestApplication;
     let base: string;
@@ -485,6 +529,81 @@ describe('Auth session flow (e2e)', () => {
             expect(res.status).toBe(201);
             expect(pathOfSet(res, 'refresh')).toBe('/v1/auth');
             expect(clearedAt(res)).toContain('refresh@/v1/auth/refresh');
+        });
+    });
+
+    describe('fixed-length sessions: cookies expire with the session (#21)', () => {
+        const LOGIN_AT = new Date('2026-09-01T08:00:00.000Z');
+        const SESSION_END = LOGIN_AT.getTime() + 86_400 * 1000;
+
+        afterEach(() => jest.useRealTimers());
+
+        async function logIn(): Promise<Response> {
+            checkCredentials.mockResolvedValue(SELLER);
+            const res = await call('POST', '/auth/login', [], {
+                username: 'cashier',
+                password: 'password123',
+            });
+            expect(res.status).toBe(201);
+            return res;
+        }
+
+        it('login: the refresh and marker cookies last REFRESH_EXPIRY_S, the access cookie JWT_EXPIRY_S', async () => {
+            fakeClock(LOGIN_AT);
+
+            const login = await logIn();
+
+            for (const name of ['refresh', 'dummy']) {
+                expect(lifetimeOf(login, name)).toEqual({
+                    maxAgeS: 86_400,
+                    expires: SESSION_END,
+                });
+            }
+            expect(lifetimeOf(login, 'jwt')?.maxAgeS).toBe(900);
+            const [token] = model.tokensOf(SELLER);
+            expect(token.expiry.getTime()).toBe(SESSION_END);
+        });
+
+        it('refresh 10h after login: the cookies keep the login expiry (14h left), not a fresh day', async () => {
+            fakeClock(LOGIN_AT);
+            const login = await logIn();
+            const { refresh } = setCookies(login);
+
+            jest.setSystemTime(LOGIN_AT.getTime() + 10 * HOUR_S * 1000);
+            const refreshed = await call('POST', '/auth/refresh', [
+                `refresh=${refresh}`,
+            ]);
+
+            expect(refreshed.status).toBe(201);
+            for (const name of ['refresh', 'dummy']) {
+                expect(lifetimeOf(refreshed, name)).toEqual({
+                    maxAgeS: 14 * HOUR_S,
+                    expires: SESSION_END,
+                });
+            }
+            expect(lifetimeOf(refreshed, 'jwt')?.maxAgeS).toBe(900);
+            const [token] = model.tokensOf(SELLER);
+            expect(token.expiry.getTime()).toBe(SESSION_END);
+        });
+
+        it('the last access token of a session does not outlive it', async () => {
+            fakeClock(LOGIN_AT);
+            const refreshId = model.seed(SELLER, {
+                expiry: new Date(LOGIN_AT.getTime() + 60_000),
+            });
+
+            const refreshed = await call('POST', '/auth/refresh', [
+                refreshCookie(refreshId),
+            ]);
+
+            expect(refreshed.status).toBe(201);
+            expect(lifetimeOf(refreshed, 'jwt')?.maxAgeS).toBe(60);
+            expect(lifetimeOf(refreshed, 'refresh')?.maxAgeS).toBe(60);
+            const signed = decodeURIComponent(setCookies(refreshed).jwt);
+            const { exp } = jwt.decode(
+                signed.slice(2).replace(/\.[^.]+$/, ''),
+            ) as { exp: number };
+            expect(exp * 1000).toBe(LOGIN_AT.getTime() + 60_000);
         });
     });
 

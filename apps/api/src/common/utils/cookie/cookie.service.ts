@@ -7,6 +7,16 @@ import {
     REFRESH_COOKIE_PATH,
 } from '../../../constants';
 
+/**
+ * Milliseconds from now until `expiresAt`, never negative. Cookies that
+ * belong to a session use it as their maxAge, so they expire when the
+ * session does (#21): sessions are a fixed length from login, and a
+ * refresh must not make the browser think it was extended.
+ */
+export function msUntil(expiresAt: Date): number {
+    return Math.max(0, expiresAt.getTime() - Date.now());
+}
+
 @Injectable()
 export class CookieService {
     private readonly isProd: boolean;
@@ -50,14 +60,17 @@ export class CookieService {
      * Also clears the cookie from its old, narrower path first: the browser
      * keys cookies by name and path, so a leftover one would otherwise keep
      * being sent (first, being more specific) to `/auth/refresh`.
+     *
+     * Expires with the session (`sessionExpiry`, the token's stored
+     * expiry), not a full `REFRESH_EXPIRY_S` from now.
      */
-    createRefresh(res: Response, payload: string) {
+    createRefresh(res: Response, payload: string, sessionExpiry: Date) {
         this.removeSecure(res, 'refresh', LEGACY_REFRESH_COOKIE_PATH);
         this.createSecure(
             res,
             'refresh',
             payload,
-            this.config.get('REFRESH_EXPIRY_S') * MS_PER_SECOND,
+            msUntil(sessionExpiry),
             REFRESH_COOKIE_PATH,
         );
     }
@@ -67,12 +80,16 @@ export class CookieService {
         this.removeSecure(res, 'refresh', REFRESH_COOKIE_PATH);
     }
 
-    createJwt(res: Response, payload: string) {
+    /** Lives `JWT_EXPIRY_S`, but never past the end of the session. */
+    createJwt(res: Response, payload: string, sessionExpiry: Date) {
         this.createSecure(
             res,
             'jwt',
             payload,
-            this.config.get('JWT_EXPIRY_S') * MS_PER_SECOND,
+            Math.min(
+                this.config.get('JWT_EXPIRY_S') * MS_PER_SECOND,
+                msUntil(sessionExpiry),
+            ),
         );
     }
 
@@ -80,13 +97,18 @@ export class CookieService {
         this.removeSecure(res, 'jwt');
     }
 
-    createDummy(res: Response) {
+    /**
+     * The readable session marker the client checks (`dummy=true`). It
+     * expires with the refresh cookie, so it is present exactly while the
+     * session can still be renewed.
+     */
+    createDummy(res: Response, sessionExpiry: Date) {
         res.cookie('dummy', 'true', {
             httpOnly: false,
             secure: this.isProd,
             sameSite: this.isProd && !this.isDomainSet ? 'none' : 'lax',
             signed: false,
-            maxAge: this.config.get('REFRESH_EXPIRY_S') * MS_PER_SECOND,
+            maxAge: msUntil(sessionExpiry),
             path: '/',
             domain: this.config.get('DOMAIN') || undefined,
         });

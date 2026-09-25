@@ -25,13 +25,6 @@ export class RefreshToken {
     })
     expiry!: Date;
 
-    @Prop({
-        type: Boolean,
-        required: true,
-        default: true,
-    })
-    isValid!: boolean;
-
     /**
      * Session id: set at login and carried over by every rotation, so all
      * tokens of one sign-in share it. Access tokens carry it as `sid`, which

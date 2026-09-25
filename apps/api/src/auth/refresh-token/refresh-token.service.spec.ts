@@ -51,6 +51,22 @@ describe('RefreshTokenService', () => {
             expect(a.sid).not.toBe(b.sid);
             expect(model.rows.get(a.refreshId)?.family?.toString()).toBe(a.sid);
         });
+
+        it('ends the session REFRESH_EXPIRY_S after login and returns that expiry', async () => {
+            jest.useFakeTimers({ now: new Date('2026-09-01T08:00:00Z') });
+            try {
+                const created = await service.create(cashier._id.toString());
+
+                expect(created.expiry).toEqual(
+                    new Date('2026-09-02T08:00:00Z'),
+                );
+                expect(model.rows.get(created.refreshId)?.expiry).toEqual(
+                    created.expiry,
+                );
+            } finally {
+                jest.useRealTimers();
+            }
+        });
     });
 
     describe('rotate', () => {
@@ -72,6 +88,23 @@ describe('RefreshTokenService', () => {
                 roles: [Role.Seller],
                 sid: family.toString(),
             });
+        });
+
+        it('does not extend the session: a later rotation returns the login expiry (#21)', async () => {
+            jest.useFakeTimers({ now: new Date('2026-09-01T08:00:00Z') });
+            try {
+                const login = await service.create(cashier._id.toString());
+
+                jest.setSystemTime(new Date('2026-09-01T20:00:00Z'));
+                const rotated = await service.rotate(login.refreshId);
+
+                expect(rotated.expiry).toEqual(login.expiry);
+                expect(model.rows.get(rotated.refreshId)?.expiry).toEqual(
+                    login.expiry,
+                );
+            } finally {
+                jest.useRealTimers();
+            }
         });
 
         it('gives a token from before session ids a session', async () => {
@@ -177,6 +210,20 @@ describe('RefreshTokenService', () => {
         });
     });
 
+    describe('invalidate (logout)', () => {
+        it('deletes exactly that token, so it can no longer be rotated', async () => {
+            const mine = model.seed(cashier);
+            const other = model.seed(cashier);
+
+            await service.invalidate(mine);
+
+            expect(model.rows.has(mine)).toBe(false);
+            expect(model.rows.has(other)).toBe(true);
+            const err = await rejection(service.rotate(mine));
+            expect(err.statusCode).toBe(401);
+        });
+    });
+
     describe('revoking', () => {
         it('revokeAllForUser ends every session of that user only', async () => {
             const other = model.addUser({
@@ -230,6 +277,10 @@ describe('RefreshTokenService', () => {
 });
 
 describe('RefreshToken schema', () => {
+    it('has no isValid flag: a revoked token is deleted, not flagged (#21)', () => {
+        expect(RefreshTokenSchema.path('isValid')).toBeUndefined();
+    });
+
     it('has a TTL index on expiry, so expired sessions are deleted', () => {
         expect(RefreshTokenSchema.indexes()).toContainEqual([
             { expiry: 1 },
