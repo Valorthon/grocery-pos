@@ -18,9 +18,3 @@ declare module '*.svg' {
     const src: string;
     export default src;
 }
-
-declare module 'vue' {
-    export interface ComponentCustomProperties {
-        $axios: import('axios').AxiosInstance;
-    }
-}

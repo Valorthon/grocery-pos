@@ -1,6 +1,5 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import axios from '@/axios';
 import App from './App.vue';
 import router from '@/router';
 import { useAuthStore } from '@/stores/auth';
@@ -13,7 +12,5 @@ app.use(createPinia());
 // guard awaits the same request before the first navigation resolves.
 void useAuthStore().initSession();
 app.use(router);
-
-app.config.globalProperties.$axios = axios;
 
 app.mount('#app');
