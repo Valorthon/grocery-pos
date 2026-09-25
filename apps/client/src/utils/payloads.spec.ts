@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { DiscountType } from '@grocery-pos/contracts';
 import {
     newProductLines,
     toAdjustmentBody,
     toEnsureValidQuery,
     toNewProductsBody,
     toRestockBody,
+    toSaleTicket,
     type ProductDraft,
     type RestockDraft,
 } from './payloads';
@@ -205,5 +207,59 @@ describe('draft row ids (issue #19)', () => {
         for (const body of bodies) {
             expect(JSON.stringify(body)).not.toContain(draftId);
         }
+    });
+});
+
+describe('toSaleTicket (POST /sales ticket, #23)', () => {
+    const lines = [
+        {
+            product: PRODUCT,
+            EAN: '4006381333931',
+            name: 'Bread',
+            unitPrice: 1999,
+            quantity: 2,
+        },
+        {
+            product: '507f1f77bcf86cd799439012',
+            EAN: '1',
+            name: 'Milk',
+            unitPrice: 5000,
+            quantity: 1,
+        },
+    ];
+
+    it('sends exactly product and quantity per line, and no discount key without one', () => {
+        const body = toSaleTicket(lines, null);
+        expect(body).toEqual({
+            sellDetails: [
+                { product: PRODUCT, quantity: 2 },
+                { product: '507f1f77bcf86cd799439012', quantity: 1 },
+            ],
+        });
+        expect(body).not.toHaveProperty('discount');
+    });
+
+    it('sends a FIXED discount as type, centavos and trimmed reason only', () => {
+        const body = toSaleTicket(lines, {
+            type: DiscountType.FIXED,
+            value: 1500,
+            reason: '  damaged box ',
+        });
+        expect(body.discount).toEqual({
+            type: DiscountType.FIXED,
+            value: 1500,
+            reason: 'damaged box',
+        });
+        expect(Object.keys(body).sort()).toEqual(['discount', 'sellDetails']);
+    });
+
+    it('sends a PERCENT discount as a whole percent', () => {
+        expect(
+            toSaleTicket(lines, {
+                type: DiscountType.PERCENT,
+                value: 10,
+                reason: 'senior',
+            }).discount,
+        ).toEqual({ type: DiscountType.PERCENT, value: 10, reason: 'senior' });
     });
 });

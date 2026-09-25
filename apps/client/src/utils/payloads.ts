@@ -1,3 +1,5 @@
+import type { DiscountType } from '@grocery-pos/contracts';
+
 /**
  * Request bodies for the back-office write flows, built from the form
  * drafts (issue #33). The API's ValidationPipe refuses any property its DTO
@@ -136,5 +138,42 @@ export function toAdjustmentBody(
             reason: d.reason,
         })),
         description,
+    };
+}
+
+/** A register ticket line; EAN, name and unit price are for display only. */
+export interface SaleLineDraft {
+    product: string;
+    quantity: number;
+}
+
+/** The ticket part of `POST /sales` (`SellDto`: `sellDetails`, `discount`). */
+export interface SaleTicketBody {
+    sellDetails: { product: string; quantity: number }[];
+    discount?: { type: DiscountType; value: number; reason: string };
+}
+
+/**
+ * The ticket part of `POST /sales` from the register's cart (#23). Only
+ * `product` and `quantity` go per line: the server prices the sale. The
+ * discount is sent as type, value (percent, or centavos for FIXED) and
+ * trimmed reason, never an amount; `null` sends none.
+ */
+export function toSaleTicket(
+    lines: SaleLineDraft[],
+    discount: { type: DiscountType; value: number; reason: string } | null,
+): SaleTicketBody {
+    return {
+        sellDetails: lines.map((l) => ({
+            product: l.product,
+            quantity: l.quantity,
+        })),
+        ...(discount && {
+            discount: {
+                type: discount.type,
+                value: discount.value,
+                reason: discount.reason.trim(),
+            },
+        }),
     };
 }
