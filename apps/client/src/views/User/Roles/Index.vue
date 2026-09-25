@@ -10,6 +10,7 @@
                     v-for="role in roles"
                     :key="role.key"
                     class="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+                    :data-testid="`role-${role.key}`"
                 >
                     <div class="flex items-center gap-3 px-5 py-4">
                         <div
@@ -44,6 +45,7 @@
 </template>
 
 <script setup lang="ts">
+import type { Component } from 'vue';
 import {
     ClipboardEdit,
     Crown,
@@ -52,72 +54,53 @@ import {
     Truck,
     Users,
 } from '@lucide/vue';
+import { ASSIGNABLE_ROLES, permissionsOf, Role } from '@grocery-pos/contracts';
 import PageCard from '@/components/ui/PageCard.vue';
 import Badge from '@/components/ui/Badge.vue';
 
-const roles = [
-    {
-        key: 'ADMIN',
+/**
+ * One card per assignable role. What each role may do comes from
+ * `PERMISSIONS` in contracts, which the API's role-permissions spec checks
+ * against every controller's `@Roles(...)` (issue #24); only the look of a
+ * card lives here.
+ */
+type AssignableRole = Exclude<Role, Role.Unauthenticated>;
+
+const LOOK: Record<
+    AssignableRole,
+    { label: string; icon: Component; avatarClass: string }
+> = {
+    [Role.Admin]: {
         label: 'Admin',
         icon: Crown,
         avatarClass: 'bg-primary-50 text-primary-600',
-        permissions: [
-            'Full Access',
-            'View Dashboard',
-            'Manage Products',
-            'Manage Inventory',
-            'Manage Restocks',
-            'Manage Adjustments',
-            'Sell Products',
-            'Manage Users',
-            'View Sales History',
-        ],
     },
-    {
-        key: 'SELLER',
+    [Role.Seller]: {
         label: 'Seller',
         icon: ShoppingCart,
         avatarClass: 'bg-emerald-50 text-emerald-600',
-        permissions: [
-            'View Dashboard',
-            'Sell Products',
-            'View Sales History',
-            'Lookup Products by Barcode',
-        ],
     },
-    {
-        key: 'RESTOCKER',
+    [Role.Restocker]: {
         label: 'Restocker',
         icon: Truck,
         avatarClass: 'bg-sky-50 text-sky-600',
-        permissions: [
-            'View Dashboard',
-            'View Product List',
-            'Add New Products',
-            'View Inventory',
-            'Create Restocks',
-            'View Restock History',
-        ],
     },
-    {
-        key: 'ADJUSTER',
+    [Role.Adjuster]: {
         label: 'Adjuster',
         icon: ClipboardEdit,
         avatarClass: 'bg-amber-50 text-amber-600',
-        permissions: [
-            'View Dashboard',
-            'View Product List',
-            'View Inventory',
-            'Create Adjustments',
-            'View Adjustment History',
-        ],
     },
-    {
-        key: 'USER_MANAGER',
+    [Role.UserManager]: {
         label: 'User Manager',
         icon: Users,
         avatarClass: 'bg-purple-50 text-purple-600',
-        permissions: ['View Dashboard', 'Manage Users', 'View Roles'],
     },
-];
+};
+
+const roles = ASSIGNABLE_ROLES.map((role) => ({
+    key: role,
+    // ASSIGNABLE_ROLES never holds Unauthenticated (see contracts roles.ts).
+    ...LOOK[role as AssignableRole],
+    permissions: permissionsOf(role).map((p) => p.label),
+}));
 </script>
