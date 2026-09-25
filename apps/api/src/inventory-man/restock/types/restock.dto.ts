@@ -13,7 +13,12 @@ import {
     Min,
     ValidateNested,
 } from 'class-validator';
-import { IsCalendarDate, RequiresOne } from '../../../common/validators';
+import {
+    ExactlyOneOf,
+    IsCalendarDate,
+    Trim,
+    TrimLowercase,
+} from '../../../common/validators';
 import { NewProductFields } from '../../../product/types';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../../../constants';
 
@@ -23,14 +28,18 @@ export class GetDetailsParamDto {
     restock!: string;
 }
 export class GetDetailsQueryDto {
+    /** Matched anywhere in the product name. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
+    @TrimLowercase()
     name!: string;
 
+    /** Matched as a barcode prefix. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.EAN)
+    @Trim()
     EAN!: string;
 
     @IsNumber()
@@ -46,6 +55,11 @@ export class GetDetailsQueryDto {
 
 export type GetDetailsDto = GetDetailsQueryDto & GetDetailsParamDto;
 
+/**
+ * One restock line: an existing `product` or a `newProduct` to create,
+ * never both and never neither (issue #14).
+ */
+@ExactlyOneOf(['newProduct', 'product'])
 export class RestockFields {
     @IsOptional()
     @ValidateNested()
@@ -55,9 +69,6 @@ export class RestockFields {
     @IsOptional()
     @IsMongoId()
     product?: string;
-
-    @RequiresOne(['newProduct', 'product'])
-    dummy?: unknown;
 
     @IsNumber()
     @IsNotEmpty()
