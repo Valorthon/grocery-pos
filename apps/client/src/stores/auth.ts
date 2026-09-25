@@ -13,6 +13,11 @@ export { Role };
 
 /** Mirrors GET /v1/users/profile exactly (apps/api/src/user/user.controller.ts). */
 export interface User {
+    /**
+     * The account's id; keys this cashier's saved basket (#23). Absent on a
+     * user cached before it was sent, until the profile is re-read.
+     */
+    userId?: string;
     username: string;
     roles: Role[];
 }
@@ -26,6 +31,8 @@ export const useAuthStore = defineStore('auth', () => {
             : null;
 
     const user = ref<User | null>(initialUser);
+    // Restores this cashier's saved basket, if any (#23).
+    useCartStore().setOwner(initialUser?.userId);
 
     const hasSessionCookie = (): boolean => hasSessionMarker(document.cookie);
 
@@ -102,6 +109,7 @@ export const useAuthStore = defineStore('auth', () => {
      * never inherits the last cashier's basket or shift. The shift itself
      * stays open on the server; the same cashier resumes it at next login.
      * The toasts go too: the next person never sees the last one's errors.
+     * The basket saved in this browser for the cashier goes as well (#23).
      */
     const resetRegister = (): void => {
         useShiftStore().reset();
@@ -125,6 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
             const response = await api.get('/users/profile');
             user.value = response.data;
             localStorage.setItem('user', JSON.stringify(user.value));
+            useCartStore().setOwner(user.value?.userId);
             return user.value;
         } catch (err) {
             if (isAxiosError(err) && err.response?.status === 401) clearUser();

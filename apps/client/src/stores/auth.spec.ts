@@ -357,4 +357,90 @@ describe('auth store', () => {
             expect(store.user).toEqual(staleAdmin);
         });
     });
+    describe('the saved basket (#23)', () => {
+        const ANA = { userId: 'u-ana', username: 'ana', roles: [Role.Seller] };
+        const BASKET = JSON.stringify({
+            version: 1,
+            items: [
+                {
+                    product: 'p1',
+                    EAN: '2000000000015',
+                    name: 'milk',
+                    unitPrice: 9500,
+                    quantity: 2,
+                },
+            ],
+            discount: null,
+        });
+
+        it('comes back for the same cashier after a refresh', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+
+            await loadStore();
+            const { useCartStore } = await import('./cart');
+            expect(useCartStore().items.map((i) => i.name)).toEqual(['milk']);
+        });
+
+        it('is not shown to another cashier who signs in', async () => {
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({ data: {} });
+            vi.mocked(api.get).mockResolvedValue({
+                data: {
+                    userId: 'u-ben',
+                    username: 'ben',
+                    roles: [Role.Seller],
+                },
+            });
+
+            const store = await loadStore();
+            await store.login('ben', 'password1');
+            const { useCartStore } = await import('./cart');
+            expect(useCartStore().owner).toBe('u-ben');
+            expect(useCartStore().items).toEqual([]);
+        });
+
+        it('is removed on logout', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({});
+
+            const store = await loadStore();
+            await store.logout();
+
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).toBeNull();
+        });
+
+        it('is removed when the session is found gone (forced logout)', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            setDummyCookie(true);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.get).mockRejectedValue(
+                new AxiosError(
+                    'Unauthorized',
+                    'ERR_BAD_REQUEST',
+                    undefined,
+                    null,
+                    {
+                        status: 401,
+                    } as AxiosResponse,
+                ),
+            );
+
+            const store = await loadStore();
+            await store.initSession();
+            // The profile 401 dropped the user; the router then resets.
+            expect(store.user).toBeNull();
+            store.resetRegister();
+
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).toBeNull();
+        });
+    });
 });
