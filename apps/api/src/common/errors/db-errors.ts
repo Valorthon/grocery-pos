@@ -29,15 +29,41 @@ const isObject = (v: unknown): v is Loose =>
 const str = (v: unknown, fallback: string): string =>
     typeof v === 'string' || typeof v === 'number' ? String(v) : fallback;
 
+/** Index key directions/types that end each field in a default index name. */
+const INDEX_KEY_TYPES = new Set([
+    '1',
+    '-1',
+    'text',
+    'hashed',
+    '2d',
+    '2dsphere',
+]);
+
 /**
- * The field names of `dup key: { name: "Milk", EAN: "..." }` in a server
- * error message. Only the field names are taken, never the values.
+ * The field names of a unique index from its default name in a server
+ * error message: `index: name_1` → `name`, `index: cashier_1_status_1` →
+ * `cashier`, `status`. The `dup key: { ... }` part is never read: it holds
+ * the clashing values, and a value can contain text that looks like a key.
+ * A custom index name that does not follow the `<field>_<type>` pattern
+ * yields nothing (the caller reports `unknown`).
  */
-function keysFromMessage(errmsg: unknown): string[] {
+export function fieldsFromIndexName(errmsg: unknown): string[] {
     if (typeof errmsg !== 'string') return [];
-    const body = /dup key: \{(.*)\}/s.exec(errmsg)?.[1];
-    if (!body) return [];
-    return [...body.matchAll(/(?:^|,)\s*"?([\w.$]+)"?\s*:/g)].map((m) => m[1]);
+    const indexName = /\bindex: (\S+) dup key:/.exec(errmsg)?.[1];
+    if (!indexName) return [];
+
+    const fields: string[] = [];
+    let pending: string[] = [];
+    for (const token of indexName.split('_')) {
+        if (pending.length > 0 && INDEX_KEY_TYPES.has(token)) {
+            fields.push(pending.join('_'));
+            pending = [];
+        } else {
+            pending.push(token);
+        }
+    }
+    // Leftover tokens: not a default name, so no field can be trusted.
+    return pending.length === 0 ? fields : [];
 }
 
 /** Field names from `keyPattern` (server 4.4+), else from the message. */
@@ -47,7 +73,7 @@ function duplicateFields(err: Loose): string[] {
         if (keys.length > 0) return keys;
     }
     const response = isObject(err.errorResponse) ? err.errorResponse : {};
-    return keysFromMessage(err.errmsg ?? response.errmsg ?? err.message);
+    return fieldsFromIndexName(err.errmsg ?? response.errmsg ?? err.message);
 }
 
 function duplicateDetails(err: Loose): DuplicateKeyDetail[] {
@@ -91,15 +117,31 @@ function duplicateDetails(err: Loose): DuplicateKeyDetail[] {
     }));
 }
 
+const INVALID_VALUE = 'Invalid value';
+
+/**
+ * The client-facing message for one failed path. Only a `validate`
+ * message written in our schemas (a ValidatorError of kind
+ * `user defined`, e.g. "unitCost must be an integer number of centavos")
+ * is passed on. Mongoose's built-in messages (cast, min, enum, ...) echo
+ * the submitted value and BSON reasons, so they stay in the log (the
+ * original error is the `cause`) and the client gets `Invalid value`.
+ */
+function pathMessage(e: unknown): string {
+    return isObject(e) &&
+        e.name === 'ValidatorError' &&
+        e.kind === 'user defined' &&
+        typeof e.message === 'string'
+        ? e.message
+        : INVALID_VALUE;
+}
+
 /** Mongoose `ValidationError`: `errors` maps each path to its failure. */
 function mongooseValidationDetails(err: Loose): ValidationDetail[] {
     const errors = isObject(err.errors) ? err.errors : {};
     return Object.entries(errors).map(([field, e]) => ({
         field,
-        message:
-            isObject(e) && typeof e.message === 'string'
-                ? e.message
-                : 'Invalid value',
+        message: pathMessage(e),
     }));
 }
 
@@ -110,7 +152,7 @@ function documentValidationDetails(err: Loose): ValidationDetail[] | null {
     if (!Array.isArray(list)) return null;
     return list.filter(isObject).map((v) => ({
         field: str(v.path, 'unknown'),
-        message: str(v.message, 'Invalid value'),
+        message: str(v.message, INVALID_VALUE),
     }));
 }
 
@@ -125,7 +167,8 @@ function documentValidationDetails(err: Loose): ValidationDetail[] | null {
  *   validation (code 121) → 400 DB_VALIDATION_ERROR.
  *
  * Dispatches on the error `code` and `name`, never on message text (the
- * message is only read to recover field names the driver leaves out).
+ * message is only read for the index name, to recover the field names a
+ * bulk write error leaves out).
  * The returned error keeps the original as its `cause`, for the log.
  */
 export function classifyDbError(err: unknown): AppError | null {
@@ -151,7 +194,7 @@ export function classifyDbError(err: unknown): AppError | null {
             [
                 {
                     field: str(e.path, 'unknown'),
-                    message: `Invalid value for ${str(e.kind, 'this field')}`,
+                    message: INVALID_VALUE,
                 },
             ],
             { cause: err },

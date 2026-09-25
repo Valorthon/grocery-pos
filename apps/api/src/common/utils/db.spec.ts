@@ -214,6 +214,7 @@ describe('runInTransaction classifies database errors (issue #8)', () => {
             new MongooseError.ValidatorError({
                 path: 'price',
                 message: 'price must be an integer',
+                type: 'user defined',
             }),
         );
 
