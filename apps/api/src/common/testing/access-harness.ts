@@ -3,8 +3,9 @@
  * Test-only: excluded from the build (tsconfig.build.json).
  *
  * Boots the given controllers behind the real global JWTAuthGuard,
- * RoleGuard and GlobalFilter, the RequestIdModule (X-Request-Id), with cookie-parser, URI versioning and the
- * ValidationPipe configured as in main.ts (the same harness as
+ * RoleGuard and GlobalFilter, the RequestIdModule (X-Request-Id), with
+ * cookie-parser, URI versioning and main.ts's global ValidationPipe
+ * (`createValidationPipe`) (the same harness as
  * auth/auth.e2e.spec.ts and product/product.access.e2e.spec.ts). Callers
  * supply the providers behind the controllers, usually real services over
  * faked models.
@@ -16,7 +17,6 @@ import {
     INestApplication,
     Provider,
     Type,
-    ValidationPipe,
     VersioningType,
 } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -29,6 +29,7 @@ import { RoleGuard } from '../../auth/guards/role.guard';
 import { JWTStrategy } from '../../auth/jwt.strategy';
 import { Role } from '../../auth/types';
 import { GlobalFilter } from '../global/global.filter';
+import { createValidationPipe } from '../pipes/validation.pipe';
 import { RequestIdModule } from '../request-id/request-id';
 import { TypedConfigService } from '../typed-config/typed-config.service';
 
@@ -106,14 +107,7 @@ export async function bootAccessHarness(
     }).compile();
 
     const app = moduleRef.createNestApplication({ logger: false });
-    app.useGlobalPipes(
-        new ValidationPipe({
-            transform: true,
-            whitelist: true,
-            forbidNonWhitelisted: true,
-            transformOptions: { enableImplicitConversion: true },
-        }),
-    );
+    app.useGlobalPipes(createValidationPipe());
     app.use(cookieParser(COOKIE_SECRET));
     app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
     await app.listen(0, '127.0.0.1');

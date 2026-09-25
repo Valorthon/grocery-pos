@@ -25,10 +25,10 @@ import { RateLimitError } from '../../common/errors';
  *   shop's POS terminals sharing one public IP never trip it in normal use.
  * - `account`: one account's attempts. On the password change it is the
  *   signed-in user (a guard). On login it is IP + username, counted by
- *   `LoginAttemptLimiter` inside the handler, i.e. AFTER the global
- *   SanitationPipe and LoginDto have normalised the username: guards run
- *   before pipes and see the raw body, where `<b>admin</b>`, `ad<i></i>min`
- *   and `a&#100;min` would each get a fresh bucket yet all sign in as
+ *   `LoginAttemptLimiter` inside the handler, i.e. AFTER LoginDto has
+ *   normalised the username (trim + lowercase) in the global
+ *   ValidationPipe: guards run before pipes and see the raw body, where
+ *   ` ADMIN ` and `Admin` would each get a fresh bucket yet all sign in as
  *   `admin`. It is counted before the account is looked up, so it cannot
  *   leak whether the name exists.
  *

@@ -2,10 +2,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 import { TypedConfigService } from './common/typed-config/typed-config.service';
-import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
+import { Logger, VersioningType } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
-import { SanitationPipe } from './common/pipes/sanitation.pipe';
+import { createValidationPipe } from './common/pipes/validation.pipe';
 
 async function bootstrap() {
     const logger = new Logger('Bootstrap');
@@ -16,19 +16,10 @@ async function bootstrap() {
     app.use(helmet());
 
     const config = app.get(TypedConfigService);
-    // const isProd = config.get('NODE_ENV') === 'prod';
 
-    app.useGlobalPipes(
-        new SanitationPipe(config.get('SANITATION_EXCLUDES')),
-        new ValidationPipe({
-            transform: true,
-            whitelist: true,
-            forbidNonWhitelisted: true,
-            transformOptions: { enableImplicitConversion: true },
-            /* uncomment if frontend relies on api error messages */
-            // disableErrorMessages: isProd,
-        }),
-    );
+    // Validation only: request text is stored as typed, trimmed per field by
+    // the DTOs (see createValidationPipe, issue #15).
+    app.useGlobalPipes(createValidationPipe());
 
     app.use(cookieParser(config.get('COOKIE_SECRET')));
     app.enableVersioning({

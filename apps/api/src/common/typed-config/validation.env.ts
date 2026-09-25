@@ -85,20 +85,6 @@ export const envSchema = zod
             .refine((digits) => digits === EAN_DATA_DIGITS, {
                 message: `EAN_COUNTER_DIGITS must be ${EAN_DATA_DIGITS}: the ${String(EAN_COUNTER.PREFIX).length}-digit prefix ${EAN_COUNTER.PREFIX} plus the counter must fill the 12 data digits of an EAN-13.`,
             }),
-        SANITATION_EXCLUDES: zod
-            .string()
-            .transform((val) =>
-                val
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-            )
-            .pipe(
-                zod
-                    .string()
-                    .array()
-                    .min(1, 'At least one exclusion is required'),
-            ),
         HEALTH_HEAP_THRESHOLD: zod.coerce
             .number()
             .positive()

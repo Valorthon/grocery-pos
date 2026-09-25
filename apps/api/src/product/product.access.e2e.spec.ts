@@ -232,6 +232,46 @@ describe('Product route access by role (e2e)', () => {
         });
     });
 
+    describe('names are stored as typed (#15)', () => {
+        it('passes a 50-character name with &, < and > to the service unchanged', async () => {
+            const name = `m&m's <3 a>b `
+                .repeat(4)
+                .slice(0, STRING_LIMITS.PRODUCT_NAME - 1)
+                .concat('x');
+            expect(name).toHaveLength(STRING_LIMITS.PRODUCT_NAME);
+            service.addMany.mockClear();
+
+            const res = await harness.call(
+                caller(Role.Restocker),
+                'POST',
+                '/products/bulk',
+                {
+                    newProducts: [
+                        { name: `  ${name.toUpperCase()} `, price: 1 },
+                    ],
+                },
+            );
+
+            expect(res.status).toBe(201);
+            expect(service.addMany).toHaveBeenCalledWith(expect.anything(), {
+                newProducts: [{ name, price: 1 }],
+            });
+        });
+
+        it('searches for the text as typed', async () => {
+            service.getMatches.mockClear();
+
+            const res = await harness.call(
+                caller(Role.Seller),
+                'GET',
+                `/products/matches?name=${encodeURIComponent('M&M')}`,
+            );
+
+            expect(res.status).toBe(200);
+            expect(service.getMatches).toHaveBeenCalledWith({ name: 'm&m' });
+        });
+    });
+
     it('answers an over-long search with 400, not a 500', async () => {
         const name = 'x'.repeat(STRING_LIMITS.PRODUCT_NAME + 1);
 

@@ -3,10 +3,9 @@
  *
  * Boots a Nest app with the real AuthController, AuthService, JWTStrategy,
  * RefreshTokenService, CookieService, the global JWTAuthGuard + RoleGuard and
- * GlobalFilter, plus cookie-parser, URI versioning and main.ts's two global
- * pipes in main.ts's order (the login rate limit must agree with what they
- * make of a username). The SanitationPipe is a stand-in, see
- * `SanitationStandIn`. It does not install helmet or CORS: neither bears on
+ * GlobalFilter, plus cookie-parser, URI versioning and main.ts's global
+ * ValidationPipe (the login rate limit must agree with what it makes of a
+ * username). It does not install helmet or CORS: neither bears on
  * how auth failures map to status codes. The persistence edges are faked: the RefreshToken model
  * (an in-memory map at the provider level) and
  * UserService.checkCredentials.
@@ -18,8 +17,6 @@ import {
     Controller,
     Get,
     INestApplication,
-    PipeTransform,
-    ValidationPipe,
     VersioningType,
 } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -48,6 +45,7 @@ import type { AuthUser } from './types';
 import { CookieService } from '../common/utils/cookie/cookie.service';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { GlobalFilter } from '../common/global/global.filter';
+import { createValidationPipe } from '../common/pipes/validation.pipe';
 import { ErrorCode } from '../common/errors';
 import { UserService } from '../user/user.service';
 
@@ -69,34 +67,6 @@ const SELLER: TokenOwner = {
     roles: [Role.Seller],
     isActive: true,
 };
-
-/**
- * Does to body strings what the real SanitationPipe does to these inputs:
- * strips tags, decodes entities, trims; `password` is excluded as in
- * .env.example. The real pipe cannot be loaded under Jest here: sanitize-html
- * requires htmlparser2 12, which is ESM-only, and Jest's CommonJS runtime
- * cannot `require` ESM on Node 22 (it can from Node 24.9). What matters is
- * that the login limiter keys on the value AFTER the pipes, whatever they do.
- */
-class SanitationStandIn implements PipeTransform {
-    transform(value: unknown, meta: { type: string }): unknown {
-        if (meta.type !== 'body' || !value || typeof value !== 'object')
-            return value;
-        return Object.fromEntries(
-            Object.entries(value).map(([key, v]) => [
-                key,
-                typeof v === 'string' && key !== 'password'
-                    ? v
-                          .replace(/<[^>]*>/g, '')
-                          .replace(/&#(\d+);/g, (_m, code: string) =>
-                              String.fromCharCode(Number(code)),
-                          )
-                          .trim()
-                    : v,
-            ]),
-        );
-    }
-}
 
 /** A route behind the real guards: any Seller (or Admin) may call it. */
 @Controller('probe')
@@ -227,17 +197,9 @@ describe('Auth session flow (e2e)', () => {
 
         app = moduleRef.createNestApplication({ logger: false });
         app.use(cookieParser(COOKIE_SECRET));
-        // main.ts's global pipes, in its order: the login throttle has to key
-        // on what these turn the username into.
-        app.useGlobalPipes(
-            new SanitationStandIn(),
-            new ValidationPipe({
-                transform: true,
-                whitelist: true,
-                forbidNonWhitelisted: true,
-                transformOptions: { enableImplicitConversion: true },
-            }),
-        );
+        // main.ts's global pipe: the login throttle has to key on what it
+        // turns the username into.
+        app.useGlobalPipes(createValidationPipe());
         app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
         await app.listen(0, '127.0.0.1');
 
@@ -413,6 +375,18 @@ describe('Auth session flow (e2e)', () => {
             expect(res.status).toBe(201);
             expect(await res.json()).toEqual({ user: { username: 'cashier' } });
         });
+    });
+
+    it('passes the login password through verbatim: no trim, no encoding (#15)', async () => {
+        checkCredentials.mockResolvedValue(null);
+        const password = '  p&ss <w>ord>  ';
+
+        await call('POST', '/auth/login', [], {
+            username: '  Cashier ',
+            password,
+        });
+
+        expect(checkCredentials).toHaveBeenCalledWith('cashier', password);
     });
 
     it('rejects bad login credentials with 401 AUTH_INVALID_CREDENTIALS', async () => {
@@ -644,15 +618,15 @@ describe('Auth session flow (e2e)', () => {
             expect((await login('manager')).status).toBe(401);
         });
 
-        it('login: HTML variants of a username share its bucket', async () => {
+        it('login: case and whitespace variants of a username share its bucket', async () => {
             // Each of these reaches checkCredentials as plain `admin` after
-            // the pipes, so each must count against `admin`.
+            // LoginDto's trim + lowercase, so each must count against `admin`.
             const variants = [
                 'admin',
-                '<b>admin</b>',
-                'ad<i></i>min',
-                'a&#100;min',
                 ' ADMIN ',
+                'Admin',
+                '\tadmin\n',
+                'ADMIN',
             ];
             for (const variant of variants) {
                 expect((await login(variant)).status).toBe(401);
@@ -661,12 +635,25 @@ describe('Auth session flow (e2e)', () => {
                 checkCredentials.mock.calls.map(([name]) => name as string),
             ).toEqual(variants.map(() => 'admin'));
 
-            const blocked = await login('<span>admin</span>');
+            const blocked = await login('  aDmIn');
 
             expect(blocked.status).toBe(429);
             expect(blocked.headers.get('retry-after')).toBe(
                 String(RATE_LIMITS.login.account.ttl / 1000),
             );
+        });
+
+        it('login: markup in a username is kept as typed, so it names another account (#15)', async () => {
+            // Nothing strips tags or decodes entities any more: these are
+            // not `admin` and cannot sign in as it, so they get their own
+            // buckets and `admin` keeps its full budget.
+            const variants = ['<b>admin</b>', 'a&#100;min', 'M&M'];
+            for (const variant of variants) {
+                expect((await login(variant)).status).toBe(401);
+            }
+            expect(
+                checkCredentials.mock.calls.map(([name]) => name as string),
+            ).toEqual(['<b>admin</b>', 'a&#100;min', 'm&m']);
         });
 
         it(`login: ${RATE_LIMITS.login.ip.limit} tries per IP across usernames, then 429`, async () => {

@@ -325,6 +325,12 @@ describe('SellDto.idempotencyKey', () => {
         expect(dto.idempotencyKey).toBe(KEY);
     });
 
+    it('trims surrounding whitespace, as the old global pipe did (#15)', async () => {
+        const dto = await run({ idempotencyKey: `  ${KEY.toUpperCase()}\n` });
+
+        expect(dto.idempotencyKey).toBe(KEY);
+    });
+
     it.each([
         ['missing', undefined],
         ['empty', ''],

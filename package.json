@@ -13,6 +13,7 @@
         "typecheck": "pnpm -r typecheck",
         "test": "pnpm -r test",
         "seed": "pnpm --filter grocery-pos-api seed",
+        "migrate:decode-entities": "pnpm --filter grocery-pos-api migrate:decode-entities",
         "format": "prettier --write \"{apps,packages}/**/*.{ts,vue,css,html,json}\"",
         "prepare": "husky"
     },
