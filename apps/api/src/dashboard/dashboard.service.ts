@@ -9,16 +9,37 @@ import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { calendarDateInZone, dayRangeInZone } from '../common/utils/timezone';
 
-export interface DashboardResponse {
+/** What every dashboard role sees: stock and activity, no money. */
+export interface DashboardStats {
     totalProducts: number;
     lowStockCount: number;
+    /** Store-wide count of today's sales that were not reversed. */
     todaySalesCount: number;
-    /** Centavos. */
-    todayRevenue: number;
-    recentSales: Array<Record<string, unknown>>;
+    /** Newest restocks; without `totalCost` unless the caller is ADMIN. */
     recentRestocks: Array<Record<string, unknown>>;
     recentAdjustments: Array<Record<string, unknown>>;
 }
+
+/** The money figures only ADMIN receives (issue #13). */
+export interface DashboardMoney {
+    /** Centavos. */
+    todayRevenue: number;
+    /** The newest sales store-wide, with their amounts and cashiers. */
+    recentSales: Array<Record<string, unknown>>;
+}
+
+export type DashboardResponse = DashboardStats & Partial<DashboardMoney>;
+
+export interface DashboardOptions {
+    /** Whether to include money figures: true for ADMIN only. */
+    includeMoney: boolean;
+}
+
+/**
+ * Restock fields a non-admin dashboard may see. A whitelist, so a money
+ * field added to Restock later stays out by default.
+ */
+export const RESTOCK_ACTIVITY_FIELDS = '_id description restockedBy createdAt';
 
 @Injectable()
 export class DashboardService {
@@ -32,12 +53,26 @@ export class DashboardService {
         private config: TypedConfigService,
     ) {}
 
-    async getDashboard(): Promise<DashboardResponse> {
+    /**
+     * The dashboard figures. Without `includeMoney` nothing in centavos is
+     * read or returned: no revenue sum, no recent-sales feed (a sale is a
+     * money record, and other cashiers' sales are not a non-admin's to
+     * browse; see SalesService.getAll), and restocks without `totalCost`.
+     */
+    async getDashboard({
+        includeMoney,
+    }: DashboardOptions): Promise<DashboardResponse> {
         const timeZone = this.config.get('STORE_TIMEZONE');
         const { start: startOfDay, end: endOfDay } = dayRangeInZone(
             calendarDateInZone(new Date(), timeZone),
             timeZone,
         );
+
+        const restocks = this.restockModel
+            .find()
+            .sort({ createdAt: -1 })
+            .limit(5);
+        if (!includeMoney) restocks.select(RESTOCK_ACTIVITY_FIELDS);
 
         const [
             totalProducts,
@@ -49,10 +84,7 @@ export class DashboardService {
         ] = await Promise.all([
             this.productModel.estimatedDocumentCount(),
             this.inventoryModel.countDocuments({ stock: { $lte: 10 } }),
-            this.salesModel.aggregate<{
-                count: number;
-                revenue: number;
-            }>([
+            this.salesModel.aggregate<{ count: number; revenue?: number }>([
                 {
                     $match: {
                         createdAt: { $gte: startOfDay, $lt: endOfDay },
@@ -64,22 +96,19 @@ export class DashboardService {
                     $group: {
                         _id: null,
                         count: { $sum: 1 },
-                        revenue: { $sum: '$amount' },
+                        ...(includeMoney && { revenue: { $sum: '$amount' } }),
                     },
                 },
             ]),
-            this.salesModel
-                .find()
-                .sort({ createdAt: -1 })
-                .limit(5)
-                .populate({ path: 'cashier', select: 'name' })
-                .lean(),
-            this.restockModel
-                .find()
-                .sort({ createdAt: -1 })
-                .limit(5)
-                .populate({ path: 'restockedBy', select: 'name' })
-                .lean(),
+            includeMoney
+                ? this.salesModel
+                      .find()
+                      .sort({ createdAt: -1 })
+                      .limit(5)
+                      .populate({ path: 'cashier', select: 'name' })
+                      .lean()
+                : Promise.resolve(null),
+            restocks.populate({ path: 'restockedBy', select: 'name' }).lean(),
             this.adjustmentModel
                 .find()
                 .sort({ createdAt: -1 })
@@ -88,16 +117,22 @@ export class DashboardService {
                 .lean(),
         ]);
 
-        const todaySales = todaySalesAgg[0] ?? { count: 0, revenue: 0 };
+        const todaySales = todaySalesAgg[0];
 
-        return {
+        const stats: DashboardStats = {
             totalProducts,
             lowStockCount,
-            todaySalesCount: todaySales.count,
-            todayRevenue: todaySales.revenue,
-            recentSales,
+            todaySalesCount: todaySales?.count ?? 0,
             recentRestocks,
             recentAdjustments,
+        };
+
+        if (!includeMoney) return stats;
+
+        return {
+            ...stats,
+            todayRevenue: todaySales?.revenue ?? 0,
+            recentSales: recentSales ?? [],
         };
     }
 }

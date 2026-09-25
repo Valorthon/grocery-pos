@@ -129,6 +129,7 @@ import {
     Users,
 } from '@lucide/vue';
 import { useAuthStore, Role } from '@/stores/auth';
+import { canViewDashboard } from '@/router/access';
 import UserProfileMenu from '@/components/User/Sales/UserProfileMenu.vue';
 
 const props = defineProps<{ modelValue: boolean }>();
@@ -166,7 +167,7 @@ const sections = computed(() => [
                 name: 'Dashboard',
                 title: 'Dashboard',
                 icon: LayoutDashboard,
-                visible: true,
+                visible: canViewDashboard(authStore.user?.roles ?? []),
             },
             {
                 name: 'SalesHistory',

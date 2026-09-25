@@ -10,6 +10,11 @@ export enum ErrorCode {
     NOT_FOUND = 'NOT_FOUND_001',
     PRODUCT_NOT_FOUND = 'PRODUCT_001',
     PRODUCT_DUPLICATE = 'PRODUCT_002',
+    /**
+     * `PATCH /products` changed a price without ADMIN. Price changes are
+     * ADMIN-only (issue #13); the whole batch is refused, nothing is written.
+     */
+    PRODUCT_PRICE_CHANGE_FORBIDDEN = 'PRODUCT_003',
 
     /** A GCash reference number already used by another sale. */
     SALE_DUPLICATE_REFERENCE = 'SALE_001',

@@ -13,9 +13,14 @@ import {
 } from './types';
 import { runInTransaction } from '../common/utils/db';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
-import { AuthUser } from '../auth/types';
+import { AuthUser, Role } from '../auth/types';
 import { EanCounterService } from '../ean-counter/ean-counter.service';
-import { ErrorCode, NotFoundError, ValidationError } from '../common/errors';
+import {
+    ErrorCode,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+} from '../common/errors';
 
 /** Most rows `GET /products/matches` returns: it feeds a pick list. */
 export const MAX_MATCHES = 10;
@@ -23,6 +28,29 @@ export const MAX_MATCHES = 10;
 /** Escapes user input so it matches literally inside a `$regex`. */
 export function escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Throws a 403 PRODUCT_PRICE_CHANGE_FORBIDDEN if `dto` changes a price and
+ * `user` is not an ADMIN. Setting the first price of a new product
+ * (`POST /products/bulk`, or a new product created by a restock) is not a
+ * price change and stays open to restockers; a restock never writes the
+ * price of an existing product (it records `unitCost`, the purchase cost).
+ */
+export function assertMayChangePrices(user: AuthUser, dto: UpdateBulkDto) {
+    if (user.roles.includes(Role.Admin)) return;
+
+    const products = dto.updates
+        .filter(({ update }) => update.price !== undefined)
+        .map(({ product }) => product);
+
+    if (products.length > 0) {
+        throw new ForbiddenError(
+            ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN,
+            'Only an admin can change prices',
+            { products },
+        );
+    }
 }
 
 @Injectable()
@@ -50,7 +78,24 @@ export class ProductService {
         return product;
     }
 
-    async update(dto: UpdateBulkDto, session?: ClientSession): Promise<void> {
+    /**
+     * Applies a batch of product edits, all or nothing.
+     *
+     * Price changes are ADMIN-only (issue #13). A batch from anyone else
+     * that sets `price` on any product is refused whole with a 403
+     * PRODUCT_PRICE_CHANGE_FORBIDDEN before anything is written, even if
+     * the price equals the current one: applying only the non-price edits
+     * would silently drop part of what the caller asked for.
+     */
+    async update(
+        user: AuthUser,
+        dto: UpdateBulkDto,
+        session?: ClientSession,
+    ): Promise<void> {
+        assertMayChangePrices(user, dto);
+
+        // TODO(#46): record each price change (product, old and new price,
+        // who) in the audit log inside this transaction.
         await runInTransaction(
             async (session) => {
                 // Not bulkWrite: Mongoose never runs schema validators on

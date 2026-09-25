@@ -6,6 +6,7 @@ import {
     UpdateBulkDto,
 } from './types/user.dto';
 import { Roles } from '../auth/auth.decorator';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { GetAllDto } from '../product/types';
@@ -15,8 +16,10 @@ import { GetAllDto } from '../product/types';
 export class UserController {
     constructor(private service: UserService) {}
 
-    // Empty Roles() allow all authenticated users to access the endpoint
-    @Roles()
+    // Any user holding at least one assignable role (issue #13: an explicit
+    // list, never an empty @Roles()). A session with no roles, or only
+    // legacy/unassignable ones, gets 403 here; that is intended.
+    @Roles(...ASSIGNABLE_ROLES)
     @Get('/profile')
     getProfile(@CurrentUser() user: AuthUser) {
         return {
@@ -31,9 +34,10 @@ export class UserController {
         return data;
     }
 
-    // Open to every signed-in user (cashiers included); the current
+    // Any user holding at least one assignable role (cashiers included);
+    // empty or legacy-only roles get 403, as on /profile. The current
     // password is required.
-    @Roles()
+    @Roles(...ASSIGNABLE_ROLES)
     @Patch('/me/password')
     async changeOwnPassword(
         @CurrentUser() user: AuthUser,
