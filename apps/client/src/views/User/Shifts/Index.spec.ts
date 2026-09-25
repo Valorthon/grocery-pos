@@ -95,3 +95,38 @@ describe('Shifts admin force-close (issue #25)', () => {
         expect(errorText()).toBeUndefined();
     });
 });
+
+describe('Shifts force-close while closing (issue #22)', () => {
+    it('cannot be dismissed while the close is in flight', async () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(ShiftsIndex);
+        app.use(createPinia());
+        app.mount(host);
+        await flush();
+        [...document.querySelectorAll('tr')]
+            .find((tr) => tr.textContent?.includes('ana'))!
+            .click();
+        await flush();
+
+        let fail!: (e: Error) => void;
+        api.post.mockReturnValue(new Promise((_, reject) => (fail = reject)));
+        await typeCount('1000', '1');
+        forceCloseButton().click();
+        await flush();
+        expect(api.post).toHaveBeenCalled();
+
+        expect(document.querySelector('[data-modal-close]')).toBeNull();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        document
+            .querySelector('.fixed.inset-0')!
+            .dispatchEvent(new MouseEvent('mousedown'));
+        await flush();
+        expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+        // A refused close leaves the dialog open, dismissable again.
+        fail(new Error('offline'));
+        await flush();
+        expect(document.querySelector('[data-modal-close]')).not.toBeNull();
+    });
+});

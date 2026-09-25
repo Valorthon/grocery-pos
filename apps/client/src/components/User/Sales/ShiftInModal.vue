@@ -5,6 +5,7 @@
         :subtitle="`Log starting cash in drawer for ${terminal} (${cashierName})`"
         max-width="56rem"
         scrollable
+        :closable="!submitting"
     >
         <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 

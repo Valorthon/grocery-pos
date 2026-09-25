@@ -5,6 +5,7 @@
         subtitle="Count all physical cash and coins currently inside the cash drawer"
         max-width="56rem"
         scrollable
+        :closable="!submitting"
     >
         <div
             class="flex items-center gap-1.5 text-slate-600 font-semibold text-[11px] mb-3"

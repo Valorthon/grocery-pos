@@ -61,6 +61,7 @@
             :title="selected?.report ? '' : 'Open Shift'"
             max-width="56rem"
             scrollable
+            :closable="!closing"
         >
             <template v-if="selected?.report" #header>
                 <span class="text-xs font-bold text-emerald-700"

@@ -227,3 +227,23 @@ describe('DrawerActionModal (issue #25)', () => {
         expect(input('reason').value).toBe('');
     });
 });
+
+describe('DrawerActionModal while submitting (issue #22)', () => {
+    it('hides × and ignores Escape until the request settles', async () => {
+        const shift = await openModal(DrawerMovementType.CASH_IN);
+        let settle!: (v: unknown) => void;
+        api.post.mockReturnValue(new Promise((r) => (settle = r)));
+        await type('amount', '500');
+        await type('reason', 'coins');
+        await submit();
+
+        expect(document.querySelector('[data-modal-close]')).toBeNull();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        await flush();
+        expect(shift.drawerAction).toBe(DrawerMovementType.CASH_IN);
+
+        settle({ data: { ...SHIFT } });
+        await flush();
+        expect(shift.drawerAction).toBeNull();
+    });
+});
