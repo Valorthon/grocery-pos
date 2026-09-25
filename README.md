@@ -97,8 +97,10 @@ pnpm migrate:decode-entities --apply    # writes it
 4. It records itself in the `migrations` collection and refuses a second
    `--apply`, because decoding twice would turn a typed `&lt;` into `<`.
 
-Text a user typed as a literal entity was stored double-encoded
-(`&amp;lt;`) and decodes back to exactly what they typed (`&lt;`). Passwords
+The old pipe decoded its input before re-encoding it, so an entity a user
+typed literally was already lost on the way in: a typed `&lt;` was stored as
+`&lt;`, exactly like a typed `<`, and the migration turns it into `<`. That
+cannot be undone. Everything else decodes back to what was typed. Passwords
 are not affected: login passwords were never encoded, and hashes cannot be
 migrated. A password changed through "change password" before #15 that
 contained `&`, `<`, `>` or leading/trailing spaces was hashed in its encoded,

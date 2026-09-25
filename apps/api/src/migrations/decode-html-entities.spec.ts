@@ -22,31 +22,49 @@ import {
     TARGETS,
 } from './decode-html-entities';
 
+/**
+ * Stored forms below are what sanitize-html 2.17.7 actually produced with
+ * the old pipe's options (checked by running the real library): it decodes
+ * its input, then re-encodes `&`, `<` and `>`. So stored =
+ * encode(decode(typed)).
+ */
 describe('decodeEntities', () => {
     it.each([
-        // What the old pipe stored for the issue's example.
-        ["M&amp;M's qty &lt; 10 a&gt;b", "M&M's qty < 10 a>b"],
-        ['Tom &amp; Jerry', 'Tom & Jerry'],
-        ['say &quot;hi&quot;', 'say "hi"'],
-        ['plain text', 'plain text'],
-        ['', ''],
-    ])('%j -> %j', (stored, typed) => {
-        expect(decodeEntities(stored)).toBe(typed);
+        // [typed, stored by the old pipe, decoded now]
+        [
+            "M&M's qty < 10 a>b",
+            "M&amp;M's qty &lt; 10 a&gt;b",
+            "M&M's qty < 10 a>b",
+        ],
+        ['Tom & Jerry', 'Tom &amp; Jerry', 'Tom & Jerry'],
+        ['m&m', 'm&amp;m', 'm&m'],
+        ['a &foo; b', 'a &amp;foo; b', 'a &foo; b'],
+        // Quotes were never encoded.
+        ['say "hi"', 'say "hi"', 'say "hi"'],
+        ['plain text', 'plain text', 'plain text'],
+    ])('typed %j, stored %j -> %j', (_typed, stored, decoded) => {
+        expect(decodeEntities(stored)).toBe(decoded);
     });
 
-    it('decodes in a single pass: a typed entity stays an entity', () => {
-        // The user typed `&lt;` and `&amp;`; the pipe stored them encoded.
+    it('decodes in a single pass: one level only', () => {
+        // Typed `&amp;lt;`: the pipe decoded it to `&lt;` and stored
+        // `&amp;lt;`. One pass gives back `&lt;`, never `<`.
         expect(decodeEntities('&amp;lt;')).toBe('&lt;');
-        expect(decodeEntities('&amp;amp;')).toBe('&amp;');
+        // Typed `&amp;amp;lt;`, stored as such.
+        expect(decodeEntities('&amp;amp;lt;')).toBe('&amp;lt;');
         expect(decodeEntities('a &amp;lt;b&amp;gt; c')).toBe('a &lt;b&gt; c');
     });
 
-    it('decodes double-encoded text by exactly one level', () => {
-        const once = decodeEntities('&amp;amp;lt;');
+    it('cannot restore a literal entity the pipe already decoded', () => {
+        // Typed `&lt;` was decoded on ingest and stored as `&lt;` (the
+        // encoding of `<`), indistinguishable from a typed `<`. That loss
+        // happened in the old pipe; decoding yields the character.
+        expect(decodeEntities('&lt;')).toBe('<');
+        expect(decodeEntities('&amp;')).toBe('&');
+    });
 
-        expect(once).toBe('&amp;lt;');
-        // A second run WOULD go further, which is why apply runs only once.
-        expect(decodeEntities(once)).toBe('&lt;');
+    it('also decodes &quot;, in case an older sanitize-html stored it', () => {
+        expect(decodeEntities('say &quot;hi&quot;')).toBe('say "hi"');
     });
 
     it('leaves other entities and near-misses alone', () => {
@@ -201,6 +219,8 @@ describe('guardUnique (Product.name, User.name)', () => {
     });
 
     it('skips both edits when two decode to the same name', () => {
+        // Only possible with a `&quot;` from an older sanitize-html: 2.17's
+        // stored forms decode one-to-one.
         const edits = [
             edit('p1', 'say &quot;hi&quot;'),
             edit('p2', 'say &quot;hi"'),
