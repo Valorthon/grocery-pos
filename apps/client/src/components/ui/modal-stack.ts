@@ -12,8 +12,11 @@
  *   modal) is `inert` and `aria-hidden` while a modal is open. Elements
  *   marked `data-inert-exempt` (the toast stack) stay live.
  * - Scroll lock: the page stays locked until the last modal closes.
- * - Focus return: closing the topmost modal gives the focus back to its
- *   `returnFocus` target, else to what was focused when it opened.
+ * - Focus return: closing the topmost modal gives the focus back to what
+ *   was focused when it opened. If that is gone (e.g. a menu item that
+ *   unmounted) or disabled, the focus goes into the modal below, else to
+ *   the first focusable element of the page's `<main>` (else of the app),
+ *   never to `<body>`. The register then moves it on to its scan box.
  *
  * `anyModalOpen` lets a page (the register) pause its own keyboard
  * handling while a modal is up and react when the last one closes.
@@ -29,8 +32,6 @@ export interface ModalEntry {
     closable: () => boolean;
     /** Asks the modal to close (Escape). */
     close: () => void;
-    /** A caller-chosen element to focus on close, if any. */
-    returnFocus: () => HTMLElement | null | undefined;
     /** What had the focus when it opened; restored on close. */
     opener: HTMLElement | null;
 }
@@ -186,7 +187,7 @@ export function removeModal(entry: ModalEntry): void {
     const index = stack.indexOf(entry);
     if (index === -1) return;
     const wasTop = index === stack.length - 1;
-    const target = entry.returnFocus() ?? entry.opener;
+    const target = entry.opener;
     const own = rendered.get(entry) ?? null;
     stack.splice(index, 1);
 
@@ -212,8 +213,27 @@ export function removeModal(entry: ModalEntry): void {
         const nextPanel = next?.panel();
         if (target?.isConnected && !target.closest('[inert]')) {
             target.focus({ preventScroll: true });
-        } else if (next && nextPanel) {
-            focusInto(next);
         }
+        if (target && document.activeElement === target) return;
+        if (next && nextPanel) focusInto(next);
+        else focusPage();
+    }
+}
+
+/** The page's first focusable element: in `<main>`, else anywhere. */
+function focusPage(): void {
+    const main = document.querySelector<HTMLElement>('main');
+    const candidates = [
+        ...(main ? focusables(main) : []),
+        ...[...document.body.children].flatMap((child) =>
+            child instanceof HTMLElement &&
+            !child.hasAttribute('data-inert-exempt')
+                ? focusables(child)
+                : [],
+        ),
+    ];
+    for (const el of candidates) {
+        el.focus({ preventScroll: true });
+        if (document.activeElement === el) return;
     }
 }

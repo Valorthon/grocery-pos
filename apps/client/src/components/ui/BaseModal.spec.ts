@@ -280,13 +280,29 @@ describe('BaseModal dialog semantics (issue #22)', () => {
         },
     );
 
-    it('gives the focus back to returnFocus when given', async () => {
-        const target = document.createElement('input');
-        document.body.appendChild(target);
-        const { open } = await mountOne({ returnFocus: () => target });
+    it('falls back to the page, not <body>, when the opener is gone', async () => {
+        const main = document.createElement('main');
+        const first = document.createElement('button');
+        main.append(first);
+        document.body.prepend(main);
+        const { open, trigger } = await mountOne();
+        // e.g. a menu item that unmounted while its confirmation was open.
+        trigger.remove();
+
         open.value = false;
         await flush();
-        expect(document.activeElement).toBe(target);
+        expect(document.activeElement).toBe(first);
+    });
+
+    it('falls back to the page when the opener is now disabled', async () => {
+        const { open, trigger, host } = await mountOne();
+        const other = document.createElement('button');
+        host.append(other);
+        (trigger as HTMLButtonElement).disabled = true;
+
+        open.value = false;
+        await flush();
+        expect(document.activeElement).toBe(other);
     });
 
     it('ignores Escape and the backdrop while not closable', async () => {

@@ -127,8 +127,8 @@ import {
  * - Initial focus: the first element marked `data-autofocus`, else the
  *   first focusable element (the header's close button last), else the
  *   dialog itself.
- * - On close, the focus goes back to `returnFocus` if given, else to what
- *   had it when the modal opened.
+ * - On close, the focus goes back to what had it when the modal opened
+ *   (see ./modal-stack.ts for when that is gone).
  * - `closable: false` (busy, e.g. a save in flight) hides the close button
  *   and makes Escape and the backdrop do nothing.
  */
@@ -142,8 +142,6 @@ const props = withDefaults(
         scrollable?: boolean;
         /** The accessible name when there is no title or header slot. */
         ariaLabel?: string;
-        /** Where the focus goes on close; defaults to where it came from. */
-        returnFocus?: HTMLElement | (() => HTMLElement | null) | null;
     }>(),
     {
         title: '',
@@ -152,7 +150,6 @@ const props = withDefaults(
         closable: true,
         scrollable: false,
         ariaLabel: '',
-        returnFocus: null,
     },
 );
 
@@ -183,10 +180,6 @@ const entry: ModalEntry = {
     panel: () => panel.value,
     closable: () => props.closable,
     close,
-    returnFocus: () =>
-        typeof props.returnFocus === 'function'
-            ? props.returnFocus()
-            : props.returnFocus,
     opener: null,
 };
 
