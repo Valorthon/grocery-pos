@@ -512,3 +512,37 @@ describe('User schema roles', () => {
         expect(rolesError([Role.Unauthenticated])).toBe('enum');
     });
 });
+
+describe('UserService.getAll count (issue #16)', () => {
+    it('counts exactly, never by the collection estimate, with no name filter', async () => {
+        const chain = {
+            sort: () => chain,
+            skip: () => chain,
+            limit: () => chain,
+            select: () => chain,
+            lean: () => Promise.resolve([]),
+        };
+        const model = {
+            find: jest.fn(() => chain),
+            countDocuments: jest.fn().mockResolvedValue(3),
+            estimatedDocumentCount: jest.fn().mockResolvedValue(99),
+        };
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                UserService,
+                { provide: getConnectionToken(), useValue: {} },
+                { provide: getModelToken(User.name), useValue: model },
+            ],
+        }).compile();
+        const service = moduleRef.get(UserService);
+
+        const result = await service.getAll({
+            page: 1,
+            limit: 5,
+        } as Parameters<UserService['getAll']>[0]);
+
+        expect(model.countDocuments).toHaveBeenCalledWith({});
+        expect(model.estimatedDocumentCount).not.toHaveBeenCalled();
+        expect(result.totalItems).toBe(3);
+    });
+});

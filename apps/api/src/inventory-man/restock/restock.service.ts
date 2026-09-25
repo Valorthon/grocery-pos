@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Restock } from './restock.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -93,8 +93,6 @@ export class RestockService {
             query.createdAt = createdAt;
         }
 
-        Logger.log({ query, dto });
-
         const [data, totalItems] = await Promise.all([
             this.model
                 .find(query)
@@ -129,8 +127,6 @@ export class RestockService {
 
         const productQuery = productSearchFilter({ name, EAN }, 'product.');
 
-        Logger.log({ productQuery });
-
         const result = await this.modelDetails.aggregate<{
             paginatedData: RestockDetails[];
             metadata: Array<{ total: number }>;
@@ -158,7 +154,6 @@ export class RestockService {
             },
         ]);
 
-        Logger.log({ result });
         const data = result[0]?.paginatedData ?? [];
         const totalItems = result[0]?.metadata[0]?.total ?? 0;
 

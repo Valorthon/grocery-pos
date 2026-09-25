@@ -117,6 +117,7 @@ describe('AdjustmentService.getAll date filter', () => {
     let service: AdjustmentService;
     let find: jest.Mock;
     let countDocuments: jest.Mock;
+    let estimatedDocumentCount: jest.Mock;
 
     beforeEach(async () => {
         const chain = {
@@ -128,6 +129,7 @@ describe('AdjustmentService.getAll date filter', () => {
         };
         find = jest.fn().mockReturnValue(chain);
         countDocuments = jest.fn().mockResolvedValue(0);
+        estimatedDocumentCount = jest.fn().mockResolvedValue(0);
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -138,7 +140,7 @@ describe('AdjustmentService.getAll date filter', () => {
                     useValue: {
                         find,
                         countDocuments,
-                        estimatedDocumentCount: jest.fn(),
+                        estimatedDocumentCount,
                     },
                 },
                 {
@@ -173,6 +175,19 @@ describe('AdjustmentService.getAll date filter', () => {
             $lt: new Date('2026-01-05T16:00:00.000Z'),
         });
         expect(countDocuments).toHaveBeenCalledWith(query());
+    });
+
+    it('counts exactly, never by the collection estimate, with no filter (#16)', async () => {
+        countDocuments.mockResolvedValue(7);
+
+        const result = await service.getAll({
+            page: 1,
+            limit: 5,
+        } as GetAllDto);
+
+        expect(countDocuments).toHaveBeenCalledWith({});
+        expect(estimatedDocumentCount).not.toHaveBeenCalled();
+        expect(result.totalItems).toBe(7);
     });
 
     it('applies a start-only range', async () => {
