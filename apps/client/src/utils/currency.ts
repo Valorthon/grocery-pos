@@ -18,23 +18,36 @@ export function formatCurrency(centavos: number): string {
 const PESO_INPUT = /^(-?)(\d*)(?:\.(\d{0,2}))?$/;
 
 /**
- * Converts a typed peso amount to centavos from its decimal digits, never by
- * multiplying a double (1.005 * 100 is 100.49999999999999). Blank or invalid
- * input, including more than two decimals, is 0 so callers treat it as empty.
+ * Parses a typed peso amount into centavos from its decimal digits, never by
+ * multiplying a double (1.005 * 100 is 100.49999999999999). Returns null for
+ * blank input and for anything that is not a plain amount with at most two
+ * decimals ("abc", "1.005", "1e3", "-"), so a form can tell "left blank" and
+ * "mistyped" apart from a real ₱0.00.
  */
-export function pesosToCentavos(
+export function parsePesos(
     pesos: string | number | null | undefined,
-): number {
+): number | null {
     const match = PESO_INPUT.exec(String(pesos ?? '').trim());
-    if (!match) return 0;
+    if (!match) return null;
 
     const [, sign, whole = '', fraction = ''] = match;
-    if (!whole && !fraction) return 0;
+    if (!whole && !fraction) return null;
 
     const centavos =
         Number(whole || '0') * CENTAVOS_PER_PESO +
         Number(fraction.padEnd(2, '0'));
     return sign && centavos ? -centavos : centavos;
+}
+
+/**
+ * Converts a typed peso amount to centavos (see `parsePesos`). Blank or
+ * invalid input, including more than two decimals, is 0 so callers treat it
+ * as empty; forms that must reject it validate with `moneyError` first.
+ */
+export function pesosToCentavos(
+    pesos: string | number | null | undefined,
+): number {
+    return parsePesos(pesos) ?? 0;
 }
 
 /** Converts centavos to pesos for pre-filling a number input. */

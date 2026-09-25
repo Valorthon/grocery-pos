@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { BARCODE_MESSAGES, STRING_LIMITS } from '@grocery-pos/contracts';
-import { barcodeFieldError, PASSWORD_HINT, passwordError } from './rules';
+import {
+    BARCODE_MESSAGES,
+    NUMERIC_LIMITS,
+    STRING_LIMITS,
+} from '@grocery-pos/contracts';
+import {
+    barcodeFieldError,
+    fieldErrors,
+    integerError,
+    moneyError,
+    PASSWORD_HINT,
+    passwordError,
+    productPickError,
+    REQUIRED,
+    textError,
+} from './rules';
 
 describe('passwordError (the API password policy, #12)', () => {
     const min = STRING_LIMITS.PASSWORD_MIN;
@@ -48,5 +62,98 @@ describe('barcodeFieldError (the API barcode rules, #14)', () => {
         expect(barcodeFieldError('', false)).toBe('This field is required');
         expect(barcodeFieldError('', true)).toBe('');
         expect(barcodeFieldError('abc', true)).toBe('');
+    });
+});
+
+describe('textError (#17)', () => {
+    it('requires text after trimming, as the API trims it', () => {
+        expect(textError('', 10)).toBe(REQUIRED);
+        expect(textError('   ', 10)).toBe(REQUIRED);
+        expect(textError(undefined, 10)).toBe(REQUIRED);
+        expect(textError(' ok ', 10)).toBe('');
+    });
+
+    it('caps the trimmed length at the contracts limit', () => {
+        const max = STRING_LIMITS.REASON;
+        expect(textError('x'.repeat(max), max)).toBe('');
+        expect(textError(`  ${'x'.repeat(max)}  `, max)).toBe('');
+        expect(textError('x'.repeat(max + 1), max)).toBe(
+            `At most ${max} characters`,
+        );
+    });
+});
+
+describe('integerError (#17)', () => {
+    it('rejects a blank v-model.number field', () => {
+        // looseToNumber('') is '', which `== null || < 1` used to let through.
+        expect(integerError('')).toBe(REQUIRED);
+        expect(integerError('  ')).toBe(REQUIRED);
+        expect(integerError(null)).toBe(REQUIRED);
+        expect(integerError(undefined)).toBe(REQUIRED);
+    });
+
+    it('rejects fractions, NaN and unparsed text', () => {
+        expect(integerError(1.5)).toBe('Enter a whole number');
+        expect(integerError(Number.NaN)).toBe('Enter a whole number');
+        expect(integerError(Infinity)).toBe('Enter a whole number');
+        expect(integerError('abc')).toBe('Enter a whole number');
+    });
+
+    it('applies a minimum, e.g. a restock quantity', () => {
+        const min = NUMERIC_LIMITS.QUANTITY_MIN;
+        expect(integerError(0, { min })).toBe(`Must be at least ${min}`);
+        expect(integerError(-3, { min })).toBe(`Must be at least ${min}`);
+        expect(integerError(1, { min })).toBe('');
+    });
+
+    it('allows a negative but not a zero adjustment change', () => {
+        expect(integerError(0, { nonZero: true })).toBe('Must not be 0');
+        expect(integerError(-2, { nonZero: true })).toBe('');
+        expect(integerError(7, { nonZero: true })).toBe('');
+    });
+});
+
+describe('moneyError (#17)', () => {
+    it('rejects a blank amount instead of recording ₱0', () => {
+        expect(moneyError('')).toBe(REQUIRED);
+        expect(moneyError(' ')).toBe(REQUIRED);
+        expect(moneyError(null)).toBe(REQUIRED);
+    });
+
+    it('rejects text that is not pesos with up to 2 decimals', () => {
+        const message = 'Enter an amount in pesos, up to 2 decimals';
+        expect(moneyError('abc')).toBe(message);
+        expect(moneyError('1.005')).toBe(message);
+        expect(moneyError('1e3')).toBe(message);
+        expect(moneyError('1,000')).toBe(message);
+        expect(moneyError({})).toBe(message);
+    });
+
+    it('matches the API bounds: at least one centavo, at most AMOUNT_MAX', () => {
+        expect(moneyError('0')).toBe('Enter at least ₱0.01');
+        expect(moneyError('-5')).toBe('Enter at least ₱0.01');
+        expect(moneyError('0.01')).toBe('');
+        expect(moneyError('10000000')).toBe('');
+        expect(NUMERIC_LIMITS.AMOUNT_MAX).toBe(1_000_000_000);
+        expect(moneyError('10000000.01')).toBe('At most ₱10,000,000.00');
+    });
+
+    it('accepts a number as well as text', () => {
+        expect(moneyError(12.5)).toBe('');
+    });
+});
+
+describe('productPickError (#17)', () => {
+    it('needs a picked product id, not typed text', () => {
+        expect(productPickError('')).not.toBe('');
+        expect(productPickError(undefined)).not.toBe('');
+        expect(productPickError('64b000000000000000000001')).toBe('');
+    });
+});
+
+describe('fieldErrors', () => {
+    it('keeps only the refused fields', () => {
+        expect(fieldErrors({ a: '', b: 'bad' })).toEqual({ b: 'bad' });
+        expect(fieldErrors({ a: '' })).toEqual({});
     });
 });
