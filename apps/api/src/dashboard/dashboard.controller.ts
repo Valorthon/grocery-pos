@@ -13,9 +13,11 @@ import type { AuthUser } from '../auth/types';
  *   reaches it; USER_MANAGER included, otherwise a user-manager-only account
  *   would have no page to land on after login.
  * - A SELLER-only cashier gets 403: store-wide figures are not theirs to see.
- * - Money (today's revenue, the recent-sales feed, restock costs) is
- *   ADMIN-only and is left out server-side for everyone else; see
- *   DashboardService.getDashboard.
+ * - On the dashboard, money (today's revenue, the recent-sales feed, and
+ *   the restock `totalCost` in the activity feed) is ADMIN-only and is left
+ *   out server-side for everyone else; see DashboardService.getDashboard.
+ *   This hides restock costs on the dashboard only: restockers still see
+ *   costs in their restock history (/restocks), which #13 does not change.
  *
  * dashboard.access.e2e.spec.ts pins this.
  */

@@ -16,8 +16,9 @@ import { GetAllDto } from '../product/types';
 export class UserController {
     constructor(private service: UserService) {}
 
-    // Every signed-in user, whatever their roles (issue #13: an explicit
-    // list, never an empty @Roles()).
+    // Any user holding at least one assignable role (issue #13: an explicit
+    // list, never an empty @Roles()). A session with no roles, or only
+    // legacy/unassignable ones, gets 403 here; that is intended.
     @Roles(...ASSIGNABLE_ROLES)
     @Get('/profile')
     getProfile(@CurrentUser() user: AuthUser) {
@@ -33,7 +34,8 @@ export class UserController {
         return data;
     }
 
-    // Open to every signed-in user (cashiers included); the current
+    // Any user holding at least one assignable role (cashiers included);
+    // empty or legacy-only roles get 403, as on /profile. The current
     // password is required.
     @Roles(...ASSIGNABLE_ROLES)
     @Patch('/me/password')
