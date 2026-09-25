@@ -86,7 +86,6 @@ export class Shift {
         enum: Object.values(ShiftStatus),
         required: true,
         default: ShiftStatus.OPEN,
-        index: true,
     })
     status!: ShiftStatus;
 

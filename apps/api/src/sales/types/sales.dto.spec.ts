@@ -393,4 +393,23 @@ describe('ReverseSaleDto', () => {
 
         expect(errors[0]?.constraints).toHaveProperty('maxLength');
     });
+
+    it('accepts an optional payout shift id, and only a Mongo id (#2)', async () => {
+        const ok = await validate(
+            plainToInstance(ReverseSaleDto, {
+                reason: 'return',
+                payoutShiftId: '507f1f77bcf86cd799439011',
+            }),
+        );
+        const bad = await validate(
+            plainToInstance(ReverseSaleDto, {
+                reason: 'return',
+                payoutShiftId: 'lane-1',
+            }),
+        );
+
+        expect(ok).toHaveLength(0);
+        expect(bad[0]?.property).toBe('payoutShiftId');
+        expect(bad[0]?.constraints).toHaveProperty('isMongoId');
+    });
 });
