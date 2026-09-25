@@ -425,6 +425,74 @@ describe('ProductService.ensureValid (issue #14)', () => {
             } as EnsureValidDto),
         ).resolves.toBeUndefined();
     });
+
+    describe('the duplicate lookup (issue #33)', () => {
+        const foundProduct = (doc: Record<string, unknown> | null) =>
+            findOne.mockReturnValue({ lean: () => Promise.resolve(doc) });
+
+        it('looks up only the name when the barcode is auto-generated', async () => {
+            await service.ensureValid({
+                name: 'bread',
+                autoGenerateEAN: true,
+            } as EnsureValidDto);
+
+            // Never `{ EAN: undefined }`: sent as `{}`, it matches everything.
+            expect(findOne).toHaveBeenCalledWith({
+                $or: [{ name: 'bread' }],
+            });
+        });
+
+        it('ignores a leftover typed barcode when auto-generating', async () => {
+            await service.ensureValid({
+                EAN: '4006381333931',
+                name: 'bread',
+                autoGenerateEAN: true,
+            } as EnsureValidDto);
+
+            expect(findOne).toHaveBeenCalledWith({
+                $or: [{ name: 'bread' }],
+            });
+        });
+
+        it('looks up both the typed barcode and the name', async () => {
+            await service.ensureValid({
+                EAN: '4006381333931',
+                name: 'bread',
+            } as EnsureValidDto);
+
+            expect(findOne).toHaveBeenCalledWith({
+                $or: [{ EAN: '4006381333931' }, { name: 'bread' }],
+            });
+        });
+
+        it('says which field already exists', async () => {
+            foundProduct({ EAN: '4006381333931', name: 'milk' });
+
+            await expect(
+                service.ensureValid({
+                    EAN: '4006381333931',
+                    name: 'bread',
+                } as EnsureValidDto),
+            ).rejects.toMatchObject({
+                code: ErrorCode.PRODUCT_DUPLICATE,
+                details: ['EAN already exists'],
+            });
+        });
+
+        it('reports a clashing name when auto-generating', async () => {
+            foundProduct({ EAN: '2000000000015', name: 'bread' });
+
+            await expect(
+                service.ensureValid({
+                    name: 'bread',
+                    autoGenerateEAN: true,
+                } as EnsureValidDto),
+            ).rejects.toMatchObject({
+                code: ErrorCode.PRODUCT_DUPLICATE,
+                details: ['name already exists'],
+            });
+        });
+    });
 });
 
 describe('ProductService.getAll search (issue #14)', () => {

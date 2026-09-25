@@ -111,14 +111,14 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import AddProductDialog from '@/components/User/Product/AddDialog.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
+import { apiErrorMessages } from '@/utils/api-error';
+import { toNewProductsBody, type ProductDraft } from '@/utils/payloads';
 
 const isAddDialogOpen = ref(false);
 const uiStore = useUIStore();
 const search = ref('');
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const items = ref<any[]>([]);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const editItem = ref<Record<string, any>>({});
+const items = ref<ProductDraft[]>([]);
+const editItem = ref<Partial<ProductDraft>>({});
 const editIndex = ref(-1);
 const router = useRouter();
 
@@ -139,37 +139,12 @@ const saveToDB = async () => {
     }
 
     try {
-        await api.post('/products/bulk', { newProducts: items.value });
+        await api.post('/products/bulk', toNewProductsBody(items.value));
     } catch (err: unknown) {
-        const error = err as {
-            status?: number;
-            response?: {
-                data?: {
-                    message?: string;
-                    details?: unknown;
-                };
-            };
-        };
-        const messages: string[] = [];
-        if (error.status === 400) {
-            // A duplicate key (DB_DUPLICATE_KEY) lists `{ property, msg }`
-            // per clash in `details`; any other 400 says it in `message`.
-            const data = error.response?.data;
-            const clashes = Array.isArray(data?.details)
-                ? (data.details as { property?: string; msg?: string }[])
-                : [];
-            clashes.forEach(({ property, msg }) => {
-                if (property && msg) messages.push(`${property} ${msg}`);
-            });
-            if (messages.length === 0 && data?.message) {
-                messages.push(data.message);
-            }
-        } else {
-            messages.push('Error saving products. Please try again');
-        }
-        messages.forEach((message) =>
-            uiStore.queueMessage(Color.ERROR, message),
-        );
+        apiErrorMessages(
+            err,
+            'Error saving products. Please try again',
+        ).forEach((message) => uiStore.queueMessage(Color.ERROR, message));
         return;
     }
 
@@ -183,30 +158,26 @@ const openAddDialog = () => {
     isAddDialogOpen.value = true;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const handleNewProduct = async (newProduct: any) => {
+const handleNewProduct = async (newProduct: ProductDraft) => {
     items.value.push(newProduct);
     isAddDialogOpen.value = false;
     uiStore.queueMessage(Color.SUCCESS, 'Product added');
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const editDraft = (item: any) => {
+const editDraft = (item: ProductDraft) => {
     editIndex.value = items.value.indexOf(item);
     editItem.value = { ...item };
     isAddDialogOpen.value = true;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const updateDraft = (updatedProduct: any) => {
+const updateDraft = (updatedProduct: ProductDraft) => {
     if (editIndex.value > -1) {
         items.value[editIndex.value] = updatedProduct;
     }
     isAddDialogOpen.value = false;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const deleteDraft = (item: any) => {
+const deleteDraft = (item: ProductDraft) => {
     const index = items.value.indexOf(item);
     if (index > -1) {
         items.value.splice(index, 1);

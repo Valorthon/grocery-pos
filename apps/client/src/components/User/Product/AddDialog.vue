@@ -59,10 +59,11 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
-import { isAxiosError } from 'axios';
 import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
 import { centavosToPesos, pesosToCentavos } from '@/utils/currency';
 import { barcodeFieldError } from '@/utils/rules';
+import { apiErrorMessages } from '@/utils/api-error';
+import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -77,8 +78,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
-    (e: 'add', payload: Record<string, unknown>): void;
-    (e: 'update', payload: Record<string, unknown>): void;
+    (e: 'add', payload: ProductDraft): void;
+    (e: 'update', payload: ProductDraft): void;
 }>();
 
 const model = computed({
@@ -133,15 +134,13 @@ const submitProduct = async () => {
     if (!validate()) return;
 
     try {
-        await api.get('products/ensureValid', { params: { ...formData } });
+        await api.get('products/ensureValid', {
+            params: toEnsureValidQuery(formData),
+        });
     } catch (err) {
-        if (isAxiosError(err)) {
-            let message = err.response?.data.message;
-            message = Array.isArray(message) ? message : [message];
-            message.forEach((msg: string) =>
-                uiStore.queueMessage(Color.ERROR, msg),
-            );
-        }
+        apiErrorMessages(err, 'Could not check the product').forEach((msg) =>
+            uiStore.queueMessage(Color.ERROR, msg),
+        );
         return;
     }
 

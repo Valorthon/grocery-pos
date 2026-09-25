@@ -237,9 +237,16 @@ export class ProductService {
         );
     }
 
+    /**
+     * Throws when a product draft would be refused: a typed barcode that
+     * breaks the create rules, or a barcode or name that already exists.
+     * With `autoGenerateEAN` the barcode is not checked at all: the client
+     * omits it (issue #33), and a leftover typed value is ignored.
+     */
     async ensureValid(dto: EnsureValidDto) {
         const { EAN, name, autoGenerateEAN } = dto;
-        if (!autoGenerateEAN) {
+        const checkEAN = !autoGenerateEAN;
+        if (checkEAN) {
             // The same rules as the create and import DTOs (IsBarcode).
             const message = EAN
                 ? barcodeError(EAN)
@@ -252,18 +259,23 @@ export class ProductService {
             }
         }
 
-        const found = await this.model
-            .findOne({
-                $or: [{ EAN: EAN }, { name: name }],
-            })
-            .lean();
+        // Only the fields being checked. An absent one must not reach the
+        // filter: `{ EAN: undefined }` is sent as `{}`, which matches every
+        // product and would report any draft as a duplicate (issue #33).
+        const clauses: Record<string, string>[] = [];
+        if (checkEAN) clauses.push({ EAN });
+        if (name) clauses.push({ name });
+        if (clauses.length === 0) return;
 
-        const duplicates: string[] = [];
+        const found = await this.model.findOne({ $or: clauses }).lean();
+
         if (found) {
-            if (!autoGenerateEAN && found.EAN === EAN)
+            const duplicates: string[] = [];
+            if (checkEAN && found.EAN === EAN)
                 duplicates.push('EAN already exists');
 
-            if (found.name === name) duplicates.push('name already exists');
+            if (name && found.name === name)
+                duplicates.push('name already exists');
 
             throw new ValidationError(
                 ErrorCode.PRODUCT_DUPLICATE,
