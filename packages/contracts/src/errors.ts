@@ -26,6 +26,25 @@ export enum ErrorCode {
      */
     SALE_IN_PROGRESS = 'SALE_004',
 
+    /** The caller is signed in but may not do this (generic 403). */
+    FORBIDDEN = 'FORBIDDEN_001',
+
+    /** Granting a role the actor does not hold (e.g. ADMIN as USER_MANAGER). */
+    USER_ROLE_NOT_GRANTABLE = 'USER_001',
+    /** Nobody may change their own roles, not even an ADMIN. */
+    USER_SELF_ROLE_CHANGE = 'USER_002',
+    /** The target holds a role the actor does not hold (e.g. an ADMIN). */
+    USER_TARGET_FORBIDDEN = 'USER_003',
+    /**
+     * Resetting another user's password is ADMIN-only; your own password is
+     * changed through `PATCH /users/me/password`.
+     */
+    USER_PASSWORD_RESET_FORBIDDEN = 'USER_004',
+    /** The change would leave no active ADMIN. */
+    USER_LAST_ADMIN = 'USER_005',
+    /** `currentPassword` did not match on a self-service password change. */
+    USER_WRONG_PASSWORD = 'USER_006',
+
     DB_DUPLICATE_KEY = 'DB_002',
     DB_VALIDATION_ERROR = 'DB_003',
 

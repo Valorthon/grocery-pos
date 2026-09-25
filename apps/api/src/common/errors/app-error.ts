@@ -37,6 +37,16 @@ export class AppError extends Error {
             case ErrorCode.AUTH_MISSING_REFRESH_TOKEN:
             case ErrorCode.AUTH_INVALID_TOKEN:
                 return HttpStatus.UNAUTHORIZED;
+            // Signed in, but not allowed to do this. Never 401: the client
+            // would treat it as an expired session and refresh.
+            case ErrorCode.FORBIDDEN:
+            case ErrorCode.USER_ROLE_NOT_GRANTABLE:
+            case ErrorCode.USER_SELF_ROLE_CHANGE:
+            case ErrorCode.USER_TARGET_FORBIDDEN:
+            case ErrorCode.USER_PASSWORD_RESET_FORBIDDEN:
+            case ErrorCode.USER_LAST_ADMIN:
+            case ErrorCode.USER_WRONG_PASSWORD:
+                return HttpStatus.FORBIDDEN;
             case ErrorCode.VALIDATION_INVALID_INPUT:
             case ErrorCode.VALIDATION_EAN_INVALID:
             case ErrorCode.PRODUCT_DUPLICATE:
@@ -71,6 +81,13 @@ export class ValidationError extends AppError {
 }
 
 export class NotFoundError extends AppError {
+    constructor(code: ErrorCode, message: string, details: unknown = null) {
+        super(code, AppError.getHttpStatus(code), message, details);
+    }
+}
+
+/** 403: the caller is authenticated but may not perform this action. */
+export class ForbiddenError extends AppError {
     constructor(code: ErrorCode, message: string, details: unknown = null) {
         super(code, AppError.getHttpStatus(code), message, details);
     }

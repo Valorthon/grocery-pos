@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from '../auth/types/auth.types';
 import { STRING_LIMITS } from '../constants';
 
@@ -16,7 +17,8 @@ export class User {
 
     @Prop({
         type: [String],
-        enum: Role,
+        // Not `Role`: UNAUTHENTICATED is never a stored role.
+        enum: ASSIGNABLE_ROLES,
         required: true,
     })
     roles!: Role[];
@@ -33,6 +35,14 @@ export class User {
         default: true,
     })
     isActive!: boolean;
+
+    /**
+     * Write-lock counter, bumped on every active ADMIN by a transaction that
+     * may remove an admin, so concurrent ones write-conflict (issue #3).
+     * Carries no meaning of its own.
+     */
+    @Prop({ type: Number, default: 0, select: false })
+    adminLock?: number;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

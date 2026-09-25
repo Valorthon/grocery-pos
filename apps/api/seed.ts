@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from './src/auth/types/auth.types';
 import { User, UserSchema } from './src/user/user.schema';
 import * as argon from 'argon2';
@@ -101,22 +102,25 @@ async function seedAll() {
 async function seedUser() {
     const hash = await argon.hash('a');
 
-    let users: { name: string; passwordHash: string; roles: Role[] }[] = (
-        Object.keys(Role) as Array<keyof typeof Role>
-    ).map((key) => ({
-        name: key,
-        passwordHash: hash,
-        roles: [Role[key]],
-    }));
+    // Only storable roles: UNAUTHENTICATED fails the schema enum, and the
+    // collection is already dropped by then, leaving no users at all.
+    const keys = (Object.keys(Role) as Array<keyof typeof Role>).filter((key) =>
+        ASSIGNABLE_ROLES.includes(Role[key]),
+    );
 
-    const inactives = (Object.keys(Role) as Array<keyof typeof Role>).map(
-        (key) => ({
-            name: key + '1',
+    let users: { name: string; passwordHash: string; roles: Role[] }[] =
+        keys.map((key) => ({
+            name: key,
             passwordHash: hash,
             roles: [Role[key]],
-            isActive: false,
-        }),
-    );
+        }));
+
+    const inactives = keys.map((key) => ({
+        name: key + '1',
+        passwordHash: hash,
+        roles: [Role[key]],
+        isActive: false,
+    }));
 
     users = users.concat(inactives);
 

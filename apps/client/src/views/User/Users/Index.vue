@@ -53,7 +53,13 @@
                 <div class="flex justify-end">
                     <button
                         type="button"
-                        class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50"
+                        class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:pointer-events-none"
+                        :disabled="!canEdit(item)"
+                        :title="
+                            canEdit(item)
+                                ? 'Edit'
+                                : 'Only an admin can edit this user'
+                        "
                         @click="openEdit(item)"
                     >
                         <Pencil class="w-4 h-4" />
@@ -78,7 +84,7 @@
                 >
                 <div class="space-y-1.5">
                     <BaseCheckbox
-                        v-for="role in roleOptions"
+                        v-for="role in grantableRoles"
                         :key="role"
                         :model-value="createForm.roles.includes(role)"
                         :label="role"
@@ -103,6 +109,7 @@
         <div class="space-y-4">
             <BaseInput v-model="editForm.name" label="Username" disabled />
             <BaseInput
+                v-if="canResetPassword"
                 v-model="editForm.password"
                 label="New Password (optional)"
                 type="password"
@@ -118,6 +125,9 @@
                         :key="role"
                         :model-value="editForm.roles.includes(role)"
                         :label="role"
+                        :disabled="
+                            isEditingSelf || !grantableRoles.includes(role)
+                        "
                         @update:model-value="
                             toggleRole(editForm.roles, role, $event)
                         "
@@ -138,7 +148,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Pencil, Plus, Users, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
@@ -149,7 +159,12 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
 import { Color, useUIStore } from '@/stores/ui';
-import { Role } from '@/stores/auth';
+import { Role, useAuthStore } from '@/stores/auth';
+import {
+    ASSIGNABLE_ROLES,
+    canGrantRole,
+    canManageUser,
+} from '@grocery-pos/contracts';
 import { isAxiosError } from 'axios';
 
 const loading = ref(true);
@@ -163,9 +178,25 @@ const serverItems = ref<any[]>([]);
 const uiStore = useUIStore();
 const saving = ref(false);
 
-const roleOptions = Object.values(Role).filter(
-    (r) => r !== Role.Unauthenticated,
+const authStore = useAuthStore();
+const myRoles = computed(() => authStore.user?.roles ?? []);
+
+// The server enforces all of this (issue #3); the form only hides what it
+// would refuse. A user manager grants and manages only SELLER, ADJUSTER
+// and RESTOCKER (MANAGEABLE_ROLES); ADMIN and USER_MANAGER holders are
+// admin-only. Nobody changes their own roles, and only an admin resets
+// someone else's password.
+const roleOptions = ASSIGNABLE_ROLES;
+const grantableRoles = computed(() =>
+    roleOptions.filter((role) => canGrantRole(myRoles.value, role)),
 );
+
+function canEdit(item: { name?: string; roles?: Role[] }): boolean {
+    return (
+        item.name === authStore.user?.username ||
+        canManageUser(myRoles.value, item.roles ?? [])
+    );
+}
 
 const headers = [
     { key: 'name', title: 'Name' },
@@ -185,6 +216,13 @@ const editForm = ref({
     roles: [] as Role[],
     isActive: true,
 });
+
+const isEditingSelf = computed(
+    () => editForm.value.name === authStore.user?.username,
+);
+const canResetPassword = computed(
+    () => authStore.isAdmin && !isEditingSelf.value,
+);
 
 function toggleRole(list: Role[], role: Role, checked: boolean) {
     if (checked) {
@@ -257,7 +295,11 @@ function openEdit(item: any) {
         _id: item._id,
         name: item.name,
         password: '',
-        roles: item.roles ?? [],
+        // Drops roles that can't be stored (e.g. UNAUTHENTICATED on legacy
+        // documents), so saving cleans them up.
+        roles: (item.roles ?? []).filter((role: Role) =>
+            ASSIGNABLE_ROLES.includes(role),
+        ),
         isActive: item.isActive ?? true,
     };
     isEditOpen.value = true;
@@ -267,10 +309,10 @@ async function updateUser() {
     saving.value = true;
     try {
         const update: Record<string, unknown> = {
-            roles: editForm.value.roles,
             isActive: editForm.value.isActive,
         };
-        if (editForm.value.password) {
+        if (!isEditingSelf.value) update.roles = editForm.value.roles;
+        if (canResetPassword.value && editForm.value.password) {
             update.password = editForm.value.password;
         }
 
