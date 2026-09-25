@@ -46,20 +46,22 @@
                     </div>
                     <button
                         type="button"
-                        class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0"
+                        class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                        aria-label="Collapse sidebar"
                         @click="rail = !rail"
                     >
-                        <PanelLeftClose class="w-4 h-4" />
+                        <PanelLeftClose class="w-4 h-4" aria-hidden="true" />
                     </button>
                 </div>
 
                 <button
                     v-else
                     type="button"
-                    class="w-10 h-10 rounded-xl bg-primary-600/10 text-primary-600 hover:bg-primary-600 hover:text-white flex items-center justify-center border border-primary-600/20 hover:border-primary-600 transition-all"
+                    class="w-10 h-10 rounded-xl bg-primary-600/10 text-primary-600 hover:bg-primary-600 hover:text-white flex items-center justify-center border border-primary-600/20 hover:border-primary-600 transition-all focus-ring"
+                    aria-label="Expand sidebar"
                     @click="rail = !rail"
                 >
-                    <Store class="w-5 h-5" />
+                    <Store class="w-5 h-5" aria-hidden="true" />
                 </button>
             </div>
 
@@ -76,7 +78,7 @@
                         v-show="item.visible"
                         :key="item.name"
                         type="button"
-                        class="w-full flex items-center rounded-xl transition-all group relative"
+                        class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
                         :class="[
                             rail
                                 ? 'justify-center p-3'
@@ -86,6 +88,8 @@
                                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
                         ]"
                         :title="rail ? item.title : undefined"
+                        :aria-label="rail ? item.title : undefined"
+                        :aria-current="isActive(item.name) ? 'page' : undefined"
                         @click="navigate(item.name)"
                     >
                         <div class="flex items-center gap-3 min-w-0">

@@ -1,11 +1,12 @@
 <template>
     <BaseDropdown v-model="open" align="right" width-class="w-64">
-        <template #trigger>
+        <template #trigger="{ trigger }">
             <button
                 v-if="variant === 'icon'"
-                type="button"
-                class="w-10 h-10 rounded-xl mx-auto flex items-center justify-center bg-slate-100 border border-slate-200 hover:bg-slate-200 transition-colors"
+                v-bind="trigger"
+                class="w-10 h-10 rounded-xl mx-auto flex items-center justify-center bg-slate-100 border border-slate-200 hover:bg-slate-200 transition-colors focus-ring"
                 :title="userName"
+                :aria-label="`Account menu for ${userName}`"
             >
                 <span
                     class="w-7 h-7 rounded-lg bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs"
@@ -16,8 +17,8 @@
 
             <button
                 v-else-if="variant === 'box'"
-                type="button"
-                class="w-full p-2.5 rounded-xl hover:bg-slate-100 border border-slate-200 bg-white shadow-xs flex items-center justify-between text-left transition-colors"
+                v-bind="trigger"
+                class="w-full p-2.5 rounded-xl hover:bg-slate-100 border border-slate-200 bg-white shadow-xs flex items-center justify-between text-left transition-colors focus-ring"
             >
                 <div class="flex items-center gap-2.5 min-w-0">
                     <div
@@ -46,8 +47,8 @@
 
             <button
                 v-else
-                type="button"
-                class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all"
+                v-bind="trigger"
+                class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all focus-ring"
             >
                 <span
                     class="w-7 h-7 rounded-full bg-slate-900 text-white text-xs font-extrabold flex items-center justify-center"
@@ -63,6 +64,7 @@
 
         <template #menu>
             <div
+                role="none"
                 class="p-3 rounded-xl bg-slate-50 border border-slate-200 mb-1.5"
             >
                 <div class="flex items-center gap-3">
@@ -86,7 +88,8 @@
 
             <button
                 type="button"
-                class="w-full px-3 py-2 rounded-lg hover:bg-red-50 text-red-600 flex items-center gap-2.5 text-left transition-colors"
+                role="menuitem"
+                class="w-full px-3 py-2 rounded-lg hover:bg-red-50 text-red-600 flex items-center gap-2.5 text-left transition-colors focus-ring"
                 @click="logout"
             >
                 <LogOut class="w-4 h-4 text-red-500" />

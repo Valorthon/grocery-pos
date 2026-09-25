@@ -7,8 +7,15 @@
         scrollable
         :closable="!processing"
     >
+        <!--
+            Enter in a field confirms (issue #22): the fields and the footer's
+            Confirm button belong to this form (their `form` attribute), and
+            Confirm is disabled until the payment is valid. Escape cancels
+            unless the sale is processing (BaseModal is not closable then).
+        -->
+        <form :id="formId" novalidate class="hidden" @submit.prevent="finish" />
         <!-- Disabled while the sale is in flight: what is sent cannot change. -->
-        <fieldset :disabled="processing" class="contents">
+        <fieldset ref="fields" :disabled="processing" class="contents">
             <div
                 class="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center"
             >
@@ -127,6 +134,9 @@
                     >
                     <input
                         v-model="amountTendered"
+                        :form="formId"
+                        data-autofocus
+                        aria-label="Amount tendered"
                         type="number"
                         step="0.01"
                         min="0"
@@ -166,6 +176,9 @@
                 </label>
                 <input
                     v-model="referenceNumber"
+                    :form="formId"
+                    data-autofocus
+                    aria-label="GCash reference number"
                     type="text"
                     inputmode="numeric"
                     autocomplete="off"
@@ -216,6 +229,9 @@
                         >
                         <input
                             v-model="splitCashGiven"
+                            :form="formId"
+                            data-autofocus
+                            aria-label="Customer cash given"
                             type="number"
                             step="0.01"
                             min="0"
@@ -247,6 +263,7 @@
                             </label>
                             <input
                                 v-model="referenceNumber"
+                                :form="formId"
                                 type="text"
                                 inputmode="numeric"
                                 autocomplete="off"
@@ -311,11 +328,13 @@
                 >Back</BaseButton
             >
             <BaseButton
+                type="submit"
+                :form="formId"
                 class="flex-1"
                 :loading="processing"
                 :disabled="!canConfirm"
+                aria-keyshortcuts="Enter"
                 data-testid="checkout-confirm"
-                @click="finish"
             >
                 <template v-if="processing">
                     Processing Transaction...
@@ -330,16 +349,18 @@
                 <template v-else>
                     Confirm & Complete ({{ currency(total) }})
                 </template>
+                <KeyHint v-if="!processing" tone="dark">Enter</KeyHint>
             </BaseButton>
         </template>
     </BaseModal>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
 import { AlertCircle, Banknote, QrCode, Split } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import KeyHint from '@/components/ui/KeyHint.vue';
 import { PaymentType } from '@grocery-pos/contracts';
 import type { PaymentRequest } from './types';
 import {
@@ -368,6 +389,8 @@ const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
 }>();
 
+const formId = useId();
+const fields = useTemplateRef<HTMLFieldSetElement>('fields');
 const processing = ref(false);
 const error = ref<string | null>(null);
 
@@ -431,11 +454,14 @@ function currency(value: number): string {
     return formatCurrency(value);
 }
 
-function selectMethod(next: PaymentType) {
+async function selectMethod(next: PaymentType) {
     method.value = next;
     if (next === PaymentType.CASH && !amountTendered.value) {
         amountTendered.value = centavosToPesoInput(total.value);
     }
+    // On to the new method's amount or reference field.
+    await nextTick();
+    fields.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
 }
 
 function reset() {
@@ -469,6 +495,10 @@ async function finish() {
     } catch (err) {
         processing.value = false;
         error.value = err instanceof Error ? err.message : 'Sale failed';
+        // The disabled fieldset dropped the focus to <body>: back to the
+        // tender field, so a fix and Enter retry from the keyboard.
+        await nextTick();
+        fields.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
     }
 }
 </script>

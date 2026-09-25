@@ -1,42 +1,50 @@
 <template>
-    <div
-        class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto"
-        data-testid="toast-stack"
-    >
-        <!-- Errors: each one is an alert, announced as it appears. -->
-        <TransitionGroup
-            tag="div"
-            class="flex flex-col gap-2 items-end"
-            v-bind="transition"
+    <!--
+        Outside the app root, and exempt from the inert background while a
+        modal is open (issue #22): a failed save's toast must stay readable
+        and dismissable over the dialog that is still open.
+    -->
+    <Teleport to="body">
+        <div
+            data-inert-exempt
+            class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto"
+            data-testid="toast-stack"
         >
-            <ToastItem
-                v-for="toast in errors"
-                :key="toast.id"
-                role="alert"
-                :toast="toast"
-                @dismiss="uiStore.dismiss(toast.id)"
-            />
-        </TransitionGroup>
-        <!--
+            <!-- Errors: each one is an alert, announced as it appears. -->
+            <TransitionGroup
+                tag="div"
+                class="flex flex-col gap-2 items-end"
+                v-bind="transition"
+            >
+                <ToastItem
+                    v-for="toast in errors"
+                    :key="toast.id"
+                    role="alert"
+                    :toast="toast"
+                    @dismiss="uiStore.dismiss(toast.id)"
+                />
+            </TransitionGroup>
+            <!--
             Success and info: one live region that is always in the page,
             so a toast added to it is announced (politely).
         -->
-        <TransitionGroup
-            tag="div"
-            class="flex flex-col gap-2 items-end"
-            role="status"
-            aria-live="polite"
-            data-testid="toast-status"
-            v-bind="transition"
-        >
-            <ToastItem
-                v-for="toast in notices"
-                :key="toast.id"
-                :toast="toast"
-                @dismiss="uiStore.dismiss(toast.id)"
-            />
-        </TransitionGroup>
-    </div>
+            <TransitionGroup
+                tag="div"
+                class="flex flex-col gap-2 items-end"
+                role="status"
+                aria-live="polite"
+                data-testid="toast-status"
+                v-bind="transition"
+            >
+                <ToastItem
+                    v-for="toast in notices"
+                    :key="toast.id"
+                    :toast="toast"
+                    @dismiss="uiStore.dismiss(toast.id)"
+                />
+            </TransitionGroup>
+        </div>
+    </Teleport>
 </template>
 
 <script setup lang="ts">

@@ -9,7 +9,8 @@
             <div class="flex items-center gap-6">
                 <button
                     type="button"
-                    class="flex items-center gap-2.5 group"
+                    class="flex items-center gap-2.5 group focus-ring"
+                    aria-label="GroceryPOS dashboard"
                     @click="router.push({ name: 'SellerDashboard' })"
                 >
                     <div
@@ -29,7 +30,7 @@
                 >
                     <button
                         type="button"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
                         :class="
                             isDashboard
                                 ? 'bg-slate-100 text-slate-900'
@@ -43,7 +44,7 @@
 
                     <button
                         type="button"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
+                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
                         :class="
                             isOrders
                                 ? 'bg-slate-100 text-slate-900'
@@ -61,7 +62,7 @@
             <div class="flex items-center gap-3">
                 <button
                     type="button"
-                    class="px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 transition-all active:scale-[0.98] shadow-xs"
+                    class="px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 transition-all active:scale-[0.98] shadow-xs focus-ring"
                     :class="
                         isRegister
                             ? 'bg-primary-700 text-white ring-2 ring-primary-600/30'

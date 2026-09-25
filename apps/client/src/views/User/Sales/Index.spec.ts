@@ -382,3 +382,27 @@ describe('sale details freshness (issue #20)', () => {
         expect(document.querySelector('.animate-spin')).toBeNull();
     });
 });
+
+describe('void/refund while reversing (issue #22)', () => {
+    it('cannot be dismissed while the reversal is in flight', async () => {
+        serve(CASH_SALE, [openShift(OWN_SHIFT, 'ana')]);
+        await startVoid();
+        let fail!: (e: Error) => void;
+        api.post.mockReturnValue(new Promise((_, reject) => (fail = reject)));
+        confirmButton().click();
+        await flush();
+
+        expect(document.querySelector('[data-modal-close]')).toBeNull();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        document
+            .querySelector('.fixed.inset-0')!
+            .dispatchEvent(new MouseEvent('mousedown'));
+        await flush();
+        expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+
+        // A refused reversal leaves the dialog open, dismissable again.
+        fail(new Error('offline'));
+        await flush();
+        expect(document.querySelector('[data-modal-close]')).not.toBeNull();
+    });
+});

@@ -12,6 +12,7 @@
                 : 'Transfer excess cash safely out of drawer'
         "
         max-width="28rem"
+        :closable="!submitting"
     >
         <div class="space-y-4 text-xs">
             <div>

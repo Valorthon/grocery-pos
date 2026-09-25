@@ -154,3 +154,92 @@ describe('BaseCombobox (#17)', () => {
         );
     });
 });
+
+describe('BaseCombobox accessibility (#22)', () => {
+    const COFFEE: ComboboxOption = { value: 'id-coffee', label: 'COFFEE' };
+
+    it('is a combobox wired to a listbox of options', async () => {
+        const c = mount([MILK, COFFEE]);
+        expect(c.input.getAttribute('role')).toBe('combobox');
+        expect(c.input.getAttribute('aria-expanded')).toBe('false');
+        expect(c.input.getAttribute('aria-activedescendant')).toBeNull();
+
+        await c.type('b');
+        await c.answer([MILK, COFFEE]);
+        const list = c.host.querySelector('[role="listbox"]')!;
+        expect(c.input.getAttribute('aria-expanded')).toBe('true');
+        expect(c.input.getAttribute('aria-controls')).toBe(list.id);
+        const options = [...list.querySelectorAll('[role="option"]')];
+        expect(options).toHaveLength(2);
+        expect(c.input.getAttribute('aria-activedescendant')).toBe(
+            options[0].id,
+        );
+        expect(options[0].getAttribute('aria-selected')).toBe('true');
+
+        c.input.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+        );
+        await nextTick();
+        expect(c.input.getAttribute('aria-activedescendant')).toBe(
+            options[1].id,
+        );
+        expect(options[1].getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('scrolls the highlighted option into view', async () => {
+        const scrolled: string[] = [];
+        const original = Element.prototype.scrollIntoView;
+        Element.prototype.scrollIntoView = function (this: Element) {
+            scrolled.push(this.textContent?.trim() ?? '');
+        };
+        try {
+            const c = mount([MILK, COFFEE]);
+            await c.type('b');
+            await c.answer([MILK, COFFEE]);
+            c.input.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'ArrowDown' }),
+            );
+            await nextTick();
+            await nextTick();
+            expect(scrolled[scrolled.length - 1]).toBe('COFFEE');
+        } finally {
+            Element.prototype.scrollIntoView = original;
+        }
+    });
+
+    it('closes the list on blur right away', async () => {
+        const c = mount();
+        await c.type('bear');
+        await c.answer();
+        c.input.dispatchEvent(new Event('blur'));
+        await nextTick();
+        expect(c.host.querySelector('[role="listbox"]')).toBeNull();
+    });
+
+    it('keeps Escape to itself only while the list is open', async () => {
+        const c = mount();
+        const reached: string[] = [];
+        const listener = () => reached.push('document');
+        document.addEventListener('keydown', listener);
+        try {
+            await c.type('bear');
+            await c.answer();
+            const esc = () =>
+                c.input.dispatchEvent(
+                    new KeyboardEvent('keydown', {
+                        key: 'Escape',
+                        bubbles: true,
+                    }),
+                );
+            esc();
+            await nextTick();
+            expect(c.host.querySelector('[role="listbox"]')).toBeNull();
+            expect(reached).toEqual([]);
+
+            esc();
+            expect(reached).toEqual(['document']);
+        } finally {
+            document.removeEventListener('keydown', listener);
+        }
+    });
+});

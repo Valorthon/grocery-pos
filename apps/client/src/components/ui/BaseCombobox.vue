@@ -24,7 +24,14 @@
                 :maxlength="maxlength"
                 autocomplete="off"
                 role="combobox"
-                :aria-expanded="isOpen && options.length > 0"
+                aria-autocomplete="list"
+                :aria-controls="listId"
+                :aria-expanded="listShown"
+                :aria-activedescendant="
+                    listShown && options[highlighted]
+                        ? optionId(highlighted)
+                        : undefined
+                "
                 :class="[
                     'w-full py-2.5 rounded-xl border text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10 transition-all',
                     icon ? 'pl-10 pr-10' : 'px-3.5 pr-10',
@@ -38,8 +45,8 @@
                 @keydown.down.prevent="moveSelection(1)"
                 @keydown.up.prevent="moveSelection(-1)"
                 @keydown.enter.prevent="selectHighlighted"
-                @keydown.esc="close"
-                @blur="onBlur"
+                @keydown.esc="onEscape"
+                @blur="close"
             />
 
             <Spinner
@@ -66,12 +73,19 @@
         </p>
 
         <ul
-            v-if="isOpen && options.length"
+            v-if="listShown"
+            :id="listId"
+            ref="list"
+            role="listbox"
+            :aria-label="label || placeholder || undefined"
             class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
         >
             <li
                 v-for="(opt, index) in options"
+                :id="optionId(index)"
                 :key="opt.value"
+                role="option"
+                :aria-selected="index === highlighted"
                 class="cursor-pointer px-3.5 py-2.5 text-sm hover:bg-slate-50"
                 :class="index === highlighted ? 'bg-slate-100' : ''"
                 @mousedown.prevent="select(opt)"
@@ -93,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
 import { CircleCheck } from '@lucide/vue';
 import Spinner from './Spinner.vue';
 
@@ -147,6 +161,19 @@ const emit = defineEmits<{
 
 const isOpen = ref(false);
 const highlighted = ref(0);
+const listShown = computed(() => isOpen.value && props.options.length > 0);
+const listId = useId();
+const optionId = (index: number) => `${listId}-${index}`;
+const list = useTemplateRef<HTMLElement>('list');
+
+// Keeps the highlighted option visible in a scrolled list (issue #22).
+watch([highlighted, listShown], async () => {
+    if (!listShown.value) return;
+    await nextTick();
+    list.value?.children[highlighted.value]?.scrollIntoView?.({
+        block: 'nearest',
+    });
+});
 /**
  * True from a keystroke until the parent answers with new options: until
  * then the list still holds the previous query's matches, so Enter must not
@@ -192,13 +219,18 @@ function selectHighlighted() {
     if (opt) select(opt);
 }
 
+/**
+ * Closes the list. Options pick on `mousedown.prevent`, so clicking one
+ * never blurs the input first: no delay is needed here (issue #22).
+ */
 function close() {
     isOpen.value = false;
 }
 
-function onBlur() {
-    setTimeout(() => {
-        isOpen.value = false;
-    }, 150);
+/** Escape closes an open list, and only the list, not a modal around it. */
+function onEscape(event: KeyboardEvent) {
+    if (!listShown.value) return;
+    event.stopPropagation();
+    close();
 }
 </script>

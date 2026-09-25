@@ -10,7 +10,7 @@
         </p>
         <template #footer>
             <BaseButton
-                ref="cancelButton"
+                data-autofocus
                 variant="outline"
                 :aria-describedby="messageId"
                 @click="emit('answer', false)"
@@ -32,47 +32,29 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, useId, useTemplateRef, watch } from 'vue';
+import { ref, useId, watch } from 'vue';
 import BaseModal from './BaseModal.vue';
 import BaseButton from './BaseButton.vue';
 import type { ConfirmRequest } from '@/composables/useConfirm';
 
 /**
  * A yes/no question on top of the page (issue #19); pair it with
- * `useConfirm`. The safe choice (Cancel) takes the focus, so Enter and
- * Escape both keep things as they are; the focus goes back to where it
- * was once answered.
+ * `useConfirm`. The safe choice (Cancel) takes the focus (`data-autofocus`),
+ * so Enter and Escape both keep things as they are. BaseModal gives the
+ * focus back to where it was once answered (issue #22).
  */
 const props = defineProps<{ request: ConfirmRequest | null }>();
 const emit = defineEmits<{ (e: 'answer', ok: boolean): void }>();
 
 const messageId = useId();
-const cancelButton = useTemplateRef<{ $el: HTMLElement }>('cancelButton');
 
 // Keeps the text while the modal fades out after an answer.
 const shown = ref<ConfirmRequest>({ title: '', message: '' });
 
-// Where the focus was when the question opened (the button that asked),
-// given back once it is answered.
-let returnFocus: HTMLElement | null = null;
-
 watch(
     () => props.request,
-    async (request, previous) => {
-        if (!request) {
-            const target = returnFocus;
-            returnFocus = null;
-            await nextTick();
-            if (target?.isConnected) target.focus();
-            return;
-        }
-        if (!previous) {
-            const active = document.activeElement;
-            returnFocus = active instanceof HTMLElement ? active : null;
-        }
-        shown.value = request;
-        await nextTick();
-        cancelButton.value?.$el.focus();
+    (request) => {
+        if (request) shown.value = request;
     },
     { immediate: true },
 );

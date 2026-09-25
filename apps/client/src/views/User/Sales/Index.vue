@@ -72,6 +72,7 @@
             title="Sale Details"
             max-width="36rem"
             scrollable
+            :closable="!reversing"
         >
             <table class="w-full text-left border-collapse text-sm">
                 <thead>

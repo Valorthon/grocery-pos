@@ -15,7 +15,10 @@ afterEach(() => {
 });
 
 /** Mounts the modal open, with exact cash pre-filled so Confirm is enabled. */
-function mount(submit: (payment: PaymentRequest) => Promise<unknown>) {
+function mount(
+    submit: (payment: PaymentRequest) => Promise<unknown>,
+    props: Record<string, unknown> = {},
+) {
     const open = ref(true);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -29,6 +32,7 @@ function mount(submit: (payment: PaymentRequest) => Promise<unknown>) {
                 initialMethod: PaymentType.CASH,
                 initialCash: TOTAL,
                 submit,
+                ...props,
             }),
     });
     app.mount(host);
@@ -50,6 +54,30 @@ function errorText() {
 
 async function flush() {
     for (let i = 0; i < 5; i++) await nextTick();
+}
+
+function amountInput() {
+    return document.querySelector<HTMLInputElement>(
+        'input[aria-label="Amount tendered"]',
+    )!;
+}
+
+/**
+ * Enter in a field. jsdom has no implicit form submission, so this fires
+ * the `submit` the browser would; that Enter really submits (through the
+ * footer's Confirm, joined by its `form` attribute) is in the PR's manual
+ * keyboard checks.
+ */
+async function pressEnter() {
+    amountInput().form!.dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await flush();
+}
+
+async function escape() {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await flush();
 }
 
 describe('CheckoutModal', () => {
@@ -114,5 +142,110 @@ describe('CheckoutModal', () => {
 
         expect(submit).toHaveBeenCalledTimes(2);
         expect(open.value).toBe(false);
+    });
+
+    describe('keyboard (issue #22)', () => {
+        it('puts the focus in the amount tendered', async () => {
+            mount(vi.fn(), { initialCash: null });
+            await flush();
+            expect(document.activeElement).toBe(amountInput());
+        });
+
+        it('confirms with Enter once the payment is valid, and not before', async () => {
+            const submit = vi.fn().mockResolvedValue(undefined);
+            const { open } = mount(submit, { initialCash: null });
+            await flush();
+
+            await pressEnter();
+            expect(submit).not.toHaveBeenCalled();
+            expect(open.value).toBe(true);
+
+            amountInput().value = '500';
+            amountInput().dispatchEvent(new Event('input'));
+            await pressEnter();
+            expect(submit).toHaveBeenCalledTimes(1);
+            expect(open.value).toBe(false);
+        });
+
+        it('confirms through the form: the button submits it and shows Enter', async () => {
+            mount(vi.fn());
+            await flush();
+            const button = confirmButton();
+            expect(button.type).toBe('submit');
+            expect(button.form).toBe(amountInput().form);
+            expect(button.getAttribute('aria-keyshortcuts')).toBe('Enter');
+            expect(button.querySelector('kbd')?.textContent).toBe('Enter');
+        });
+
+        it('submits once for a double Enter', async () => {
+            const submit = vi.fn(() => new Promise(() => {}));
+            mount(submit);
+            await flush();
+            await pressEnter();
+            await pressEnter();
+            expect(submit).toHaveBeenCalledTimes(1);
+        });
+
+        it('cancels with Escape, but not while the sale is processing', async () => {
+            let settle!: () => void;
+            const submit = vi.fn(
+                () => new Promise<void>((resolve) => (settle = resolve)),
+            );
+            const { open } = mount(submit);
+            await flush();
+
+            await pressEnter();
+            await escape();
+            expect(open.value).toBe(true);
+
+            settle();
+            await flush();
+            expect(open.value).toBe(false);
+
+            open.value = true;
+            await flush();
+            await escape();
+            expect(open.value).toBe(false);
+        });
+
+        it('moves the focus to the field of a newly picked method', async () => {
+            mount(vi.fn());
+            await flush();
+            const gcash = [...document.querySelectorAll('button')].find(
+                (b) => b.textContent?.trim() === 'GCash',
+            )!;
+            gcash.click();
+            await flush();
+            expect(document.activeElement?.getAttribute('aria-label')).toBe(
+                'GCash reference number',
+            );
+        });
+
+        it('puts the focus back in the tender field after a failed sale', async () => {
+            let fail!: (e: Error) => void;
+            const submit = vi.fn(
+                () => new Promise((_, reject) => (fail = reject)),
+            );
+            mount(submit);
+            await flush();
+
+            await pressEnter();
+            // A browser silently drops the focus of a field its fieldset
+            // disables, to <body>; jsdom does not, so move it there.
+            const swallow = (e: Event) => e.stopPropagation();
+            document.addEventListener('focusin', swallow, true);
+            const away = document.body.appendChild(
+                document.createElement('button'),
+            );
+            away.focus();
+            away.remove();
+            document.removeEventListener('focusin', swallow, true);
+            expect(document.activeElement).toBe(document.body);
+            fail(new Error('Could not record the sale'));
+            await flush();
+
+            expect(errorText()).toContain('Could not record the sale');
+            expect(document.activeElement).toBe(amountInput());
+        });
     });
 });

@@ -5,7 +5,8 @@
         <div class="flex items-center gap-3">
             <button
                 type="button"
-                class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"
+                class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus-ring"
+                aria-label="Open navigation menu"
                 @click="emit('toggle-drawer')"
             >
                 <Menu class="w-5 h-5" />
@@ -13,7 +14,8 @@
 
             <button
                 type="button"
-                class="flex items-center gap-2.5"
+                class="flex items-center gap-2.5 focus-ring"
+                aria-label="GroceryPOS dashboard"
                 @click="router.push({ name: 'Dashboard' })"
             >
                 <div
@@ -33,8 +35,9 @@
             <button
                 v-if="canAddProduct"
                 type="button"
-                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
                 title="Add Product"
+                aria-label="Add Product"
                 @click="router.push({ name: 'Products/Add' })"
             >
                 <TagPlus class="w-5 h-5" />
@@ -43,8 +46,9 @@
             <button
                 v-if="canRestock"
                 type="button"
-                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
                 title="Restock Inventory"
+                aria-label="Restock Inventory"
                 @click="router.push({ name: 'Restocks/Add' })"
             >
                 <PackagePlus class="w-5 h-5" />
@@ -53,8 +57,9 @@
             <button
                 v-if="canAdjust"
                 type="button"
-                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
                 title="Adjust Stock"
+                aria-label="Adjust Stock"
                 @click="router.push({ name: 'Adjustments/Add' })"
             >
                 <SlidersHorizontal class="w-5 h-5" />
