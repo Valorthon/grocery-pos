@@ -383,6 +383,8 @@ describe('auth store', () => {
         });
 
         it('is not shown to another cashier who signs in', async () => {
+            // Ana was the last cashier here: her user is still cached.
+            localStorage.setItem('user', JSON.stringify(ANA));
             localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
             const api = (await import('@/axios')).default;
             vi.mocked(api.post).mockResolvedValue({ data: {} });
@@ -395,10 +397,15 @@ describe('auth store', () => {
             });
 
             const store = await loadStore();
-            await store.login('ben', 'password1');
             const { useCartStore } = await import('./cart');
+            expect(useCartStore().owner).toBe('u-ana');
+
+            await store.login('ben', 'password1');
             expect(useCartStore().owner).toBe('u-ben');
             expect(useCartStore().items).toEqual([]);
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ben'),
+            ).toBeNull();
         });
 
         it('is removed on logout', async () => {
@@ -415,7 +422,7 @@ describe('auth store', () => {
             ).toBeNull();
         });
 
-        it('is removed when the session is found gone (forced logout)', async () => {
+        it('is removed when the profile says the session is over (401 at start-up)', async () => {
             localStorage.setItem('user', JSON.stringify(ANA));
             localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
             setDummyCookie(true);
@@ -434,13 +441,46 @@ describe('auth store', () => {
 
             const store = await loadStore();
             await store.initSession();
-            // The profile 401 dropped the user; the router then resets.
-            expect(store.user).toBeNull();
-            store.resetRegister();
 
+            expect(store.user).toBeNull();
             expect(
                 localStorage.getItem('grocery_pos_cart_v1:u-ana'),
             ).toBeNull();
+            const { useCartStore } = await import('./cart');
+            expect(useCartStore().items).toEqual([]);
+        });
+
+        it('is removed when the session expired while the app was closed (no cookie)', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            setDummyCookie(false);
+            const api = (await import('@/axios')).default;
+
+            const store = await loadStore();
+            await store.initSession();
+
+            expect(api.get).not.toHaveBeenCalled();
+            expect(store.user).toBeNull();
+            expect(localStorage.getItem('user')).toBeNull();
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).toBeNull();
+        });
+
+        it('is kept when the profile check fails for another reason (offline)', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            setDummyCookie(true);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.get).mockRejectedValue(new Error('Network Error'));
+
+            const store = await loadStore();
+            await store.initSession();
+
+            expect(store.user).not.toBeNull();
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).not.toBeNull();
         });
     });
 });

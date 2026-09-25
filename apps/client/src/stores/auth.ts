@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { isAxiosError } from 'axios';
 import api from '@/axios';
-import { useCartStore } from './cart';
+import { USER_STORAGE_KEY, useCartStore } from './cart';
 import { useShiftStore } from './shift';
 import { Color, useUIStore } from './ui';
 import { hasSessionMarker } from '@/utils/session-cookie';
@@ -23,7 +23,7 @@ export interface User {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-    const storedUser = localStorage.getItem('user');
+    const storedUser = localStorage.getItem(USER_STORAGE_KEY);
 
     const initialUser: User | null =
         storedUser && storedUser !== 'undefined'
@@ -119,7 +119,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     const clearUser = (): void => {
         user.value = null;
-        localStorage.removeItem('user');
+        localStorage.removeItem(USER_STORAGE_KEY);
     };
 
     /**
@@ -132,7 +132,7 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const response = await api.get('/users/profile');
             user.value = response.data;
-            localStorage.setItem('user', JSON.stringify(user.value));
+            localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value));
             useCartStore().setOwner(user.value?.userId);
             return user.value;
         } catch (err) {
@@ -144,19 +144,40 @@ export const useAuthStore = defineStore('auth', () => {
     let sessionCheck: Promise<void> | null = null;
 
     /**
+     * The session ended while the app was closed (#23 review): the cached
+     * user's cookie is gone, or the profile answered 401. Treated as a
+     * forced logout, locally: the cached user, the shift and that
+     * cashier's saved basket go, as if the logout had happened then. The
+     * guard does not see it on a public page (e.g. `/` or Login), so it
+     * cannot be left to the guard's own reset.
+     */
+    const endStaleSession = (): void => {
+        if (!user.value && !useCartStore().owner) return;
+        clearUser();
+        resetRegister();
+    };
+
+    /**
      * Once per page load: when a session cookie exists, re-reads the user
      * from the server so roles revoked (or granted) since the last visit
-     * take effect instead of the copy in localStorage (issue #12). The
-     * navigation guard awaits it before its first decision. Never rejects:
-     * a 401 has already cleared the user, so the guard sends them to login.
+     * take effect instead of the copy in localStorage (issue #12). Without
+     * a session (no cookie, or a 401) whatever the last session left is
+     * dropped (`endStaleSession`). The navigation guard awaits it before
+     * its first decision. Never rejects.
      */
     const initSession = (): Promise<void> => {
         sessionCheck ??= (async () => {
-            if (!hasSessionCookie()) return;
+            if (!hasSessionCookie()) {
+                endStaleSession();
+                return;
+            }
             try {
                 await fetchMe();
-            } catch {
-                // Handled in fetchMe; the guard reads the resulting state.
+            } catch (err) {
+                // Any other failure (offline, 5xx) keeps the session.
+                if (isAxiosError(err) && err.response?.status === 401) {
+                    endStaleSession();
+                }
             }
         })();
         return sessionCheck;
