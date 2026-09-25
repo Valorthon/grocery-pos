@@ -191,6 +191,10 @@ router.beforeEach(async (to) => {
     const requiresAuth = to.matched.some((r) => r.meta?.requiresAuth);
 
     if (requiresAuth && !isAuthenticated) {
+        // The session is gone (cookie expired or cleared) without a
+        // logout: drop the register state as logout does. Local only, no
+        // navigation, so this cannot loop.
+        authStore.resetRegister();
         uiStore.queueMessage(Color.ERROR, 'Please log in to continue');
         return { name: 'Login' };
     }

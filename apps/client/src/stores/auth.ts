@@ -48,14 +48,22 @@ export const useAuthStore = defineStore('auth', () => {
             // logout is best-effort; local state is cleared either way
         } finally {
             clearUser();
-            // The next person at this register must not inherit this
-            // cashier's basket or shift. The shift itself stays open on
-            // the server; the same cashier resumes it at next login.
-            useShiftStore().reset();
-            useCartStore().reset();
+            resetRegister();
             const { default: router } = await import('@/router');
             await router.push({ name: 'Login' });
         }
+    };
+
+    /**
+     * Forgets this browser's register state: the shift (and any Z-read on
+     * screen) and the cart. Called whenever the session ends, on logout or
+     * when the router finds it gone, so the next person at this register
+     * never inherits the last cashier's basket or shift. The shift itself
+     * stays open on the server; the same cashier resumes it at next login.
+     */
+    const resetRegister = (): void => {
+        useShiftStore().reset();
+        useCartStore().reset();
     };
 
     const clearUser = (): void => {
@@ -113,6 +121,7 @@ export const useAuthStore = defineStore('auth', () => {
         isAuthenticated,
         login,
         logout,
+        resetRegister,
         fetchMe,
         initSession,
         hasRole,

@@ -184,4 +184,36 @@ describe('dashboard access (issue #13)', () => {
         await asManager.push('/admin/shifts');
         expect(asManager.currentRoute.value.name).not.toBe('Shifts');
     });
+
+    it('drops the cart and shift when the session is found gone, without looping (#2)', async () => {
+        localStorage.setItem(
+            'user',
+            JSON.stringify({ username: 'ana', roles: [Role.Seller] }),
+        );
+        // No session cookie: the session expired without a logout.
+        Object.defineProperty(document, 'cookie', {
+            configurable: true,
+            get: () => '',
+        });
+        const router = await freshRouter();
+        const { useCartStore } = await import('@/stores/cart');
+        const { useShiftStore } = await import('@/stores/shift');
+        const cart = useCartStore();
+        const shift = useShiftStore();
+        cart.add({ product: 'p1', EAN: '1', name: 'milk', unitPrice: 9500 });
+        cart.lock();
+        shift.loaded = true;
+        shift.zRead = { shiftId: 's0' } as never;
+        const guard = vi.fn();
+        router.afterEach(guard);
+
+        await router.push('/seller');
+
+        expect(router.currentRoute.value.name).toBe('Login');
+        expect(guard).toHaveBeenCalledTimes(1);
+        expect(cart.items).toEqual([]);
+        expect(cart.locked).toBe(false);
+        expect(shift.zRead).toBeNull();
+        expect(shift.loaded).toBe(false);
+    });
 });
