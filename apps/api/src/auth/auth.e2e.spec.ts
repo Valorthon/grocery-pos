@@ -3,10 +3,11 @@
  *
  * Boots a Nest app with the real AuthController, AuthService, JWTStrategy,
  * RefreshTokenService, CookieService, the global JWTAuthGuard + RoleGuard and
- * GlobalFilter, plus cookie-parser and URI versioning configured as in
- * main.ts. It does not install main.ts's global ValidationPipe,
- * SanitationPipe, helmet or CORS: none of them bear on how auth failures map
- * to status codes. The persistence edges are faked: the RefreshToken model
+ * GlobalFilter, plus cookie-parser, URI versioning and main.ts's two global
+ * pipes in main.ts's order (the login rate limit must agree with what they
+ * make of a username). The SanitationPipe is a stand-in, see
+ * `SanitationStandIn`. It does not install helmet or CORS: neither bears on
+ * how auth failures map to status codes. The persistence edges are faked: the RefreshToken model
  * (an in-memory map at the provider level) and
  * UserService.checkCredentials.
  * Requests go through Node's built-in fetch, so no supertest dependency.
@@ -17,6 +18,8 @@ import {
     Controller,
     Get,
     INestApplication,
+    PipeTransform,
+    ValidationPipe,
     VersioningType,
 } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -66,6 +69,34 @@ const SELLER: TokenOwner = {
     roles: [Role.Seller],
     isActive: true,
 };
+
+/**
+ * Does to body strings what the real SanitationPipe does to these inputs:
+ * strips tags, decodes entities, trims; `password` is excluded as in
+ * .env.example. The real pipe cannot be loaded under Jest here: sanitize-html
+ * requires htmlparser2 12, which is ESM-only, and Jest's CommonJS runtime
+ * cannot `require` ESM on Node 22 (it can from Node 24.9). What matters is
+ * that the login limiter keys on the value AFTER the pipes, whatever they do.
+ */
+class SanitationStandIn implements PipeTransform {
+    transform(value: unknown, meta: { type: string }): unknown {
+        if (meta.type !== 'body' || !value || typeof value !== 'object')
+            return value;
+        return Object.fromEntries(
+            Object.entries(value).map(([key, v]) => [
+                key,
+                typeof v === 'string' && key !== 'password'
+                    ? v
+                          .replace(/<[^>]*>/g, '')
+                          .replace(/&#(\d+);/g, (_m, code: string) =>
+                              String.fromCharCode(Number(code)),
+                          )
+                          .trim()
+                    : v,
+            ]),
+        );
+    }
+}
 
 /** A route behind the real guards: any Seller (or Admin) may call it. */
 @Controller('probe')
@@ -196,6 +227,17 @@ describe('Auth session flow (e2e)', () => {
 
         app = moduleRef.createNestApplication({ logger: false });
         app.use(cookieParser(COOKIE_SECRET));
+        // main.ts's global pipes, in its order: the login throttle has to key
+        // on what these turn the username into.
+        app.useGlobalPipes(
+            new SanitationStandIn(),
+            new ValidationPipe({
+                transform: true,
+                whitelist: true,
+                forbidNonWhitelisted: true,
+                transformOptions: { enableImplicitConversion: true },
+            }),
+        );
         app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
         await app.listen(0, '127.0.0.1');
 
@@ -598,6 +640,31 @@ describe('Auth session flow (e2e)', () => {
             );
             // Another username from the same IP still has its own budget.
             expect((await login('manager')).status).toBe(401);
+        });
+
+        it('login: HTML variants of a username share its bucket', async () => {
+            // Each of these reaches checkCredentials as plain `admin` after
+            // the pipes, so each must count against `admin`.
+            const variants = [
+                'admin',
+                '<b>admin</b>',
+                'ad<i></i>min',
+                'a&#100;min',
+                ' ADMIN ',
+            ];
+            for (const variant of variants) {
+                expect((await login(variant)).status).toBe(401);
+            }
+            expect(
+                checkCredentials.mock.calls.map(([name]) => name as string),
+            ).toEqual(variants.map(() => 'admin'));
+
+            const blocked = await login('<span>admin</span>');
+
+            expect(blocked.status).toBe(429);
+            expect(blocked.headers.get('retry-after')).toBe(
+                String(RATE_LIMITS.login.account.ttl / 1000),
+            );
         });
 
         it(`login: ${RATE_LIMITS.login.ip.limit} tries per IP across usernames, then 429`, async () => {

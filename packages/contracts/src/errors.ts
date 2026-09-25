@@ -52,7 +52,8 @@ export enum ErrorCode {
 
     /**
      * Too many attempts on a rate-limited route (login, refresh, password
-     * change). Answered with 429 and a `Retry-After` header.
+     * change). Answered with 429, a `Retry-After` header (seconds) and
+     * `details.retryAfterS`.
      */
     RATE_LIMITED = 'RATE_001',
 

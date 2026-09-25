@@ -6,15 +6,16 @@ import {
     UseGuards,
 } from '@nestjs/common';
 import {
+    InjectThrottlerStorage,
     normalizeIp,
     SkipThrottle,
     Throttle,
     ThrottlerGuard,
     ThrottlerModule,
 } from '@nestjs/throttler';
-import type { ThrottlerLimitDetail } from '@nestjs/throttler';
+import type { ThrottlerLimitDetail, ThrottlerStorage } from '@nestjs/throttler';
+import type { Response } from 'express';
 import { RateLimitError } from '../../common/errors';
-import { STRING_LIMITS } from '../../constants';
 
 /**
  * Brute-force protection for the credential-bearing routes (issue #12).
@@ -22,10 +23,14 @@ import { STRING_LIMITS } from '../../constants';
  * Two named throttlers, each counted per route:
  * - `ip`: every request from one client IP. The outer bound, sized so a
  *   shop's POS terminals sharing one public IP never trip it in normal use.
- * - `account`: one account's attempts. On login that is IP + submitted
- *   username (checked before the account is looked up, so it cannot leak
- *   whether the name exists); on the password change it is the signed-in
- *   user.
+ * - `account`: one account's attempts. On the password change it is the
+ *   signed-in user (a guard). On login it is IP + username, counted by
+ *   `LoginAttemptLimiter` inside the handler, i.e. AFTER the global
+ *   SanitationPipe and LoginDto have normalised the username: guards run
+ *   before pipes and see the raw body, where `<b>admin</b>`, `ad<i></i>min`
+ *   and `a&#100;min` would each get a fresh bucket yet all sign in as
+ *   `admin`. It is counted before the account is looked up, so it cannot
+ *   leak whether the name exists.
  *
  * Counters live in process memory (the throttler's default storage). That is
  * right for the single API instance deployed today; running several
@@ -67,21 +72,6 @@ export function clientIp(req: RequestLike): string {
     return req.ip ? normalizeIp(req.ip) : 'unknown';
 }
 
-/** Login attempts are counted per client IP and submitted username. */
-export function loginTracker(req: RequestLike): string {
-    // Guards run before the ValidationPipe, so the body is still raw.
-    const raw: unknown = (req.body as { username?: unknown } | undefined)
-        ?.username;
-    const username =
-        typeof raw === 'string'
-            ? raw
-                  .trim()
-                  .toLowerCase()
-                  .slice(0, STRING_LIMITS.USERNAME + 1)
-            : '';
-    return `${clientIp(req)}|${username}`;
-}
-
 /** Authenticated attempts are counted per user, whatever IP they come from. */
 export function userTracker(req: RequestLike): string {
     return req.user?.userId ? `user:${req.user.userId}` : clientIp(req);
@@ -89,20 +79,66 @@ export function userTracker(req: RequestLike): string {
 
 /**
  * The throttler guard, answering with the app's own 429 `AppError` so the
- * body has the same shape as every other error (via GlobalFilter). The
- * throttler has already set `Retry-After-<name>` on the response.
+ * body has the same shape as every other error (via GlobalFilter), plus a
+ * standard `Retry-After` header next to the throttler's `Retry-After-<name>`.
  */
 @Injectable()
 export class RateLimitGuard extends ThrottlerGuard {
     protected throwThrottlingException(
-        _context: ExecutionContext,
+        context: ExecutionContext,
         detail: ThrottlerLimitDetail,
     ): Promise<void> {
-        const retryAfterS = Math.max(1, detail.timeToBlockExpire);
-        throw new RateLimitError(
-            `Too many attempts. Try again in ${retryAfterS} seconds.`,
-            { retryAfterS },
+        throw rateLimited(
+            context.switchToHttp().getResponse<Response>(),
+            detail.timeToBlockExpire,
         );
+    }
+}
+
+/**
+ * The 429 for a blocked request. The throttler only sets
+ * `Retry-After-<name>`; this adds the standard `Retry-After` header (seconds)
+ * that clients and proxies understand.
+ */
+function rateLimited(
+    res: Response,
+    timeToBlockExpireS: number,
+): RateLimitError {
+    const retryAfterS = Math.max(1, timeToBlockExpireS);
+    res.setHeader('Retry-After', String(retryAfterS));
+    return new RateLimitError(
+        `Too many attempts. Try again in ${retryAfterS} seconds.`,
+        { retryAfterS },
+    );
+}
+
+/**
+ * Login's per-account budget: IP + the username as validated (sanitised,
+ * trimmed, lowercased), counted in the same throttler storage as the guards.
+ * Call it from the handler, before the credentials are checked.
+ */
+@Injectable()
+export class LoginAttemptLimiter {
+    constructor(
+        @InjectThrottlerStorage() private readonly storage: ThrottlerStorage,
+    ) {}
+
+    async hit(res: Response, ip: string, username: string): Promise<void> {
+        const { limit, ttl } = RATE_LIMITS.login.account;
+        const { isBlocked, timeToBlockExpire } = await this.storage.increment(
+            `login-account|${ip}|${username}`,
+            ttl,
+            limit,
+            ttl,
+            THROTTLER_ACCOUNT,
+        );
+        if (isBlocked) {
+            res.setHeader(
+                `Retry-After-${THROTTLER_ACCOUNT}`,
+                String(timeToBlockExpire),
+            );
+            throw rateLimited(res, timeToBlockExpire);
+        }
     }
 }
 
@@ -117,21 +153,19 @@ export class RateLimitGuard extends ThrottlerGuard {
             ],
         }),
     ],
-    providers: [RateLimitGuard],
-    exports: [RateLimitGuard],
+    providers: [RateLimitGuard, LoginAttemptLimiter],
+    exports: [RateLimitGuard, LoginAttemptLimiter],
 })
 export class RateLimitModule {}
 
-/** `POST /auth/login`: per IP, and per IP + username. */
+/**
+ * `POST /auth/login`: per IP here; per IP + username through
+ * `LoginAttemptLimiter` in the handler (see the top of this file).
+ */
 export const LoginRateLimit = () =>
     applyDecorators(
-        Throttle({
-            [THROTTLER_IP]: RATE_LIMITS.login.ip,
-            [THROTTLER_ACCOUNT]: {
-                ...RATE_LIMITS.login.account,
-                getTracker: loginTracker,
-            },
-        }),
+        Throttle({ [THROTTLER_IP]: RATE_LIMITS.login.ip }),
+        SkipThrottle({ [THROTTLER_ACCOUNT]: true }),
         UseGuards(RateLimitGuard),
     );
 

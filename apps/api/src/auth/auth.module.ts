@@ -6,6 +6,7 @@ import { CookieModule } from '../common/utils/cookie/cookie.module';
 import { UserModule } from '../user/user.module';
 import { JWTStrategy } from './jwt.strategy';
 import { RefreshTokenModule } from './refresh-token/refresh-token.module';
+import { RateLimitModule } from './rate-limit/rate-limit';
 
 @Module({
     imports: [
@@ -13,6 +14,7 @@ import { RefreshTokenModule } from './refresh-token/refresh-token.module';
         JwtModule.register({}),
         CookieModule,
         RefreshTokenModule,
+        RateLimitModule,
     ],
     controllers: [AuthController],
     providers: [AuthService, JWTStrategy],

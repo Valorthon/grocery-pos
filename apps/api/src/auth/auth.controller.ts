@@ -7,7 +7,12 @@ import { CookieService } from '../common/utils/cookie/cookie.service';
 import { Public } from './auth.decorator';
 import { AppError, AuthError, ErrorCode } from '../common/errors';
 import 'cookie-parser';
-import { LoginRateLimit, RefreshRateLimit } from './rate-limit/rate-limit';
+import {
+    clientIp,
+    LoginAttemptLimiter,
+    LoginRateLimit,
+    RefreshRateLimit,
+} from './rate-limit/rate-limit';
 
 /**
  * Reads the refresh token id out of the signed `refresh` cookie, or `null`
@@ -32,6 +37,7 @@ export class AuthController {
     constructor(
         private service: AuthService,
         private cookieService: CookieService,
+        private loginLimiter: LoginAttemptLimiter,
     ) {}
 
     @Public()
@@ -39,8 +45,12 @@ export class AuthController {
     @Post('login')
     async login(
         @Body() dto: LoginDto,
+        @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
     ) {
+        // Keyed on the username as it will be checked, after the pipes.
+        await this.loginLimiter.hit(res, clientIp(req), dto.username);
+
         const { refreshPayload, jwtPayload, user } =
             await this.service.login(dto);
 
