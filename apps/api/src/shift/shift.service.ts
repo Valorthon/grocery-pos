@@ -297,7 +297,20 @@ export class ShiftService {
         },
         session: ClientSession,
     ): Promise<Types.ObjectId | null> {
-        if (amount <= 0) return null;
+        if (amount <= 0) {
+            // No drawer is touched, but the reversal still changes the
+            // sale's status, which that shift's Z-read reports. Write the
+            // shift (only while OPEN) so a concurrent close conflicts with
+            // this transaction instead of storing a Z-read that misses it.
+            if (saleShift) {
+                await this.model.updateOne(
+                    { _id: saleShift, status: ShiftStatus.OPEN },
+                    { $inc: { reversalCount: 1 } },
+                    { session },
+                );
+            }
+            return null;
+        }
 
         const movement: DrawerMovement = {
             type: DrawerMovementType.REVERSAL_PAYOUT,

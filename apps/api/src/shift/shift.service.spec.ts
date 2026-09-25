@@ -604,6 +604,41 @@ describe('ShiftService.payOutReversal', () => {
         expect(payouts(_id)).toHaveLength(0);
     });
 
+    it('still writes the open sale shift, in the session, for a cash-free reversal so a close conflicts', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        const spy = jest.spyOn(shifts, 'updateOne');
+        const session = { id: 'reversal-session' } as unknown as ClientSession;
+
+        await service.payOutReversal(
+            {
+                saleId: String(new Types.ObjectId()),
+                saleShift: new Types.ObjectId(_id),
+                amount: 0,
+                type: ReversalType.VOID,
+                reason: 'x',
+                admin: BOSS,
+            },
+            session,
+        );
+
+        expect(spy).toHaveBeenCalledWith(
+            { _id: new Types.ObjectId(_id), status: ShiftStatus.OPEN },
+            { $inc: { reversalCount: 1 } },
+            { session },
+        );
+        expect(shifts.byId(_id)!.reversalCount).toBe(1);
+        expect(payouts(_id)).toHaveLength(0);
+    });
+
+    it('leaves a closed sale shift alone for a cash-free reversal', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS);
+        const before = { ...shifts.byId(_id)! };
+
+        await expect(payOut(new Types.ObjectId(_id), 0)).resolves.toBeNull();
+        expect(shifts.byId(_id)).toEqual(before);
+    });
+
     it('charges the sale’s own shift while it is open', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
 

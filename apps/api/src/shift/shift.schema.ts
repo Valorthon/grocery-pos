@@ -116,6 +116,14 @@ export class Shift {
     @Prop({ type: Number, default: 0 })
     saleCount!: number;
 
+    /**
+     * Reversals of this shift's sales that paid no cash (GCash only). Bumped
+     * with a `status: OPEN` filter for the same reason as `saleCount`: the
+     * reversal and a close of the shift must conflict.
+     */
+    @Prop({ type: Number, default: 0 })
+    reversalCount!: number;
+
     @Prop({ type: Date })
     closedAt?: Date;
 
