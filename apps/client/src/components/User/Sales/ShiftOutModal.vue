@@ -44,6 +44,7 @@
 
         <p
             v-if="error"
+            role="alert"
             class="mt-3 text-xs font-semibold text-red-600"
             data-testid="shift-out-error"
         >
@@ -77,7 +78,7 @@ import { billCountTotal, ErrorCode } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { COUNTS_INVALID, countPieces } from './shift';
+import { countPieces, countsError } from './shift';
 import type { BillCounts } from './shift';
 import { apiErrorCode, apiErrorMessage, useShiftStore } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
@@ -128,8 +129,9 @@ function currency(value: number): string {
 
 async function confirm() {
     if (submitting.value) return;
-    if (countsInvalid.value) {
-        error.value = COUNTS_INVALID;
+    const refused = countsError(billCounts.value, countsInvalid.value);
+    if (refused) {
+        error.value = refused;
         return;
     }
     submitting.value = true;

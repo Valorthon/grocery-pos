@@ -4,7 +4,7 @@ import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { DEFAULT_TERMINAL, ShiftStatus } from '@grocery-pos/contracts';
 import { useShiftStore } from '@/stores/shift';
 import ShiftInModal from './ShiftInModal.vue';
-import { COUNTS_INVALID, FLOAT_REQUIRED } from './shift';
+import { COUNTED_TOO_MUCH, COUNTS_INVALID, FLOAT_REQUIRED } from './shift';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -98,6 +98,17 @@ describe('ShiftInModal (issue #25)', () => {
         await submit();
 
         expect(errorText()).toContain(COUNTS_INVALID);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('refuses a count over ₱10,000,000, as the API does', async () => {
+        await openModal();
+        await type('1000', '10000');
+        await type('coin-1', '1');
+
+        await submit();
+
+        expect(errorText()).toContain(COUNTED_TOO_MUCH);
         expect(api.post).not.toHaveBeenCalled();
     });
 

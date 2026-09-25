@@ -110,7 +110,12 @@
                     </span>
                 </div>
 
-                <p v-if="closeError" class="text-xs font-semibold text-red-600">
+                <p
+                    v-if="closeError"
+                    role="alert"
+                    class="text-xs font-semibold text-red-600"
+                    data-testid="force-close-error"
+                >
                     {{ closeError }}
                 </p>
             </div>
@@ -152,7 +157,7 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import Badge from '@/components/ui/Badge.vue';
 import BillCountInput from '@/components/User/Sales/BillCountInput.vue';
-import { COUNTS_INVALID } from '@/components/User/Sales/shift';
+import { countsError } from '@/components/User/Sales/shift';
 import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
 import { apiErrorMessage } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
@@ -250,6 +255,11 @@ const closeError = ref('');
 // Display only: the server adds the count up itself.
 const countedCash = computed(() => billCountTotal(closeCounts.value));
 
+// A changed count answers the last refusal; a new one shows on submit.
+watch(closeCounts, () => {
+    if (!closing.value) closeError.value = '';
+});
+
 function select(row: { shift: ShiftListItem }) {
     selected.value = row.shift;
     closeCounts.value = {};
@@ -260,8 +270,9 @@ function select(row: { shift: ShiftListItem }) {
 async function forceClose() {
     const shift = selected.value;
     if (!shift || closing.value) return;
-    if (countsInvalid.value) {
-        closeError.value = COUNTS_INVALID;
+    const refused = countsError(closeCounts.value, countsInvalid.value);
+    if (refused) {
+        closeError.value = refused;
         return;
     }
     closing.value = true;

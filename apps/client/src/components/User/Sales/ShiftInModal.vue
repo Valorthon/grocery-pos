@@ -64,7 +64,7 @@ import {
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { COUNTS_INVALID, countPieces, FLOAT_REQUIRED } from './shift';
+import { countPieces, countsError, FLOAT_REQUIRED } from './shift';
 import type { BillCounts } from './shift';
 import { apiErrorMessage, useShiftStore } from '@/stores/shift';
 import { useAuthStore } from '@/stores/auth';
@@ -116,8 +116,9 @@ async function confirm() {
     if (submitting.value) return;
     // Refused here with a reason, never silently (issue #25): the server
     // refuses a count below OPENING_FLOAT_MIN too.
-    if (countsInvalid.value) {
-        error.value = COUNTS_INVALID;
+    const refused = countsError(billCounts.value, countsInvalid.value);
+    if (refused) {
+        error.value = refused;
         return;
     }
     if (total.value < SHIFT_LIMITS.OPENING_FLOAT_MIN) {

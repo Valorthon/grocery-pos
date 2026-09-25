@@ -1,7 +1,9 @@
 import {
     type BillCounts,
+    billCountTotal,
     CASH_DENOMINATIONS,
     type CashDenomination,
+    NUMERIC_LIMITS,
     SHIFT_LIMITS,
 } from '@grocery-pos/contracts';
 
@@ -32,6 +34,23 @@ export const FLOAT_REQUIRED =
 
 /** Why a count with a refused field is not submitted. */
 export const COUNTS_INVALID = 'Fix the highlighted counts first.';
+
+/** Why a count over `NUMERIC_LIMITS.AMOUNT_MAX` is not submitted. */
+export const COUNTED_TOO_MUCH =
+    'The counted cash is more than any drawer can hold.';
+
+/**
+ * Why a whole drawer count is not submitted, or '' when it may be: a
+ * field `BillCountInput` flagged (`invalid`), or a total over AMOUNT_MAX,
+ * which the API's `countedTotal` refuses too.
+ */
+export function countsError(counts: BillCounts, invalid: boolean): string {
+    if (invalid) return COUNTS_INVALID;
+    if (billCountTotal(counts) > NUMERIC_LIMITS.AMOUNT_MAX) {
+        return COUNTED_TOO_MUCH;
+    }
+    return '';
+}
 
 const WHOLE_NUMBER = /^\d+$/;
 

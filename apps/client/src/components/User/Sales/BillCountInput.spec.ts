@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { type App, createApp, defineComponent, h, nextTick, ref } from 'vue';
-import { SHIFT_LIMITS } from '@grocery-pos/contracts';
+import { NUMERIC_LIMITS, SHIFT_LIMITS } from '@grocery-pos/contracts';
 import BillCountInput from './BillCountInput.vue';
-import { piecesError } from './shift';
+import {
+    COUNTED_TOO_MUCH,
+    COUNTS_INVALID,
+    countsError,
+    piecesError,
+} from './shift';
 import type { BillCounts } from './shift';
 
 let app: App | null = null;
@@ -209,6 +214,27 @@ describe('BillCountInput (issue #25)', () => {
         expect(field('1000').value).toBe('');
         expect(field('500').value).toBe('');
         expect(invalid.value).toBe(false);
+    });
+});
+
+describe('countsError', () => {
+    // ₱10,000,000 is 10,000 × ₱1,000.
+    const AT_MAX = { '1000': 10_000 };
+
+    it('accepts a count up to AMOUNT_MAX', () => {
+        expect(NUMERIC_LIMITS.AMOUNT_MAX).toBe(1_000_000_000);
+        expect(countsError(AT_MAX, false)).toBe('');
+        expect(countsError({}, false)).toBe('');
+    });
+
+    it('refuses a total over AMOUNT_MAX, as the API does', () => {
+        expect(countsError({ ...AT_MAX, 'coin-25c': 1 }, false)).toBe(
+            COUNTED_TOO_MUCH,
+        );
+    });
+
+    it('refuses a flagged field first', () => {
+        expect(countsError({ ...AT_MAX, '500': 1 }, true)).toBe(COUNTS_INVALID);
     });
 });
 
