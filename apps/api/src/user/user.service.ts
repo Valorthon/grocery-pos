@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { User } from './user.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -35,6 +36,16 @@ function toPolicyUser(doc: {
     return { id: doc._id.toString(), roles: doc.roles, isActive: doc.isActive };
 }
 
+/**
+ * An argon2 hash of a random secret nobody knows, verified against when the
+ * username does not exist, so login takes as long for an unknown user as for
+ * a wrong password (issue #12). Same default argon2 parameters as real
+ * hashes, so the verify costs the same.
+ */
+function makeDummyHash(): Promise<string> {
+    return argon.hash(randomBytes(32).toString('base64'));
+}
+
 class UserInfo {
     name!: string;
     roles!: Role[];
@@ -43,11 +54,23 @@ class UserInfo {
 }
 
 @Injectable()
-export class UserService {
+export class UserService implements OnModuleInit {
+    private dummyHash?: Promise<string>;
+
     constructor(
         @InjectConnection() private connection: Connection,
         @InjectModel(User.name) private model: Model<User>,
     ) {}
+
+    /** Hashes the dummy up front, so the first unknown-user login is not slower. */
+    onModuleInit(): void {
+        void this.getDummyHash();
+    }
+
+    private getDummyHash(): Promise<string> {
+        this.dummyHash ??= makeDummyHash();
+        return this.dummyHash;
+    }
 
     async getAll(
         dto: GetAllDto,
@@ -89,9 +112,9 @@ export class UserService {
      * enum), then the last-active-ADMIN invariant is re-checked before the
      * transaction commits.
      *
-     * Returns the ids whose roles changed or who were deactivated: the users
-     * whose existing sessions no longer match their stored state (the hook
-     * for revoking them, issue #12).
+     * Returns the ids whose roles changed, who were deactivated or whose
+     * password was reset: the users whose existing sessions must end (the
+     * controller revokes them, issue #12).
      */
     async update(
         actor: AuthUser,
@@ -167,6 +190,7 @@ export class UserService {
                     .filter(
                         ({ target, update }) =>
                             update.isActive === false ||
+                            update.password !== undefined ||
                             (update.roles !== undefined &&
                                 !sameRoles(update.roles, target.roles)),
                     )
@@ -289,17 +313,25 @@ export class UserService {
         }
     }
 
+    /**
+     * The user when `password` matches, else `null`. Always runs exactly one
+     * argon2 verify -- against a dummy hash when the username is unknown --
+     * so the response time does not reveal whether the account exists.
+     * `isActive` is left to the caller, which must answer an inactive
+     * account exactly like a wrong password.
+     */
     async checkCredentials(
         username: string,
         password: string,
     ): Promise<UserInfo | null> {
         const user = await this.model.findOne({ name: username }).lean();
 
-        if (!user) {
-            return null;
-        }
+        const matches = await verifyPassword(
+            user?.passwordHash ?? (await this.getDummyHash()),
+            password,
+        );
 
-        if (!(await verifyPassword(user.passwordHash, password))) {
+        if (!user || !matches) {
             return null;
         }
 

@@ -3,6 +3,7 @@ import { UserService } from './user.service';
 import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from './user.schema';
 import { UserController } from './user.controller';
+import { RefreshTokenModule } from '../auth/refresh-token/refresh-token.module';
 
 @Module({
     imports: [
@@ -12,6 +13,7 @@ import { UserController } from './user.controller';
                 schema: UserSchema,
             },
         ]),
+        RefreshTokenModule,
     ],
     providers: [UserService],
     exports: [UserService],

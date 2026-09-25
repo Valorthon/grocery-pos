@@ -9,7 +9,11 @@ import { runInTransaction } from '../../common/utils/db';
 import { dateRangeFilter } from '../../common/utils/timezone';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
-import { User } from '../../user/user.schema';
+/** One entry of the `GET .../users` filter list: nothing beyond the name. */
+export interface UserOption {
+    _id: Types.ObjectId;
+    name: string;
+}
 
 @Injectable()
 export class AdjustmentService {
@@ -164,14 +168,17 @@ export class AdjustmentService {
         return { data, totalItems };
     }
 
-    async getAdjustUsers(): Promise<User[]> {
-        return await this.model.aggregate([
+    async getAdjustUsers(): Promise<UserOption[]> {
+        return await this.model.aggregate<UserOption>([
             { $group: { _id: '$adjustedBy' } },
             {
+                // Only the name ever leaves the users collection: never the
+                // password hash, roles or status (issue #12).
                 $lookup: {
                     from: 'users',
                     localField: '_id',
                     foreignField: '_id',
+                    pipeline: [{ $project: { name: 1 } }],
                     as: 'userDoc',
                 },
             },

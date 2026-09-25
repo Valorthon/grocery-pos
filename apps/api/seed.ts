@@ -36,6 +36,17 @@ import {
     RefreshTokenSchema,
 } from './src/auth/refresh-token/refresh-token.schema';
 import { Category } from './src/product/types';
+import {
+    assertSeedAllowed,
+    describeDatabase,
+} from './src/common/utils/seed-guard';
+
+/**
+ * Every seeded user's password. Development data only; it meets the
+ * password policy (STRING_LIMITS.PASSWORD_MIN) so accounts can be edited
+ * from the app without tripping it.
+ */
+const SEED_PASSWORD = 'password123';
 
 const user = mongoose.model(User.name, UserSchema);
 const product = mongoose.model(Product.name, ProductSchema);
@@ -76,9 +87,19 @@ async function dropIfExists(model: { collection: mongoose.Collection }) {
 }
 
 async function seedAll() {
+    assertSeedAllowed(process.env.NODE_ENV, process.argv.slice(2));
+
     const databaseUrl =
         process.env.DATABASE_URL ?? 'mongodb://127.0.0.1:27017/grocery';
+    console.log(
+        `Seeding DROPS every collection of ${describeDatabase(databaseUrl)} ` +
+            `(NODE_ENV=${process.env.NODE_ENV ?? 'unset'}).`,
+    );
     await mongoose.connect(databaseUrl);
+    console.log(
+        `Connected to ${mongoose.connection.host}, database ` +
+            `'${mongoose.connection.name}'. Wiping it now.`,
+    );
 
     await Promise.all([
         seedUser(),
@@ -100,7 +121,7 @@ async function seedAll() {
 }
 
 async function seedUser() {
-    const hash = await argon.hash('a');
+    const hash = await argon.hash(SEED_PASSWORD);
 
     // Only storable roles: UNAUTHENTICATED fails the schema enum, and the
     // collection is already dropped by then, leaving no users at all.

@@ -168,9 +168,15 @@ function homeFor(authStore: ReturnType<typeof useAuthStore>) {
 }
 
 // Navigation Guard
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
     const authStore = useAuthStore();
     const uiStore = useUIStore();
+    // Decide on the server's current roles, not the localStorage copy: the
+    // first navigation waits for the one-off profile fetch (later ones get
+    // the settled promise). A 401 there has cleared the user, so a
+    // protected route falls through to Login below; Login itself needs no
+    // session, so this cannot loop.
+    await authStore.initSession();
     const isAuthenticated = authStore.isAuthenticated;
 
     const requiresAuth = to.matched.some((r) => r.meta?.requiresAuth);

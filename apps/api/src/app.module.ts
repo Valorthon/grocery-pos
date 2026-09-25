@@ -19,6 +19,7 @@ import { TypedConfigService } from './common/typed-config/typed-config.service';
 import { TimingMiddleware } from './common/middleware/timing.middleware';
 import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { RateLimitModule } from './auth/rate-limit/rate-limit';
 
 @Module({
     imports: [
@@ -31,6 +32,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
             }),
         }),
         CookieModule,
+        RateLimitModule,
         AuthModule,
         RefreshTokenModule,
         UserModule,

@@ -7,6 +7,12 @@ import { CookieService } from '../common/utils/cookie/cookie.service';
 import { Public } from './auth.decorator';
 import { AppError, AuthError, ErrorCode } from '../common/errors';
 import 'cookie-parser';
+import {
+    clientIp,
+    LoginAttemptLimiter,
+    LoginRateLimit,
+    RefreshRateLimit,
+} from './rate-limit/rate-limit';
 
 /**
  * Reads the refresh token id out of the signed `refresh` cookie, or `null`
@@ -31,14 +37,20 @@ export class AuthController {
     constructor(
         private service: AuthService,
         private cookieService: CookieService,
+        private loginLimiter: LoginAttemptLimiter,
     ) {}
 
     @Public()
+    @LoginRateLimit()
     @Post('login')
     async login(
         @Body() dto: LoginDto,
+        @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
     ) {
+        // Keyed on the username as it will be checked, after the pipes.
+        await this.loginLimiter.hit(res, clientIp(req), dto.username);
+
         const { refreshPayload, jwtPayload, user } =
             await this.service.login(dto);
 
@@ -57,6 +69,7 @@ export class AuthController {
      * leaves the cookies alone: a transient failure must not end the session.
      */
     @Public()
+    @RefreshRateLimit()
     @Post('refresh')
     async refresh(
         @Req() req: Request,
@@ -96,7 +109,9 @@ export class AuthController {
     /**
      * Public, so an expired access token does not block it. Idempotent: with
      * no usable refresh cookie there is nothing to revoke, and the session
-     * cookies are cleared either way.
+     * cookies are cleared either way. The refresh cookie is scoped to
+     * `/v1/auth` (not just `/v1/auth/refresh`) precisely so the browser
+     * sends it here and the server-side token can be revoked.
      */
     @Public()
     @Post('logout')

@@ -36,6 +36,12 @@ import {
     FakeUserRow,
     fakeConnection,
 } from './testing/fake-user-model';
+import { RefreshToken } from '../auth/refresh-token/refresh-token.schema';
+import { RefreshTokenService } from '../auth/refresh-token/refresh-token.service';
+import { FakeRefreshTokenModel } from '../auth/refresh-token/testing/fake-refresh-token-model';
+import { RATE_LIMITS, RateLimitModule } from '../auth/rate-limit/rate-limit';
+import { getStorageToken, ThrottlerStorageService } from '@nestjs/throttler';
+import { STRING_LIMITS } from '../constants';
 
 const COOKIE_SECRET = 'cookie-secret';
 const JWT_SECRET = 'jwt-secret';
@@ -54,18 +60,21 @@ describe('Users (e2e)', () => {
     let base: string;
     let jwt: JwtService;
     const model = new FakeUserModel();
+    const tokens = new FakeRefreshTokenModel();
+    let throttles: ThrottlerStorageService;
 
     let admin: FakeUserRow;
     let manager: FakeUserRow;
     let cashier: FakeUserRow;
 
-    function sessionOf(row: FakeUserRow): string {
+    function sessionOf(row: FakeUserRow, sid?: string): string {
         return `jwt=${signCookie(
             jwt.sign(
                 {
                     userId: row._id.toString(),
                     username: row.name,
                     roles: row.roles,
+                    ...(sid ? { sid } : {}),
                 },
                 { secret: JWT_SECRET, expiresIn: 600 },
             ),
@@ -77,11 +86,12 @@ describe('Users (e2e)', () => {
         method: 'GET' | 'POST' | 'PATCH',
         path: string,
         body?: unknown,
+        sid?: string,
     ): Promise<{ status: number; body: Record<string, unknown> }> {
         const res = await fetch(`${base}${path}`, {
             method,
             headers: {
-                cookie: sessionOf(as),
+                cookie: sessionOf(as, sid),
                 'content-type': 'application/json',
             },
             body: body === undefined ? undefined : JSON.stringify(body),
@@ -99,10 +109,12 @@ describe('Users (e2e)', () => {
 
     beforeAll(async () => {
         const moduleRef = await Test.createTestingModule({
-            imports: [JwtModule.register({})],
+            imports: [JwtModule.register({}), RateLimitModule],
             controllers: [UserController],
             providers: [
                 UserService,
+                RefreshTokenService,
+                { provide: getModelToken(RefreshToken.name), useValue: tokens },
                 JWTStrategy,
                 { provide: getModelToken(User.name), useValue: model },
                 {
@@ -138,6 +150,7 @@ describe('Users (e2e)', () => {
         const { port } = app.getHttpServer().address() as AddressInfo;
         base = `http://127.0.0.1:${port}/v1`;
         jwt = app.get(JwtService);
+        throttles = app.get(getStorageToken());
     });
 
     afterAll(async () => {
@@ -147,6 +160,8 @@ describe('Users (e2e)', () => {
     beforeEach(async () => {
         model.rows = [];
         model.writes.length = 0;
+        tokens.rows.clear();
+        throttles.storage.clear();
         const hash = await argon.hash('secret');
         admin = model.seed({
             name: 'admin',
@@ -196,7 +211,9 @@ describe('Users (e2e)', () => {
 
     it('USER_MANAGER creating an ADMIN -> 403, nothing inserted', async () => {
         const res = await call(manager, 'POST', '/users', {
-            users: [{ name: 'mole', password: 'pw', roles: [Role.Admin] }],
+            users: [
+                { name: 'mole', password: 'password123', roles: [Role.Admin] },
+            ],
         });
 
         expect(res.status).toBe(403);
@@ -208,7 +225,13 @@ describe('Users (e2e)', () => {
 
     it('USER_MANAGER creating a USER_MANAGER -> 403', async () => {
         const res = await call(manager, 'POST', '/users', {
-            users: [{ name: 'm2', password: 'pw', roles: [Role.UserManager] }],
+            users: [
+                {
+                    name: 'm2',
+                    password: 'password123',
+                    roles: [Role.UserManager],
+                },
+            ],
         });
 
         expect(res.status).toBe(403);
@@ -219,7 +242,13 @@ describe('Users (e2e)', () => {
 
     it('USER_MANAGER creating a cashier -> 201', async () => {
         const res = await call(manager, 'POST', '/users', {
-            users: [{ name: 'till2', password: 'pw', roles: [Role.Seller] }],
+            users: [
+                {
+                    name: 'till2',
+                    password: 'password123',
+                    roles: [Role.Seller],
+                },
+            ],
         });
 
         expect(res.status).toBe(201);
@@ -270,7 +299,7 @@ describe('Users (e2e)', () => {
 
     it("USER_MANAGER resetting a cashier's password -> 403", async () => {
         const res = await patchUsers(manager, [
-            { user: id(cashier), update: { password: 'pw' } },
+            { user: id(cashier), update: { password: 'password123' } },
         ]);
 
         expect(res.status).toBe(403);
@@ -378,7 +407,7 @@ describe('Users (e2e)', () => {
                 users: [
                     {
                         name: 'ghost',
-                        password: 'pw',
+                        password: 'password123',
                         roles: [Role.Unauthenticated],
                     },
                 ],
@@ -472,5 +501,197 @@ describe('Users (e2e)', () => {
         });
 
         expect(res.status).toBe(401);
+    });
+
+    describe('sessions end when access changes (#12)', () => {
+        /** Two signed-in sessions (refresh tokens) for each of `rows`. */
+        function signIn(...rows: FakeUserRow[]) {
+            for (const row of rows) {
+                tokens.seed(row._id);
+                tokens.seed(row._id);
+            }
+        }
+
+        it('deactivating a user revokes all their refresh tokens', async () => {
+            signIn(cashier, manager);
+
+            const res = await patchUsers(manager, [
+                { user: id(cashier), update: { isActive: false } },
+            ]);
+
+            expect(res.status).toBe(200);
+            expect(tokens.tokensOf(cashier._id)).toEqual([]);
+            expect(tokens.tokensOf(manager._id)).toHaveLength(2);
+        });
+
+        it('changing a user’s roles revokes their refresh tokens', async () => {
+            signIn(cashier);
+
+            const res = await patchUsers(manager, [
+                { user: id(cashier), update: { roles: [Role.Restocker] } },
+            ]);
+
+            expect(res.status).toBe(200);
+            expect(tokens.tokensOf(cashier._id)).toEqual([]);
+        });
+
+        it('an admin password reset revokes the target’s refresh tokens', async () => {
+            signIn(cashier);
+
+            const res = await patchUsers(admin, [
+                { user: id(cashier), update: { password: 'reset-password' } },
+            ]);
+
+            expect(res.status).toBe(200);
+            expect(tokens.tokensOf(cashier._id)).toEqual([]);
+        });
+
+        it('an edit that changes no access keeps the sessions', async () => {
+            signIn(cashier);
+
+            const res = await patchUsers(manager, [
+                {
+                    user: id(cashier),
+                    update: { roles: [Role.Seller], isActive: true },
+                },
+            ]);
+
+            expect(res.status).toBe(200);
+            expect(tokens.tokensOf(cashier._id)).toHaveLength(2);
+        });
+
+        it('a refused update revokes nothing', async () => {
+            signIn(admin);
+
+            const res = await patchUsers(manager, [
+                { user: id(admin), update: { isActive: false } },
+            ]);
+
+            expect(res.status).toBe(403);
+            expect(tokens.tokensOf(admin._id)).toHaveLength(2);
+        });
+
+        it('changing your own password ends your other sessions but keeps this one', async () => {
+            const mine = new Types.ObjectId();
+            const keep = tokens.seed(cashier._id, { family: mine });
+            signIn(cashier, manager);
+
+            const res = await call(
+                cashier,
+                'PATCH',
+                '/users/me/password',
+                { currentPassword: 'secret', newPassword: 'fresh-secret' },
+                mine.toString(),
+            );
+
+            expect(res.status).toBe(200);
+            expect(
+                tokens.tokensOf(cashier._id).map((t) => t._id.toString()),
+            ).toEqual([keep]);
+            expect(tokens.tokensOf(manager._id)).toHaveLength(2);
+        });
+
+        it('without a session id in the token, a password change ends every session', async () => {
+            tokens.seed(cashier._id);
+            signIn(cashier);
+
+            const res = await call(cashier, 'PATCH', '/users/me/password', {
+                currentPassword: 'secret',
+                newPassword: 'fresh-secret',
+            });
+
+            expect(res.status).toBe(200);
+            expect(tokens.tokensOf(cashier._id)).toEqual([]);
+        });
+
+        it('a failed password change revokes nothing', async () => {
+            signIn(cashier);
+
+            const res = await call(cashier, 'PATCH', '/users/me/password', {
+                currentPassword: 'guess',
+                newPassword: 'fresh-secret',
+            });
+
+            expect(res.status).toBe(403);
+            expect(tokens.tokensOf(cashier._id)).toHaveLength(2);
+        });
+    });
+
+    describe(`password policy: at least ${STRING_LIMITS.PASSWORD_MIN} characters (#12)`, () => {
+        const short = 'x'.repeat(STRING_LIMITS.PASSWORD_MIN - 1);
+        const enough = 'x'.repeat(STRING_LIMITS.PASSWORD_MIN);
+
+        it('on create', async () => {
+            const tooShort = await call(admin, 'POST', '/users', {
+                users: [
+                    { name: 'till9', password: short, roles: [Role.Seller] },
+                ],
+            });
+            expect(tooShort.status).toBe(400);
+            expect(String(tooShort.body.message)).toMatch(/password/);
+
+            const ok = await call(admin, 'POST', '/users', {
+                users: [
+                    { name: 'till9', password: enough, roles: [Role.Seller] },
+                ],
+            });
+            expect(ok.status).toBe(201);
+        });
+
+        it('on an admin reset', async () => {
+            const tooShort = await patchUsers(admin, [
+                { user: id(cashier), update: { password: short } },
+            ]);
+            expect(tooShort.status).toBe(400);
+
+            const ok = await patchUsers(admin, [
+                { user: id(cashier), update: { password: enough } },
+            ]);
+            expect(ok.status).toBe(200);
+        });
+
+        it('on the new password of /me/password, but not the current one', async () => {
+            model.byId(cashier._id)!.passwordHash = await argon.hash('old');
+
+            const tooShort = await call(
+                cashier,
+                'PATCH',
+                '/users/me/password',
+                {
+                    currentPassword: 'old',
+                    newPassword: short,
+                },
+            );
+            expect(tooShort.status).toBe(400);
+
+            // A legacy short current password is still accepted.
+            const ok = await call(cashier, 'PATCH', '/users/me/password', {
+                currentPassword: 'old',
+                newPassword: enough,
+            });
+            expect(ok.status).toBe(200);
+        });
+    });
+
+    it(`PATCH /users/me/password: ${RATE_LIMITS.password.account.limit} tries per user, then 429 (#12)`, async () => {
+        const attempt = (as: FakeUserRow) =>
+            call(as, 'PATCH', '/users/me/password', {
+                currentPassword: 'guess',
+                newPassword: 'fresh-secret',
+            });
+
+        for (let i = 0; i < RATE_LIMITS.password.account.limit; i++) {
+            expect((await attempt(cashier)).status).toBe(403);
+        }
+
+        const blocked = await attempt(cashier);
+        expect(blocked.status).toBe(429);
+        expect(blocked.body).toMatchObject({
+            statusCode: 429,
+            error: ErrorCode.RATE_LIMITED,
+        });
+
+        // Another user on the same IP is unaffected.
+        expect((await attempt(manager)).status).toBe(403);
     });
 });

@@ -50,6 +50,13 @@ export enum ErrorCode {
     /** `currentPassword` did not match on a self-service password change. */
     USER_WRONG_PASSWORD = 'USER_006',
 
+    /**
+     * Too many attempts on a rate-limited route (login, refresh, password
+     * change). Answered with 429, a `Retry-After` header (seconds) and
+     * `details.retryAfterS`.
+     */
+    RATE_LIMITED = 'RATE_001',
+
     DB_DUPLICATE_KEY = 'DB_002',
     DB_VALIDATION_ERROR = 'DB_003',
 

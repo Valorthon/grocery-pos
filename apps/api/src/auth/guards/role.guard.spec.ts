@@ -79,9 +79,25 @@ describe('RoleGuard on the public auth routes', () => {
         (handler) => {
             expect(
                 guard.canActivate(
-                    authContext(handler, { roles: Role.Unauthenticated }),
+                    authContext(handler, { roles: [Role.Unauthenticated] }),
                 ),
             ).toBe(true);
         },
     );
+});
+
+describe('RoleGuard with the anonymous user of a public route', () => {
+    const guard = new RoleGuard(new Reflector());
+
+    it('never lets it through a role check', () => {
+        const ctx = {
+            switchToHttp: () => ({
+                getRequest: () => ({ user: { roles: [Role.Unauthenticated] } }),
+            }),
+            getHandler: () => SalesController.prototype.sell,
+            getClass: () => SalesController,
+        } as unknown as ExecutionContext;
+
+        expect(guard.canActivate(ctx)).toBe(false);
+    });
 });

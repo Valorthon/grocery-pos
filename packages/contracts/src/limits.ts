@@ -7,6 +7,13 @@ export const STRING_LIMITS = {
     USERNAME: 30,
     PRODUCT_NAME: 50,
     PASSWORD: 64,
+    /**
+     * Shortest password accepted when one is set: on create, on an admin
+     * reset and on `PATCH /users/me/password`. Deliberately not checked on
+     * login, so accounts with an older, shorter password can still sign in
+     * (and then change it).
+     */
+    PASSWORD_MIN: 8,
     REASON: 100,
     DESCRIPTION: 300,
 } as const;

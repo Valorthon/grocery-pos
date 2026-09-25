@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import { TypedConfigService } from '../../typed-config/typed-config.service';
-import { MS_PER_SECOND, REFRESH_ROUTE } from '../../../constants';
+import {
+    LEGACY_REFRESH_COOKIE_PATH,
+    MS_PER_SECOND,
+    REFRESH_COOKIE_PATH,
+} from '../../../constants';
 
 @Injectable()
 export class CookieService {
@@ -42,18 +46,25 @@ export class CookieService {
         });
     }
 
+    /**
+     * Also clears the cookie from its old, narrower path first: the browser
+     * keys cookies by name and path, so a leftover one would otherwise keep
+     * being sent (first, being more specific) to `/auth/refresh`.
+     */
     createRefresh(res: Response, payload: string) {
+        this.removeSecure(res, 'refresh', LEGACY_REFRESH_COOKIE_PATH);
         this.createSecure(
             res,
             'refresh',
             payload,
             this.config.get('REFRESH_EXPIRY_S') * MS_PER_SECOND,
-            REFRESH_ROUTE,
+            REFRESH_COOKIE_PATH,
         );
     }
 
     removeRefresh(res: Response) {
-        this.removeSecure(res, 'refresh', REFRESH_ROUTE);
+        this.removeSecure(res, 'refresh', LEGACY_REFRESH_COOKIE_PATH);
+        this.removeSecure(res, 'refresh', REFRESH_COOKIE_PATH);
     }
 
     createJwt(res: Response, payload: string) {

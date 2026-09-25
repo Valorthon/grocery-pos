@@ -2,6 +2,13 @@ import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import * as argon from 'argon2';
+
+// argon2's exports cannot be spied on in place; wrap verify (still real) so
+// the enumeration tests can see how it is called.
+jest.mock('argon2', () => {
+    const actual = jest.requireActual<typeof import('argon2')>('argon2');
+    return { ...actual, verify: jest.fn(actual.verify) };
+});
 import { UserService } from './user.service';
 import { User, UserSchema } from './user.schema';
 import { Role } from '../auth/types';
@@ -197,6 +204,17 @@ describe('UserService', () => {
                 {
                     user: manager._id.toString(),
                     update: { roles: [Role.UserManager], name: 'mgr' },
+                },
+            ]);
+
+            expect(changed).toEqual([cashier._id.toString()]);
+        });
+
+        it('also returns a user whose password an admin reset', async () => {
+            const changed = await update(as(admin), [
+                {
+                    user: cashier._id.toString(),
+                    update: { password: 'reset-password' },
                 },
             ]);
 
@@ -419,6 +437,66 @@ describe('UserService', () => {
                 argon.verify(model.byId(cashier._id)!.passwordHash, 'old-pw'),
             ).resolves.toBe(true);
         });
+    });
+});
+
+describe('UserService.checkCredentials (no enumeration, #12)', () => {
+    let service: UserService;
+    let model: FakeUserModel;
+    const verify = jest.mocked(argon.verify);
+
+    beforeEach(async () => {
+        model = new FakeUserModel();
+        model.seed({
+            name: 'cashier',
+            passwordHash: await argon.hash('right-password'),
+        });
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                UserService,
+                {
+                    provide: getConnectionToken(),
+                    useValue: fakeConnection(model),
+                },
+                { provide: getModelToken(User.name), useValue: model },
+            ],
+        }).compile();
+        await moduleRef.init();
+        service = moduleRef.get(UserService);
+        verify.mockClear();
+    });
+
+    it('runs one argon2 verify for an unknown user, against a real argon2 hash', async () => {
+        await expect(
+            service.checkCredentials('nobody', 'right-password'),
+        ).resolves.toBeNull();
+
+        expect(verify).toHaveBeenCalledTimes(1);
+        const [hash, password] = verify.mock.calls[0] as [string, string];
+        expect(hash).toMatch(/^\$argon2id\$/);
+        expect(password).toBe('right-password');
+    });
+
+    it('uses the same dummy hash every time', async () => {
+        await service.checkCredentials('nobody', 'a');
+        await service.checkCredentials('someone-else', 'b');
+
+        const [first, second] = verify.mock.calls.map(([hash]) => hash);
+        expect(first).toBe(second);
+    });
+
+    it('runs one verify for a wrong password too', async () => {
+        await expect(
+            service.checkCredentials('cashier', 'wrong-password'),
+        ).resolves.toBeNull();
+
+        expect(verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the user (active or not) on the right password', async () => {
+        await expect(
+            service.checkCredentials('cashier', 'right-password'),
+        ).resolves.toMatchObject({ name: 'cashier', isActive: true });
     });
 });
 

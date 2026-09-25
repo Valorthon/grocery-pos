@@ -3,10 +3,11 @@
  *
  * Boots a Nest app with the real AuthController, AuthService, JWTStrategy,
  * RefreshTokenService, CookieService, the global JWTAuthGuard + RoleGuard and
- * GlobalFilter, plus cookie-parser and URI versioning configured as in
- * main.ts. It does not install main.ts's global ValidationPipe,
- * SanitationPipe, helmet or CORS: none of them bear on how auth failures map
- * to status codes. The persistence edges are faked: the RefreshToken model
+ * GlobalFilter, plus cookie-parser, URI versioning and main.ts's two global
+ * pipes in main.ts's order (the login rate limit must agree with what they
+ * make of a username). The SanitationPipe is a stand-in, see
+ * `SanitationStandIn`. It does not install helmet or CORS: neither bears on
+ * how auth failures map to status codes. The persistence edges are faked: the RefreshToken model
  * (an in-memory map at the provider level) and
  * UserService.checkCredentials.
  * Requests go through Node's built-in fetch, so no supertest dependency.
@@ -17,6 +18,8 @@ import {
     Controller,
     Get,
     INestApplication,
+    PipeTransform,
+    ValidationPipe,
     VersioningType,
 } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
@@ -33,6 +36,13 @@ import { RoleGuard } from './guards/role.guard';
 import { JWTStrategy } from './jwt.strategy';
 import { RefreshToken } from './refresh-token/refresh-token.schema';
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
+import {
+    FakeRefreshTokenModel,
+    TokenOwner,
+} from './refresh-token/testing/fake-refresh-token-model';
+import { RATE_LIMITS, RateLimitModule } from './rate-limit/rate-limit';
+import { getStorageToken, ThrottlerStorageService } from '@nestjs/throttler';
+import { INVALID_CREDENTIALS_MESSAGE } from './auth.service';
 import { CurrentUser, Role } from './types';
 import type { AuthUser } from './types';
 import { CookieService } from '../common/utils/cookie/cookie.service';
@@ -43,7 +53,6 @@ import { UserService } from '../user/user.service';
 
 const COOKIE_SECRET = 'cookie-secret';
 const JWT_SECRET = 'jwt-secret';
-const HOUR_MS = 3_600_000;
 
 const CONFIG: Record<string, unknown> = {
     NODE_ENV: 'test',
@@ -54,12 +63,40 @@ const CONFIG: Record<string, unknown> = {
     REFRESH_EXPIRY_S: 86_400,
 };
 
-const SELLER = {
+const SELLER: TokenOwner = {
     _id: new Types.ObjectId(),
     name: 'cashier',
     roles: [Role.Seller],
     isActive: true,
 };
+
+/**
+ * Does to body strings what the real SanitationPipe does to these inputs:
+ * strips tags, decodes entities, trims; `password` is excluded as in
+ * .env.example. The real pipe cannot be loaded under Jest here: sanitize-html
+ * requires htmlparser2 12, which is ESM-only, and Jest's CommonJS runtime
+ * cannot `require` ESM on Node 22 (it can from Node 24.9). What matters is
+ * that the login limiter keys on the value AFTER the pipes, whatever they do.
+ */
+class SanitationStandIn implements PipeTransform {
+    transform(value: unknown, meta: { type: string }): unknown {
+        if (meta.type !== 'body' || !value || typeof value !== 'object')
+            return value;
+        return Object.fromEntries(
+            Object.entries(value).map(([key, v]) => [
+                key,
+                typeof v === 'string' && key !== 'password'
+                    ? v
+                          .replace(/<[^>]*>/g, '')
+                          .replace(/&#(\d+);/g, (_m, code: string) =>
+                              String.fromCharCode(Number(code)),
+                          )
+                          .trim()
+                    : v,
+            ]),
+        );
+    }
+}
 
 /** A route behind the real guards: any Seller (or Admin) may call it. */
 @Controller('probe')
@@ -68,65 +105,6 @@ class ProbeController {
     @Get()
     whoAmI(@CurrentUser() user: AuthUser) {
         return { username: user.username };
-    }
-}
-
-interface StoredToken {
-    _id: Types.ObjectId;
-    user: Types.ObjectId;
-    expiry: Date;
-    isValid: boolean;
-}
-
-/**
- * In-memory stand-in for the RefreshToken model, covering exactly what
- * RefreshTokenService uses: `create([doc])` and
- * `findByIdAndDelete(id)[.populate().lean()]`.
- */
-class FakeRefreshTokenModel {
-    readonly rows = new Map<string, StoredToken>();
-    failNext = false;
-
-    create = jest.fn(async (docs: { user: string; expiry: Date }[]) =>
-        docs.map((doc) => {
-            const row: StoredToken = {
-                _id: new Types.ObjectId(),
-                user: new Types.ObjectId(doc.user),
-                expiry: doc.expiry,
-                isValid: true,
-            };
-            this.rows.set(row._id.toString(), row);
-            return row;
-        }),
-    );
-
-    findByIdAndDelete = jest.fn((id: string) => {
-        if (this.failNext) {
-            this.failNext = false;
-            throw new Error('MongoNetworkError: connection refused');
-        }
-        const row = this.rows.get(String(id)) ?? null;
-        this.rows.delete(String(id));
-        const populated = row && {
-            ...row,
-            user: row.user.equals(SELLER._id) ? SELLER : null,
-        };
-        const result = Promise.resolve(populated);
-        return Object.assign(result, {
-            populate: () => ({ lean: () => result }),
-        });
-    });
-
-    /** Stores a token directly, as a prior login would have. */
-    seed(expiry = new Date(Date.now() + HOUR_MS)): string {
-        const row: StoredToken = {
-            _id: new Types.ObjectId(),
-            user: SELLER._id,
-            expiry,
-            isValid: true,
-        };
-        this.rows.set(row._id.toString(), row);
-        return row._id.toString();
     }
 }
 
@@ -154,13 +132,33 @@ function setCookies(res: Response): Record<string, string> {
     return out;
 }
 
-/** Names of the cookies a response deletes (expires them in 1970). */
-function clearedCookies(res: Response): string[] {
+/** `name@path` of each cookie a response deletes (expires it in 1970). */
+function clearedAt(res: Response): string[] {
     return res.headers
         .getSetCookie()
         .filter((header) => header.includes('Expires=Thu, 01 Jan 1970'))
-        .map((header) => header.slice(0, header.indexOf('=')))
+        .map(
+            (header) =>
+                `${header.slice(0, header.indexOf('='))}@${/Path=([^;]*)/.exec(header)?.[1]}`,
+        )
         .sort();
+}
+
+/** Names of the cookies a response deletes. */
+function clearedCookies(res: Response): string[] {
+    return [...new Set(clearedAt(res).map((c) => c.split('@')[0]))].sort();
+}
+
+/** The Path attribute a response gives to the cookie it sets as `name`. */
+function pathOfSet(res: Response, name: string): string | undefined {
+    const header = res.headers
+        .getSetCookie()
+        .find(
+            (h) =>
+                h.startsWith(`${name}=`) &&
+                !h.includes('Expires=Thu, 01 Jan 1970'),
+        );
+    return header && /Path=([^;]*)/.exec(header)?.[1];
 }
 
 describe('Auth session flow (e2e)', () => {
@@ -168,6 +166,7 @@ describe('Auth session flow (e2e)', () => {
     let base: string;
     let model: FakeRefreshTokenModel;
     let jwt: JwtService;
+    let throttles: ThrottlerStorageService;
     const checkCredentials = jest.fn();
 
     function accessToken(expiresInS: number): string {
@@ -204,7 +203,7 @@ describe('Auth session flow (e2e)', () => {
 
     beforeAll(async () => {
         const moduleRef = await Test.createTestingModule({
-            imports: [JwtModule.register({})],
+            imports: [JwtModule.register({}), RateLimitModule],
             controllers: [AuthController, ProbeController],
             providers: [
                 AuthService,
@@ -228,6 +227,17 @@ describe('Auth session flow (e2e)', () => {
 
         app = moduleRef.createNestApplication({ logger: false });
         app.use(cookieParser(COOKIE_SECRET));
+        // main.ts's global pipes, in its order: the login throttle has to key
+        // on what these turn the username into.
+        app.useGlobalPipes(
+            new SanitationStandIn(),
+            new ValidationPipe({
+                transform: true,
+                whitelist: true,
+                forbidNonWhitelisted: true,
+                transformOptions: { enableImplicitConversion: true },
+            }),
+        );
         app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
         await app.listen(0, '127.0.0.1');
 
@@ -235,6 +245,7 @@ describe('Auth session flow (e2e)', () => {
         base = `http://127.0.0.1:${port}/v1`;
         model = app.get(getModelToken(RefreshToken.name));
         jwt = app.get(JwtService);
+        throttles = app.get(getStorageToken());
     });
 
     afterAll(async () => {
@@ -243,12 +254,17 @@ describe('Auth session flow (e2e)', () => {
 
     beforeEach(() => {
         model.rows.clear();
-        model.failNext = false;
+        model.users.clear();
+        model.addUser(SELLER);
+        SELLER.isActive = true;
+        model.failNext = null;
         checkCredentials.mockReset();
+        // Every test starts with a full rate-limit budget.
+        throttles.storage.clear();
     });
 
     it('expired access token -> 401, refresh -> 201, replay with the new token -> 200', async () => {
-        const refreshId = model.seed();
+        const refreshId = model.seed(SELLER);
         const expired = accessToken(-60);
 
         const first = await call('GET', '/probe', [expired]);
@@ -340,12 +356,18 @@ describe('Auth session flow (e2e)', () => {
 
         it('expired token', () =>
             expectRejected(
-                [refreshCookie(model.seed(new Date(Date.now() - 1000)))],
+                [
+                    refreshCookie(
+                        model.seed(SELLER, {
+                            expiry: new Date(Date.now() - 1000),
+                        }),
+                    ),
+                ],
                 ErrorCode.AUTH_TOKEN_EXPIRED,
             ));
 
         it('reused (already rotated) token', async () => {
-            const refreshId = model.seed();
+            const refreshId = model.seed(SELLER);
             const first = await call('POST', '/auth/refresh', [
                 refreshCookie(refreshId),
             ]);
@@ -359,8 +381,8 @@ describe('Auth session flow (e2e)', () => {
     });
 
     it('keeps the session when refresh fails for a non-auth reason', async () => {
-        const refreshId = model.seed();
-        model.failNext = true;
+        const refreshId = model.seed(SELLER);
+        model.failNext = 'findById';
 
         const res = await call('POST', '/auth/refresh', [
             refreshCookie(refreshId),
@@ -374,7 +396,7 @@ describe('Auth session flow (e2e)', () => {
         it('refresh with a valid access token is not 403', async () => {
             const res = await call('POST', '/auth/refresh', [
                 accessToken(600),
-                refreshCookie(model.seed()),
+                refreshCookie(model.seed(SELLER)),
             ]);
 
             expect(res.status).toBe(201);
@@ -409,7 +431,7 @@ describe('Auth session flow (e2e)', () => {
 
     describe('logout', () => {
         it('works with an expired access token and revokes the refresh token', async () => {
-            const refreshId = model.seed();
+            const refreshId = model.seed(SELLER);
 
             const res = await call('POST', '/auth/logout', [
                 accessToken(-60),
@@ -425,6 +447,254 @@ describe('Auth session flow (e2e)', () => {
             const res = await call('POST', '/auth/logout', [accessToken(-60)]);
 
             expect(res.status).toBe(201);
+        });
+    });
+
+    describe('logout revokes the session a browser actually holds (#12)', () => {
+        /**
+         * What a browser would send to `path`: each cookie set by `res`
+         * whose Path path-matches it (RFC 6265 5.1.4), minus deletions.
+         */
+        function browserCookiesFor(res: Response, path: string): string[] {
+            return res.headers
+                .getSetCookie()
+                .filter((h) => !h.includes('Expires=Thu, 01 Jan 1970'))
+                .filter((h) => {
+                    const cookiePath = /Path=([^;]*)/.exec(h)?.[1] ?? '/';
+                    return (
+                        path === cookiePath ||
+                        (path.startsWith(cookiePath) &&
+                            (cookiePath.endsWith('/') ||
+                                path[cookiePath.length] === '/'))
+                    );
+                })
+                .map((h) => h.split(';')[0]);
+        }
+
+        it('scopes the refresh cookie to /v1/auth, so /auth/logout receives it', async () => {
+            checkCredentials.mockResolvedValue(SELLER);
+            const login = await call('POST', '/auth/login', [], {
+                username: 'cashier',
+                password: 'password123',
+            });
+            expect(login.status).toBe(201);
+            expect(pathOfSet(login, 'refresh')).toBe('/v1/auth');
+            expect(model.tokensOf(SELLER)).toHaveLength(1);
+
+            const sent = browserCookiesFor(login, '/v1/auth/logout');
+            expect(sent.some((c) => c.startsWith('refresh='))).toBe(true);
+
+            const logout = await call('POST', '/auth/logout', sent);
+
+            expect(logout.status).toBe(201);
+            expect(model.tokensOf(SELLER)).toEqual([]);
+        });
+
+        it('clears the refresh cookie on both the new and the legacy path', async () => {
+            const res = await call('POST', '/auth/logout', [
+                refreshCookie(model.seed(SELLER)),
+            ]);
+
+            expect(clearedAt(res)).toEqual(
+                expect.arrayContaining([
+                    'refresh@/v1/auth',
+                    'refresh@/v1/auth/refresh',
+                ]),
+            );
+        });
+
+        it('migrates a legacy-path cookie on refresh', async () => {
+            const res = await call('POST', '/auth/refresh', [
+                refreshCookie(model.seed(SELLER)),
+            ]);
+
+            expect(res.status).toBe(201);
+            expect(pathOfSet(res, 'refresh')).toBe('/v1/auth');
+            expect(clearedAt(res)).toContain('refresh@/v1/auth/refresh');
+        });
+    });
+
+    describe('sessions of users who lost access (#12)', () => {
+        it('refresh for a deactivated user -> 401, cookies cleared, sessions gone', async () => {
+            const refreshId = model.seed(SELLER);
+            model.seed(SELLER);
+            SELLER.isActive = false;
+
+            const res = await call('POST', '/auth/refresh', [
+                refreshCookie(refreshId),
+            ]);
+
+            expect(res.status).toBe(401);
+            expect(await res.json()).toMatchObject({
+                error: ErrorCode.AUTH_INVALID_TOKEN,
+            });
+            expect(clearedCookies(res)).toEqual(['dummy', 'jwt', 'refresh']);
+            expect(model.tokensOf(SELLER)).toEqual([]);
+        });
+
+        it('refresh for a deleted user -> 401, not 500', async () => {
+            const refreshId = model.seed(new Types.ObjectId());
+
+            const res = await call('POST', '/auth/refresh', [
+                refreshCookie(refreshId),
+            ]);
+
+            expect(res.status).toBe(401);
+            expect(clearedCookies(res)).toEqual(['dummy', 'jwt', 'refresh']);
+        });
+
+        it('a failed rotation keeps the session: 500, no cookies, old token still works', async () => {
+            const refreshId = model.seed(SELLER);
+            model.failNext = 'create';
+
+            const failed = await call('POST', '/auth/refresh', [
+                refreshCookie(refreshId),
+            ]);
+            expect(failed.status).toBe(500);
+            expect(setCookies(failed)).toEqual({});
+
+            const retry = await call('POST', '/auth/refresh', [
+                refreshCookie(refreshId),
+            ]);
+            expect(retry.status).toBe(201);
+        });
+
+        it('the access token names its session (sid) and refresh keeps it', async () => {
+            checkCredentials.mockResolvedValue(SELLER);
+            const login = await call('POST', '/auth/login', [], {
+                username: 'cashier',
+                password: 'password123',
+            });
+            const first = setCookies(login);
+            const sidOf = (cookie: string) =>
+                (
+                    jwt.decode(
+                        decodeURIComponent(cookie)
+                            .slice(2)
+                            .replace(/\.[^.]+$/, ''),
+                    ) as { sid?: string }
+                ).sid;
+
+            const refreshed = await call('POST', '/auth/refresh', [
+                `refresh=${first.refresh}`,
+            ]);
+            const second = setCookies(refreshed);
+
+            expect(sidOf(first.jwt)).toBeDefined();
+            expect(sidOf(second.jwt)).toBe(sidOf(first.jwt));
+        });
+    });
+
+    describe('no username enumeration (#12)', () => {
+        async function loginBody(user: unknown) {
+            checkCredentials.mockResolvedValue(user);
+            const res = await call('POST', '/auth/login', [], {
+                username: 'cashier',
+                password: 'password123',
+            });
+            const body = (await res.json()) as Record<string, unknown>;
+            delete body.timestamp;
+            return { status: res.status, body };
+        }
+
+        it('answers a deactivated account exactly like a wrong password', async () => {
+            const wrong = await loginBody(null);
+            const deactivated = await loginBody({ ...SELLER, isActive: false });
+
+            expect(wrong.status).toBe(401);
+            expect(deactivated).toEqual(wrong);
+            expect(wrong.body).toMatchObject({
+                error: ErrorCode.AUTH_INVALID_CREDENTIALS,
+                message: INVALID_CREDENTIALS_MESSAGE,
+            });
+            expect(model.rows.size).toBe(0);
+        });
+    });
+
+    describe('rate limiting (#12)', () => {
+        const login = (username: string) =>
+            call('POST', '/auth/login', [], { username, password: 'nope' });
+
+        beforeEach(() => checkCredentials.mockResolvedValue(null));
+
+        it(`login: ${RATE_LIMITS.login.account.limit} tries per username and IP, then 429`, async () => {
+            for (let i = 0; i < RATE_LIMITS.login.account.limit; i++) {
+                expect((await login('cashier')).status).toBe(401);
+            }
+
+            const blocked = await login(' Cashier ');
+
+            expect(blocked.status).toBe(429);
+            expect(await blocked.json()).toMatchObject({
+                statusCode: 429,
+                error: ErrorCode.RATE_LIMITED,
+                path: '/v1/auth/login',
+                details: { retryAfterS: expect.any(Number) },
+            });
+            expect(Number(blocked.headers.get('retry-after-account'))).toBe(
+                RATE_LIMITS.login.account.ttl / 1000,
+            );
+            // Not checked at all once blocked.
+            expect(checkCredentials).toHaveBeenCalledTimes(
+                RATE_LIMITS.login.account.limit,
+            );
+            // Another username from the same IP still has its own budget.
+            expect((await login('manager')).status).toBe(401);
+        });
+
+        it('login: HTML variants of a username share its bucket', async () => {
+            // Each of these reaches checkCredentials as plain `admin` after
+            // the pipes, so each must count against `admin`.
+            const variants = [
+                'admin',
+                '<b>admin</b>',
+                'ad<i></i>min',
+                'a&#100;min',
+                ' ADMIN ',
+            ];
+            for (const variant of variants) {
+                expect((await login(variant)).status).toBe(401);
+            }
+            expect(
+                checkCredentials.mock.calls.map(([name]) => name as string),
+            ).toEqual(variants.map(() => 'admin'));
+
+            const blocked = await login('<span>admin</span>');
+
+            expect(blocked.status).toBe(429);
+            expect(blocked.headers.get('retry-after')).toBe(
+                String(RATE_LIMITS.login.account.ttl / 1000),
+            );
+        });
+
+        it(`login: ${RATE_LIMITS.login.ip.limit} tries per IP across usernames, then 429`, async () => {
+            for (let i = 0; i < RATE_LIMITS.login.ip.limit; i++) {
+                expect((await login(`user${i}`)).status).toBe(401);
+            }
+
+            const blocked = await login('fresh-name');
+
+            expect(blocked.status).toBe(429);
+            expect(blocked.headers.get('retry-after-ip')).toBeTruthy();
+        });
+
+        it(`refresh: ${RATE_LIMITS.refresh.ip.limit} per IP, then 429`, async () => {
+            for (let i = 0; i < RATE_LIMITS.refresh.ip.limit; i++) {
+                expect((await call('POST', '/auth/refresh')).status).toBe(401);
+            }
+
+            const blocked = await call('POST', '/auth/refresh');
+
+            expect(blocked.status).toBe(429);
+            expect(await blocked.json()).toMatchObject({
+                error: ErrorCode.RATE_LIMITED,
+            });
+        });
+
+        it('logout is not rate limited', async () => {
+            for (let i = 0; i < RATE_LIMITS.refresh.ip.limit + 1; i++) {
+                expect((await call('POST', '/auth/logout')).status).toBe(201);
+            }
         });
     });
 });

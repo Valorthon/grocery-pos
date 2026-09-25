@@ -42,7 +42,15 @@ async function bootstrap() {
         methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
     });
 
-    if (config.get('NODE_ENV') === 'prod') {
+    // Deployed (prod/stage on Railway), the API sits behind exactly one
+    // reverse proxy, which appends the real client address to
+    // X-Forwarded-For. Trusting that one hop makes `req.ip` the client, which
+    // the login/refresh rate limits key on. Trusting more hops (or `true`)
+    // would let a client pick its own IP by sending X-Forwarded-For; trusting
+    // none would put every client in the proxy's single rate-limit bucket.
+    // Locally (dev/test) there is no proxy, so the header is ignored.
+    const nodeEnv = config.get('NODE_ENV');
+    if (nodeEnv === 'prod' || nodeEnv === 'stage') {
         app.set('trust proxy', 1);
     }
 

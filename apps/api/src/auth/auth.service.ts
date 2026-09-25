@@ -7,6 +7,8 @@ import { TypedConfigService } from '../common/typed-config/typed-config.service'
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
 import { AuthError, ErrorCode } from '../common/errors';
 
+export const INVALID_CREDENTIALS_MESSAGE = 'Invalid username or password';
+
 @Injectable()
 export class AuthService {
     constructor(
@@ -30,21 +32,19 @@ export class AuthService {
             password,
         );
 
-        if (!userInfo) {
+        // One answer for an unknown user, a wrong password and a
+        // deactivated account, so the response never confirms that a
+        // username exists (issue #12). checkCredentials runs an argon2
+        // verify in every case, so the timing does not tell them apart
+        // either.
+        if (!userInfo || !userInfo.isActive) {
             throw new AuthError(
                 ErrorCode.AUTH_INVALID_CREDENTIALS,
-                `Username and Password do not match`,
+                INVALID_CREDENTIALS_MESSAGE,
             );
         }
 
-        if (!userInfo.isActive) {
-            throw new AuthError(
-                ErrorCode.AUTH_INVALID_CREDENTIALS,
-                `Account is deactivated. Kindly contact the owner`,
-            );
-        }
-
-        const refreshId = await this.refreshTokenService.create(
+        const { refreshId, sid } = await this.refreshTokenService.create(
             userInfo._id.toString(),
         );
 
@@ -52,6 +52,7 @@ export class AuthService {
             userId: userInfo._id.toString(),
             username: userInfo.name,
             roles: userInfo.roles,
+            sid,
         };
 
         return {
