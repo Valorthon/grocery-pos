@@ -33,7 +33,7 @@
                             {{ userName }}
                         </p>
                         <p
-                            class="text-[11px] text-slate-500 font-medium truncate mt-0.5"
+                            class="text-xs text-slate-500 font-medium truncate mt-0.5"
                         >
                             {{ roleLabel }}
                         </p>
@@ -77,9 +77,7 @@
                         <p class="text-xs font-bold text-slate-900 truncate">
                             {{ userName }}
                         </p>
-                        <p
-                            class="text-[11px] text-slate-500 truncate font-medium"
-                        >
+                        <p class="text-xs text-slate-500 truncate font-medium">
                             {{ roleLabel }}
                         </p>
                     </div>

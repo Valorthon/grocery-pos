@@ -34,6 +34,22 @@ distinct value for each deployed secret with:
 openssl rand -base64 48
 ```
 
+### Login hero photo
+
+The login page's photo is served from
+`apps/client/public/images/login-hero.jpg` and is not in the repo (no binaries,
+and no third-party hosts at runtime). Fetch it once per checkout, and on every
+deploy build:
+
+```bash
+curl -L --create-dirs -o apps/client/public/images/login-hero.jpg "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1600&q=70&fm=jpg"
+```
+
+The photo is from Unsplash, under the
+[Unsplash License](https://unsplash.com/license) (free to use, no attribution
+required). Without the file the page shows its dark teal gradient instead, and
+the build still passes.
+
 ## Database
 
 ```bash
@@ -64,6 +80,9 @@ prints which host and database that is first. It runs freely only when
 unset) needs `--force-destroy-data` (`pnpm seed --force-destroy-data`).
 
 ## Deploy notes (operator)
+
+Every client build: fetch the login photo first (see
+[Login hero photo](#login-hero-photo)).
 
 One-off steps to run by hand at a specific deploy. Each runs from a checkout
 of the deployed commit (with `pnpm install` and the contracts built), pointed

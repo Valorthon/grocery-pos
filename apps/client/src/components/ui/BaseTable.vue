@@ -6,7 +6,7 @@
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr
-                        class="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                        class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
                     >
                         <th
                             v-for="header in headers"

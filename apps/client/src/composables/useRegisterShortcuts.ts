@@ -55,13 +55,22 @@ const isFunctionKey = (key: string) => /^F\d{1,2}$/.test(key);
 /**
  * Page-level shortcuts, active while the calling component is mounted
  * (the register only). They are off while any modal is open: a modal
- * answers its own keys (the checkout's Enter and Escape). A key with
+ * answers its own keys (the checkout's Enter and Escape). `activeWhile`
+ * names the exception: the register's own tender sheet below lg (#26),
+ * which is a modal but part of the register. A key with
  * Ctrl, Alt, Meta or Shift held, or one already handled, is left alone.
  * A handled key's default is prevented.
  */
-export function useRegisterShortcuts(shortcuts: ShortcutMap): void {
+export function useRegisterShortcuts(
+    shortcuts: ShortcutMap,
+    options: {
+        /** True while the keys work although a modal is open. */
+        activeWhile?: () => boolean;
+    } = {},
+): void {
     function onKeydown(event: KeyboardEvent) {
-        if (event.defaultPrevented || anyModalOpen.value) return;
+        if (event.defaultPrevented) return;
+        if (anyModalOpen.value && !options.activeWhile?.()) return;
         if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
             return;
         }

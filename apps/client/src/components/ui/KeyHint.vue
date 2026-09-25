@@ -7,7 +7,7 @@
         aria-hidden="true"
         data-key-hint
         :class="[
-            'inline-flex items-center rounded-md border px-1.5 font-mono text-[10px] font-bold leading-4 not-italic',
+            'inline-flex items-center rounded-md border px-1.5 font-mono text-xs font-bold leading-4 not-italic',
             tone === 'dark'
                 ? 'border-white/30 bg-white/10 text-white/80'
                 : 'border-slate-300 bg-white text-slate-500',

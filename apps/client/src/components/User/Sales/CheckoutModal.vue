@@ -20,7 +20,7 @@
                 class="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center"
             >
                 <span
-                    class="text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                    class="text-xs font-bold uppercase tracking-wider text-slate-500"
                 >
                     Total Due Amount
                 </span>
@@ -40,7 +40,7 @@
                 <div class="grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        class="py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                         :class="
                             method === PaymentType.CASH
                                 ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
@@ -54,7 +54,7 @@
 
                     <button
                         type="button"
-                        class="py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                         :class="
                             method === PaymentType.GCASH
                                 ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
@@ -68,7 +68,7 @@
 
                     <button
                         type="button"
-                        class="py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                         :class="
                             method === PaymentType.SPLIT
                                 ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
@@ -111,7 +111,7 @@
                 >
                     <button
                         type="button"
-                        class="min-h-9 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
+                        class="min-h-11 min-w-11 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
                         @click="amountTendered = centavosToPesoInput(total)"
                     >
                         Exact
@@ -120,7 +120,7 @@
                         v-for="amount in quickCash"
                         :key="amount"
                         type="button"
-                        class="min-h-9 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
+                        class="min-h-11 min-w-11 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
                         @click="amountTendered = centavosToPesoInput(amount)"
                     >
                         {{ currency(amount) }}
@@ -141,7 +141,7 @@
                         step="0.01"
                         min="0"
                         placeholder="0.00"
-                        class="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                        class="w-full min-h-11 pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                     />
                 </div>
 
@@ -187,7 +187,7 @@
                     :aria-describedby="
                         showReferenceError ? referenceErrorId : undefined
                     "
-                    class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                    class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                     :class="
                         showReferenceError
                             ? 'border-red-400'
@@ -213,7 +213,7 @@
                         <label class="text-xs font-extrabold text-slate-900"
                             >1. Customer Cash Given:</label
                         >
-                        <span class="text-[11px] font-semibold text-slate-500"
+                        <span class="text-xs font-semibold text-slate-500"
                             >Total bill:
                             <strong class="text-slate-800 font-mono">{{
                                 currency(total)
@@ -226,7 +226,7 @@
                             v-for="bill in splitBills"
                             :key="bill"
                             type="button"
-                            class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98]"
+                            class="min-h-11 min-w-11 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
                             @click="splitCashGiven = centavosToPesoInput(bill)"
                         >
                             {{ currency(bill) }}
@@ -247,7 +247,7 @@
                             step="0.01"
                             min="0"
                             placeholder="Enter cash handed by customer"
-                            class="w-full pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                            class="w-full min-h-11 pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                         />
                     </div>
                 </div>
@@ -287,7 +287,7 @@
                                         ? referenceErrorId
                                         : undefined
                                 "
-                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
                                 :class="
                                     showReferenceError
                                         ? 'border-red-400'
@@ -338,7 +338,7 @@
                         class="p-2.5 rounded-xl bg-slate-900 text-white flex items-center justify-between text-xs font-semibold"
                     >
                         <span>Split Breakdown:</span>
-                        <span class="font-mono text-[11px]">
+                        <span class="font-mono text-xs">
                             Cash {{ currency(split.cash) }} + GCash
                             {{ currency(split.gcash) }} =
                             {{ currency(total) }}

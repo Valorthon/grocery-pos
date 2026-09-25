@@ -23,7 +23,7 @@ const props = withDefaults(
 );
 
 const sizeClass = computed(() =>
-    props.size === 'md' ? 'text-xs px-3 py-1' : 'text-[11px] px-2 py-0.5',
+    props.size === 'md' ? 'text-xs px-3 py-1' : 'text-xs px-2 py-0.5',
 );
 
 const colorClass = computed(() => {

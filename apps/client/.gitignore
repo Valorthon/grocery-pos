@@ -50,3 +50,6 @@ vite.config.d.ts
 src/config/validation.env.js
 src/config/validation.env.d.ts
 
+
+# The login hero photo is fetched at deploy (README), never committed (#26).
+public/images/login-hero.jpg

@@ -46,7 +46,7 @@
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 text-[11px] space-y-1 text-slate-500"
+                    class="border-t border-dashed border-slate-300 pt-3 text-xs space-y-1 text-slate-500"
                 >
                     <div class="flex justify-between gap-2">
                         <time
@@ -67,7 +67,7 @@
                         >
                     </div>
                     <div
-                        class="text-[10px] text-slate-600 break-all text-right"
+                        class="text-xs text-slate-600 break-all text-right"
                         data-testid="receipt-sale-id"
                     >
                         ID {{ receipt?._id }}
@@ -78,7 +78,7 @@
                     class="border-t border-dashed border-slate-300 pt-3 space-y-2"
                 >
                     <div
-                        class="flex justify-between font-bold text-[10px] text-slate-500 uppercase border-b border-slate-100 pb-1"
+                        class="flex justify-between font-bold text-xs text-slate-500 uppercase border-b border-slate-100 pb-1"
                     >
                         <span>Item</span>
                         <span>Total</span>
@@ -92,7 +92,7 @@
                             <p class="font-bold text-slate-900">
                                 {{ item.productName }}
                             </p>
-                            <p class="text-[10px] text-slate-400">
+                            <p class="text-xs text-slate-400">
                                 {{ item.quantity }} x
                                 {{ currency(item.amount / item.quantity) }}
                             </p>
@@ -121,7 +121,7 @@
                                 >-{{ currency(receipt.discount.amount) }}</span
                             >
                         </div>
-                        <div class="text-[10px] text-slate-500">
+                        <div class="text-xs text-slate-500">
                             Reason: {{ receipt.discount.reason }}
                         </div>
                     </template>
@@ -136,7 +136,7 @@
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 space-y-1.5 text-[11px] text-slate-500"
+                    class="border-t border-dashed border-slate-300 pt-3 space-y-1.5 text-xs text-slate-500"
                 >
                     <div class="flex justify-between">
                         <span>Payment Method:</span>
@@ -173,7 +173,7 @@
                 <div
                     class="border-t border-dashed border-slate-300 pt-3 text-center space-y-1.5"
                 >
-                    <p class="text-[10px] text-slate-400">
+                    <p class="text-xs text-slate-400">
                         Thank you for shopping at Grocery POS!
                     </p>
                 </div>

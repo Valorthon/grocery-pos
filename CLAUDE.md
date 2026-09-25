@@ -277,6 +277,58 @@ requestId}`. A 5xx never carries details or internals.
   `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
 
+**Register (Phase 6)** (#22–#26)
+
+- Keys (`useRegisterShortcuts`): F2 scan box, F4 selected line's quantity,
+  F8 discount, F9 Tender & Charge, Delete removes the focused line. F5 is
+  never bound. Keys are off while a modal is open (except the tender sheet).
+- `BaseModal` is a labelled `role=dialog`; `modal-stack.ts` owns Escape
+  (topmost only), the focus trap, `inert` background, scroll lock and focus
+  return. The scan box takes the focus back after clicks and modals.
+- While a receipt shows, a stray Enter does nothing and a scan starts the
+  next sale with that item.
+- Void Ticket asks first. A removed line has a 5s Undo. Quantities are
+  editable. The Qty multiplier (or `12*`) applies to the next scan only and
+  shows a badge.
+- Basket, discount and checkout attempt (`idempotencyKey`) are kept per
+  cashier in localStorage `grocery_pos_cart_v1:<userId>`, so a reload
+  retries the same key and can't double-charge. Cleared on sale, void and
+  logout; synced across tabs.
+- Quick cash is Exact plus up to 4 next round amounts (₱20/50/100/500/1000
+  steps). SPLIT: GCash pays what the cash doesn't; cash covering the total
+  is sent as CASH (`splitTender`).
+- Receipt: the sale's server time in the store timezone, sale number (last 8
+  of the id) plus the full id, a Change line for any cash tender (₱0 too),
+  one "Discount" label. No print buttons or fake store details (store
+  settings are #47).
+- The Roles page is built from contracts `PERMISSIONS`; `role-permissions`
+  (API) and `role-pages` (client) specs keep it in step.
+- Denominations are unchanged. Shift In refuses a ₱0/empty float with an
+  inline reason. `BillCountInput` counts on input, flags bad entries inline
+  and reports them via `v-model:invalid`.
+- Touch layout (#26): below `lg` (64rem, `useIsLarge`) the register has a
+  sticky footer (total + Tender) that opens the tender panel as a sheet on
+  the modal stack (`useTenderSheet`); the basket scrolls on its own. From
+  `lg` the panel sits beside the ticket. With the sheet on top, F2/F4 close
+  it and go to the ticket; F8/F9 open it first (F9 then opens the checkout).
+- Crossing `lg` with the focus in the tender panel keeps it on the same
+  control: shrinking opens the sheet, growing closes it without returning
+  the focus to its opener.
+- Seller sidebar: from `lg` it starts expanded; collapsed/expanded is kept
+  in localStorage `grocery_pos_sidebar_v1:<userId>` (the only preference
+  there; storage errors fall back to expanded). Below `lg` it is a modal
+  drawer on the modal stack (menu button, backdrop, X, Escape, navigation
+  close it); the register behind it is inert and its keys pause.
+- Every register button and field is at least 44px (`min-h-11 min-w-11` or
+  `w-11 h-11`), including the scan box's Clear, Enter / Scan and the Qty
+  select. `BaseModal`'s header close (×) is still 32px, in every dialog.
+  No text below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for
+  classes and CSS `font-size`.
+- No third-party runtime assets: Poppins (400–900) comes from
+  `@fontsource/poppins`, and the login photo is
+  `public/images/login-hero.jpg`, fetched at deploy (README) over a
+  gradient, gitignored, never committed.
+
 **Scope**
 
 - Receipts are shown on screen only, with no printing. BIR compliance (VAT,
@@ -287,6 +339,6 @@ requestId}`. A 5xx never carries details or internals.
 
 ## Status
 
-Phases 1–5 of #31 are complete. Phase 5 (#21, #33, #17, #18, #19, #20)
-covered sessions and client correctness: payloads, forms, errors, draft
-screens and list views. Next is Phase 6, the register, starting with #22.
+Phases 1–6 of #31 are complete. Phase 6 (#25, #22, #23, #24, #26) made the
+register usable: shortcuts and dialogs, checkout UX, on-screen receipt, shift
+modals and touch layout. Next is Phase 7, foundations, starting with #28.
