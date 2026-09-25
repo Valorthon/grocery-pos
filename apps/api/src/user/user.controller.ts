@@ -28,6 +28,8 @@ export class UserController {
     @Get('/profile')
     getProfile(@CurrentUser() user: AuthUser) {
         return {
+            // The client keys this cashier's saved basket by it (#23).
+            userId: user.userId,
             username: user.username,
             roles: user.roles,
         };

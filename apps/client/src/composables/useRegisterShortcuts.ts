@@ -3,8 +3,8 @@ import { anyModalOpen } from '@/components/ui/modal-stack';
 
 /**
  * The register's keys (issue #22, product decision 2026-09-25). F5 is
- * never bound: it stays the browser's refresh. F4 and Delete belong to
- * #23 (line quantity and line void) and are added to Sell.vue's map there.
+ * never bound: it stays the browser's refresh. F4 and Delete are the
+ * ticket's line keys (#23).
  */
 export const REGISTER_KEYS = {
     /** Focus the scan / search box. */
@@ -13,6 +13,10 @@ export const REGISTER_KEYS = {
     DISCOUNT: 'F8',
     /** Open Tender & Charge. */
     CHARGE: 'F9',
+    /** Edit the quantity of the selected (else the last) ticket line. */
+    LINE_QUANTITY: 'F4',
+    /** Remove the selected ticket line, with Undo. Never while typing. */
+    REMOVE_LINE: 'Delete',
 } as const;
 
 export interface Shortcut {

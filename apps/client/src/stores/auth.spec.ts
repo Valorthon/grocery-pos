@@ -357,4 +357,130 @@ describe('auth store', () => {
             expect(store.user).toEqual(staleAdmin);
         });
     });
+    describe('the saved basket (#23)', () => {
+        const ANA = { userId: 'u-ana', username: 'ana', roles: [Role.Seller] };
+        const BASKET = JSON.stringify({
+            version: 1,
+            items: [
+                {
+                    product: 'p1',
+                    EAN: '2000000000015',
+                    name: 'milk',
+                    unitPrice: 9500,
+                    quantity: 2,
+                },
+            ],
+            discount: null,
+        });
+
+        it('comes back for the same cashier after a refresh', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+
+            await loadStore();
+            const { useCartStore } = await import('./cart');
+            expect(useCartStore().items.map((i) => i.name)).toEqual(['milk']);
+        });
+
+        it('is not shown to another cashier who signs in', async () => {
+            // Ana was the last cashier here: her user is still cached.
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({ data: {} });
+            vi.mocked(api.get).mockResolvedValue({
+                data: {
+                    userId: 'u-ben',
+                    username: 'ben',
+                    roles: [Role.Seller],
+                },
+            });
+
+            const store = await loadStore();
+            const { useCartStore } = await import('./cart');
+            expect(useCartStore().owner).toBe('u-ana');
+
+            await store.login('ben', 'password1');
+            expect(useCartStore().owner).toBe('u-ben');
+            expect(useCartStore().items).toEqual([]);
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ben'),
+            ).toBeNull();
+        });
+
+        it('is removed on logout', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({});
+
+            const store = await loadStore();
+            await store.logout();
+
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).toBeNull();
+        });
+
+        it('is removed when the profile says the session is over (401 at start-up)', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            setDummyCookie(true);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.get).mockRejectedValue(
+                new AxiosError(
+                    'Unauthorized',
+                    'ERR_BAD_REQUEST',
+                    undefined,
+                    null,
+                    {
+                        status: 401,
+                    } as AxiosResponse,
+                ),
+            );
+
+            const store = await loadStore();
+            await store.initSession();
+
+            expect(store.user).toBeNull();
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).toBeNull();
+            const { useCartStore } = await import('./cart');
+            expect(useCartStore().items).toEqual([]);
+        });
+
+        it('is removed when the session expired while the app was closed (no cookie)', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            setDummyCookie(false);
+            const api = (await import('@/axios')).default;
+
+            const store = await loadStore();
+            await store.initSession();
+
+            expect(api.get).not.toHaveBeenCalled();
+            expect(store.user).toBeNull();
+            expect(localStorage.getItem('user')).toBeNull();
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).toBeNull();
+        });
+
+        it('is kept when the profile check fails for another reason (offline)', async () => {
+            localStorage.setItem('user', JSON.stringify(ANA));
+            localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
+            setDummyCookie(true);
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.get).mockRejectedValue(new Error('Network Error'));
+
+            const store = await loadStore();
+            await store.initSession();
+
+            expect(store.user).not.toBeNull();
+            expect(
+                localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+            ).not.toBeNull();
+        });
+    });
 });

@@ -157,21 +157,54 @@
                     </div>
                 </form>
 
+                <!--
+                    The multiplier applies to the next scan only (decision
+                    2026-09-25, #23), whether set with the Qty picker or
+                    typed as "12*".
+                -->
+                <div role="status" aria-live="polite">
+                    <p
+                        v-if="nextScanQty > 1"
+                        data-testid="multiplier-badge"
+                        class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-amber-900 text-sm font-extrabold"
+                    >
+                        ×{{ nextScanQty }} on next scan
+                    </p>
+                </div>
+
+                <!--
+                    Scan results are announced (#23): a success politely and
+                    it fades; an error assertively and it stays until the
+                    next scan. Both regions are always present, so a screen
+                    reader hears what appears in them.
+                -->
+                <div role="status" aria-live="polite" data-testid="scan-status">
+                    <div
+                        v-if="scanFeedback?.type === 'success'"
+                        class="mt-2.5 p-2.5 rounded-xl flex items-center gap-2 text-sm font-bold bg-emerald-50 border border-emerald-200 text-emerald-800"
+                    >
+                        <CheckCircle2
+                            class="w-4 h-4 text-emerald-600 shrink-0"
+                            aria-hidden="true"
+                        />
+                        <span>{{ scanFeedback.message }}</span>
+                    </div>
+                </div>
                 <div
-                    v-if="scanFeedback"
-                    class="mt-2.5 p-2.5 rounded-xl flex items-center gap-2 text-xs sm:text-sm font-bold transition-opacity"
-                    :class="
-                        scanFeedback.type === 'success'
-                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                            : 'bg-red-50 border border-red-200 text-red-800'
-                    "
+                    role="alert"
+                    aria-live="assertive"
+                    data-testid="scan-alert"
                 >
-                    <CheckCircle2
-                        v-if="scanFeedback.type === 'success'"
-                        class="w-4 h-4 text-emerald-600 shrink-0"
-                    />
-                    <AlertCircle v-else class="w-4 h-4 text-red-600 shrink-0" />
-                    <span>{{ scanFeedback.message }}</span>
+                    <div
+                        v-if="scanFeedback?.type === 'error'"
+                        class="mt-2.5 p-2.5 rounded-xl flex items-center gap-2 text-sm font-bold bg-red-50 border border-red-200 text-red-800"
+                    >
+                        <AlertCircle
+                            class="w-4 h-4 text-red-600 shrink-0"
+                            aria-hidden="true"
+                        />
+                        <span>{{ scanFeedback.message }}</span>
+                    </div>
                 </div>
             </div>
 
@@ -243,7 +276,7 @@
                                 ? 'border-slate-900 ring-2 ring-slate-900/20'
                                 : 'border-slate-200'
                         "
-                        @click="selectMatch(m, scanMultiplier)"
+                        @click="selectMatch(m, nextScanQty)"
                     >
                         <div>
                             <h4
@@ -352,10 +385,42 @@
                             <tbody
                                 class="divide-y divide-slate-100 text-slate-800 text-xs sm:text-sm"
                             >
+                                <!--
+                                    A line is selected by scanning it or
+                                    clicking it (#23): F4 edits its
+                                    quantity, Delete removes it (with Undo).
+                                -->
                                 <tr
                                     v-for="(item, index) in cartStore.items"
                                     :key="item.product"
-                                    class="hover:bg-slate-50/80 transition-colors"
+                                    :ref="
+                                        (el) =>
+                                            setLineEl(
+                                                item.product,
+                                                el as HTMLElement | null,
+                                            )
+                                    "
+                                    tabindex="-1"
+                                    data-ticket-line
+                                    :data-product="item.product"
+                                    :data-testid="`ticket-line-${index}`"
+                                    :aria-current="
+                                        selectedLine === item.product
+                                            ? 'true'
+                                            : undefined
+                                    "
+                                    class="transition-colors outline-none focus:ring-2 focus:ring-inset focus:ring-slate-900/30"
+                                    :class="
+                                        selectedLine === item.product
+                                            ? 'bg-sky-50'
+                                            : 'hover:bg-slate-50/80'
+                                    "
+                                    @click="onLineClick(item.product, $event)"
+                                    @focusin="selectedLine = item.product"
+                                    @keydown.up.self.prevent="moveSelection(-1)"
+                                    @keydown.down.self.prevent="
+                                        moveSelection(1)
+                                    "
                                 >
                                     <td
                                         class="py-3 px-4 text-center font-bold text-slate-400"
@@ -387,41 +452,89 @@
                                                 type="button"
                                                 :disabled="isTicketLocked"
                                                 :aria-label="`One less ${item.name}`"
-                                                class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
-                                                @click="
-                                                    cartStore.setQuantity(
-                                                        item.product,
-                                                        item.quantity - 1,
-                                                    )
-                                                "
+                                                class="w-8 h-8 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
+                                                @click="decrement(item)"
                                             >
                                                 <Minus
-                                                    class="w-3.5 h-3.5"
+                                                    class="w-4 h-4"
                                                     aria-hidden="true"
                                                 />
                                             </button>
-                                            <span
-                                                class="w-8 text-center font-bold text-slate-900 text-xs"
-                                                >{{ item.quantity }}</span
-                                            >
+                                            <input
+                                                :ref="
+                                                    (el) =>
+                                                        setQtyEl(
+                                                            item.product,
+                                                            el as HTMLInputElement | null,
+                                                        )
+                                                "
+                                                type="text"
+                                                inputmode="numeric"
+                                                autocomplete="off"
+                                                :value="
+                                                    qtyDrafts[item.product] ??
+                                                    String(item.quantity)
+                                                "
+                                                :disabled="isTicketLocked"
+                                                :aria-label="`Quantity of ${item.name}`"
+                                                :aria-keyshortcuts="
+                                                    REGISTER_KEYS.LINE_QUANTITY
+                                                "
+                                                :aria-invalid="
+                                                    !!qtyErrors[item.product]
+                                                "
+                                                :aria-describedby="
+                                                    qtyErrors[item.product]
+                                                        ? `qty-error-${index}`
+                                                        : undefined
+                                                "
+                                                data-testid="line-quantity"
+                                                class="w-14 h-8 text-center font-bold text-slate-900 text-sm rounded border focus:outline-none focus:border-slate-800"
+                                                :class="
+                                                    qtyErrors[item.product]
+                                                        ? 'border-red-400 bg-red-50'
+                                                        : 'border-transparent'
+                                                "
+                                                @focus="
+                                                    selectedLine = item.product
+                                                "
+                                                @input="
+                                                    onQtyInput(
+                                                        item.product,
+                                                        $event,
+                                                    )
+                                                "
+                                                @change="
+                                                    commitQuantity(item.product)
+                                                "
+                                                @keydown.enter.prevent="
+                                                    onQtyEnter(item.product)
+                                                "
+                                                @keydown.esc.prevent.stop="
+                                                    cancelQuantity(item.product)
+                                                "
+                                            />
                                             <button
                                                 type="button"
                                                 :disabled="isTicketLocked"
                                                 :aria-label="`One more ${item.name}`"
-                                                class="w-6 h-6 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
-                                                @click="
-                                                    cartStore.setQuantity(
-                                                        item.product,
-                                                        item.quantity + 1,
-                                                    )
-                                                "
+                                                class="w-8 h-8 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
+                                                @click="increment(item)"
                                             >
                                                 <Plus
-                                                    class="w-3.5 h-3.5"
+                                                    class="w-4 h-4"
                                                     aria-hidden="true"
                                                 />
                                             </button>
                                         </div>
+                                        <p
+                                            v-if="qtyErrors[item.product]"
+                                            :id="`qty-error-${index}`"
+                                            data-testid="line-quantity-error"
+                                            class="mt-1 text-xs font-semibold text-red-600"
+                                        >
+                                            {{ qtyErrors[item.product] }}
+                                        </p>
                                     </td>
                                     <td
                                         class="py-3 px-4 text-right font-bold text-slate-900"
@@ -437,13 +550,14 @@
                                             type="button"
                                             :disabled="isTicketLocked"
                                             :aria-label="`Remove ${item.name}`"
-                                            class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-ring"
-                                            @click="
-                                                cartStore.remove(item.product)
+                                            :aria-keyshortcuts="
+                                                REGISTER_KEYS.REMOVE_LINE
                                             "
+                                            class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-ring"
+                                            @click="removeLine(item.product)"
                                         >
                                             <Trash2
-                                                class="w-3.5 h-3.5"
+                                                class="w-4 h-4"
                                                 aria-hidden="true"
                                             />
                                         </button>
@@ -451,6 +565,31 @@
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!--
+                        A removed line can be put back for a few seconds
+                        (decision 2026-09-25, #23).
+                    -->
+                    <div role="status" aria-live="polite" class="mt-auto">
+                        <div
+                            v-if="undo"
+                            data-testid="undo-bar"
+                            class="m-3 p-3 rounded-xl bg-slate-900 text-white flex items-center justify-between gap-3 text-sm font-semibold"
+                        >
+                            <span
+                                >Removed {{ undo.item.quantity }}×
+                                {{ undo.item.name }}</span
+                            >
+                            <button
+                                type="button"
+                                :disabled="isTicketLocked"
+                                class="px-3 py-1.5 rounded-lg bg-white text-slate-900 text-sm font-extrabold hover:bg-slate-100 focus-ring"
+                                @click="undoRemove"
+                            >
+                                Undo
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -474,14 +613,14 @@
                     >
                         <Percent class="w-3.5 h-3.5 text-slate-500" />
                         {{
-                            discountPercent > 0
-                                ? `Discount Applied (${discountPercent}%)`
+                            discountLabel
+                                ? `Discount Applied (${discountLabel})`
                                 : '+ Apply Order Discount'
                         }}
                         <KeyHint>{{ REGISTER_KEYS.DISCOUNT }}</KeyHint>
                     </button>
                     <span
-                        v-if="discountPercent > 0"
+                        v-if="discountAmount > 0"
                         class="text-emerald-600 font-extrabold text-sm"
                     >
                         -{{ currency(discountAmount) }}
@@ -494,7 +633,7 @@
                     ref="discountOptionsEl"
                     role="group"
                     aria-label="Order discount"
-                    class="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
+                    class="flex flex-wrap items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
                 >
                     <span class="text-xs font-bold text-slate-500"
                         >Discount:</span
@@ -504,10 +643,10 @@
                         :key="d"
                         type="button"
                         :disabled="isTicketLocked"
-                        :aria-pressed="discountPercent === d"
-                        class="px-2.5 py-1 rounded-lg text-xs font-bold transition-colors active:scale-[0.98] focus-ring"
+                        :aria-pressed="discountChoice === d"
+                        class="min-h-8 px-2.5 py-1 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
                         :class="
-                            discountPercent === d
+                            discountChoice === d
                                 ? 'bg-slate-900 text-white'
                                 : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                         "
@@ -515,9 +654,62 @@
                     >
                         {{ d === 0 ? 'None' : `${d}%` }}
                     </button>
+                    <!-- A fixed peso amount (#52 follow-up, #23). -->
+                    <button
+                        type="button"
+                        :disabled="isTicketLocked"
+                        :aria-pressed="discountChoice === 'FIXED'"
+                        class="min-h-8 px-2.5 py-1 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                        :class="
+                            discountChoice === 'FIXED'
+                                ? 'bg-slate-900 text-white'
+                                : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                        "
+                        @click="applyDiscount('FIXED')"
+                    >
+                        ₱ Amount
+                    </button>
                 </div>
 
-                <div v-if="discountPercent > 0" class="space-y-1">
+                <div v-if="discountChoice === 'FIXED'" class="space-y-1">
+                    <label
+                        for="discount-amount"
+                        class="block text-xs font-bold text-slate-500"
+                        >Discount amount (₱)</label
+                    >
+                    <input
+                        id="discount-amount"
+                        ref="fixedInput"
+                        v-model="fixedText"
+                        :disabled="isTicketLocked"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        placeholder="0.00"
+                        :aria-invalid="!!fixedErrorShown"
+                        :aria-describedby="
+                            fixedErrorShown
+                                ? 'discount-amount-error'
+                                : undefined
+                        "
+                        class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
+                        :class="
+                            fixedErrorShown
+                                ? 'border-red-300'
+                                : 'border-slate-300'
+                        "
+                    />
+                    <p
+                        v-if="fixedErrorShown"
+                        id="discount-amount-error"
+                        data-testid="discount-amount-error"
+                        class="text-xs font-semibold text-red-600"
+                    >
+                        {{ fixedErrorShown }}
+                    </p>
+                </div>
+
+                <div v-if="discountChoice !== 0" class="space-y-1">
                     <label
                         for="discount-reason"
                         class="block text-xs font-bold text-slate-500"
@@ -548,10 +740,10 @@
                         }}</span>
                     </div>
                     <div
-                        v-if="discountPercent > 0"
+                        v-if="discountAmount > 0"
                         class="flex justify-between text-emerald-600 font-semibold"
                     >
-                        <span>Discount ({{ discountPercent }}%)</span>
+                        <span>Discount ({{ discountLabel }})</span>
                         <span>-{{ currency(discountAmount) }}</span>
                     </div>
                     <div class="flex justify-between font-medium">
@@ -622,6 +814,8 @@
             :submit="submitSale"
         />
 
+        <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
+
         <ReceiptModal
             v-model="isReceiptOpen"
             :receipt="receipt"
@@ -633,7 +827,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    shallowRef,
+    watch,
+} from 'vue';
 import { isAxiosError } from 'axios';
 import {
     AlertCircle,
@@ -654,13 +857,19 @@ import {
     X,
 } from '@lucide/vue';
 import api from '@/axios';
-import { useCartStore } from '@/stores/cart';
+import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
 import { apiErrorCode, useShiftStore } from '@/stores/shift';
+import { Color, useUIStore } from '@/stores/ui';
 import KeyHint from '@/components/ui/KeyHint.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
 import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
-import { paymentLabel, previewSale } from '@/components/User/Sales/checkout';
+import {
+    fixedDiscountError,
+    paymentLabel,
+    previewSale,
+} from '@/components/User/Sales/checkout';
 import {
     isRejectedSale,
     saleErrorMessage,
@@ -672,12 +881,19 @@ import {
     parseScan,
     useProductSearch,
 } from '@/components/User/Sales/product-search';
-import { formatCurrency } from '@/utils/currency';
+import {
+    centavosToPesoInput,
+    formatCurrency,
+    parsePesos,
+} from '@/utils/currency';
+import { integerError } from '@/utils/rules';
+import { toSaleTicket } from '@/utils/payloads';
 import {
     REGISTER_KEYS,
     useRegisterShortcuts,
 } from '@/composables/useRegisterShortcuts';
 import { useStickyFocus } from '@/composables/useStickyFocus';
+import { useConfirm } from '@/composables/useConfirm';
 import {
     DiscountType,
     type DiscountInput,
@@ -695,13 +911,27 @@ interface Product {
     price: number;
 }
 
+/** How long a removed line can be put back (decision 2026-09-25, #23). */
+const UNDO_MS = 5000;
+/** How long a scan success stays; an error stays until the next scan. */
+const SUCCESS_MS = 2500;
+
+const PRICES_CHANGED_NOTICE =
+    'Prices changed since scanning; the receipt shows the charged amounts.';
+
 const cartStore = useCartStore();
+const uiStore = useUIStore();
 const shiftStore = useShiftStore();
 
 const scanInput = ref<HTMLInputElement | null>(null);
 const reasonInput = ref<HTMLInputElement | null>(null);
+const fixedInput = ref<HTMLInputElement | null>(null);
 const discountOptionsEl = ref<HTMLElement | null>(null);
-const sticky = useStickyFocus(() => scanInput.value);
+// A ticket line the cashier clicked keeps the focus, so Delete can remove
+// it; a printable key typed there still goes to the scan box.
+const sticky = useStickyFocus(() => scanInput.value, {
+    keepOnClick: (el) => el.matches('[data-ticket-line]'),
+});
 const searchQuery = ref('');
 const scanMultiplier = ref(1);
 const search = useProductSearch(
@@ -718,12 +948,13 @@ const search = useProductSearch(
 const searchTerm = computed(
     () => parseScan(searchQuery.value, scanMultiplier.value).query,
 );
+/** The quantity the next scan adds: a typed `12*` wins over the picker. */
+const nextScanQty = computed(
+    () => parseScan(searchQuery.value, scanMultiplier.value).qty,
+);
 const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
     null,
 );
-const showDiscount = ref(false);
-const discountPercent = ref(0);
-const discountReason = ref('');
 const isCheckoutOpen = ref(false);
 const isReceiptOpen = ref(false);
 const checkoutMethod = ref<PaymentType>(PaymentType.CASH);
@@ -737,15 +968,76 @@ const receiptNotice = ref<string | null>(null);
 const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
 
-const discountRequest = computed<DiscountInput | null>(() =>
-    discountPercent.value > 0
-        ? {
-              type: DiscountType.PERCENT,
-              value: discountPercent.value,
-              reason: discountReason.value.trim(),
-          }
-        : null,
+// ---- Discount: kept with the cart, so it survives leaving the page and a
+// refresh (#23). A FIXED value is centavos; 0 means not typed yet.
+
+/** The picked option: 0 (none), a percent, or 'FIXED'. */
+const discountChoice = computed<number | 'FIXED'>(() => {
+    const d = cartStore.discount;
+    if (!d) return 0;
+    return d.type === DiscountType.FIXED ? 'FIXED' : d.value;
+});
+const showDiscount = ref(cartStore.discount !== null);
+/** The typed fixed amount, in pesos. */
+const fixedText = ref(
+    cartStore.discount?.type === DiscountType.FIXED && cartStore.discount.value
+        ? centavosToPesoInput(cartStore.discount.value)
+        : '',
 );
+const fixedError = computed(() =>
+    discountChoice.value === 'FIXED'
+        ? fixedDiscountError(fixedText.value, cartStore.subtotal)
+        : '',
+);
+/** Shown once something is typed: an untouched field is only "required". */
+const fixedErrorShown = computed(() =>
+    fixedText.value.trim() ? fixedError.value : '',
+);
+
+watch(fixedText, (text) => {
+    const d = cartStore.discount;
+    if (d?.type !== DiscountType.FIXED) return;
+    const centavos = parsePesos(text);
+    cartStore.setDiscount({
+        ...d,
+        value: centavos !== null && centavos > 0 ? centavos : 0,
+    });
+});
+
+// The discount changed outside this page (another tab, #23 review): show
+// it. Typing here round-trips through the store and changes nothing.
+watch(
+    () => cartStore.discount,
+    (d, before) => {
+        if (d && !before) showDiscount.value = true;
+        if (d?.type !== DiscountType.FIXED) return;
+        const typed = parsePesos(fixedText.value);
+        if ((typed !== null && typed > 0 ? typed : 0) !== d.value) {
+            fixedText.value = d.value ? centavosToPesoInput(d.value) : '';
+        }
+    },
+    { deep: true },
+);
+
+const discountReason = computed({
+    get: () => cartStore.discount?.reason ?? '',
+    set: (reason: string) => {
+        const d = cartStore.discount;
+        if (d) cartStore.setDiscount({ ...d, reason });
+    },
+});
+
+const discountRequest = computed<DiscountInput | null>(() => {
+    const d = cartStore.discount;
+    return d ? { type: d.type, value: d.value, reason: d.reason.trim() } : null;
+});
+const discountLabel = computed(() => {
+    const d = cartStore.discount;
+    if (!d || d.value <= 0) return '';
+    return d.type === DiscountType.PERCENT
+        ? `${d.value}%`
+        : formatCurrency(d.value);
+});
 // Preview for display and tendering only; the server computes the charge.
 const preview = computed(() =>
     previewSale(cartStore.subtotal, discountRequest.value),
@@ -756,12 +1048,225 @@ const total = computed(() => preview.value.total);
 const needsReason = computed(
     () => discountRequest.value !== null && !discountRequest.value.reason,
 );
+
+// ---- Ticket lines (#23)
+
+/** The selected line's product: scanned last, or clicked. */
+const selectedLine = ref<string | null>(null);
+/** Quantities being typed, by product, until they are committed. */
+const qtyDrafts = reactive<Record<string, string>>({});
+const lineEls = new Map<string, HTMLElement>();
+const qtyEls = new Map<string, HTMLInputElement>();
+
+/** The typed quantity as the rules see it: a number when it is one. */
+function typedQuantity(text: string): unknown {
+    const trimmed = text.trim();
+    return /^-?\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
+}
+
+/** Why a typed quantity is refused (`@IsInt() @Min(1)`), or ''. */
+function quantityError(product: string, text: string): string {
+    const value = typedQuantity(text);
+    if (!cartStore.items.some((i) => i.product === product)) return '';
+    const error = integerError(value, { min: 1 });
+    if (error) return error;
+    const item = cartStore.items.find((i) => i.product === product);
+    // A line gone (e.g. removed in another tab) has nothing to check.
+    if (!item) return '';
+    const max = cartStore.maxQuantity(product, item.unitPrice);
+    return (value as number) > max
+        ? `At most ${max}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`
+        : '';
+}
+
+const qtyErrors = computed<Record<string, string>>(() =>
+    Object.fromEntries(
+        Object.entries(qtyDrafts)
+            .map(([product, text]) => [product, quantityError(product, text)])
+            .filter(([, error]) => error),
+    ),
+);
+
 const canCheckout = computed(
     () =>
         cartStore.items.length > 0 &&
         !needsReason.value &&
+        !fixedError.value &&
+        Object.keys(qtyErrors.value).length === 0 &&
         preview.value.isChargeable,
 );
+
+function setLineEl(product: string, el: HTMLElement | null) {
+    if (el) lineEls.set(product, el);
+    else lineEls.delete(product);
+}
+
+function setQtyEl(product: string, el: HTMLInputElement | null) {
+    if (el) qtyEls.set(product, el);
+    else qtyEls.delete(product);
+}
+
+function onLineClick(product: string, event: MouseEvent) {
+    selectedLine.value = product;
+    // A click on the row itself (not its buttons or quantity) takes the
+    // focus, so Delete removes it.
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('button, input')) {
+        lineEls.get(product)?.focus({ preventScroll: true });
+    }
+}
+
+function moveSelection(delta: number) {
+    const items = cartStore.items;
+    if (!items.length) return;
+    const at = items.findIndex((i) => i.product === selectedLine.value);
+    const next = Math.min(Math.max(at + delta, 0), items.length - 1);
+    selectedLine.value = items[next].product;
+    lineEls.get(items[next].product)?.focus({ preventScroll: true });
+}
+
+function onQtyInput(product: string, event: Event) {
+    qtyDrafts[product] = (event.target as HTMLInputElement).value;
+}
+
+/** Applies a typed quantity; false (and the error shown) when refused. */
+function commitQuantity(product: string): boolean {
+    const text = qtyDrafts[product];
+    if (text === undefined) return true;
+    if (quantityError(product, text)) return false;
+    cartStore.setQuantity(product, Number(text.trim()));
+    delete qtyDrafts[product];
+    return true;
+}
+
+function onQtyEnter(product: string) {
+    if (commitQuantity(product)) scanInput.value?.focus();
+}
+
+/** Escape: back to the line's quantity, and the focus to the line. */
+function cancelQuantity(product: string) {
+    delete qtyDrafts[product];
+    const qty = qtyEls.get(product);
+    const item = cartStore.items.find((i) => i.product === product);
+    if (qty && item) qty.value = String(item.quantity);
+    lineEls.get(product)?.focus({ preventScroll: true });
+}
+
+/** F4: the selected line's quantity, else the last line's. */
+function focusLineQuantity() {
+    const items = cartStore.items;
+    if (!items.length || isTicketLocked.value) return;
+    const product = items.some((i) => i.product === selectedLine.value)
+        ? selectedLine.value!
+        : items[items.length - 1].product;
+    selectedLine.value = product;
+    const qty = qtyEls.get(product);
+    qty?.focus();
+    qty?.select();
+}
+
+function increment(item: CartItem) {
+    selectedLine.value = item.product;
+    delete qtyDrafts[item.product];
+    cartStore.setQuantity(item.product, item.quantity + 1);
+}
+
+function decrement(item: CartItem) {
+    selectedLine.value = item.product;
+    delete qtyDrafts[item.product];
+    if (item.quantity <= 1) removeLine(item.product);
+    else cartStore.setQuantity(item.product, item.quantity - 1);
+}
+
+// ---- Line removal with Undo (decision 2026-09-25, #23)
+
+const undo = shallowRef<{ item: CartItem; index: number } | null>(null);
+let undoTimer: ReturnType<typeof setTimeout> | undefined;
+
+function dismissUndo() {
+    if (undoTimer) clearTimeout(undoTimer);
+    undoTimer = undefined;
+    undo.value = null;
+}
+
+/** Removes a line at once; it can be put back for UNDO_MS. */
+function removeLine(product: string) {
+    if (cartStore.locked) return;
+    const hadFocus = lineEls.get(product)?.contains(document.activeElement);
+    const removed = cartStore.remove(product);
+    if (!removed) return;
+    delete qtyDrafts[product];
+
+    dismissUndo();
+    undo.value = removed;
+    undoTimer = setTimeout(dismissUndo, UNDO_MS);
+
+    // The selection moves to the line that took its place (or the one
+    // before), so Delete can go on removing.
+    const items = cartStore.items;
+    const next = items[removed.index] ?? items[removed.index - 1] ?? null;
+    selectedLine.value = next?.product ?? null;
+    if (hadFocus) {
+        void nextTick(() => {
+            const el = next && lineEls.get(next.product);
+            if (el) el.focus({ preventScroll: true });
+            else scanInput.value?.focus();
+        });
+    }
+}
+
+/**
+ * Delete: only with the focus on a ticket line or one of its buttons, so
+ * it never removes a line from the discount, the Qty picker or nowhere.
+ */
+function removeSelected() {
+    const line =
+        document.activeElement?.closest<HTMLElement>('[data-ticket-line]');
+    // The line the focus is on, which focusing it also selected.
+    const product = line?.dataset.product;
+    if (product) removeLine(product);
+}
+
+function undoRemove() {
+    const removed = undo.value;
+    dismissUndo();
+    if (!removed) return;
+    if (cartStore.restore(removed.item, removed.index)) {
+        selectedLine.value = removed.item.product;
+    } else if (
+        !cartStore.items.some((i) => i.product === removed.item.product)
+    ) {
+        uiStore.queueMessage(
+            Color.ERROR,
+            `Couldn't put back ${removed.item.quantity}x ${removed.item.name}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}.`,
+        );
+    }
+    scanInput.value?.focus();
+}
+
+/**
+ * Lines can go without this page removing them: another tab's sale, void
+ * or edit (#23 review). What the page kept for them goes too: a typed
+ * quantity (it would hold the charge with no field to show why), the
+ * selection and a pending Undo.
+ */
+watch(
+    () => cartStore.items.map((i) => i.product),
+    (products) => {
+        const onTicket = new Set(products);
+        for (const product of Object.keys(qtyDrafts)) {
+            if (!onTicket.has(product)) delete qtyDrafts[product];
+        }
+        if (selectedLine.value && !onTicket.has(selectedLine.value)) {
+            selectedLine.value = null;
+        }
+    },
+);
+// Another tab replaced the basket: an Undo from before would put a line
+// back into a ticket it no longer belongs to.
+watch(() => cartStore.remoteChanges, dismissUndo);
+
+// ---- Scanning
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined;
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -773,9 +1278,19 @@ function currency(value: number): string {
 function showFeedback(type: 'success' | 'error', message: string) {
     scanFeedback.value = { type, message };
     if (feedbackTimer) clearTimeout(feedbackTimer);
-    feedbackTimer = setTimeout(() => {
-        scanFeedback.value = null;
-    }, 2500);
+    feedbackTimer = undefined;
+    if (type === 'success') {
+        feedbackTimer = setTimeout(() => {
+            scanFeedback.value = null;
+        }, SUCCESS_MS);
+    }
+}
+
+/** A new scan starts: the last one's message goes. */
+function clearFeedback() {
+    if (feedbackTimer) clearTimeout(feedbackTimer);
+    feedbackTimer = undefined;
+    scanFeedback.value = null;
 }
 
 function cancelPendingSearch() {
@@ -786,7 +1301,8 @@ function cancelPendingSearch() {
 /**
  * Clears the input after an item is added, but only if it still holds the
  * text that was submitted: a scanner can start the next barcode while this
- * lookup is in flight, and those digits must survive.
+ * lookup is in flight, and those digits must survive. The multiplier was
+ * for this scan only (decision 2026-09-25, #23): back to 1.
  */
 function resetQuery(submitted: string) {
     scanMultiplier.value = 1;
@@ -831,6 +1347,18 @@ function onSearchChange() {
     }, 250);
 }
 
+// The register's own match list keeps the highlighted option in view (#23).
+watch(
+    () => search.highlighted.value,
+    async (index) => {
+        if (index < 0) return;
+        await nextTick();
+        document
+            .getElementById(`product-match-${index}`)
+            ?.scrollIntoView?.({ block: 'nearest' });
+    },
+);
+
 /**
  * Enter / the Scan button. In order:
  * 1. a highlighted match (picked with the arrow keys) is added;
@@ -848,6 +1376,7 @@ async function onScanSubmit() {
     const submitted = searchQuery.value;
     const { qty, query } = parseScan(submitted, scanMultiplier.value);
     if (!query) return;
+    clearFeedback();
 
     const picked = search.highlightedMatch();
     if (picked) {
@@ -910,6 +1439,7 @@ async function selectMatch(
     submitted = searchQuery.value,
 ) {
     if (cartStore.locked) return;
+    clearFeedback();
     try {
         const res = await api.get<Product>(
             `/products/${encodeURIComponent(match.EAN)}`,
@@ -925,7 +1455,7 @@ function addProduct(product: Product, quantity: number, submitted: string) {
         showFeedback('error', 'Wait for the sale to finish recording');
         return;
     }
-    cartStore.add(
+    const added = cartStore.add(
         {
             product: product._id,
             EAN: product.EAN,
@@ -934,6 +1464,17 @@ function addProduct(product: Product, quantity: number, submitted: string) {
         },
         quantity,
     );
+    if (!added) {
+        // Nothing was added: the multiplier and the text stay for a retry.
+        showFeedback(
+            'error',
+            `Can't add ${quantity}x ${product.name}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`,
+        );
+        return;
+    }
+    // Rung up again: the removed line is not put back on top of it.
+    if (undo.value?.item.product === product._id) dismissUndo();
+    selectedLine.value = product._id;
     showFeedback(
         'success',
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,
@@ -941,68 +1482,126 @@ function addProduct(product: Product, quantity: number, submitted: string) {
     resetQuery(submitted);
 }
 
-function clearDiscount() {
-    discountPercent.value = 0;
-    discountReason.value = '';
+// ---- Discount actions
+
+/** Resets the discount's on-page state; the cart holds the discount. */
+function resetDiscountUi() {
+    fixedText.value = '';
     showDiscount.value = false;
 }
 
-function voidTicket() {
+function applyDiscount(choice: number | 'FIXED') {
     if (cartStore.locked) return;
+    if (choice === 0) {
+        cartStore.setDiscount(null);
+        resetDiscountUi();
+        return;
+    }
+    const reason = cartStore.discount?.reason ?? '';
+    if (choice === 'FIXED') {
+        const centavos = parsePesos(fixedText.value);
+        cartStore.setDiscount({
+            type: DiscountType.FIXED,
+            value: centavos !== null && centavos > 0 ? centavos : 0,
+            reason,
+        });
+        void focusField(fixedInput);
+        return;
+    }
+    cartStore.setDiscount({
+        type: DiscountType.PERCENT,
+        value: choice,
+        reason,
+    });
+    // The reason is required: take the cashier straight to it.
+    if (!reason.trim()) void focusField(reasonInput);
+}
+
+async function focusField(field: typeof reasonInput) {
+    await nextTick();
+    field.value?.focus();
+}
+
+// ---- Void Ticket (decision 2026-09-25, #23: it asks first)
+
+const {
+    request: confirmRequest,
+    confirm,
+    answer: answerConfirm,
+} = useConfirm();
+
+async function voidTicket() {
+    if (cartStore.locked || !cartStore.items.length) return;
+    const units = cartStore.totalUnits;
+    const ok = await confirm({
+        title: 'Void Ticket',
+        message: `Void this ticket of ${units} ${units === 1 ? 'item' : 'items'}?`,
+        confirmLabel: 'Void Ticket',
+        cancelLabel: 'Keep Ticket',
+        danger: true,
+    });
+    if (!ok || cartStore.locked) return;
     cartStore.clear();
-    clearDiscount();
+    resetDiscountUi();
+    dismissUndo();
+    for (const product of Object.keys(qtyDrafts)) delete qtyDrafts[product];
+    selectedLine.value = null;
     // An identical next ticket must not replay a sale this one may have
     // recorded before its response was lost.
     checkout.discardKey();
 }
 
-function applyDiscount(value: number) {
-    if (cartStore.locked) return;
-    if (value === 0) {
-        clearDiscount();
-        return;
-    }
-    discountPercent.value = value;
-    // The reason is required: take the cashier straight to it.
-    if (!discountReason.value.trim()) void focusReason();
-}
-
-async function focusReason() {
-    await nextTick();
-    reasonInput.value?.focus();
-}
+// ---- Checkout
 
 function openCheckout(method: PaymentType = PaymentType.CASH) {
+    // A quantity still being typed (F9 from its field) counts first; the
+    // checkout must tender the ticket as it will be sent.
+    const typing = Object.keys(qtyDrafts);
+    if (!typing.map(commitQuantity).every(Boolean) || !canCheckout.value) {
+        return;
+    }
     checkoutMethod.value = method;
     isCheckoutOpen.value = true;
 }
 
 const checkout = useSaleCheckout({
     cart: cartStore,
-    ticket: () => ({
-        sellDetails: cartStore.items.map((item) => ({
-            product: item.product,
-            quantity: item.quantity,
-        })),
-        discount: discountRequest.value ?? undefined,
-    }),
+    ticket: () => toSaleTicket(cartStore.items, discountRequest.value),
     post: async (body) => (await api.post<Receipt>('/sales', body)).data,
+    // Saved with the basket (#23 review): a retry after a refresh or crash
+    // mid-sale reuses the key, so the server replays the recorded sale.
+    attemptStore: {
+        get: () => cartStore.attempt,
+        set: (attempt) => cartStore.setAttempt(attempt),
+    },
 });
 
 /** True while `POST /sales` is in flight: the ticket cannot be edited. */
 const isTicketLocked = computed(() => cartStore.locked);
+
+// Nothing on the ticket may be undone or typed over once it is being sold.
+watch(isTicketLocked, (locked) => {
+    if (locked) dismissUndo();
+});
 
 /**
  * Called by the checkout modal, which stays open until this settles. A
  * rejection carries the message the modal shows inline.
  */
 async function submitSale(payment: PaymentRequest) {
+    // What the cashier tendered against, priced when the items were scanned.
+    const previewTotal = total.value;
     const outcome = await checkout.submit(payment).catch(explainFailure);
     receipt.value = outcome.receipt;
     receiptNotice.value = outcome.alreadyRecorded
         ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this receipt, not the amount just entered.`
-        : null;
-    clearDiscount();
+        : outcome.receipt.totalAmount !== previewTotal
+          ? PRICES_CHANGED_NOTICE
+          : null;
+    resetDiscountUi();
+    dismissUndo();
+    for (const product of Object.keys(qtyDrafts)) delete qtyDrafts[product];
+    selectedLine.value = null;
     isReceiptOpen.value = true;
 }
 
@@ -1058,8 +1657,10 @@ function onNewSale() {
 }
 
 /**
- * The register's keys (issue #22). Off while a modal is open; the checkout
- * answers Enter and Escape itself. F4 and Delete come with #23.
+ * The register's keys (issues #22, #23). Off while a modal is open; the
+ * checkout answers Enter and Escape itself. Delete never fires in a text
+ * field (it deletes text there): it removes the selected line when the
+ * focus is on the line or one of its buttons.
  */
 useRegisterShortcuts({
     [REGISTER_KEYS.SCAN]: () => {
@@ -1079,8 +1680,10 @@ useRegisterShortcuts({
     },
     [REGISTER_KEYS.CHARGE]: () => {
         if (canCheckout.value && !isTicketLocked.value) openCheckout();
-        else if (needsReason.value) void focusReason();
+        else if (needsReason.value) void focusField(reasonInput);
     },
+    [REGISTER_KEYS.LINE_QUANTITY]: focusLineQuantity,
+    [REGISTER_KEYS.REMOVE_LINE]: { run: removeSelected, whileTyping: false },
 });
 
 /**
@@ -1102,5 +1705,6 @@ onBeforeUnmount(() => {
     cancelPendingSearch();
     search.cancel();
     if (feedbackTimer) clearTimeout(feedbackTimer);
+    dismissUndo();
 });
 </script>

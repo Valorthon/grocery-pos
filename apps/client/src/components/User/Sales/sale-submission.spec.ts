@@ -10,6 +10,7 @@ import {
 } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import {
+    type CheckoutAttempt,
     createCheckoutAttempt,
     newIdempotencyKey,
     saleErrorMessage,
@@ -140,6 +141,61 @@ describe('createCheckoutAttempt', () => {
         attempt.keyFor(ticket);
 
         expect(attempt.keyFor(changed)).toBe('key-2');
+    });
+});
+
+describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
+    const ticket = { sellDetails: [{ product: 'p1', quantity: 2 }] };
+
+    function savedStore(initial: CheckoutAttempt | null = null) {
+        let saved = initial;
+        return {
+            get: () => saved,
+            set: vi.fn((next: CheckoutAttempt | null) => {
+                saved = next;
+            }),
+            peek: () => saved,
+        };
+    }
+
+    it('saves the key with the ticket signature when it is made', () => {
+        const store = savedStore();
+        createCheckoutAttempt(() => 'key-1', store).keyFor(ticket);
+        expect(store.peek()).toEqual({
+            idempotencyKey: 'key-1',
+            ticketSignature: JSON.stringify(ticket),
+        });
+    });
+
+    it('reuses a saved key for the same ticket (a retry after a reload)', () => {
+        const store = savedStore({
+            idempotencyKey: 'key-before-reload',
+            ticketSignature: JSON.stringify(ticket),
+        });
+        const generate = vi.fn(() => 'key-new');
+        expect(createCheckoutAttempt(generate, store).keyFor(ticket)).toBe(
+            'key-before-reload',
+        );
+        expect(generate).not.toHaveBeenCalled();
+    });
+
+    it('makes a new key when the saved one was for another ticket', () => {
+        const store = savedStore({
+            idempotencyKey: 'key-before-reload',
+            ticketSignature: JSON.stringify(ticket),
+        });
+        const attempt = createCheckoutAttempt(() => 'key-new', store);
+        expect(
+            attempt.keyFor({ sellDetails: [{ product: 'p1', quantity: 3 }] }),
+        ).toBe('key-new');
+    });
+
+    it('clears the saved attempt when settled', () => {
+        const store = savedStore();
+        const attempt = createCheckoutAttempt(() => 'key-1', store);
+        attempt.keyFor(ticket);
+        attempt.settle();
+        expect(store.peek()).toBeNull();
     });
 });
 

@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { DiscountType, PaymentType, TenderType } from '@grocery-pos/contracts';
+import {
+    DiscountType,
+    NUMERIC_LIMITS,
+    PaymentType,
+    TenderType,
+} from '@grocery-pos/contracts';
 import {
     buildPayment,
     cashTender,
+    fixedDiscountError,
     previewSale,
+    QUICK_CASH_STEPS,
+    quickCashAmounts,
     referenceNumberError,
+    splitTender,
 } from './checkout';
 import { centavosToPesoInput, formatCurrency } from '@/utils/currency';
 
@@ -200,5 +209,98 @@ describe('building the tender breakdown', () => {
             paymentType: PaymentType.CASH,
             tenders: [{ type: TenderType.CASH, amount: 120000 }],
         });
+    });
+});
+
+describe('quick cash (decision 2026-09-25, #23)', () => {
+    const pesos = (list: number[]) => list.map((c) => c / 100);
+
+    it.each([
+        // The product owner's example.
+        [118000, [1200, 1500, 2000]],
+        [3500, [50, 100, 500, 1000]],
+        [9975, [100, 500, 1000]],
+        [234000, [2350, 2400, 2500, 3000]],
+        // An exact note already: the next amounts up, never the total.
+        [100000, [1050, 1100, 1500, 2000]],
+        [2000, [50, 100, 500, 1000]],
+        [1, [50, 100, 500, 1000]],
+        // Every note rounds ₱990 up to ₱1,000.
+        [99000, [1000]],
+        // ₱20 is offered when it is one of the few distinct amounts.
+        [196000, [1980, 2000]],
+    ])('offers the next likely amounts for %i centavos', (total, expected) => {
+        expect(pesos(quickCashAmounts(total))).toEqual(expected);
+    });
+
+    it('is 1 to 4 distinct amounts, all above the total, rounded to a note step, ascending', () => {
+        for (let total = 1; total <= 1_500_000; total += 3_337) {
+            const amounts = quickCashAmounts(total);
+            expect(amounts.length).toBeGreaterThanOrEqual(1);
+            expect(amounts.length).toBeLessThanOrEqual(4);
+            expect(new Set(amounts).size).toBe(amounts.length);
+            expect([...amounts].sort((a, b) => a - b)).toEqual(amounts);
+            for (const amount of amounts) {
+                expect(amount).toBeGreaterThan(total);
+                expect(
+                    QUICK_CASH_STEPS.some((step) => amount % step === 0),
+                ).toBe(true);
+            }
+        }
+    });
+
+    it('offers nothing for no total, and nothing above AMOUNT_MAX', () => {
+        expect(quickCashAmounts(0)).toEqual([]);
+        expect(quickCashAmounts(-500)).toEqual([]);
+        expect(quickCashAmounts(Number.NaN)).toEqual([]);
+        expect(quickCashAmounts(NUMERIC_LIMITS.AMOUNT_MAX)).toEqual([]);
+    });
+});
+
+describe('split tender (#23)', () => {
+    it('leaves GCash the rest and no change while the cash is short', () => {
+        expect(splitTender(100000, '300')).toEqual({
+            cash: 30000,
+            gcash: 70000,
+            changeDue: 0,
+            coversTotal: false,
+        });
+    });
+
+    it('shows the change when the cash alone covers the total', () => {
+        expect(splitTender(100000, '1500')).toEqual({
+            cash: 150000,
+            gcash: 0,
+            changeDue: 50000,
+            coversTotal: true,
+        });
+    });
+});
+
+describe('fixed discount (#52 follow-up, #23)', () => {
+    it('accepts an amount up to a centavo under the subtotal', () => {
+        expect(fixedDiscountError('15', 5000)).toBe('');
+        expect(fixedDiscountError('49.99', 5000)).toBe('');
+    });
+
+    it.each([
+        ['', 'This field is required'],
+        ['abc', 'Enter an amount in pesos, up to 2 decimals'],
+        ['1.005', 'Enter an amount in pesos, up to 2 decimals'],
+        ['0', 'Enter at least ₱0.01'],
+        ['50.01', "Can't be more than the subtotal (₱50.00)"],
+        ['50', 'Must leave something to charge'],
+    ])('refuses %j', (input, message) => {
+        expect(fixedDiscountError(input, 5000)).toBe(message);
+    });
+
+    it('agrees with the preview on what is chargeable', () => {
+        for (const input of ['49.99', '50', '50.01']) {
+            const value = Math.round(Number(input) * 100);
+            expect(fixedDiscountError(input, 5000) === '').toBe(
+                previewSale(5000, { type: DiscountType.FIXED, value })
+                    .isChargeable,
+            );
+        }
     });
 });

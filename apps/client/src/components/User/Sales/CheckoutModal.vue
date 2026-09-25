@@ -98,32 +98,32 @@
                     >
                 </div>
 
-                <div class="flex flex-wrap gap-1.5">
+                <!--
+                    Quick cash (decision 2026-09-25, #23): Exact plus the
+                    next amounts a customer is likely to hand over. Any
+                    other amount can still be typed.
+                -->
+                <div
+                    class="flex flex-wrap gap-1.5"
+                    role="group"
+                    aria-label="Quick cash amounts"
+                    data-testid="quick-cash"
+                >
                     <button
                         type="button"
-                        class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98]"
+                        class="min-h-9 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
                         @click="amountTendered = centavosToPesoInput(total)"
                     >
                         Exact
                     </button>
                     <button
+                        v-for="amount in quickCash"
+                        :key="amount"
                         type="button"
-                        class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98]"
-                        @click="
-                            amountTendered = centavosToPesoInput(roundedUpTotal)
-                        "
+                        class="min-h-9 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
+                        @click="amountTendered = centavosToPesoInput(amount)"
                     >
-                        {{ currency(roundedUpTotal) }}
-                    </button>
-                    <button
-                        v-for="bill in cashBills"
-                        :key="bill"
-                        type="button"
-                        class="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-30 active:scale-[0.98]"
-                        :disabled="bill < total"
-                        @click="amountTendered = centavosToPesoInput(bill)"
-                    >
-                        {{ currency(bill) }}
+                        {{ currency(amount) }}
                     </button>
                 </div>
 
@@ -183,10 +183,21 @@
                     inputmode="numeric"
                     autocomplete="off"
                     placeholder="13-digit GCash reference number"
-                    class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                    :aria-invalid="showReferenceError"
+                    :aria-describedby="
+                        showReferenceError ? referenceErrorId : undefined
+                    "
+                    class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                    :class="
+                        showReferenceError
+                            ? 'border-red-400'
+                            : 'border-slate-300'
+                    "
                 />
                 <p
-                    v-if="referenceNumber && referenceError"
+                    v-if="showReferenceError"
+                    :id="referenceErrorId"
+                    data-testid="reference-error"
                     class="text-xs font-semibold text-red-600"
                 >
                     {{ referenceError }}
@@ -241,7 +252,7 @@
                     </div>
                 </div>
 
-                <template v-if="cashGivenNum > 0">
+                <template v-if="split.cash > 0">
                     <div
                         class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3"
                     >
@@ -251,11 +262,12 @@
                             >
                             <span
                                 class="text-sm font-mono font-black text-slate-900"
-                                >{{ currency(splitOnlinePortion) }}</span
+                                data-testid="split-gcash"
+                                >{{ currency(split.gcash) }}</span
                             >
                         </div>
 
-                        <div v-if="splitOnlinePortion > 0" class="space-y-2">
+                        <div v-if="!split.coversTotal" class="space-y-2">
                             <label
                                 class="block text-xs font-bold uppercase tracking-wider text-slate-500"
                             >
@@ -264,14 +276,28 @@
                             <input
                                 v-model="referenceNumber"
                                 :form="formId"
+                                aria-label="GCash reference number"
                                 type="text"
                                 inputmode="numeric"
                                 autocomplete="off"
                                 placeholder="13-digit GCash reference number"
-                                class="w-full px-3 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                                :aria-invalid="showReferenceError"
+                                :aria-describedby="
+                                    showReferenceError
+                                        ? referenceErrorId
+                                        : undefined
+                                "
+                                class="w-full px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                                :class="
+                                    showReferenceError
+                                        ? 'border-red-400'
+                                        : 'border-slate-300'
+                                "
                             />
                             <p
-                                v-if="referenceNumber && referenceError"
+                                v-if="showReferenceError"
+                                :id="referenceErrorId"
+                                data-testid="reference-error"
                                 class="text-xs font-semibold text-red-600"
                             >
                                 {{ referenceError }}
@@ -279,24 +305,42 @@
                         </div>
                         <div
                             v-else
+                            data-testid="split-covered"
                             class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold"
                         >
-                            Cash given covers the full total, so this is
-                            recorded as a cash sale.
-                            <template v-if="splitCashChangeDue > 0">
-                                — Cash Change:
-                                {{ currency(splitCashChangeDue) }}</template
-                            >
+                            The cash covers the whole total, so no GCash is
+                            needed and this is recorded as a cash sale.
                         </div>
                     </div>
 
+                    <!--
+                        Change before confirming (#23). GCash pays only what
+                        the cash does not, so there is change only when the
+                        cash alone covers the total; the server pays change
+                        out of the cash tender too (settleTenders).
+                    -->
                     <div
+                        class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200"
+                    >
+                        <span class="text-xs font-bold text-slate-500"
+                            >Change Due:</span
+                        >
+                        <span
+                            class="text-base font-extrabold text-emerald-700"
+                            data-testid="split-change"
+                        >
+                            {{ currency(split.changeDue) }}
+                        </span>
+                    </div>
+
+                    <div
+                        v-if="!split.coversTotal"
                         class="p-2.5 rounded-xl bg-slate-900 text-white flex items-center justify-between text-xs font-semibold"
                     >
                         <span>Split Breakdown:</span>
                         <span class="font-mono text-[11px]">
-                            Cash {{ currency(splitCashPortion) }} + GCash
-                            {{ currency(splitOnlinePortion) }} =
+                            Cash {{ currency(split.cash) }} + GCash
+                            {{ currency(split.gcash) }} =
                             {{ currency(total) }}
                         </span>
                     </div>
@@ -342,9 +386,13 @@
                 <template v-else-if="error">
                     Retry ({{ currency(total) }})
                 </template>
-                <template v-else-if="method === PaymentType.SPLIT">
-                    Confirm Split ({{ currency(splitCashPortion) }} Cash +
-                    {{ currency(splitOnlinePortion) }} GCash)
+                <template
+                    v-else-if="
+                        method === PaymentType.SPLIT && !split.coversTotal
+                    "
+                >
+                    Confirm Split ({{ currency(split.cash) }} Cash +
+                    {{ currency(split.gcash) }} GCash)
                 </template>
                 <template v-else>
                     Confirm & Complete ({{ currency(total) }})
@@ -367,9 +415,14 @@ import {
     CENTAVOS_PER_PESO,
     centavosToPesoInput,
     formatCurrency,
-    pesosToCentavos,
 } from '@/utils/currency';
-import { buildPayment, cashTender, referenceNumberError } from './checkout';
+import {
+    buildPayment,
+    cashTender,
+    quickCashAmounts,
+    referenceNumberError,
+    splitTender,
+} from './checkout';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -407,34 +460,37 @@ const method = ref<PaymentType>(PaymentType.CASH);
 const amountTendered = ref('');
 const splitCashGiven = ref('');
 const referenceNumber = ref('');
+const referenceErrorId = useId();
 
 // Money below is integer centavos; the two text inputs hold typed pesos and
 // are converted once, on read.
-const cashBills = [20, 50, 100, 500, 1000].map((p) => p * CENTAVOS_PER_PESO);
 const splitBills = [5, 10, 20, 50, 100, 500].map((p) => p * CENTAVOS_PER_PESO);
 
 const total = computed(() => props.total);
-const roundedUpTotal = computed(
-    () => Math.ceil(total.value / CENTAVOS_PER_PESO) * CENTAVOS_PER_PESO,
-);
+const quickCash = computed(() => quickCashAmounts(total.value));
 
 const cash = computed(() => cashTender(total.value, amountTendered.value));
 const changeDue = computed(() => cash.value.changeDue);
 const isCashSufficient = computed(() => cash.value.isSufficient);
 
-const cashGivenNum = computed(() => pesosToCentavos(splitCashGiven.value));
-const splitCashPortion = computed(() =>
-    Math.min(total.value, cashGivenNum.value),
-);
-const splitOnlinePortion = computed(() =>
-    Math.max(0, total.value - splitCashPortion.value),
-);
-const splitCashChangeDue = computed(() =>
-    Math.max(0, cashGivenNum.value - total.value),
-);
+const split = computed(() => splitTender(total.value, splitCashGiven.value));
 
 const referenceError = computed(() =>
     referenceNumberError(referenceNumber.value),
+);
+/**
+ * The reference's format error (13 digits, as the API requires), inline
+ * once something is typed; Confirm stays disabled until it is valid. Only while a
+ * reference is asked for; a split the cash covers needs none.
+ */
+const showReferenceError = computed(
+    () =>
+        (method.value === PaymentType.GCASH ||
+            (method.value === PaymentType.SPLIT &&
+                split.value.cash > 0 &&
+                !split.value.coversTotal)) &&
+        !!referenceError.value &&
+        !!referenceNumber.value.trim(),
 );
 
 // What will be sent; null until the form is complete and valid.
