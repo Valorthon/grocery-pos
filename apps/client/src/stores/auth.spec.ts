@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { Role } from '@grocery-pos/contracts';
+import { AxiosError, type AxiosResponse } from 'axios';
 
 vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
 
@@ -141,5 +142,86 @@ describe('auth store', () => {
 
         expect(store.user).toBeNull();
         expect(localStorage.getItem('user')).toBeNull();
+    });
+
+    describe('initSession (roles freshness, #12)', () => {
+        const staleAdmin = { username: 'admin', roles: [Role.Admin] };
+
+        function httpError(status: number) {
+            return new AxiosError(
+                'failed',
+                'ERR_BAD_REQUEST',
+                undefined,
+                null,
+                {
+                    status,
+                } as AxiosResponse,
+            );
+        }
+
+        async function setup(profile: () => Promise<unknown>) {
+            localStorage.setItem('user', JSON.stringify(staleAdmin));
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.get).mockImplementation(profile as never);
+            const store = await loadStore();
+            return { api, store };
+        }
+
+        it('re-reads the user from the server when a session exists', async () => {
+            setDummyCookie(true);
+            const { api, store } = await setup(async () => ({
+                data: { username: 'admin', roles: [Role.Seller] },
+            }));
+
+            await store.initSession();
+
+            expect(api.get).toHaveBeenCalledWith('/users/profile');
+            expect(store.isAdmin).toBe(false);
+            expect(store.hasRole(Role.Seller)).toBe(true);
+            expect(JSON.parse(localStorage.getItem('user')!)).toEqual({
+                username: 'admin',
+                roles: [Role.Seller],
+            });
+        });
+
+        it('fetches only once per page load', async () => {
+            setDummyCookie(true);
+            const { api, store } = await setup(async () => ({
+                data: staleAdmin,
+            }));
+
+            await Promise.all([store.initSession(), store.initSession()]);
+            await store.initSession();
+
+            expect(api.get).toHaveBeenCalledTimes(1);
+        });
+
+        it('does nothing without a session cookie', async () => {
+            const { api, store } = await setup(async () => ({ data: {} }));
+
+            await store.initSession();
+
+            expect(api.get).not.toHaveBeenCalled();
+        });
+
+        it('drops the user on a 401 (session over) and still resolves', async () => {
+            setDummyCookie(true);
+            const { store } = await setup(() => Promise.reject(httpError(401)));
+
+            await expect(store.initSession()).resolves.toBeUndefined();
+
+            expect(store.user).toBeNull();
+            expect(store.isAuthenticated).toBe(false);
+            expect(localStorage.getItem('user')).toBeNull();
+        });
+
+        it('keeps the cached user when the server is unreachable', async () => {
+            setDummyCookie(true);
+            const { store } = await setup(() => Promise.reject(httpError(503)));
+
+            await store.initSession();
+
+            expect(store.user).toEqual(staleAdmin);
+        });
     });
 });

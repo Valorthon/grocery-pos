@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { isAxiosError } from 'axios';
 import api from '@/axios';
 
 import { Role } from '@grocery-pos/contracts';
@@ -22,11 +23,10 @@ export const useAuthStore = defineStore('auth', () => {
 
     const user = ref<User | null>(initialUser);
 
-    const isAuthenticated = computed(
-        () =>
-            !!user.value &&
-            document.cookie.split('; ').some((row) => row.startsWith('dummy')),
-    );
+    const hasSessionCookie = (): boolean =>
+        document.cookie.split('; ').some((row) => row.startsWith('dummy'));
+
+    const isAuthenticated = computed(() => !!user.value && hasSessionCookie());
 
     const login = async (
         username: string,
@@ -45,13 +45,23 @@ export const useAuthStore = defineStore('auth', () => {
         } catch {
             // logout is best-effort; local state is cleared either way
         } finally {
-            user.value = null;
-            localStorage.removeItem('user');
+            clearUser();
             const { default: router } = await import('@/router');
-            router.push({ name: 'Login' });
+            await router.push({ name: 'Login' });
         }
     };
 
+    const clearUser = (): void => {
+        user.value = null;
+        localStorage.removeItem('user');
+    };
+
+    /**
+     * Reloads the user (and so their roles) from the server. A 401 here
+     * means the session is over (the axios interceptor already tried a
+     * refresh), so the cached user is dropped. Any other failure (offline,
+     * 5xx) keeps it: the session may well still be valid.
+     */
     const fetchMe = async (): Promise<User | null> => {
         try {
             const response = await api.get('/users/profile');
@@ -59,10 +69,30 @@ export const useAuthStore = defineStore('auth', () => {
             localStorage.setItem('user', JSON.stringify(user.value));
             return user.value;
         } catch (err) {
-            user.value = null;
-            localStorage.removeItem('user');
+            if (isAxiosError(err) && err.response?.status === 401) clearUser();
             throw err;
         }
+    };
+
+    let sessionCheck: Promise<void> | null = null;
+
+    /**
+     * Once per page load: when a session cookie exists, re-reads the user
+     * from the server so roles revoked (or granted) since the last visit
+     * take effect instead of the copy in localStorage (issue #12). The
+     * navigation guard awaits it before its first decision. Never rejects:
+     * a 401 has already cleared the user, so the guard sends them to login.
+     */
+    const initSession = (): Promise<void> => {
+        sessionCheck ??= (async () => {
+            if (!hasSessionCookie()) return;
+            try {
+                await fetchMe();
+            } catch {
+                // Handled in fetchMe; the guard reads the resulting state.
+            }
+        })();
+        return sessionCheck;
     };
 
     const hasRole = (role: Role): boolean => {
@@ -71,5 +101,14 @@ export const useAuthStore = defineStore('auth', () => {
 
     const isAdmin = computed(() => hasRole(Role.Admin));
 
-    return { user, isAuthenticated, login, logout, fetchMe, hasRole, isAdmin };
+    return {
+        user,
+        isAuthenticated,
+        login,
+        logout,
+        fetchMe,
+        initSession,
+        hasRole,
+        isAdmin,
+    };
 });

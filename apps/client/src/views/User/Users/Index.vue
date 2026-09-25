@@ -76,6 +76,8 @@
                 v-model="createForm.password"
                 label="Password"
                 type="password"
+                :placeholder="PASSWORD_HINT"
+                :error="createForm.password ? createPasswordError : ''"
             />
             <div>
                 <label
@@ -99,7 +101,11 @@
             <BaseButton variant="outline" @click="isCreateOpen = false"
                 >Cancel</BaseButton
             >
-            <BaseButton class="flex-1" :loading="saving" @click="createUser"
+            <BaseButton
+                class="flex-1"
+                :loading="saving"
+                :disabled="!!createPasswordError"
+                @click="createUser"
                 >Save</BaseButton
             >
         </template>
@@ -113,6 +119,8 @@
                 v-model="editForm.password"
                 label="New Password (optional)"
                 type="password"
+                :placeholder="`${PASSWORD_HINT}, or blank to keep it`"
+                :error="editPasswordError"
             />
             <div>
                 <label
@@ -140,7 +148,11 @@
             <BaseButton variant="outline" @click="isEditOpen = false"
                 >Cancel</BaseButton
             >
-            <BaseButton class="flex-1" :loading="saving" @click="updateUser"
+            <BaseButton
+                class="flex-1"
+                :loading="saving"
+                :disabled="!!editPasswordError"
+                @click="updateUser"
                 >Save</BaseButton
             >
         </template>
@@ -158,6 +170,7 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
+import { PASSWORD_HINT, passwordError } from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { Role, useAuthStore } from '@/stores/auth';
 import {
@@ -222,6 +235,13 @@ const isEditingSelf = computed(
 );
 const canResetPassword = computed(
     () => authStore.isAdmin && !isEditingSelf.value,
+);
+
+const createPasswordError = computed(() =>
+    passwordError(createForm.value.password),
+);
+const editPasswordError = computed(() =>
+    canResetPassword.value ? passwordError(editForm.value.password, true) : '',
 );
 
 function toggleRole(list: Role[], role: Role, checked: boolean) {

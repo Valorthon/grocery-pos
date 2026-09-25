@@ -190,8 +190,10 @@ const handleLogin = async () => {
         router.push(home);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
+        // The API's message: one generic line for any bad credentials, or
+        // how long to wait after too many attempts (429).
         errorMsg.value =
-            err?.response?.data?.error ??
+            err?.response?.data?.message ??
             'Invalid credentials. Please try again.';
     } finally {
         loading.value = false;
