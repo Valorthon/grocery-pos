@@ -30,6 +30,17 @@ function clearLegacyShiftStorage(): void {
     }
 }
 
+/**
+ * A response that arrived after the store was reset (logout): it belongs
+ * to the previous user and was dropped.
+ */
+export class StaleResponseError extends Error {
+    constructor() {
+        super('Signed out before the server answered');
+        this.name = 'StaleResponseError';
+    }
+}
+
 /** The API's `ErrorCode` on a failed request, if any. */
 export function apiErrorCode(error: unknown): string | undefined {
     if (!isAxiosError(error)) return undefined;
@@ -69,7 +80,8 @@ export const useShiftStore = defineStore('shift', () => {
     const zRead = ref<ZReadReport | null>(null);
 
     // Bumped by reset(): a response to a request made before logout must
-    // not repopulate the store for the next user.
+    // not repopulate the store for the next user. Every request captures it
+    // and drops its result if it changed.
     let generation = 0;
 
     function setShift(shift: CurrentShiftView | null) {
@@ -99,12 +111,15 @@ export const useShiftStore = defineStore('shift', () => {
 
     /** Opens a shift with the counted float. The server adds it up. */
     async function openShift(counts: BillCounts): Promise<CurrentShiftView> {
+        const gen = generation;
         try {
             const res = await api.post<CurrentShiftView>('/shifts', {
                 counts,
             });
+            if (gen !== generation) throw new StaleResponseError();
             setShift(res.data);
         } catch (error) {
+            if (gen !== generation) throw new StaleResponseError();
             // Already open (another tab, or a lost response): resume it.
             if (apiErrorCode(error) !== ErrorCode.SHIFT_ALREADY_OPEN) {
                 throw error;
@@ -121,13 +136,16 @@ export const useShiftStore = defineStore('shift', () => {
         amount: number,
         reason: string,
     ): Promise<void> {
+        const gen = generation;
         try {
             const res = await api.post<CurrentShiftView>(
                 '/shifts/current/drawer',
                 { type, amount, reason },
             );
+            if (gen !== generation) throw new StaleResponseError();
             setShift(res.data);
         } catch (error) {
+            if (gen !== generation) throw new StaleResponseError();
             if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
                 shiftClosedElsewhere();
             }
@@ -140,6 +158,7 @@ export const useShiftStore = defineStore('shift', () => {
      * and returns the Z-read it stored, which is then shown.
      */
     async function closeShift(counts: BillCounts): Promise<ZReadReport> {
+        const gen = generation;
         let report: ZReadReport;
         try {
             report = (
@@ -148,11 +167,14 @@ export const useShiftStore = defineStore('shift', () => {
                 })
             ).data;
         } catch (error) {
+            if (gen !== generation) throw new StaleResponseError();
             if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
                 shiftClosedElsewhere();
             }
             throw error;
         }
+        // Signed out meanwhile: this report is not for whoever is here now.
+        if (gen !== generation) throw new StaleResponseError();
         setShift(null);
         shiftOutOpen.value = false;
         zRead.value = report;
@@ -164,9 +186,12 @@ export const useShiftStore = defineStore('shift', () => {
      * there is none yet.
      */
     async function showLastReport(): Promise<boolean> {
+        const gen = generation;
         const res = await api.get<{ report: ZReadReport | null }>(
             '/shifts/last-closed',
         );
+        // Signed out meanwhile: never show one cashier's report to the next.
+        if (gen !== generation) return false;
         zRead.value = res.data.report;
         return res.data.report !== null;
     }

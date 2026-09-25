@@ -38,10 +38,13 @@ function apiError(status: number, error: ErrorCode) {
     });
 }
 
+let StaleResponseError: typeof import('./shift').StaleResponseError;
+
 async function loadStore() {
     vi.resetModules();
-    const { useShiftStore } = await import('./shift');
-    return useShiftStore();
+    const mod = await import('./shift');
+    StaleResponseError = mod.StaleResponseError;
+    return mod.useShiftStore();
 }
 
 /** Every key the page wrote to localStorage. */
@@ -201,5 +204,93 @@ describe('shift store (server-backed, issue #2)', () => {
         expect(store.activeShift).toBeNull();
         expect(store.loaded).toBe(false);
         expect(store.zRead).toBeNull();
+    });
+
+    describe('a response that lands after logout is dropped', () => {
+        /** A request held open until `answer` is called. */
+        function held(method: 'get' | 'post') {
+            let answer!: (value: unknown) => void;
+            let fail!: (error: unknown) => void;
+            api[method].mockReturnValue(
+                new Promise((resolve, reject) => {
+                    answer = resolve;
+                    fail = reject;
+                }),
+            );
+            return {
+                answer: (v: unknown) => answer(v),
+                fail: (e: unknown) => fail(e),
+            };
+        }
+
+        it('never shows the previous cashier’s last Z-read', async () => {
+            const req = held('get');
+            const store = await loadStore();
+
+            const pending = store.showLastReport();
+            store.reset();
+            req.answer({ data: { report: REPORT } });
+
+            await expect(pending).resolves.toBe(false);
+            expect(store.zRead).toBeNull();
+        });
+
+        it('never shows the Z-read of a close that finished after logout', async () => {
+            const req = held('post');
+            const store = await loadStore();
+
+            const pending = store.closeShift({ '500': 2 });
+            store.reset();
+            req.answer({ data: REPORT });
+
+            await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
+            expect(store.zRead).toBeNull();
+            expect(store.activeShift).toBeNull();
+        });
+
+        it('does not restore a shift opened just before logout', async () => {
+            const req = held('post');
+            const store = await loadStore();
+
+            const pending = store.openShift({ '1000': 1 });
+            store.reset();
+            req.answer({ data: SHIFT });
+
+            await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
+            expect(store.activeShift).toBeNull();
+            expect(store.loaded).toBe(false);
+        });
+
+        it('does not restore the shift from a drawer movement answered after logout', async () => {
+            const req = held('post');
+            const store = await loadStore();
+
+            const pending = store.recordDrawer(
+                DrawerMovementType.CASH_IN,
+                100,
+                'x',
+            );
+            store.reset();
+            req.answer({ data: SHIFT });
+
+            await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
+            expect(store.activeShift).toBeNull();
+        });
+
+        it('does not mark the store loaded from a failure answered after logout', async () => {
+            const req = held('post');
+            const store = await loadStore();
+
+            const pending = store.recordDrawer(
+                DrawerMovementType.CASH_IN,
+                100,
+                'x',
+            );
+            store.reset();
+            req.fail(apiError(409, ErrorCode.SHIFT_NOT_OPEN));
+
+            await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
+            expect(store.loaded).toBe(false);
+        });
     });
 });
