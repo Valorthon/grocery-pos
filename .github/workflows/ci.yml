@@ -2,11 +2,62 @@ name: CI Pipeline
 
 on:
     push:
-        branches: ['master', 'dev']
+        branches: ['develop', 'staging', 'production', 'master']
     pull_request:
 
+permissions:
+    contents: read
+
+# A new push to the same PR or branch cancels the run it supersedes.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
+
 jobs:
+    changes:
+        name: Detect changed paths
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            # paths-filter lists a PR's files through the API.
+            pull-requests: read
+        outputs:
+            deps: ${{ steps.filter.outputs.deps }}
+            docker: ${{ steps.filter.outputs.docker }}
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v5
+              with:
+                  # On pushes paths-filter diffs in git against the push's
+                  # `before` commit, so it needs the history.
+                  fetch-depth: 0
+
+            - name: Filter paths
+              id: filter
+              uses: dorny/paths-filter@v3
+              with:
+                  # Push: naming the pushed branch itself makes paths-filter
+                  # diff against the push's `before` commit (not against the
+                  # default branch). Ignored on pull_request, which uses the
+                  # PR's own file list.
+                  base: ${{ github.ref_name }}
+                  filters: |
+                      deps:
+                        - 'pnpm-lock.yaml'
+                        - '**/package.json'
+                      docker:
+                        - 'apps/api/Dockerfile'
+                        - 'apps/client/Dockerfile'
+                        - '.dockerignore'
+                        - 'apps/client/nginx.conf.template'
+                        - 'apps/client/docker-entrypoint.sh'
+                        - 'apps/api/railway.json'
+                        - 'apps/client/railway.json'
+                        - 'pnpm-lock.yaml'
+
     verify:
+        name: Verify
+        needs: changes
         runs-on: ubuntu-latest
 
         steps:
@@ -26,14 +77,26 @@ jobs:
             - name: Install Dependencies
               run: pnpm install --frozen-lockfile
 
+            # Its dist is gitignored, and lint, typecheck and test in the apps
+            # resolve @grocery-pos/contracts through it.
+            - name: Build Contracts
+              run: pnpm --filter @grocery-pos/contracts build
+
+            - name: Format Check
+              run: pnpm format:check
+
+            # Gates only changes to pnpm-lock.yaml or a package.json; on any
+            # other change a new public advisory shows here without failing
+            # the run (the weekly audit.yml workflow catches those).
             - name: Security Audit
               run: pnpm audit --audit-level high
+              continue-on-error: ${{ needs.changes.outputs.deps != 'true' }}
 
             - name: Dependency Hygiene (Depcheck)
               run: pnpm -r exec depcheck
 
             - name: License Compliance Check
-              run: pnpm dlx license-checker --summary --failOn "GPL-2.0;GPL-3.0;AGPL-3.0"
+              run: pnpm licenses:check
 
             - name: Lint
               run: pnpm -r lint
@@ -41,6 +104,7 @@ jobs:
             - name: Typecheck
               run: pnpm -r typecheck
 
+            # Every package's test script runs with coverage thresholds.
             - name: Test
               run: pnpm -r test
 
@@ -51,3 +115,26 @@ jobs:
                   VITE_API_URL: https://api.ci-test.com
                   VITE_DOMAIN: ci-test.com
                   VITE_API_TIMEOUT: 5000
+
+    docker:
+        name: Docker images (build only)
+        needs: changes
+        if: needs.changes.outputs.docker == 'true'
+        runs-on: ubuntu-latest
+        env:
+            DOCKER_BUILDKIT: 1
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v5
+
+            - name: Build API image
+              run: docker build --file apps/api/Dockerfile --tag grocery-pos-api:ci .
+
+            - name: Build client image
+              run: >-
+                  docker build --file apps/client/Dockerfile
+                  --build-arg VITE_NODE_ENV=prod
+                  --build-arg VITE_API_URL=https://api.ci-test.com
+                  --build-arg VITE_DOMAIN=ci-test.com
+                  --build-arg VITE_API_TIMEOUT=5000
+                  --tag grocery-pos-client:ci .

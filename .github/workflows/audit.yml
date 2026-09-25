@@ -1,0 +1,30 @@
+name: Dependency Audit
+
+# CI gates the audit only on changes to dependencies. This catches advisories
+# published against dependencies nobody touched.
+on:
+    schedule:
+        - cron: '17 3 * * 1' # Mondays 03:17 UTC
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    audit:
+        name: pnpm audit (high)
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v5
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v5
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '22.x'
+
+            - name: Security Audit
+              run: pnpm audit --audit-level high
