@@ -60,16 +60,21 @@
                 <div class="flex justify-end">
                     <button
                         type="button"
-                        class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:pointer-events-none"
+                        class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
                         :disabled="!canEdit(item)"
                         :title="
                             canEdit(item)
                                 ? 'Edit'
                                 : 'Only an admin can edit this user'
                         "
+                        :aria-label="
+                            canEdit(item)
+                                ? `Edit ${item.name}`
+                                : `Edit ${item.name} (only an admin can edit this user)`
+                        "
                         @click="openEdit(item)"
                     >
-                        <Pencil class="w-4 h-4" />
+                        <Pencil class="w-4 h-4" aria-hidden="true" />
                     </button>
                 </div>
             </template>
