@@ -27,6 +27,7 @@ import {
     AdjustmentDetailsSchema,
 } from './src/inventory-man/adjustment/adjustment-details.schema';
 import { Sales, SalesSchema } from './src/sales/sales.schema';
+import { Shift, ShiftSchema } from './src/shift/shift.schema';
 import {
     SalesDetails,
     SalesDetailsSchema,
@@ -64,6 +65,7 @@ const adjustmentDetails = mongoose.model(
 );
 const sales = mongoose.model(Sales.name, SalesSchema);
 const salesDetails = mongoose.model(SalesDetails.name, SalesDetailsSchema);
+const shift = mongoose.model(Shift.name, ShiftSchema);
 
 seedAll()
     .then(() => {
@@ -110,6 +112,7 @@ async function seedAll() {
         dropIfExists(adjustmentDetails),
         dropIfExists(sales),
         dropIfExists(salesDetails),
+        dropIfExists(shift),
         dropIfExists(refreshToken),
     ]);
 

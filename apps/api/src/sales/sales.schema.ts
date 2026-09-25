@@ -117,6 +117,18 @@ export class SaleReversal {
 
     @Prop({ type: Date, required: true })
     at!: Date;
+
+    /**
+     * The shift whose drawer paid the sale's net cash back (issue #2): the
+     * sale's own shift while it is open, otherwise the open shift the ADMIN
+     * chose. Absent when nothing was paid out (a GCash-only sale).
+     */
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Shift' })
+    payoutShift?: Types.ObjectId;
+
+    /** Centavos paid out of `payoutShift`'s drawer; 0 when none. */
+    @Prop({ type: Number, min: 0, validate: centavos('payoutAmount') })
+    payoutAmount?: number;
 }
 
 export const SaleReversalSchema = SchemaFactory.createForClass(SaleReversal);
@@ -141,6 +153,13 @@ export class Sales {
         ref: User.name,
     })
     cashier!: User | Types.ObjectId;
+
+    /**
+     * The cashier's open shift the sale was rung into (issue #2). Sales
+     * recorded before shifts existed have none.
+     */
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Shift', index: true })
+    shift?: Types.ObjectId;
 
     @Prop({
         required: true,

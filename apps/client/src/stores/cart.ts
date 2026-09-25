@@ -77,6 +77,15 @@ export const useCartStore = defineStore('cart', () => {
         }
     }
 
+    /**
+     * Empties the cart and releases the lock, whatever state it is in: for
+     * logout, so the next cashier never inherits this one's basket.
+     */
+    function reset() {
+        items.value = [];
+        locked.value = false;
+    }
+
     function lock() {
         locked.value = true;
     }
@@ -95,6 +104,7 @@ export const useCartStore = defineStore('cart', () => {
         remove,
         clear,
         setUnitPrices,
+        reset,
         lock,
         unlock,
     };

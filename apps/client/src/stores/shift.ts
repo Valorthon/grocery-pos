@@ -1,144 +1,210 @@
-import { computed, ref, watch } from 'vue';
+import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import type {
-    BillCounts,
-    DrawerTransaction,
-    ShiftRecord,
-    ZReadReport,
-} from '@/components/User/Sales/shift';
+import { isAxiosError } from 'axios';
+import api from '@/axios';
+import {
+    type BillCounts,
+    type CashierDrawerMovement,
+    type CurrentShiftView,
+    ErrorCode,
+    type ZReadReport,
+} from '@grocery-pos/contracts';
 
-// v2: money is stored as integer centavos. A shift saved by an older build
-// (pesos) is ignored rather than misread as 1/100th of its value.
-const STORAGE_KEY = 'grocery_pos_active_shift_v2';
-const LEGACY_STORAGE_KEY = 'grocery_pos_active_shift';
+/**
+ * Where older builds kept the whole shift in the browser (issue #2). The
+ * shift now lives on the server; these are removed once, on load, so a
+ * stale local shift can never be read again.
+ */
+export const LEGACY_SHIFT_STORAGE_KEYS = [
+    'grocery_pos_active_shift',
+    'grocery_pos_active_shift_v2',
+];
 
-function loadActiveShift(): ShiftRecord | null {
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return null;
+function clearLegacyShiftStorage(): void {
     try {
-        const parsed = JSON.parse(saved) as ShiftRecord;
-        if (parsed && parsed.status === 'active') return parsed;
+        for (const key of LEGACY_SHIFT_STORAGE_KEYS) {
+            localStorage.removeItem(key);
+        }
     } catch {
-        return null;
+        // Storage unavailable: nothing to clean up.
     }
-    return null;
 }
 
+/**
+ * A response that arrived after the store was reset (logout): it belongs
+ * to the previous user and was dropped.
+ */
+export class StaleResponseError extends Error {
+    constructor() {
+        super('Signed out before the server answered');
+        this.name = 'StaleResponseError';
+    }
+}
+
+/** The API's `ErrorCode` on a failed request, if any. */
+export function apiErrorCode(error: unknown): string | undefined {
+    if (!isAxiosError(error)) return undefined;
+    const data = error.response?.data as { error?: unknown } | undefined;
+    return typeof data?.error === 'string' ? data.error : undefined;
+}
+
+/** The API's message on a failed request, or `fallback`. */
+export function apiErrorMessage(error: unknown, fallback: string): string {
+    if (isAxiosError(error)) {
+        const data = error.response?.data as { message?: unknown } | undefined;
+        if (typeof data?.message === 'string' && data.message) {
+            return data.message;
+        }
+    }
+    return fallback;
+}
+
+/**
+ * The cashier's shift, as the server holds it (issue #2). Nothing here is
+ * computed or stored locally: every figure comes from an API response.
+ * While the shift is open the server is blind to the cashier (no expected
+ * cash or variance); the Z-read arrives only after the count is submitted.
+ */
 export const useShiftStore = defineStore('shift', () => {
-    const activeShift = ref<ShiftRecord | null>(loadActiveShift());
+    clearLegacyShiftStorage();
+
+    /** The caller's open shift, or null. */
+    const activeShift = ref<CurrentShiftView | null>(null);
+    /** True once the server has answered whether a shift is open. */
+    const loaded = ref(false);
 
     const shiftInOpen = ref(false);
-    const drawerAction = ref<'cash_in' | 'cash_drop' | null>(null);
+    const drawerAction = ref<CashierDrawerMovement | null>(null);
     const shiftOutOpen = ref(false);
+    /** The Z-read on screen. Closing the modal only hides it. */
     const zRead = ref<ZReadReport | null>(null);
 
-    const cashInTotal = computed(
-        () =>
-            activeShift.value?.drawerTransactions
-                .filter((t) => t.type === 'cash_in')
-                .reduce((sum, t) => sum + t.amount, 0) ?? 0,
-    );
+    // Bumped by reset(): a response to a request made before logout must
+    // not repopulate the store for the next user. Every request captures it
+    // and drops its result if it changed.
+    let generation = 0;
 
-    const cashDropTotal = computed(
-        () =>
-            activeShift.value?.drawerTransactions
-                .filter((t) => t.type === 'cash_drop')
-                .reduce((sum, t) => sum + t.amount, 0) ?? 0,
-    );
-
-    const currentDrawerCash = computed(() => {
-        if (!activeShift.value) return 0;
-        return (
-            activeShift.value.openingFloat +
-            cashInTotal.value -
-            cashDropTotal.value +
-            activeShift.value.cashSales
-        );
-    });
-
-    watch(
-        activeShift,
-        (shift) => {
-            if (shift) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(shift));
-            } else {
-                localStorage.removeItem(STORAGE_KEY);
-            }
-        },
-        { deep: true },
-    );
-
-    function startShift(
-        cashier: string,
-        terminal: string,
-        billCounts: BillCounts,
-        openingFloat: number,
-    ) {
-        activeShift.value = {
-            id: `SHIFT-${Date.now()}`,
-            cashier,
-            terminal,
-            openedAt: new Date().toISOString(),
-            openingFloat,
-            billCounts,
-            drawerTransactions: [],
-            cashSales: 0,
-            status: 'active',
-        };
-        shiftInOpen.value = false;
+    function setShift(shift: CurrentShiftView | null) {
+        activeShift.value = shift;
+        loaded.value = true;
     }
 
-    function addDrawerTransaction(
-        type: 'cash_in' | 'cash_drop',
+    /** Reads the caller's open shift from the server. */
+    async function fetchCurrent(): Promise<CurrentShiftView | null> {
+        const gen = generation;
+        const res = await api.get<{ shift: CurrentShiftView | null }>(
+            '/shifts/current',
+        );
+        if (gen === generation) setShift(res.data.shift);
+        return activeShift.value;
+    }
+
+    /**
+     * The shift was closed elsewhere (an ADMIN force-closed it) or never
+     * opened: drop it, so the register asks for a new one.
+     */
+    function shiftClosedElsewhere() {
+        setShift(null);
+        drawerAction.value = null;
+        shiftOutOpen.value = false;
+    }
+
+    /** Opens a shift with the counted float. The server adds it up. */
+    async function openShift(counts: BillCounts): Promise<CurrentShiftView> {
+        const gen = generation;
+        try {
+            const res = await api.post<CurrentShiftView>('/shifts', {
+                counts,
+            });
+            if (gen !== generation) throw new StaleResponseError();
+            setShift(res.data);
+        } catch (error) {
+            if (gen !== generation) throw new StaleResponseError();
+            // Already open (another tab, or a lost response): resume it.
+            if (apiErrorCode(error) !== ErrorCode.SHIFT_ALREADY_OPEN) {
+                throw error;
+            }
+            if (!(await fetchCurrent())) throw error;
+        }
+        shiftInOpen.value = false;
+        return activeShift.value!;
+    }
+
+    /** Records a cash in or cash drop. Drops are not checked here. */
+    async function recordDrawer(
+        type: CashierDrawerMovement,
         amount: number,
         reason: string,
-    ) {
-        if (!activeShift.value) return;
-        const tx: DrawerTransaction = {
-            id: `TX-${Date.now()}`,
-            type,
-            amount,
-            reason,
-            timestamp: new Date().toISOString(),
-        };
-        activeShift.value.drawerTransactions.push(tx);
+    ): Promise<void> {
+        const gen = generation;
+        try {
+            const res = await api.post<CurrentShiftView>(
+                '/shifts/current/drawer',
+                { type, amount, reason },
+            );
+            if (gen !== generation) throw new StaleResponseError();
+            setShift(res.data);
+        } catch (error) {
+            if (gen !== generation) throw new StaleResponseError();
+            if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
+                shiftClosedElsewhere();
+            }
+            throw error;
+        }
     }
 
-    function recordCashSale(cashAmount: number) {
-        if (!activeShift.value || cashAmount <= 0) return;
-        activeShift.value.cashSales += cashAmount;
-    }
-
-    function endShift(actualCash: number) {
-        if (!activeShift.value) return;
-        const expected = currentDrawerCash.value;
-        const shift = activeShift.value;
-
-        const report: ZReadReport = {
-            shiftId: shift.id,
-            cashier: shift.cashier,
-            terminal: shift.terminal,
-            openedAt: shift.openedAt,
-            closedAt: new Date().toISOString(),
-            openingFloat: shift.openingFloat,
-            totalCashIn: cashInTotal.value,
-            totalCashDrop: cashDropTotal.value,
-            cashSales: shift.cashSales,
-            expectedCash: expected,
-            actualCash: actualCash,
-            overShort: actualCash - expected,
-        };
-
-        activeShift.value = null;
+    /**
+     * Submits the blind closing count. The server computes expected cash
+     * and returns the Z-read it stored, which is then shown.
+     */
+    async function closeShift(counts: BillCounts): Promise<ZReadReport> {
+        const gen = generation;
+        let report: ZReadReport;
+        try {
+            report = (
+                await api.post<ZReadReport>('/shifts/current/close', {
+                    counts,
+                })
+            ).data;
+        } catch (error) {
+            if (gen !== generation) throw new StaleResponseError();
+            if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
+                shiftClosedElsewhere();
+            }
+            throw error;
+        }
+        // Signed out meanwhile: this report is not for whoever is here now.
+        if (gen !== generation) throw new StaleResponseError();
+        setShift(null);
         shiftOutOpen.value = false;
         zRead.value = report;
+        return report;
     }
 
+    /**
+     * Shows the caller's most recently closed shift's Z-read. False when
+     * there is none yet.
+     */
+    async function showLastReport(): Promise<boolean> {
+        const gen = generation;
+        const res = await api.get<{ report: ZReadReport | null }>(
+            '/shifts/last-closed',
+        );
+        // Signed out meanwhile: never show one cashier's report to the next.
+        if (gen !== generation) return false;
+        zRead.value = res.data.report;
+        return res.data.report !== null;
+    }
+
+    /** Forgets everything, e.g. on logout. The server shift stays open. */
     function reset() {
+        generation++;
         activeShift.value = null;
-        zRead.value = null;
+        loaded.value = false;
+        shiftInOpen.value = false;
         drawerAction.value = null;
+        shiftOutOpen.value = false;
+        zRead.value = null;
     }
 
     async function goToRegister() {
@@ -152,17 +218,17 @@ export const useShiftStore = defineStore('shift', () => {
 
     return {
         activeShift,
+        loaded,
         shiftInOpen,
         drawerAction,
         shiftOutOpen,
         zRead,
-        cashInTotal,
-        cashDropTotal,
-        currentDrawerCash,
-        startShift,
-        addDrawerTransaction,
-        recordCashSale,
-        endShift,
+        fetchCurrent,
+        openShift,
+        recordDrawer,
+        closeShift,
+        showLastReport,
+        shiftClosedElsewhere,
         reset,
         goToRegister,
     };

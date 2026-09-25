@@ -1,21 +1,12 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { createPinia, setActivePinia } from 'pinia';
-import {
-    DiscountType,
-    PaymentType,
-    SaleStatus,
-    TenderType,
-} from '@grocery-pos/contracts';
+import { describe, expect, it } from 'vitest';
+import { DiscountType, PaymentType, TenderType } from '@grocery-pos/contracts';
 import {
     buildPayment,
     cashTender,
-    drawerCashAmount,
     previewSale,
     referenceNumberError,
 } from './checkout';
-import type { Receipt } from './types';
 import { centavosToPesoInput, formatCurrency } from '@/utils/currency';
-import { useShiftStore } from '@/stores/shift';
 
 /**
  * The same cases the API's SalesService is tested against
@@ -209,82 +200,5 @@ describe('building the tender breakdown', () => {
             paymentType: PaymentType.CASH,
             tenders: [{ type: TenderType.CASH, amount: 120000 }],
         });
-    });
-});
-
-describe('drawer expectation after a sale', () => {
-    // A server receipt whose figures differ from anything the client typed:
-    // the drawer must follow the server.
-    function receipt(
-        paymentType: PaymentType,
-        tenders: Receipt['tenders'],
-        changeGiven: number,
-    ): Receipt {
-        return {
-            _id: 'sale1',
-            createdAt: '2026-09-24T02:00:00.000Z',
-            status: SaleStatus.COMPLETED,
-            paymentType,
-            referenceNumber:
-                paymentType === PaymentType.CASH ? null : '1234567890123',
-            tenders,
-            amountTendered: tenders.reduce((sum, t) => sum + t.amount, 0),
-            changeGiven,
-            cashierName: 'ana',
-            items: [{ productName: 'basket', quantity: 1, amount: 100000 }],
-            subtotal: 100000,
-            discount: {
-                type: DiscountType.PERCENT,
-                value: 20,
-                reason: 'loyalty',
-                amount: 20000,
-            },
-            totalAmount: 80000,
-        };
-    }
-
-    beforeEach(() => {
-        localStorage.clear();
-        setActivePinia(createPinia());
-    });
-
-    it('keeps the cash tendered less the server’s change for a cash sale', () => {
-        const sale = receipt(
-            PaymentType.CASH,
-            [{ type: TenderType.CASH, amount: 100000 }],
-            20000,
-        );
-        const shift = useShiftStore();
-        shift.startShift('ana', 'T1', {}, 0);
-
-        shift.recordCashSale(drawerCashAmount(sale));
-
-        expect(shift.currentDrawerCash).toBe(80000);
-    });
-
-    it('keeps only the cash part of a split sale', () => {
-        // ₱800 total: ₱500 GCash, ₱500 bill for the rest, ₱200 change.
-        const sale = receipt(
-            PaymentType.SPLIT,
-            [
-                { type: TenderType.CASH, amount: 50000 },
-                { type: TenderType.GCASH, amount: 50000 },
-            ],
-            20000,
-        );
-
-        expect(drawerCashAmount(sale)).toBe(30000);
-    });
-
-    it('puts no cash in the drawer for GCash', () => {
-        expect(
-            drawerCashAmount(
-                receipt(
-                    PaymentType.GCASH,
-                    [{ type: TenderType.GCASH, amount: 80000 }],
-                    0,
-                ),
-            ),
-        ).toBe(0);
     });
 });

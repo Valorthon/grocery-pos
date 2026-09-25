@@ -7,6 +7,7 @@ import { SalesDetails, SalesDetailsSchema } from './sales-details.schema';
 import { ProductModule } from '../product/product.module';
 import { InventoryModule } from '../inventory-man/inventory/inventory.module';
 import { UserModule } from '../user/user.module';
+import { ShiftModule } from '../shift/shift.module';
 
 @Module({
     imports: [
@@ -25,6 +26,7 @@ import { UserModule } from '../user/user.module';
         ProductModule,
         InventoryModule,
         UserModule,
+        ShiftModule,
     ],
     providers: [SalesService],
     controllers: [SalesController],

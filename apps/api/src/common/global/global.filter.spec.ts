@@ -1,7 +1,7 @@
 import { ArgumentsHost } from '@nestjs/common';
 import { GlobalFilter } from './global.filter';
 import { JWTInvalidError } from '../../auth/types';
-import { AuthError, ErrorCode, RateLimitError } from '../errors';
+import { AuthError, ConflictError, ErrorCode, RateLimitError } from '../errors';
 
 function hostFor(url: string) {
     const res = {
@@ -82,6 +82,27 @@ describe('GlobalFilter on rate limiting', () => {
                 path: '/v1/auth/login',
                 details: { retryAfterS: 60 },
             }),
+        );
+    });
+});
+
+describe('GlobalFilter on shift errors (issue #2)', () => {
+    const filter = new GlobalFilter();
+
+    it.each([
+        ErrorCode.SHIFT_NOT_OPEN,
+        ErrorCode.SHIFT_ALREADY_OPEN,
+        ErrorCode.SHIFT_CLOSED,
+        ErrorCode.SHIFT_PAYOUT_REQUIRED,
+        ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT,
+    ])('answers %s with 409 and the code', (code) => {
+        const { host, res } = hostFor('/v1/shifts');
+
+        filter.catch(new ConflictError(code, 'x'), host);
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith(
+            expect.objectContaining({ statusCode: 409, error: code }),
         );
     });
 });

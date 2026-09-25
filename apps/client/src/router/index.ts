@@ -70,6 +70,15 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Sales/Index.vue'),
                 meta: { roles: [Role.Admin] },
             },
+            {
+                // Every cashier's shifts and Z-reads, and force-close
+                // (issue #2). The API's list, view and force-close routes
+                // are Admin-only too.
+                path: 'shifts',
+                name: 'Shifts',
+                component: () => import('@/views/User/Shifts/Index.vue'),
+                meta: { roles: [Role.Admin] },
+            },
 
             {
                 path: 'products',
@@ -182,6 +191,10 @@ router.beforeEach(async (to) => {
     const requiresAuth = to.matched.some((r) => r.meta?.requiresAuth);
 
     if (requiresAuth && !isAuthenticated) {
+        // The session is gone (cookie expired or cleared) without a
+        // logout: drop the register state as logout does. Local only, no
+        // navigation, so this cannot loop.
+        authStore.resetRegister();
         uiStore.queueMessage(Color.ERROR, 'Please log in to continue');
         return { name: 'Login' };
     }

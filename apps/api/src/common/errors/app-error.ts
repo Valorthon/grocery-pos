@@ -55,10 +55,17 @@ export class AppError extends Error {
             case ErrorCode.PRODUCT_NOT_FOUND:
             case ErrorCode.NOT_FOUND:
                 return HttpStatus.NOT_FOUND;
+            // Valid requests the current state of a sale or shift does not
+            // allow (shift codes: issue #2).
             case ErrorCode.SALE_DUPLICATE_REFERENCE:
             case ErrorCode.SALE_NOT_REVERSIBLE:
             case ErrorCode.SALE_IDEMPOTENCY_MISMATCH:
             case ErrorCode.SALE_IN_PROGRESS:
+            case ErrorCode.SHIFT_NOT_OPEN:
+            case ErrorCode.SHIFT_ALREADY_OPEN:
+            case ErrorCode.SHIFT_CLOSED:
+            case ErrorCode.SHIFT_PAYOUT_REQUIRED:
+            case ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT:
                 return HttpStatus.CONFLICT;
             case ErrorCode.RATE_LIMITED:
                 return HttpStatus.TOO_MANY_REQUESTS;

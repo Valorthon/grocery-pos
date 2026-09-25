@@ -5,7 +5,6 @@ import {
     ErrorCode,
     SaleStatus,
 } from '@grocery-pos/contracts';
-import { drawerCashAmount } from './checkout';
 import type { PaymentRequest, Receipt } from './types';
 
 /** The ticket part of `POST /sales`: what is being sold, not how it is paid. */
@@ -79,19 +78,19 @@ interface CartLike {
  * Sends `POST /sales` for the current ticket.
  *
  * While the request is in flight the cart is locked, so the ticket that is
- * charged is the ticket that is cleared. On success the drawer is credited
- * and the receipt shown from the server's response only; on failure the
- * cart is left as it was and the error is rethrown for the checkout modal
- * to show, with Retry reusing the same key.
+ * charged is the ticket that is cleared. On success the receipt is shown
+ * from the server's response only (the server also credits the shift's
+ * drawer, issue #2); on failure the cart is left as it was and the error is
+ * rethrown for the checkout modal to show, with Retry reusing the same key.
  *
  * Two answers settle the ticket without being a fresh sale:
  * - 409 SALE_003 with a stored receipt: the first try did commit (its
  *   response was lost) and the retry was tendered differently. The stored
  *   sale stands, with its original payment; it is returned as
- *   `alreadyRecorded` and the drawer is credited from its tenders, not the
- *   ones just typed.
+ *   `alreadyRecorded` so change is settled from its tenders, not the ones
+ *   just typed.
  * - A replayed sale that is no longer COMPLETED (voided or refunded since):
- *   nothing is credited and the ticket is not cleared. The key is dropped,
+ *   the ticket is not cleared. The key is dropped,
  *   so confirming again rings the ticket up as a new sale, and a
  *   `SaleNotCompletedError` explains why.
  */
@@ -99,7 +98,6 @@ export function useSaleCheckout(deps: {
     cart: CartLike;
     ticket: () => SaleTicket;
     post: (body: SaleRequest) => Promise<Receipt>;
-    recordCash: (centavos: number) => void;
     generateKey?: () => string;
 }) {
     const attempt = createCheckoutAttempt(deps.generateKey);
@@ -139,8 +137,6 @@ export function useSaleCheckout(deps: {
             throw new SaleNotCompletedError(receipt);
         }
 
-        // The server's cash tender net of change, not the modal's figures.
-        deps.recordCash(drawerCashAmount(receipt));
         deps.cart.clear();
         return { receipt, alreadyRecorded };
     }
@@ -206,6 +202,9 @@ export function saleErrorMessage(error: unknown): string {
             : 'Sale failed';
 
     if (data?.error === ErrorCode.SALE_IN_PROGRESS) return `${message}.`;
+    if (data?.error === ErrorCode.SHIFT_NOT_OPEN) {
+        return 'Your shift is no longer open, so nothing was charged. Open a shift to continue; the ticket is kept.';
+    }
     if (data?.error === ErrorCode.SALE_IDEMPOTENCY_MISMATCH) {
         return `${message}. Check Sales History before charging again.`;
     }

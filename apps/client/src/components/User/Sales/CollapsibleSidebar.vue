@@ -22,7 +22,7 @@
                         <span
                             class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block"
                         >
-                            Lane #1 Terminal
+                            {{ terminal }} Terminal
                         </span>
                     </div>
 
@@ -114,6 +114,7 @@ import {
     ShoppingCart,
     Store,
 } from '@lucide/vue';
+import { DEFAULT_TERMINAL } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import UserProfileMenu from './UserProfileMenu.vue';
@@ -123,6 +124,10 @@ const cartStore = useCartStore();
 const shiftStore = useShiftStore();
 
 const isCollapsed = ref(true);
+// A label until terminals get an identity of their own (#47).
+const terminal = computed(
+    () => shiftStore.activeShift?.terminal ?? DEFAULT_TERMINAL,
+);
 const cartCount = computed(() => cartStore.totalUnits);
 
 const navItems = [

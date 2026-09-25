@@ -39,7 +39,10 @@
                                 type="button"
                                 class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
                                 title="Add change when drawer coins or small bills run low"
-                                @click="shiftStore.drawerAction = 'cash_in'"
+                                @click="
+                                    shiftStore.drawerAction =
+                                        DrawerMovementType.CASH_IN
+                                "
                             >
                                 <ArrowDownLeft
                                     class="w-3.5 h-3.5 text-emerald-600"
@@ -51,7 +54,10 @@
                                 type="button"
                                 class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors"
                                 title="Drop excess cash safely to the back office safe"
-                                @click="shiftStore.drawerAction = 'cash_drop'"
+                                @click="
+                                    shiftStore.drawerAction =
+                                        DrawerMovementType.CASH_DROP
+                                "
                             >
                                 <ArrowUpRight
                                     class="w-3.5 h-3.5 text-amber-600"
@@ -616,7 +622,7 @@ import {
 } from '@lucide/vue';
 import api from '@/axios';
 import { useCartStore } from '@/stores/cart';
-import { useShiftStore } from '@/stores/shift';
+import { apiErrorCode, useShiftStore } from '@/stores/shift';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
 import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
@@ -636,6 +642,8 @@ import { formatCurrency } from '@/utils/currency';
 import {
     DiscountType,
     type DiscountInput,
+    DrawerMovementType,
+    ErrorCode,
     PaymentType,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
@@ -918,7 +926,6 @@ const checkout = useSaleCheckout({
         discount: discountRequest.value ?? undefined,
     }),
     post: async (body) => (await api.post<Receipt>('/sales', body)).data,
-    recordCash: (centavos) => shiftStore.recordCashSale(centavos),
 });
 
 /** True while `POST /sales` is in flight: the ticket cannot be edited. */
@@ -941,6 +948,13 @@ async function submitSale(payment: PaymentRequest) {
 /** Rejects with the cashier-facing reason a sale failed. */
 async function explainFailure(error: unknown): Promise<never> {
     let message = saleErrorMessage(error);
+    // No open shift on the server (e.g. an admin force-closed it): nothing
+    // was recorded. Drop the local shift; the layout then sends the
+    // cashier to open a new one, with the ticket kept in the cart.
+    if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
+        shiftStore.shiftClosedElsewhere();
+        throw new Error(message);
+    }
     // A 400 means nothing was recorded. The usual cause is a price that
     // changed since the item was scanned, so the preview total the tenders
     // were built from is stale: refresh it for the retry.

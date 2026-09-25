@@ -152,7 +152,6 @@ describe('useSaleCheckout', () => {
             { product: 'p1', EAN: '1', name: 'bread', unitPrice: 22500 },
             2,
         );
-        const recordCash = vi.fn();
         const postSpy = vi.fn(post);
         const checkout = useSaleCheckout({
             cart,
@@ -163,9 +162,8 @@ describe('useSaleCheckout', () => {
                 })),
             }),
             post: postSpy,
-            recordCash,
         });
-        return { cart, recordCash, post: postSpy, checkout };
+        return { cart, post: postSpy, checkout };
     }
 
     it('reuses the key on a retry and makes a new one after success', async () => {
@@ -236,7 +234,7 @@ describe('useSaleCheckout', () => {
     });
 
     it('unlocks and keeps the cart when the sale fails', async () => {
-        const { cart, checkout, recordCash } = setup(() =>
+        const { cart, checkout } = setup(() =>
             Promise.reject(httpError(500, { message: 'Database error' })),
         );
 
@@ -244,10 +242,9 @@ describe('useSaleCheckout', () => {
 
         expect(cart.locked).toBe(false);
         expect(cart.items).toHaveLength(1);
-        expect(recordCash).not.toHaveBeenCalled();
     });
 
-    it('takes the receipt and the drawer cash from the server response', async () => {
+    it('takes the receipt from the server response', async () => {
         // The server's figures differ from what the modal sent: the modal
         // tendered ₱500, the server recorded ₱500 cash less ₱77 change.
         const response = receiptFor({
@@ -255,14 +252,15 @@ describe('useSaleCheckout', () => {
             changeGiven: 7700,
             totalAmount: 42300,
         });
-        const { checkout, recordCash } = setup(() => Promise.resolve(response));
+        const { checkout, cart } = setup(() => Promise.resolve(response));
 
         const { receipt, alreadyRecorded } =
             await checkout.submit(CASH_PAYMENT);
 
         expect(receipt).toBe(response);
         expect(alreadyRecorded).toBe(false);
-        expect(recordCash).toHaveBeenCalledWith(50000 - 7700);
+        expect(receipt.changeGiven).toBe(7700);
+        expect(cart.items).toEqual([]);
     });
     describe('a ticket already recorded with another payment (409 SALE_003)', () => {
         // The first try (cash ₱500) committed but its response was lost;
@@ -274,8 +272,8 @@ describe('useSaleCheckout', () => {
             referenceNumber: '1234567890123',
         };
 
-        it('settles on the stored sale and credits its original tenders', async () => {
-            const { checkout, recordCash, cart, post } = setup(() =>
+        it('settles on the stored sale with its original tenders', async () => {
+            const { checkout, cart, post } = setup(() =>
                 Promise.reject(
                     httpError(409, {
                         error: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
@@ -288,9 +286,8 @@ describe('useSaleCheckout', () => {
             const outcome = await checkout.submit(GCASH_PAYMENT);
 
             expect(outcome).toEqual({ receipt: stored, alreadyRecorded: true });
-            // ₱500 cash less ₱50 change from the stored sale; none of the
-            // GCash just typed.
-            expect(recordCash).toHaveBeenCalledWith(45000);
+            // Change is settled from the stored sale, not the GCash typed.
+            expect(outcome.receipt.changeGiven).toBe(5000);
             expect(cart.items).toEqual([]);
             expect(cart.locked).toBe(false);
 
@@ -306,7 +303,7 @@ describe('useSaleCheckout', () => {
         });
 
         it('stays a failure when the 409 carries no receipt (another cashier)', async () => {
-            const { checkout, recordCash, cart } = setup(() =>
+            const { checkout, cart } = setup(() =>
                 Promise.reject(
                     httpError(409, {
                         error: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
@@ -318,7 +315,6 @@ describe('useSaleCheckout', () => {
             );
 
             await expect(checkout.submit(GCASH_PAYMENT)).rejects.toThrow();
-            expect(recordCash).not.toHaveBeenCalled();
             expect(cart.items).toHaveLength(1);
         });
     });
@@ -329,7 +325,7 @@ describe('useSaleCheckout', () => {
     ])(
         'does not treat a replayed %s sale as a success',
         async (status, word) => {
-            const { checkout, recordCash, cart, post } = setup(() =>
+            const { checkout, cart, post } = setup(() =>
                 Promise.resolve(receiptFor({ status })),
             );
 
@@ -337,7 +333,6 @@ describe('useSaleCheckout', () => {
 
             await expect(attempt).rejects.toBeInstanceOf(SaleNotCompletedError);
             await expect(attempt).rejects.toThrow(word);
-            expect(recordCash).not.toHaveBeenCalled();
             // The ticket stays for re-ringing, under a new key.
             expect(cart.items).toHaveLength(1);
             expect(cart.locked).toBe(false);
@@ -383,6 +378,17 @@ describe('saleErrorMessage', () => {
         expect(saleErrorMessage(httpError(null))).toMatch(
             /Retry is safe and will not charge twice/,
         );
+    });
+
+    it('explains a sale refused for want of an open shift (#2)', () => {
+        expect(
+            saleErrorMessage(
+                httpError(409, {
+                    error: ErrorCode.SHIFT_NOT_OPEN,
+                    message: 'You have no open shift. Open a shift first.',
+                }),
+            ),
+        ).toMatch(/shift is no longer open, so nothing was charged/);
     });
 
     it('passes a key conflict through as the server words it', () => {

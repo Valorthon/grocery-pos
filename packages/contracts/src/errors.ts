@@ -31,6 +31,29 @@ export enum ErrorCode {
      */
     SALE_IN_PROGRESS = 'SALE_004',
 
+    /**
+     * The caller has no open shift: `POST /sales` and the cashier's
+     * drawer and close routes need one (issue #2). Also returned when an
+     * ADMIN force-closed the shift in the meantime.
+     */
+    SHIFT_NOT_OPEN = 'SHIFT_001',
+    /** The caller already has an open shift; resume it instead. */
+    SHIFT_ALREADY_OPEN = 'SHIFT_002',
+    /** The shift named in the request is already closed. */
+    SHIFT_CLOSED = 'SHIFT_003',
+    /**
+     * A void or refund pays cash back, and the sale's own shift is closed
+     * (or the sale predates shifts): the ADMIN must name an open shift to
+     * pay it from (`payoutShiftId`). `details.openShifts` says how many
+     * are open.
+     */
+    SHIFT_PAYOUT_REQUIRED = 'SHIFT_004',
+    /**
+     * A void or refund pays cash back but no shift is open to pay it from.
+     * Nothing was reversed; open a shift first.
+     */
+    SHIFT_PAYOUT_NO_OPEN_SHIFT = 'SHIFT_005',
+
     /** The caller is signed in but may not do this (generic 403). */
     FORBIDDEN = 'FORBIDDEN_001',
 

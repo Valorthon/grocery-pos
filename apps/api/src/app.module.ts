@@ -14,6 +14,7 @@ import { InventoryModule } from './inventory-man/inventory/inventory.module';
 import { RestockModule } from './inventory-man/restock/restock.module';
 import { AdjustmentModule } from './inventory-man/adjustment/adjustment.module';
 import { SalesModule } from './sales/sales.module';
+import { ShiftModule } from './shift/shift.module';
 import { EanCounterModule } from './ean-counter/ean-counter.module';
 import { TypedConfigService } from './common/typed-config/typed-config.service';
 import { TimingMiddleware } from './common/middleware/timing.middleware';
@@ -41,6 +42,7 @@ import { RateLimitModule } from './auth/rate-limit/rate-limit';
         RestockModule,
         AdjustmentModule,
         SalesModule,
+        ShiftModule,
         EanCounterModule,
         HealthModule,
         DashboardModule,

@@ -10,7 +10,7 @@ import {
     TenderType,
 } from '@grocery-pos/contracts';
 import { pesosToCentavos } from '@/utils/currency';
-import type { PaymentRequest, Receipt } from './types';
+import type { PaymentRequest } from './types';
 
 /**
  * The checkout preview of a discounted sale, in centavos, for tendering.
@@ -116,18 +116,6 @@ export function buildPayment(
         ],
         referenceNumber,
     };
-}
-
-/**
- * Cash that stays in the drawer for a completed sale: the cash tender the
- * server recorded, less the change it computed. Nothing from the client's
- * preview is used.
- */
-export function drawerCashAmount(
-    receipt: Pick<Receipt, 'tenders' | 'changeGiven'>,
-): number {
-    const cash = receipt.tenders.find((t) => t.type === TenderType.CASH);
-    return cash ? cash.amount - receipt.changeGiven : 0;
 }
 
 const PAYMENT_LABELS: Record<PaymentType, string> = {
