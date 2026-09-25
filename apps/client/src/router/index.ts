@@ -70,6 +70,15 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Sales/Index.vue'),
                 meta: { roles: [Role.Admin] },
             },
+            {
+                // Every cashier's shifts and Z-reads, and force-close
+                // (issue #2). The API's list, view and force-close routes
+                // are Admin-only too.
+                path: 'shifts',
+                name: 'Shifts',
+                component: () => import('@/views/User/Shifts/Index.vue'),
+                meta: { roles: [Role.Admin] },
+            },
 
             {
                 path: 'products',

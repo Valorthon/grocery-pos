@@ -54,4 +54,8 @@ export interface SaleReversal {
     reason: string;
     approvedBy: string;
     at: string;
+    /** The shift whose drawer paid the cash back; absent when none was. */
+    payoutShift?: string;
+    /** Centavos paid back out of `payoutShift`. */
+    payoutAmount?: number;
 }

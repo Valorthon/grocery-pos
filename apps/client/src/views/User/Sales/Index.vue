@@ -192,6 +192,12 @@
                     {{ reversalLabel(selectedSale.reversal.type) }} on
                     {{ formatDate(selectedSale.reversal.at) }}:
                     {{ selectedSale.reversal.reason }}
+                    <template v-if="selectedSale.reversal.payoutAmount">
+                        ({{
+                            formatCurrency(selectedSale.reversal.payoutAmount)
+                        }}
+                        cash paid back)
+                    </template>
                 </div>
             </div>
 
@@ -205,9 +211,49 @@
                 </p>
                 <p class="text-xs text-red-700">
                     Every item goes back into stock and the sale no longer
-                    counts toward revenue. This cannot be undone. Settle any
-                    cash with the customer and the drawer yourself.
+                    counts toward revenue. This cannot be undone.
                 </p>
+                <p
+                    v-if="reversalCash === 0"
+                    class="text-xs text-red-700"
+                    data-testid="payout-none"
+                >
+                    No cash is paid back: the sale was paid by GCash.
+                </p>
+                <p
+                    v-else-if="loadingShifts"
+                    class="text-xs text-red-700"
+                    data-testid="payout-loading"
+                >
+                    Checking open shifts…
+                </p>
+                <p
+                    v-else-if="!payoutRequired"
+                    class="text-xs text-red-700"
+                    data-testid="payout-own-shift"
+                >
+                    {{ formatCurrency(reversalCash) }} cash is paid back out of
+                    the drawer of the shift this sale was rung in.
+                </p>
+                <template v-else>
+                    <p
+                        v-if="openShifts.length === 0"
+                        class="text-xs font-bold text-red-800"
+                        data-testid="payout-no-open-shift"
+                    >
+                        {{ formatCurrency(reversalCash) }} cash must be paid
+                        back, but no shift is open to pay it from. Open a shift
+                        first.
+                    </p>
+                    <BaseSelect
+                        v-else
+                        id="payout-shift"
+                        v-model="payoutShiftId"
+                        :label="`Pay ${formatCurrency(reversalCash)} back from`"
+                        :options="payoutOptions"
+                        data-testid="payout-shift"
+                    />
+                </template>
                 <label
                     class="block text-xs font-bold uppercase tracking-wider text-slate-600"
                     for="reversal-reason"
@@ -239,7 +285,7 @@
                         variant="danger"
                         class="flex-1"
                         :loading="reversing"
-                        :disabled="!reversalReason.trim()"
+                        :disabled="!canConfirmReversal"
                         @click="confirmReversal"
                         >Confirm
                         {{
@@ -279,14 +325,20 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
+import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
 import { isAxiosError } from 'axios';
 import {
     DiscountType,
+    ErrorCode,
+    type Paginated,
     PaymentType,
     ReversalType,
     Role,
+    saleNetCash,
     SaleStatus,
+    type ShiftListItem,
+    ShiftStatus,
     STRING_LIMITS,
     type Tender,
 } from '@grocery-pos/contracts';
@@ -296,6 +348,7 @@ import type {
 } from '@/components/User/Sales/types';
 import { paymentLabel, tenderLabel } from '@/components/User/Sales/checkout';
 import { useAuthStore } from '@/stores/auth';
+import { apiErrorCode } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
 
 /** The ledger fields of a sale that explain its total (centavos). */
@@ -309,6 +362,8 @@ interface SaleTotals {
     changeGiven: number;
     referenceNumber: string | null;
     reversal: SaleReversal | null;
+    /** The shift the sale was rung in; null for sales from before shifts. */
+    shift: string | null;
 }
 
 const authStore = useAuthStore();
@@ -371,6 +426,7 @@ async function fetchSales() {
             changeGiven: sale.changeGiven ?? 0,
             referenceNumber: sale.referenceNumber ?? null,
             reversal: sale.reversal ?? null,
+            shift: sale.shift ?? null,
         } satisfies SaleTotals,
         paymentType: sale.paymentType,
         status: sale.status ?? SaleStatus.COMPLETED,
@@ -407,25 +463,106 @@ const pendingReversal = ref<ReversalType | null>(null);
 const reversalReason = ref('');
 const reversing = ref(false);
 
+/**
+ * Cash a void or refund hands back (issue #2): the sale's cash tender less
+ * change, the same `saleNetCash` the API pays out. It comes out of the
+ * sale's own shift while that is open; otherwise the admin picks an open
+ * shift whose drawer pays it.
+ */
+const reversalCash = computed(() =>
+    selectedSale.value
+        ? saleNetCash({
+              paymentType: selectedSale.value.paymentType,
+              amount: selectedSale.value.amount,
+              tenders: selectedSale.value.tenders,
+              changeGiven: selectedSale.value.changeGiven,
+          })
+        : 0,
+);
+const openShifts = ref<ShiftListItem[]>([]);
+const loadingShifts = ref(false);
+/** True when an open shift must be chosen to pay the cash back. */
+const payoutRequired = ref(false);
+const payoutShiftId = ref('');
+
+const payoutOptions = computed(() => [
+    { value: '', label: 'Choose an open shift…' },
+    ...openShifts.value.map((shift) => ({
+        value: shift._id,
+        label: `${shift.cashierName} · ${shift.terminal} · opened ${formatDate(shift.openedAt)}`,
+    })),
+]);
+
+const canConfirmReversal = computed(
+    () =>
+        !!reversalReason.value.trim() &&
+        !loadingShifts.value &&
+        (!payoutRequired.value || !!payoutShiftId.value),
+);
+
+/** Loads the open shifts and works out whether one must be chosen. */
+async function loadPayoutShifts(forceChoice = false) {
+    const sale = selectedSale.value;
+    if (!sale || reversalCash.value === 0) {
+        payoutRequired.value = false;
+        return;
+    }
+    loadingShifts.value = true;
+    try {
+        const res = await api.get<Paginated<ShiftListItem>>('/shifts', {
+            params: { page: 1, limit: 100, status: ShiftStatus.OPEN },
+        });
+        openShifts.value = res.data.data;
+    } catch {
+        // Let the server decide; it answers SHIFT_PAYOUT_REQUIRED if a
+        // shift must be chosen, and this runs again.
+        openShifts.value = [];
+        payoutRequired.value = forceChoice;
+        return;
+    } finally {
+        loadingShifts.value = false;
+    }
+    const ownShiftOpen =
+        !!sale.shift && openShifts.value.some((s) => s._id === sale.shift);
+    payoutRequired.value = forceChoice || !ownShiftOpen;
+    // Never preselected: the admin picks the drawer that pays.
+    if (
+        !payoutRequired.value ||
+        !openShifts.value.some((s) => s._id === payoutShiftId.value)
+    ) {
+        payoutShiftId.value = '';
+    }
+}
+
 function startReversal(type: ReversalType) {
     pendingReversal.value = type;
     reversalReason.value = '';
+    payoutShiftId.value = '';
+    payoutRequired.value = false;
+    void loadPayoutShifts();
 }
 
 function cancelReversal() {
     pendingReversal.value = null;
     reversalReason.value = '';
+    payoutShiftId.value = '';
+    payoutRequired.value = false;
 }
 
 async function confirmReversal() {
     const type = pendingReversal.value;
     const reason = reversalReason.value.trim();
-    if (!type || !reason || reversing.value) return;
+    if (!type || !canConfirmReversal.value || reversing.value) return;
 
     reversing.value = true;
     const action = type === ReversalType.VOID ? 'void' : 'refund';
     try {
-        await api.post(`/sales/${selectedId.value}/${action}`, { reason });
+        await api.post(`/sales/${selectedId.value}/${action}`, {
+            reason,
+            ...(payoutRequired.value && {
+                payoutShiftId: payoutShiftId.value,
+            }),
+        });
         uiStore.queueMessage(
             Color.SUCCESS,
             `Sale ${type === ReversalType.VOID ? 'voided' : 'refunded'}; stock returned`,
@@ -434,6 +571,14 @@ async function confirmReversal() {
         isDialogOpen.value = false;
         await fetchSales();
     } catch (error) {
+        const code = apiErrorCode(error);
+        // The sale's shift closed since the check: ask for a shift now.
+        if (
+            code === ErrorCode.SHIFT_PAYOUT_REQUIRED ||
+            code === ErrorCode.SHIFT_CLOSED
+        ) {
+            await loadPayoutShifts(true);
+        }
         uiStore.queueMessage(
             Color.ERROR,
             (isAxiosError(error) && error.response?.data?.message) ||

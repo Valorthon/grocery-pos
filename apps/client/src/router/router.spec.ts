@@ -22,6 +22,7 @@ vi.mock('@/views/User/Sales/SellerDashboard.vue', () => stub);
 vi.mock('@/views/User/Sales/Index.vue', () => stub);
 vi.mock('@/views/User/Dashboard.vue', () => stub);
 vi.mock('@/views/User/Products/Index.vue', () => stub);
+vi.mock('@/views/User/Shifts/Index.vue', () => stub);
 
 function signIn(roles: Role[]) {
     localStorage.setItem('user', JSON.stringify({ username: 'u', roles }));
@@ -165,5 +166,22 @@ describe('dashboard access (issue #13)', () => {
         await router.push('/');
 
         expect(router.currentRoute.value.name).toBe('Dashboard');
+    });
+
+    it('opens the Shifts page to an admin only (issue #2)', async () => {
+        const router = await freshRouter();
+        expect(router.resolve({ name: 'Shifts' }).meta.roles).toEqual([
+            Role.Admin,
+        ]);
+
+        signIn([Role.Admin]);
+        const asAdmin = await freshRouter();
+        await asAdmin.push('/admin/shifts');
+        expect(asAdmin.currentRoute.value.name).toBe('Shifts');
+
+        signIn([Role.Seller, Role.UserManager]);
+        const asManager = await freshRouter();
+        await asManager.push('/admin/shifts');
+        expect(asManager.currentRoute.value.name).not.toBe('Shifts');
     });
 });

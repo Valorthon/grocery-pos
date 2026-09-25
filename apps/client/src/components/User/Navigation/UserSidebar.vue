@@ -118,6 +118,7 @@ import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
     ClipboardEdit,
+    Clock,
     LayoutDashboard,
     List,
     Package,
@@ -173,6 +174,12 @@ const sections = computed(() => [
                 name: 'SalesHistory',
                 title: 'Sales History',
                 icon: Receipt,
+                visible: authStore.isAdmin,
+            },
+            {
+                name: 'Shifts',
+                title: 'Shifts',
+                icon: Clock,
                 visible: authStore.isAdmin,
             },
         ],
