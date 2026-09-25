@@ -7,6 +7,8 @@ import {
     STRING_LIMITS,
     BATCH_LIMITS,
 } from '@grocery-pos/contracts';
+import { formatCurrency } from '@/utils/currency';
+import { Color, useUIStore } from './ui';
 
 export interface CartItem {
     product: string;
@@ -142,6 +144,8 @@ export function parseStoredCart(json: string | null): {
     items: CartItem[];
     discount: CartDiscount | null;
     attempt: StoredAttempt | null;
+    /** Stored lines left out: unreadable, and past TICKET_AMOUNT_MAX. */
+    dropped: { unreadable: number; overCap: number };
 } | null {
     if (!json) return null;
     let raw: unknown;
@@ -154,11 +158,19 @@ export function parseStoredCart(json: string | null): {
     if (!Array.isArray(raw.items)) return null;
 
     const items: CartItem[] = [];
+    const dropped = {
+        unreadable: Math.max(0, raw.items.length - BATCH_LIMITS.SALE_LINES),
+        overCap: 0,
+    };
     let total = 0;
     for (const entry of raw.items.slice(0, BATCH_LIMITS.SALE_LINES)) {
         const item = parseItem(entry);
-        if (!item || items.some((i) => i.product === item.product)) continue;
+        if (!item || items.some((i) => i.product === item.product)) {
+            dropped.unreadable++;
+            continue;
+        }
         if (item.quantity > (TICKET_AMOUNT_MAX - total) / item.unitPrice) {
+            dropped.overCap++;
             continue;
         }
         total += item.unitPrice * item.quantity;
@@ -168,7 +180,22 @@ export function parseStoredCart(json: string | null): {
         items,
         discount: parseDiscount(raw.discount),
         attempt: parseAttempt(raw.attempt),
+        dropped,
     };
+}
+
+/** What to tell the cashier about lines a saved basket lost, or ''. */
+export function droppedNotice(
+    dropped: { unreadable: number; overCap: number } | undefined,
+): string {
+    if (!dropped) return '';
+    if (dropped.overCap) {
+        return `Some saved lines were removed: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}.`;
+    }
+    if (dropped.unreadable) {
+        return "Some saved lines couldn't be read and were removed.";
+    }
+    return '';
 }
 
 function readStorage(key: string): string | null {
@@ -197,6 +224,8 @@ export const useCartStore = defineStore('cart', () => {
     const attempt = ref<StoredAttempt | null>(null);
     /** True while applying another tab's write: not written back. */
     let applyingRemote = false;
+    /** Counts baskets taken from another tab, for pages to react to. */
+    const remoteChanges = ref(0);
     /**
      * True while `POST /sales` is in flight. The ticket being charged must
      * not change under the request: every edit below is ignored until the
@@ -291,6 +320,7 @@ export const useCartStore = defineStore('cart', () => {
         } finally {
             applyingRemote = false;
         }
+        remoteChanges.value++;
     }
 
     if (typeof window !== 'undefined') {
@@ -308,8 +338,14 @@ export const useCartStore = defineStore('cart', () => {
         if (next === owner.value) return;
         owner.value = null;
         locked.value = false;
-        load(next ? parseStoredCart(readStorage(cartStorageKey(next))) : null);
+        const saved = next
+            ? parseStoredCart(readStorage(cartStorageKey(next)))
+            : null;
+        load(saved);
         owner.value = next;
+        // Said once, when the basket comes back without some of its lines.
+        const notice = droppedNotice(saved?.dropped);
+        if (notice) useUIStore().queueMessage(Color.ERROR, notice);
         // Rewrites a basket that lost malformed parts, or drops an empty one.
         persist();
     }
@@ -395,11 +431,15 @@ export const useCartStore = defineStore('cart', () => {
 
     /**
      * Puts a removed line back at its position with its quantity. Refused
-     * when the ticket is locked or the product is on it again.
+     * when the ticket is locked, the product is on it again, or the ticket
+     * would exceed TICKET_AMOUNT_MAX.
      */
     function restore(item: CartItem, index: number): boolean {
         if (locked.value) return false;
         if (items.value.some((c) => c.product === item.product)) return false;
+        if (item.quantity > maxQuantity(item.product, item.unitPrice)) {
+            return false;
+        }
         const at = Math.min(Math.max(index, 0), items.value.length);
         items.value.splice(at, 0, { ...item });
         return true;
@@ -461,6 +501,7 @@ export const useCartStore = defineStore('cart', () => {
         discount,
         attempt,
         owner,
+        remoteChanges,
         locked,
         totalUnits,
         subtotal,

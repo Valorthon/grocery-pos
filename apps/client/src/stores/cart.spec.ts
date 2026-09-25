@@ -492,3 +492,64 @@ describe('another tab (#23 review)', () => {
         expect(cart.items).toHaveLength(1);
     });
 });
+
+describe('the cap on restore and on load (#23 re-review)', () => {
+    it('will not put a line back past AMOUNT_MAX', () => {
+        const cart = useCartStore();
+        cart.add(MILK);
+        cart.add(MINTS);
+        const removed = cart.remove('p2')!;
+        cart.setQuantity('p1', cart.maxQuantity('p1', MILK.unitPrice));
+        expect(cart.restore(removed.item, removed.index)).toBe(false);
+        expect(cart.items).toHaveLength(1);
+    });
+
+    it('tells the cashier once when saved lines were dropped', async () => {
+        const { useUIStore } = await import('./ui');
+        localStorage.setItem(
+            cartStorageKey('ana'),
+            JSON.stringify({
+                version: 1,
+                items: [
+                    { ...MILK, quantity: 2 },
+                    { ...MINTS, quantity: TICKET_AMOUNT_MAX },
+                ],
+                discount: null,
+            }),
+        );
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        expect(cart.items.map((i) => i.name)).toEqual(['milk']);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            [
+                "Some saved lines were removed: a sale can't exceed ₱10,000,000.00.",
+            ],
+        ]);
+    });
+
+    it('says an unreadable line was dropped, and nothing for a clean basket', async () => {
+        const { useUIStore } = await import('./ui');
+        localStorage.setItem(
+            cartStorageKey('ana'),
+            JSON.stringify({
+                version: 1,
+                items: [
+                    { ...MILK, quantity: 0 },
+                    { ...MINTS, quantity: 1 },
+                ],
+                discount: null,
+            }),
+        );
+        useCartStore().setOwner('ana');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ["Some saved lines couldn't be read and were removed."],
+        ]);
+
+        useUIStore().clear();
+        useCartStore().setOwner('ben');
+        useCartStore().add(MILK);
+        useCartStore().setOwner('ana');
+        useCartStore().setOwner('ben');
+        expect(useUIStore().toasts).toEqual([]);
+    });
+});
