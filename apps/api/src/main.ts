@@ -6,6 +6,7 @@ import { Logger, VersioningType } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { createValidationPipe } from './common/pipes/validation.pipe';
+import { corsOptions } from './common/cors';
 
 async function bootstrap() {
     const logger = new Logger('Bootstrap');
@@ -27,11 +28,7 @@ async function bootstrap() {
         type: VersioningType.URI,
     });
 
-    app.enableCors({
-        origin: config.get('FRONTEND_URL'),
-        credentials: true,
-        methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
-    });
+    app.enableCors(corsOptions(config.get('FRONTEND_URL')));
 
     // Deployed (prod/stage on Railway), the API sits behind exactly one
     // reverse proxy, which appends the real client address to
