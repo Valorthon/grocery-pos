@@ -93,7 +93,10 @@
                     below. The report records that you closed it.
                 </div>
 
-                <BillCountInput v-model="closeCounts" />
+                <BillCountInput
+                    v-model="closeCounts"
+                    v-model:invalid="countsInvalid"
+                />
 
                 <div
                     class="flex items-center justify-between rounded-xl bg-slate-900 p-3.5 text-white"
@@ -107,7 +110,12 @@
                     </span>
                 </div>
 
-                <p v-if="closeError" class="text-xs font-semibold text-red-600">
+                <p
+                    v-if="closeError"
+                    role="alert"
+                    class="text-xs font-semibold text-red-600"
+                    data-testid="force-close-error"
+                >
                     {{ closeError }}
                 </p>
             </div>
@@ -149,6 +157,7 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import Badge from '@/components/ui/Badge.vue';
 import BillCountInput from '@/components/User/Sales/BillCountInput.vue';
+import { countsError } from '@/components/User/Sales/shift';
 import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
 import { apiErrorMessage } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
@@ -240,10 +249,16 @@ watch(statusFilter, search);
 const isDialogOpen = ref(false);
 const selected = ref<ShiftListItem | null>(null);
 const closeCounts = ref<BillCounts>({});
+const countsInvalid = ref(false);
 const closing = ref(false);
 const closeError = ref('');
 // Display only: the server adds the count up itself.
 const countedCash = computed(() => billCountTotal(closeCounts.value));
+
+// A changed count answers the last refusal; a new one shows on submit.
+watch(closeCounts, () => {
+    if (!closing.value) closeError.value = '';
+});
 
 function select(row: { shift: ShiftListItem }) {
     selected.value = row.shift;
@@ -255,6 +270,11 @@ function select(row: { shift: ShiftListItem }) {
 async function forceClose() {
     const shift = selected.value;
     if (!shift || closing.value) return;
+    const refused = countsError(closeCounts.value, countsInvalid.value);
+    if (refused) {
+        closeError.value = refused;
+        return;
+    }
     closing.value = true;
     closeError.value = '';
     try {

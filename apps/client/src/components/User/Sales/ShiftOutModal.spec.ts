@@ -9,6 +9,7 @@ import {
 import { useShiftStore } from '@/stores/shift';
 import ShiftOutModal from './ShiftOutModal.vue';
 import ZReadReportView from './ZReadReportView.vue';
+import { COUNTS_INVALID } from './shift';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -74,11 +75,15 @@ function mount(component: object, props: Record<string, unknown> = {}) {
 
 /** Types `pieces` into the count field of the first denomination (₱1,000). */
 async function countThousands(pieces: number) {
+    await typeCount('1000', String(pieces));
+}
+
+async function typeCount(id: string, text: string) {
     const input = document.querySelector<HTMLInputElement>(
-        'input[type="number"]',
+        `[data-testid="count-${id}"]`,
     )!;
-    input.value = String(pieces);
-    input.dispatchEvent(new Event('change'));
+    input.value = text;
+    input.dispatchEvent(new Event('input'));
     await flush();
 }
 
@@ -132,6 +137,48 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
         expect(shift.zRead).toEqual(REPORT);
         expect(shift.activeShift).toBeNull();
         expect(shift.shiftOutOpen).toBe(false);
+    });
+
+    it('starts from an empty count every time it opens', async () => {
+        const shift = await openModal();
+        await countThousands(2);
+        await typeCount('500', '1.5');
+
+        shift.shiftOutOpen = false;
+        await flush();
+        shift.shiftOutOpen = true;
+        await flush();
+
+        expect(
+            document.querySelector('[data-testid="counted-cash"]')?.textContent,
+        ).toContain('0.00');
+        expect(
+            document.querySelector<HTMLInputElement>(
+                '[data-testid="count-1000"]',
+            )!.value,
+        ).toBe('');
+        expect(document.querySelector('[data-testid^="count-error-"]')).toBe(
+            null,
+        );
+    });
+
+    it('does not submit a count with a refused field', async () => {
+        await openModal();
+        await countThousands(2);
+        await typeCount('500', '1.5');
+
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="shift-out-confirm"]',
+            )!
+            .click();
+        await flush();
+
+        expect(api.post).not.toHaveBeenCalled();
+        expect(
+            document.querySelector('[data-testid="shift-out-error"]')
+                ?.textContent,
+        ).toContain(COUNTS_INVALID);
     });
 
     it('keeps the modal open with the server’s message when the close fails', async () => {
