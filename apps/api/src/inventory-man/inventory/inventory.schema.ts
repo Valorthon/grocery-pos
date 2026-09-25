@@ -37,3 +37,7 @@ export class Inventory {
 }
 
 export const InventorySchema = SchemaFactory.createForClass(Inventory);
+
+// Serves the dashboard's stock tiles (`stock <= LOW_STOCK_THRESHOLD`) and
+// the inventory list's `maxStock` filter without a collection scan.
+InventorySchema.index({ stock: 1 });
