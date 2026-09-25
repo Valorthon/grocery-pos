@@ -20,18 +20,18 @@
                 v-model="searchEAN"
                 label="EAN / Barcode"
                 clearable
-                @enter="search"
-                @clear="search"
+                @enter="applySearch"
+                @clear="applySearch"
             />
             <BaseInput
                 v-model="searchName"
                 label="Product Name"
                 clearable
-                @enter="search"
-                @clear="search"
+                @enter="applySearch"
+                @clear="applySearch"
             />
             <div class="md:col-span-2 flex items-end gap-2">
-                <BaseButton size="sm" @click="search">
+                <BaseButton size="sm" @click="applySearch">
                     <Search class="w-4 h-4" />
                     Search
                 </BaseButton>
@@ -72,13 +72,22 @@ import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
-import { useListFetch, useListPaging } from '@/composables/useListFetch';
+import {
+    useAppliedFilters,
+    useListFetch,
+    useListPaging,
+} from '@/composables/useListFetch';
 
 const router = useRouter();
 const { page, limit, search } = useListPaging(() => fetchProducts());
 const totalItems = ref(0);
 const searchName = ref('');
 const searchEAN = ref('');
+// What the list was last searched for: paging and Retry reuse it.
+const { applied, apply: applySearch } = useAppliedFilters(
+    () => ({ name: searchName.value, EAN: searchEAN.value }),
+    search,
+);
 
 const headers = [
     { key: 'EAN', title: 'EAN' },
@@ -92,7 +101,7 @@ const serverItems = ref<any[]>([]);
 const resetFilters = () => {
     searchEAN.value = '';
     searchName.value = '';
-    search();
+    applySearch();
 };
 
 const {
@@ -105,8 +114,8 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                name: searchName.value?.toUpperCase(),
-                EAN: searchEAN.value,
+                name: applied.value.name?.toUpperCase(),
+                EAN: applied.value.EAN,
             },
         }),
     (result) => {

@@ -68,6 +68,41 @@ describe('product list search (issue #20)', () => {
         ]);
     });
 
+    it('pages and resizes with the last search, not unsearched text', async () => {
+        await mount();
+        await type('Product Name', 'milk');
+        await click('Search');
+        await type('Product Name', 'bread');
+        api.get.mockClear();
+
+        await click('Next');
+        const size = document.querySelector('select')!;
+        size.value = '25';
+        size.dispatchEvent(new Event('change'));
+        await flush();
+
+        expect(params()).toEqual([
+            expect.objectContaining({ page: 2, name: 'MILK' }),
+            expect.objectContaining({ page: 1, limit: 25, name: 'MILK' }),
+        ]);
+    });
+
+    it('searches for everything again when the box is cleared with ×', async () => {
+        await mount();
+        await type('Product Name', 'milk');
+        await click('Search');
+        api.get.mockClear();
+
+        const clear =
+            field('Product Name').parentElement!.querySelector('button')!;
+        clear.click();
+        await flush();
+
+        expect(params()).toEqual([
+            expect.objectContaining({ page: 1, name: '' }),
+        ]);
+    });
+
     it('loads page 1 once when the page size changes on page 3', async () => {
         await mount();
         await click('Next');

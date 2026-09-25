@@ -147,14 +147,22 @@ const applied = ref({
 
 /**
  * A filter changed: list page 1 with it, once. A reversed date range is
- * shown on the To field and not sent (the API would refuse it).
+ * shown on the To field and not sent (the API would refuse it): while it
+ * is, the list keeps its last valid range, and a user pick still applies
+ * with that range.
  */
 const applyFilters = () => {
-    if (rangeError.value) return;
+    const reversed = !!rangeError.value;
+    const adjustedBy = searchAdjustedBy.value ?? undefined;
+    if (reversed && adjustedBy === applied.value.adjustedBy) return;
     applied.value = {
-        adjustedBy: searchAdjustedBy.value ?? undefined,
-        dateFrom: searchDateStart.value || undefined,
-        dateTo: searchDateEnd.value || undefined,
+        adjustedBy,
+        dateFrom: reversed
+            ? applied.value.dateFrom
+            : searchDateStart.value || undefined,
+        dateTo: reversed
+            ? applied.value.dateTo
+            : searchDateEnd.value || undefined,
     };
     search();
 };

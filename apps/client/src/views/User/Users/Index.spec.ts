@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { Role } from '@grocery-pos/contracts';
+import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
 import {
     check,
     click,
@@ -278,5 +278,66 @@ describe('user editor (issue #20)', () => {
 
         expect(field('Username').value).toBe('');
         expect(fieldError('Username')).toBe('');
+    });
+});
+
+describe('users search and create errors (issue #20 review)', () => {
+    it('pages and retries with the last search, not unsearched text', async () => {
+        api.get.mockResolvedValue({ data: { ...USERS, totalItems: 30 } });
+        await mount();
+        await type('Search Name', 'Ana');
+        await click('Search');
+        await type('Search Name', 'bob');
+        api.get.mockClear();
+        api.get.mockRejectedValueOnce(
+            httpError(500, { message: 'Internal server error' }),
+        );
+
+        await click('Next');
+        expect(tableError()).not.toBeNull();
+        await click('Retry');
+
+        expect(api.get.mock.calls.map(([, c]) => c.params)).toEqual([
+            expect.objectContaining({ page: 2, name: 'ana' }),
+            expect.objectContaining({ page: 2, name: 'ana' }),
+        ]);
+    });
+
+    it('clears each Save error once its field is edited', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await click('Add User');
+        await click('Save');
+        const rolesError = () =>
+            document.querySelector('[data-testid="create-roles-error"]');
+        expect(fieldError('Username')).toBe(REQUIRED);
+        expect(fieldError('Password')).toBe('Password is required');
+        expect(rolesError()).not.toBeNull();
+
+        await type('Username', 'bea');
+        expect(fieldError('Username')).toBe('');
+        expect(fieldError('Password')).toBe('Password is required');
+
+        await type('Password', 'long-enough-1');
+        expect(fieldError('Password')).toBe('');
+
+        await check(Role.Seller, true);
+        expect(rolesError()).toBeNull();
+    });
+
+    it('checks the trimmed username length, as the API does', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.post.mockResolvedValueOnce({ data: {} });
+        await mount();
+        await click('Add User');
+        // The limit inside spaces: the API trims, so this is accepted.
+        await type('Username', `  ${'a'.repeat(STRING_LIMITS.USERNAME)}  `);
+        await type('Password', 'long-enough-1');
+        await check(Role.Seller, true);
+
+        await click('Save');
+
+        expect(fieldError('Username')).toBe('');
+        expect(api.post).toHaveBeenCalledTimes(1);
     });
 });

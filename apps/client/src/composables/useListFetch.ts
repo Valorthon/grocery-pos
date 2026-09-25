@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue';
+import { type Ref, ref, watch } from 'vue';
 import { apiErrorText } from '@/utils/api-error';
 
 /**
@@ -62,4 +62,21 @@ export function useListPaging(load: () => unknown, initialLimit = 5) {
     watch(limit, search);
 
     return { page, limit, search };
+}
+
+/**
+ * The search filters a list was last loaded with (issue #20). `read`
+ * takes the live inputs; `apply()` snapshots them into `applied` and
+ * searches. Requests read `applied`, so paging, a page-size change and
+ * Retry never send text that was typed but not searched yet.
+ */
+export function useAppliedFilters<T>(read: () => T, search: () => void) {
+    const applied = ref(read()) as Ref<T>;
+
+    function apply(): void {
+        applied.value = read();
+        search();
+    }
+
+    return { applied, apply };
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { NETWORK_ERROR_MESSAGE } from '@/utils/api-error';
-import { useListFetch, useListPaging } from './useListFetch';
+import { useAppliedFilters, useListFetch, useListPaging } from './useListFetch';
 
 function httpError(status: number, message: string): AxiosError {
     const config = { headers: new AxiosHeaders() };
@@ -226,5 +226,25 @@ describe('useListPaging (issue #20)', () => {
 
         expect(paging.page.value).toBe(1);
         expect(paging.limit.value).toBe(10);
+    });
+});
+
+describe('useAppliedFilters (issue #20)', () => {
+    it('keeps the last applied inputs until apply() runs again', () => {
+        const name = ref('');
+        const search = vi.fn();
+        const filters = useAppliedFilters(() => ({ name: name.value }), search);
+        expect(filters.applied.value).toEqual({ name: '' });
+
+        name.value = 'milk';
+        expect(filters.applied.value).toEqual({ name: '' });
+        expect(search).not.toHaveBeenCalled();
+
+        filters.apply();
+        expect(filters.applied.value).toEqual({ name: 'milk' });
+        expect(search).toHaveBeenCalledTimes(1);
+
+        name.value = 'bread';
+        expect(filters.applied.value).toEqual({ name: 'milk' });
     });
 });

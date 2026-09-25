@@ -266,6 +266,28 @@ describe('restock history filters and paging (issue #20)', () => {
         ]);
     });
 
+    it('applies a user pick while the range is reversed, with the last valid range', async () => {
+        serve();
+        await mount();
+        await type('From', '2026-03-02');
+        await flush();
+        await type('To', '2026-03-01');
+        await flush();
+        api.get.mockClear();
+
+        await choose(userFilter(), 'u2');
+
+        expect(fieldError('To')).toBe(DATE_RANGE_REVERSED);
+        expect(listCalls()).toEqual([
+            expect.objectContaining({
+                page: 1,
+                restockedBy: 'u2',
+                dateFrom: '2026-03-02',
+                dateTo: undefined,
+            }),
+        ]);
+    });
+
     it('clears every filter with one request', async () => {
         serve();
         await mount();

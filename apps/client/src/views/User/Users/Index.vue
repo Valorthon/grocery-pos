@@ -18,11 +18,11 @@
                 label="Search Name"
                 :maxlength="STRING_LIMITS.USERNAME"
                 clearable
-                @enter="search"
-                @clear="search"
+                @enter="applySearch"
+                @clear="applySearch"
             />
             <div class="md:col-span-3 flex items-end gap-2">
-                <BaseButton size="sm" @click="search">
+                <BaseButton size="sm" @click="applySearch">
                     <Search class="w-4 h-4" />
                     Search
                 </BaseButton>
@@ -88,6 +88,7 @@
                 label="Username"
                 :maxlength="STRING_LIMITS.USERNAME"
                 :error="createErrors.name"
+                @update:model-value="clearCreateError('name')"
             />
             <BaseInput
                 v-model="createForm.password"
@@ -98,6 +99,7 @@
                     createErrors.password ||
                     (createForm.password ? createPasswordError : '')
                 "
+                @update:model-value="clearCreateError('password')"
             />
             <div>
                 <label
@@ -111,7 +113,8 @@
                         :model-value="createForm.roles.includes(role)"
                         :label="role"
                         @update:model-value="
-                            toggleRole(createForm.roles, role, $event)
+                            toggleRole(createForm.roles, role, $event);
+                            clearCreateError('roles');
                         "
                     />
                 </div>
@@ -218,12 +221,21 @@ import {
     canManageUser,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
-import { useListFetch, useListPaging } from '@/composables/useListFetch';
+import {
+    useAppliedFilters,
+    useListFetch,
+    useListPaging,
+} from '@/composables/useListFetch';
 import { apiErrorMessages } from '@/utils/api-error';
 
 const { page, limit, search } = useListPaging(() => fetchUsers());
 const totalItems = ref(0);
 const searchName = ref('');
+// What the list was last searched for: paging and Retry reuse it.
+const { applied, apply: applySearch } = useAppliedFilters(
+    () => ({ name: searchName.value }),
+    search,
+);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const serverItems = ref<any[]>([]);
 
@@ -310,7 +322,7 @@ function toggleRole(list: Role[], role: Role, checked: boolean) {
 
 const resetFilters = () => {
     searchName.value = '';
-    search();
+    applySearch();
 };
 
 const {
@@ -323,7 +335,7 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                name: searchName.value?.toLowerCase(),
+                name: applied.value.name?.toLowerCase(),
             },
         }),
     (result) => {
@@ -348,6 +360,13 @@ function createFormErrors(): Record<string, string> {
         password: passwordError(createForm.value.password),
         roles: createForm.value.roles.length ? '' : 'Pick at least one role',
     });
+}
+
+/** Drops a field's Save error once it is edited (as #17's dialogs). */
+function clearCreateError(field: string) {
+    const next = { ...createErrors.value };
+    delete next[field];
+    createErrors.value = next;
 }
 
 /** Opens the Add User dialog empty: an earlier Cancel kept nothing. */
