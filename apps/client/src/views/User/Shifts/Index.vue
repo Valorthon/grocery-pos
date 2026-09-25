@@ -163,6 +163,7 @@ import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
 import { apiErrorMessage } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
+import { formatStoreDateTime } from '@/utils/datetime';
 import { useListFetch, useListPaging } from '@/composables/useListFetch';
 
 /**
@@ -205,13 +206,7 @@ const rows = computed(() =>
 );
 
 function formatDate(value: string): string {
-    return new Date(value).toLocaleString('en-PH', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-    });
+    return formatStoreDateTime(value);
 }
 
 function signed(value: number): string {

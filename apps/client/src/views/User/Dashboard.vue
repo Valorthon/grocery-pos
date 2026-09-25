@@ -192,6 +192,7 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import { useListFetch } from '@/composables/useListFetch';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency } from '@/utils/currency';
+import { formatStoreDateTime } from '@/utils/datetime';
 
 const authStore = useAuthStore();
 
@@ -353,14 +354,7 @@ function dotClass(color: string) {
 }
 
 function formatDate(iso: string) {
-    return new Date(iso).toLocaleString('en-PH', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-    });
+    return formatStoreDateTime(iso);
 }
 
 function formatRelative(iso: string) {

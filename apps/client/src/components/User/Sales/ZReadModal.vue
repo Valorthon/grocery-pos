@@ -14,10 +14,6 @@
         </div>
 
         <template #footer>
-            <BaseButton variant="outline" class="flex-1" @click="print">
-                <Printer class="w-3.5 h-3.5" />
-                Print
-            </BaseButton>
             <BaseButton class="flex-1" @click="done">
                 Back to Dashboard
             </BaseButton>
@@ -27,7 +23,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { CheckCircle2, Printer } from '@lucide/vue';
+import { CheckCircle2 } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import ZReadReportView from './ZReadReportView.vue';
@@ -48,10 +44,6 @@ const open = computed({
         if (!val) shiftStore.zRead = null;
     },
 });
-
-function print() {
-    window.print();
-}
 
 async function done() {
     shiftStore.zRead = null;

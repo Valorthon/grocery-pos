@@ -2,7 +2,12 @@ import { useAuthStore, Role } from '@/stores/auth';
 import { Color, useUIStore } from '@/stores/ui';
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
-import { DASHBOARD_ROLES, homeRouteFor } from './access';
+import {
+    canOpenRoute,
+    DASHBOARD_ROLES,
+    homeRouteFor,
+    type RouteAccessMeta,
+} from './access';
 
 const routes: RouteRecordRaw[] = [
     // GUEST LAYOUT
@@ -206,27 +211,17 @@ router.beforeEach(async (to) => {
         return homeFor(authStore);
     }
 
-    // Seller-only routes: only users with SELLER role (admins cannot sell)
-    if (to.meta?.sellerOnly && !authStore.hasRole(Role.Seller)) {
+    // Seller-only routes need the SELLER role itself (ADMIN alone cannot
+    // sell); other routes need ADMIN or one of their `roles`. The Roles
+    // page's rows are checked against the same rule (role-pages.spec.ts).
+    if (
+        !canOpenRoute(to.meta as RouteAccessMeta, authStore.user?.roles ?? [])
+    ) {
         uiStore.queueMessage(
             Color.ERROR,
             'You do not have access to that page',
         );
         return homeFor(authStore);
-    }
-
-    const requiredRoles = to.meta?.roles as Role[] | undefined;
-    if (requiredRoles && requiredRoles.length > 0) {
-        const hasRole =
-            authStore.isAdmin ||
-            requiredRoles.some((role) => authStore.hasRole(role));
-        if (!hasRole) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                'You do not have access to that page',
-            );
-            return homeFor(authStore);
-        }
     }
 
     return true;

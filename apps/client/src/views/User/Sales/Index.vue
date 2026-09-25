@@ -10,7 +10,7 @@
                     Orders & Transactions
                 </h1>
                 <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-                    View transaction history and reprint receipts
+                    View transaction history
                 </p>
             </div>
 
@@ -365,6 +365,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
+import { formatStoreDateTime } from '@/utils/datetime';
 import { apiErrorMessages, apiErrorText } from '@/utils/api-error';
 import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import {
@@ -424,14 +425,9 @@ const headers = [
 ];
 
 function formatDate(value: string | Date): string {
-    return new Date(value).toLocaleString('en-PH', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-    });
+    return formatStoreDateTime(
+        value instanceof Date ? value.toISOString() : value,
+    );
 }
 
 function statusColor(status: SaleStatus) {

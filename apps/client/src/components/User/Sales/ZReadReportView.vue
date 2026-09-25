@@ -6,16 +6,20 @@
             <div
                 class="font-sans font-black text-sm uppercase tracking-wider text-slate-900"
             >
-                Grocery POS Store
+                Grocery POS
             </div>
             <div class="text-[11px] text-slate-500 font-sans mt-0.5">
-                {{ report.terminal }} • Shift Close Report (Z-Read)
+                <span data-testid="zread-terminal">{{ report.terminal }}</span>
+                • Shift Close Report (Z-Read)
             </div>
             <div class="text-[10px] text-slate-400 mt-1">
-                {{ formatDate(report.openedAt) }} —
-                {{ formatDate(report.closedAt) }}
+                {{ formatStoreDateTime(report.openedAt) }} —
+                {{ formatStoreDateTime(report.closedAt) }}
             </div>
-            <div class="text-[11px] font-bold text-slate-700 mt-1">
+            <div
+                class="text-[11px] font-bold text-slate-700 mt-1"
+                data-testid="zread-cashier"
+            >
                 Cashier: {{ report.cashierName }}
             </div>
             <div
@@ -134,7 +138,7 @@
                 class="flex justify-between gap-2"
             >
                 <span class="truncate"
-                    >{{ formatTime(m.at) }} {{ movementLabel(m.type) }} ·
+                    >{{ formatStoreTime(m.at) }} {{ movementLabel(m.type) }} ·
                     {{ m.reason }} ({{ m.byName }})</span
                 >
                 <span class="shrink-0">{{ currency(m.amount) }}</span>
@@ -151,6 +155,7 @@
 import { computed, defineComponent, h } from 'vue';
 import { DrawerMovementType, type ZReadReport } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
+import { formatStoreDateTime, formatStoreTime } from '@/utils/datetime';
 
 /** The server's stored Z-read. Every figure is shown as the server sent it. */
 const props = defineProps<{ report: ZReadReport }>();
@@ -207,23 +212,5 @@ const MOVEMENT_LABELS: Record<DrawerMovementType, string> = {
 
 function movementLabel(type: DrawerMovementType): string {
     return MOVEMENT_LABELS[type] ?? type;
-}
-
-function formatDate(iso: string): string {
-    return new Date(iso).toLocaleString('en-PH', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-    });
-}
-
-function formatTime(iso: string): string {
-    return new Date(iso).toLocaleTimeString('en-PH', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-    });
 }
 </script>

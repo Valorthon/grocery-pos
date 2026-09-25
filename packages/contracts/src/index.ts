@@ -6,3 +6,4 @@ export * from './discount';
 export * from './sales';
 export * from './shift';
 export * from './barcode';
+export * from './permissions';

@@ -1,9 +1,23 @@
 <template>
-    <img :src="src" alt="" v-bind="$attrs" />
+    <!--
+        The picture is the only thing on a count tile that says which
+        denomination it is, so it carries the name as its alt text (issue
+        #24). An id with no picture shows the name as text instead of a
+        broken image.
+    -->
+    <img v-if="src" :src="src" :alt="name" v-bind="$attrs" />
+    <span
+        v-else
+        v-bind="$attrs"
+        class="inline-flex items-center justify-center font-mono font-black text-slate-700"
+        data-testid="denomination-fallback"
+        >{{ name }}</span
+    >
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { CASH_DENOMINATIONS } from '@grocery-pos/contracts';
 import bill1000 from '@/assets/Cash_Logo/1000-bill.png';
 import bill500 from '@/assets/Cash_Logo/500-bill.png';
 import bill200 from '@/assets/Cash_Logo/200-bill.png';
@@ -36,5 +50,11 @@ const IMAGES: Record<string, string> = {
     'coin-25c': coin025,
 };
 
-const src = computed(() => IMAGES[props.id] ?? '');
+const src = computed(() => IMAGES[props.id] ?? null);
+
+/** "₱1,000 bill", "₱0.25 coin"; the raw id for one contracts does not know. */
+const name = computed(() => {
+    const d = CASH_DENOMINATIONS.find((x) => x.id === props.id);
+    return d ? `${d.label} ${d.kind}` : props.id;
+});
 </script>

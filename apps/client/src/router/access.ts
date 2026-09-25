@@ -42,3 +42,30 @@ export function homeRouteFor(roles: readonly Role[]): HomeRoute {
 export function canViewDashboard(roles: readonly Role[]): boolean {
     return DASHBOARD_ROLES.some((role) => roles.includes(role));
 }
+
+/** The role parts of a route's (merged) meta that the router checks. */
+export interface RouteAccessMeta {
+    sellerOnly?: boolean;
+    roles?: readonly Role[];
+}
+
+/**
+ * Whether someone holding `roles` may open a route with `meta`, as the
+ * router's guard decides it: a `sellerOnly` route needs the SELLER role
+ * itself (ADMIN alone is not enough), and a route with `roles` needs ADMIN
+ * or one of them.
+ */
+export function canOpenRoute(
+    meta: RouteAccessMeta,
+    roles: readonly Role[],
+): boolean {
+    if (meta.sellerOnly && !roles.includes(Role.Seller)) return false;
+    const required = meta.roles;
+    if (required && required.length > 0) {
+        return (
+            roles.includes(Role.Admin) ||
+            required.some((role) => roles.includes(role))
+        );
+    }
+    return true;
+}
