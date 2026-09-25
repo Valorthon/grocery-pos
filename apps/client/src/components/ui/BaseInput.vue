@@ -21,6 +21,7 @@
                 :type="type"
                 :min="min"
                 :step="step"
+                :maxlength="maxlength"
                 :value="modelValue"
                 :placeholder="placeholder"
                 :disabled="disabled"
@@ -58,6 +59,8 @@ const props = withDefaults(
         type?: string;
         min?: string | number;
         step?: string | number;
+        /** Longest value the input accepts, e.g. a contracts STRING_LIMITS. */
+        maxlength?: number;
         placeholder?: string;
         disabled?: boolean;
         clearable?: boolean;
@@ -72,6 +75,7 @@ const props = withDefaults(
         type: 'text',
         min: undefined,
         step: undefined,
+        maxlength: undefined,
         placeholder: '',
         disabled: false,
         clearable: false,

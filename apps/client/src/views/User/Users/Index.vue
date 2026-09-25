@@ -16,6 +16,7 @@
             <BaseInput
                 v-model="searchName"
                 label="Search Name"
+                :maxlength="STRING_LIMITS.USERNAME"
                 clearable
                 @enter="resetSearch"
                 @clear="resetSearch"
@@ -177,6 +178,7 @@ import {
     ASSIGNABLE_ROLES,
     canGrantRole,
     canManageUser,
+    STRING_LIMITS,
 } from '@grocery-pos/contracts';
 import { isAxiosError } from 'axios';
 
