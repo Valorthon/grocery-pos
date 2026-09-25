@@ -2,227 +2,249 @@ import {
     ArgumentsHost,
     Catch,
     ExceptionFilter,
+    HttpException,
     HttpStatus,
+    Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { AppError, AppErrorResponse, ErrorCode } from '../errors';
+import {
+    AppError,
+    AppErrorResponse,
+    classifyDbError,
+    ErrorCode,
+} from '../errors';
+import { requestIdOf } from '../request-id/request-id';
 
+/** The only message a client ever sees for an unexpected failure. */
+export const INTERNAL_MESSAGE = 'Internal server error';
+
+/**
+ * The ErrorCode for an HttpException that Nest or a library raised (a
+ * guard's 403, an unknown route's 404, ...): it keeps its real status and
+ * gets a code that matches it.
+ */
+const CODE_FOR_STATUS: Partial<Record<number, ErrorCode>> = {
+    [HttpStatus.BAD_REQUEST]: ErrorCode.VALIDATION_INVALID_INPUT,
+    [HttpStatus.UNAUTHORIZED]: ErrorCode.AUTH_INVALID_TOKEN,
+    [HttpStatus.FORBIDDEN]: ErrorCode.FORBIDDEN,
+    [HttpStatus.NOT_FOUND]: ErrorCode.NOT_FOUND,
+    [HttpStatus.CONFLICT]: ErrorCode.CONFLICT,
+    [HttpStatus.TOO_MANY_REQUESTS]: ErrorCode.RATE_LIMITED,
+};
+
+export function codeForStatus(status: number): ErrorCode {
+    return (
+        CODE_FOR_STATUS[status] ??
+        (status >= 500 ? ErrorCode.INTERNAL_ERROR : ErrorCode.HTTP_ERROR)
+    );
+}
+
+/** `err.stack`, followed by the stack of each `cause` in the chain. */
+export function stackWithCauses(err: unknown): string | undefined {
+    const parts: string[] = [];
+    const seen = new Set<unknown>();
+    let current: unknown = err;
+    while (current !== undefined && current !== null && !seen.has(current)) {
+        seen.add(current);
+        parts.push(
+            current instanceof Error
+                ? (current.stack ?? `${current.name}: ${current.message}`)
+                : safeString(current),
+        );
+        current = current instanceof Error ? current.cause : undefined;
+    }
+    return parts.length > 0 ? parts.join('\nCaused by: ') : undefined;
+}
+
+function safeString(value: unknown): string {
+    try {
+        return typeof value === 'string' ? value : JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
+}
+
+/**
+ * Turns every exception into an `AppErrorResponse` (issue #8).
+ *
+ * - `AppError`: its own status, code and `details` (none on a 5xx).
+ * - A raw error from the database is classified first (`classifyDbError`):
+ *   a duplicate key or validation failure is a 400, not a 500.
+ * - `HttpException` (Nest, guards, `ValidationPipe`): its real status and a
+ *   matching code (`codeForStatus`). The ValidationPipe's message list is
+ *   joined into `message` and kept in `details.messages`.
+ * - An exposed `http-errors` 4xx (body-parser's 413, malformed JSON): its
+ *   status, a matching code and its message.
+ * - Anything else: 500 INTERNAL_ERROR with a generic message.
+ *
+ * Every body carries the request's correlation id. A 5xx is logged as an
+ * error with the stack (and every `cause`); a 4xx as one warning line,
+ * plus the stack and causes for a classified database error.
+ * Request bodies are never logged.
+ */
 @Catch()
 export class GlobalFilter implements ExceptionFilter {
+    private readonly logger = new Logger(GlobalFilter.name);
+
     catch(exception: unknown, host: ArgumentsHost): void {
         const ctx = host.switchToHttp();
         const res = ctx.getResponse<Response>();
         const req = ctx.getRequest<Request>();
+        const requestId = requestIdOf(req, res);
 
-        if (exception instanceof AppError) {
-            res.status(exception.statusCode).json(
-                exception.toResponse(req.url),
-            );
-            return;
-        }
+        const body = this.toResponse(exception, req.url, requestId);
+        this.log(exception, body, req);
 
-        if (
-            exception instanceof Error &&
-            exception.name === 'MongoServerError'
-        ) {
-            MongoErrorHandler.handle(exception, res, req);
-            return;
-        }
-
-        const errorResponse = this.buildErrorResponse(exception, req.url);
-        res.status(errorResponse.statusCode).json(errorResponse);
+        res.status(body.statusCode).json(body);
     }
 
-    private buildErrorResponse(
+    private toResponse(
         exception: unknown,
         path: string,
+        requestId: string,
     ): AppErrorResponse {
-        const error = exception as {
-            getStatus?: () => number;
-            status?: number;
-            getResponse?: () => unknown;
-            message?: string;
+        // A raw database error thrown outside `runInTransaction` (inside
+        // one, db.ts has already classified it).
+        const classified = classifyDbError(exception);
+        if (classified) return classified.toResponse(path, requestId);
+
+        if (exception instanceof AppError) {
+            return exception.toResponse(path, requestId);
+        }
+
+        if (exception instanceof HttpException) {
+            return this.fromHttpException(exception, path, requestId);
+        }
+
+        const base = {
+            timestamp: new Date().toISOString(),
+            path,
+            details: null,
+            requestId,
         };
 
-        const status =
-            error.getStatus?.() ??
-            error.status ??
-            HttpStatus.INTERNAL_SERVER_ERROR;
-
-        const response = error.getResponse?.();
-
-        if (typeof response === 'object' && response !== null) {
-            const respObj = response as { message?: string | string[] };
-            const message = Array.isArray(respObj.message)
-                ? respObj.message.join(', ')
-                : (respObj.message ?? 'Internal Server Error');
-
+        const httpError = exposedClientError(exception);
+        if (httpError) {
             return {
-                statusCode: status,
-                error: ErrorCode.VALIDATION_INVALID_INPUT,
-                message,
-                timestamp: new Date().toISOString(),
-                path,
-                details: respObj.message !== message ? respObj : null,
+                ...base,
+                statusCode: httpError.status,
+                error: codeForStatus(httpError.status),
+                message: httpError.message,
             };
         }
 
         return {
-            statusCode: status,
+            ...base,
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
             error: ErrorCode.INTERNAL_ERROR,
-            message:
-                typeof response === 'string'
-                    ? response
-                    : 'Internal Server Error',
+            message: INTERNAL_MESSAGE,
+        };
+    }
+
+    private fromHttpException(
+        exception: HttpException,
+        path: string,
+        requestId: string,
+    ): AppErrorResponse {
+        const status = exception.getStatus();
+        const base = {
+            statusCode: status,
+            error: codeForStatus(status),
             timestamp: new Date().toISOString(),
             path,
+            requestId,
+        };
+
+        if (status >= 500) {
+            return { ...base, message: INTERNAL_MESSAGE, details: null };
+        }
+
+        const response = exception.getResponse();
+        const raw =
+            typeof response === 'object' && response !== null
+                ? (response as { message?: unknown }).message
+                : response;
+
+        if (Array.isArray(raw)) {
+            const messages = raw.map(String);
+            return {
+                ...base,
+                message: messages.join(', '),
+                details: { messages },
+            };
+        }
+
+        return {
+            ...base,
+            message: typeof raw === 'string' ? raw : exception.message,
             details: null,
         };
     }
+
+    private log(exception: unknown, body: AppErrorResponse, req: Request) {
+        // The path without the query string: queries can carry search terms.
+        const path = (req.originalUrl ?? req.url ?? '').split('?')[0];
+        const line = `[${body.requestId}] ${req.method} ${path} -> ${body.statusCode} ${body.error}`;
+        const message =
+            exception instanceof Error
+                ? `${exception.name}: ${exception.message}`
+                : safeString(exception);
+
+        if (body.statusCode >= 500) {
+            const details =
+                exception instanceof AppError && exception.details !== null
+                    ? ` details=${safeString(exception.details)}`
+                    : '';
+            this.logger.error(
+                `${line}: ${message}${details}`,
+                stackWithCauses(exception),
+            );
+            return;
+        }
+
+        // A classified database error (a duplicate key, a validation
+        // failure) is a 4xx, but its stack and the driver error behind it
+        // are what explain it: still a warning, with the stack and causes
+        // in the same entry.
+        if (isClassifiedDbError(exception)) {
+            this.logger.warn(
+                `${line}: ${message}\n${stackWithCauses(exception)}`,
+            );
+            return;
+        }
+
+        this.logger.warn(`${line}: ${body.message}`);
+    }
 }
 
-class MongoErrorHandler {
-    static handle(err: Error, res: Response, req: Request): void {
-        const error = err as {
-            code?: number | string;
-            name?: string;
-            message?: string;
-            writeErrors?: Array<{
-                err?: {
-                    op?: Record<string, unknown>;
-                    errmsg?: string;
-                };
-            }>;
-            errorResponse?: {
-                errmsg?: string;
-                validationErrors?: Array<{
-                    path: string;
-                    message: string;
-                }>;
-            };
-        };
+/**
+ * A database error that answers 4xx: raw (classified by the filter) or
+ * already classified by `runInTransaction` (an AppError whose `cause` is
+ * the driver or Mongoose error).
+ */
+function isClassifiedDbError(exception: unknown): boolean {
+    return (
+        classifyDbError(exception) !== null ||
+        (exception instanceof AppError && exception.cause !== undefined)
+    );
+}
 
-        const code = Number(error.code);
-
-        switch (code) {
-            case 11000:
-                return this.handleDuplicateKey(error, res, req);
-            case 121:
-                return this.handleValidationFailure(error, res, req);
-            case 112:
-                return this.handleWriteConflict(error, res, req);
-            default:
-                return this.handleGenericError(error, res, req);
-        }
-    }
-
-    private static handleDuplicateKey(
-        err: Record<string, unknown>,
-        res: Response,
-        req: Request,
-    ): void {
-        const error = err as {
-            name?: string;
-            writeErrors?: Array<{
-                err?: {
-                    op?: Record<string, unknown>;
-                    errmsg?: string;
-                };
-            }>;
-            errorResponse?: { errmsg?: string };
-        };
-
-        const baseErrMsg = 'Already exists';
-        const getKey = (origMsg: string) =>
-            origMsg.split('dup key: { ')[1]?.split(':')[0] ?? 'unknown';
-
-        let details: unknown;
-
-        if (error.name === 'MongoBulkWriteError') {
-            details = error.writeErrors?.map(({ err: writeErr }) => {
-                const op = writeErr?.op;
-                const entry: Record<string, unknown> = {
-                    msg: baseErrMsg,
-                    property: getKey(writeErr?.errmsg ?? ''),
-                };
-                if (op?._id) {
-                    entry._id = op._id;
-                }
-                return entry;
-            });
-        } else {
-            details = [
-                {
-                    msg: baseErrMsg,
-                    property: getKey(error.errorResponse?.errmsg ?? ''),
-                },
-            ];
-        }
-
-        const appError = new AppError(
-            ErrorCode.DB_DUPLICATE_KEY,
-            HttpStatus.BAD_REQUEST,
-            baseErrMsg,
-            details,
-        );
-        res.status(appError.statusCode).json(appError.toResponse(req.url));
-    }
-
-    private static handleValidationFailure(
-        err: Record<string, unknown>,
-        res: Response,
-        req: Request,
-    ): void {
-        const error = err as {
-            errorResponse?: {
-                errmsg?: string;
-                validationErrors?: Array<{
-                    path: string;
-                    message: string;
-                }>;
-            };
-        };
-
-        const validationErrors =
-            error.errorResponse?.validationErrors?.map((v) => ({
-                field: v.path,
-                message: v.message,
-            })) ?? [];
-
-        const appError = new AppError(
-            ErrorCode.DB_VALIDATION_ERROR,
-            HttpStatus.BAD_REQUEST,
-            'Document validation failed',
-            validationErrors.length > 0 ? validationErrors : null,
-        );
-        res.status(appError.statusCode).json(appError.toResponse(req.url));
-    }
-
-    private static handleWriteConflict(
-        err: Record<string, unknown>,
-        res: Response,
-        req: Request,
-    ): void {
-        const appError = new AppError(
-            ErrorCode.INTERNAL_ERROR,
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            'Write conflict - please retry',
-            { originalError: err.message },
-        );
-        res.status(appError.statusCode).json(appError.toResponse(req.url));
-    }
-
-    private static handleGenericError(
-        err: Record<string, unknown>,
-        res: Response,
-        req: Request,
-    ): void {
-        const appError = new AppError(
-            ErrorCode.INTERNAL_ERROR,
-            HttpStatus.INTERNAL_SERVER_ERROR,
-            'Database error',
-            { originalError: err.message },
-        );
-        res.status(appError.statusCode).json(appError.toResponse(req.url));
-    }
+/**
+ * An `http-errors` client error, as body-parser raises it (413 entity too
+ * large, 400 malformed JSON, 415 unsupported charset): `expose` is true
+ * only when its message is meant for the client.
+ */
+function exposedClientError(
+    exception: unknown,
+): { status: number; message: string } | null {
+    if (!(exception instanceof Error)) return null;
+    const e = exception as Error & {
+        expose?: unknown;
+        status?: unknown;
+        statusCode?: unknown;
+    };
+    const status = Number(e.status ?? e.statusCode);
+    if (e.expose !== true || !Number.isInteger(status)) return null;
+    if (status < 400 || status >= 500) return null;
+    return { status, message: e.message };
 }
