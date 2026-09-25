@@ -24,7 +24,7 @@ describe('Sales indexes (issue #16)', () => {
         });
     });
 
-    it('drops the single-field shift index the compound one makes redundant', () => {
+    it('no longer declares the single-field shift index (an existing DB keeps shift_1 until an operator drops it: README deploy notes)', () => {
         expect(keysOf(SalesSchema)).not.toContainEqual({ shift: 1 });
     });
 

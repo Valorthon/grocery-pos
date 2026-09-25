@@ -262,7 +262,9 @@ SalesSchema.index(
 //   `{ cashier, shift }` (`saleScope`). A shift belongs to one cashier, so
 //   `shift` alone is as selective as the pair and `cashier` is checked on
 //   the few matching documents. Its `shift` prefix also serves the Z-read's
-//   `find({ shift })` at close and replaces the old single-field `shift_1`.
+//   `find({ shift })` at close, so the schema no longer declares the
+//   single-field `shift_1`. Mongoose builds new indexes but never drops
+//   old ones: the README deploy notes say when to drop it.
 SalesSchema.index({ createdAt: -1 });
 SalesSchema.index({ cashier: 1, createdAt: -1 });
 SalesSchema.index({ shift: 1, createdAt: -1 });
