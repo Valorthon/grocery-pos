@@ -248,4 +248,160 @@ describe('CheckoutModal', () => {
             expect(document.activeElement).toBe(amountInput());
         });
     });
+    describe('tendering (#23)', () => {
+        function methodButton(name: string) {
+            return [...document.querySelectorAll('button')].find(
+                (b) => b.textContent?.trim() === name,
+            )!;
+        }
+
+        function field(label: string) {
+            return document.querySelector<HTMLInputElement>(
+                `input[aria-label="${label}"]`,
+            );
+        }
+
+        async function typeInto(el: HTMLInputElement, value: string) {
+            el.value = value;
+            el.dispatchEvent(new Event('input'));
+            await flush();
+        }
+
+        function quickCashButtons() {
+            return [
+                ...document.querySelectorAll<HTMLButtonElement>(
+                    '[data-testid="quick-cash"] button',
+                ),
+            ];
+        }
+
+        it('offers Exact and the next likely amounts, none disabled', async () => {
+            // ₱1,180: the product owner's example.
+            mount(vi.fn(), { total: 118000, initialCash: null });
+            await flush();
+
+            expect(
+                quickCashButtons().map((b) => b.textContent?.trim()),
+            ).toEqual(['Exact', '₱1,200.00', '₱1,500.00', '₱2,000.00']);
+            expect(quickCashButtons().some((b) => b.disabled)).toBe(false);
+        });
+
+        it('fills the amount from a quick-cash button and shows the change', async () => {
+            const submit = vi.fn().mockResolvedValue(undefined);
+            mount(submit, { initialCash: null });
+            await flush();
+
+            quickCashButtons()
+                .find((b) => b.textContent?.trim() === '₱500.00')!
+                .click();
+            await flush();
+
+            expect(amountInput().value).toBe('500.00');
+            expect(document.body.textContent).toContain('Change Due:');
+            expect(document.body.textContent).toContain('₱50.00');
+
+            confirmButton().click();
+            await flush();
+            expect(submit).toHaveBeenCalledWith({
+                paymentType: PaymentType.CASH,
+                tenders: [{ type: 'CASH', amount: 50000 }],
+            });
+        });
+
+        it('fills the exact total', async () => {
+            mount(vi.fn(), { initialCash: null });
+            await flush();
+            quickCashButtons()[0].click();
+            await flush();
+            expect(amountInput().value).toBe('450.00');
+            expect(confirmButton().disabled).toBe(false);
+        });
+
+        it('shows the GCash reference format error inline and holds Confirm', async () => {
+            mount(vi.fn());
+            await flush();
+            methodButton('GCash').click();
+            await flush();
+
+            const reference = field('GCash reference number')!;
+            // Nothing typed yet: no error, but nothing to confirm.
+            expect(
+                document.querySelector('[data-testid="reference-error"]'),
+            ).toBeNull();
+            expect(confirmButton().disabled).toBe(true);
+
+            await typeInto(reference, '12345');
+            const error = document.querySelector(
+                '[data-testid="reference-error"]',
+            )!;
+            expect(error.textContent).toContain(
+                'A GCash reference number is 13 digits',
+            );
+            expect(reference.getAttribute('aria-invalid')).toBe('true');
+            expect(reference.getAttribute('aria-describedby')).toBe(error.id);
+            expect(confirmButton().disabled).toBe(true);
+
+            await typeInto(reference, '1234 567 890123');
+            expect(
+                document.querySelector('[data-testid="reference-error"]'),
+            ).toBeNull();
+            expect(confirmButton().disabled).toBe(false);
+        });
+
+        it('confirms a split whose cash covers the total, without a reference', async () => {
+            const submit = vi.fn().mockResolvedValue(undefined);
+            mount(submit, { initialMethod: PaymentType.SPLIT });
+            await flush();
+
+            await typeInto(field('Customer cash given')!, '500');
+
+            // The reference is hidden, so it cannot be required.
+            expect(field('GCash reference number')).toBeNull();
+            expect(
+                document.querySelector('[data-testid="split-covered"]'),
+            ).not.toBeNull();
+            expect(
+                document.querySelector('[data-testid="split-change"]')
+                    ?.textContent,
+            ).toContain('₱50.00');
+            expect(confirmButton().disabled).toBe(false);
+
+            confirmButton().click();
+            await flush();
+            expect(submit).toHaveBeenCalledWith({
+                paymentType: PaymentType.CASH,
+                tenders: [{ type: 'CASH', amount: 50000 }],
+            });
+        });
+
+        it('shows no change on a real split, and GCash the rest', async () => {
+            const submit = vi.fn().mockResolvedValue(undefined);
+            mount(submit, { initialMethod: PaymentType.SPLIT });
+            await flush();
+
+            await typeInto(field('Customer cash given')!, '300');
+            expect(
+                document.querySelector('[data-testid="split-gcash"]')
+                    ?.textContent,
+            ).toContain('₱150.00');
+            expect(
+                document.querySelector('[data-testid="split-change"]')
+                    ?.textContent,
+            ).toContain('₱0.00');
+            expect(confirmButton().disabled).toBe(true);
+
+            await typeInto(field('GCash reference number')!, '1234567890123');
+            expect(confirmButton().disabled).toBe(false);
+            confirmButton().click();
+            await flush();
+            expect(submit).toHaveBeenCalledWith({
+                paymentType: PaymentType.SPLIT,
+                tenders: [
+                    { type: 'CASH', amount: 30000 },
+                    { type: 'GCASH', amount: 15000 },
+                ],
+                referenceNumber: '1234567890123',
+            });
+        });
+    });
 });
