@@ -84,18 +84,35 @@ pnpm migrate:decode-entities            # dry run: prints what would change
 pnpm migrate:decode-entities --apply    # writes it
 ```
 
-1. Back up the database (or run it against a restored copy first).
-2. Run the dry run. It lists, per collection and field, how many documents
+Run it with the API stopped, so nobody types new text while it runs (text
+typed after the fix is stored raw, and a literal `&amp;` in it must not be
+decoded) and nobody re-creates a name in between:
+
+1. Back up the database (or rehearse on a restored copy first).
+2. Stop the API.
+3. Deploy the fix, without starting the API yet.
+4. Run the dry run. It lists, per collection and field, how many documents
    would change, with examples, and every `SKIPPED` document: a product or
    user whose decoded name would duplicate an existing one (both names are
-   unique). Rename one of each pair in the app, or accept that the skipped
-   one keeps its encoded name.
-3. Deploy the fix, then run with `--apply` right away, before users re-enter
-   names by hand. Each write only applies if the document still holds the
-   value that was read, so a document edited in between is reported and
-   skipped, not overwritten; no single failure stops the run.
-4. It records itself in the `migrations` collection and refuses a second
-   `--apply`, because decoding twice would turn a typed `&lt;` into `<`.
+   unique).
+5. Run with `--apply`.
+6. Start the API.
+
+A `SKIPPED` product or user keeps its encoded name until someone renames it.
+A skipped user must type the name encoded to sign in (e.g. `m&amp;m`, not
+`m&m`) until an admin renames the account; rename one of each pair in the
+app once the API is back.
+
+The run is crash-safe and resumable. It marks itself `running` in the
+`migrations` collection before writing, and records each document's exact
+edit in `migration_progress` before touching it. Each write only applies if
+the document still holds the value that was read, so a document edited
+meanwhile is reported and skipped, not overwritten. If a write fails, the
+run carries on, exits with status 1 and ends `incomplete`: fix the cause and
+run `--apply` again. The rerun (like a rerun after a crash) retries only the
+documents that were not written and never decodes one twice. Once a run ends
+`complete`, further `--apply` runs are refused, because decoding text typed
+after the fix would corrupt it.
 
 The old pipe decoded its input before re-encoding it, so an entity a user
 typed literally was already lost on the way in: a typed `&lt;` was stored as
