@@ -58,7 +58,7 @@
                         :title="
                             canEdit(item)
                                 ? 'Edit'
-                                : 'This user holds a role you do not hold'
+                                : 'Only an admin can edit this user'
                         "
                         @click="openEdit(item)"
                     >
@@ -160,7 +160,11 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import { Role, useAuthStore } from '@/stores/auth';
-import { ASSIGNABLE_ROLES, holdsRole } from '@grocery-pos/contracts';
+import {
+    ASSIGNABLE_ROLES,
+    canGrantRole,
+    canManageUser,
+} from '@grocery-pos/contracts';
 import { isAxiosError } from 'axios';
 
 const loading = ref(true);
@@ -178,16 +182,20 @@ const authStore = useAuthStore();
 const myRoles = computed(() => authStore.user?.roles ?? []);
 
 // The server enforces all of this (issue #3); the form only hides what it
-// would refuse. You can grant only roles you hold (ADMIN holds all), cannot
-// edit anyone holding a role you lack, cannot change your own roles, and
-// only an admin resets someone else's password.
+// would refuse. A user manager grants and manages only SELLER, ADJUSTER
+// and RESTOCKER (MANAGEABLE_ROLES); ADMIN and USER_MANAGER holders are
+// admin-only. Nobody changes their own roles, and only an admin resets
+// someone else's password.
 const roleOptions = ASSIGNABLE_ROLES;
 const grantableRoles = computed(() =>
-    roleOptions.filter((role) => holdsRole(myRoles.value, role)),
+    roleOptions.filter((role) => canGrantRole(myRoles.value, role)),
 );
 
-function canEdit(item: { roles?: Role[] }): boolean {
-    return (item.roles ?? []).every((role) => holdsRole(myRoles.value, role));
+function canEdit(item: { name?: string; roles?: Role[] }): boolean {
+    return (
+        item.name === authStore.user?.username ||
+        canManageUser(myRoles.value, item.roles ?? [])
+    );
 }
 
 const headers = [
@@ -287,7 +295,11 @@ function openEdit(item: any) {
         _id: item._id,
         name: item.name,
         password: '',
-        roles: [...(item.roles ?? [])],
+        // Drops roles that can't be stored (e.g. UNAUTHENTICATED on legacy
+        // documents), so saving cleans them up.
+        roles: (item.roles ?? []).filter((role: Role) =>
+            ASSIGNABLE_ROLES.includes(role),
+        ),
         isActive: item.isActive ?? true,
     };
     isEditOpen.value = true;
