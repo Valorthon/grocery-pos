@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import { isAxiosError } from 'axios';
 import api from '@/axios';
+import { apiErrorText } from '@/utils/api-error';
 import {
     type BillCounts,
     type CashierDrawerMovement,
@@ -48,15 +49,13 @@ export function apiErrorCode(error: unknown): string | undefined {
     return typeof data?.error === 'string' ? data.error : undefined;
 }
 
-/** The API's message on a failed request, or `fallback`. */
+/**
+ * The API's message on a failed request as one line (its detail list
+ * when it sent one, a network error without a response), or `fallback`.
+ * Same rules as `apiErrorMessages` (issue #18).
+ */
 export function apiErrorMessage(error: unknown, fallback: string): string {
-    if (isAxiosError(error)) {
-        const data = error.response?.data as { message?: unknown } | undefined;
-        if (typeof data?.message === 'string' && data.message) {
-            return data.message;
-        }
-    }
-    return fallback;
+    return apiErrorText(error, fallback);
 }
 
 /**

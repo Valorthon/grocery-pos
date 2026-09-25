@@ -98,7 +98,7 @@
         @update="handleUpdateIem"
     />
 
-    <AdjustSaveDialog v-model="isSaveDialogOpen" @save="saveToDB" />
+    <AdjustSaveDialog v-model="isSaveDialogOpen" :save="saveToDB" />
 </template>
 
 <script setup lang="ts">
@@ -136,21 +136,24 @@ const filteredItems = computed(() => {
     );
 });
 
-const saveToDB = async (saveForm: SaveForm) => {
+/** The save dialog waits on this and closes only when it is true. */
+const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
     try {
         await api.post(
             '/adjustments',
             toAdjustmentBody(items.value, saveForm.description),
         );
-
-        isSaveDialogOpen.value = false;
-        router.push({ name: 'Adjustments' });
-        uiStore.queueMessage(Color.SUCCESS, 'Adjustments saved.');
     } catch (error) {
-        apiErrorMessages(error, 'Error saving. Try again.').forEach((message) =>
-            uiStore.queueMessage(Color.ERROR, message),
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Error saving. Try again.'),
         );
+        return false;
     }
+
+    uiStore.queueMessage(Color.SUCCESS, 'Adjustments saved.');
+    router.push({ name: 'Adjustments' });
+    return true;
 };
 
 const openAddDialog = () => {

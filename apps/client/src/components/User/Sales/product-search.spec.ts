@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import { AxiosError, AxiosHeaders, CanceledError } from 'axios';
 import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { NETWORK_ERROR_MESSAGE } from '@/utils/api-error';
 import {
     isBarcode,
     type Match,
@@ -70,8 +71,13 @@ describe('searchErrorMessage', () => {
             ),
         ).toBe('Forbidden resource');
         expect(
-            searchErrorMessage(httpError(400, { message: ['a', 'b'] })),
-        ).toBe('a, b');
+            searchErrorMessage(
+                httpError(400, {
+                    message: 'Validation failed',
+                    details: { messages: ['a', 'b'] },
+                }),
+            ),
+        ).toBe('a; b');
     });
 
     it('falls back to the status, or to a network message', () => {
@@ -81,7 +87,7 @@ describe('searchErrorMessage', () => {
             searchErrorMessage(
                 new AxiosError('timeout', 'ECONNABORTED', config),
             ),
-        ).toBe('No response from the server');
+        ).toBe(NETWORK_ERROR_MESSAGE);
     });
 });
 

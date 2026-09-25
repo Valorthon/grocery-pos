@@ -1,84 +1,70 @@
 <template>
-    <div class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end">
+    <div
+        class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto"
+        data-testid="toast-stack"
+    >
+        <!-- Errors: each one is an alert, announced as it appears. -->
         <TransitionGroup
-            enter-active-class="transition duration-200 ease-out"
-            enter-from-class="opacity-0 -translate-y-2"
-            enter-to-class="opacity-100 translate-y-0"
-            leave-active-class="transition duration-200 ease-in"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
+            tag="div"
+            class="flex flex-col gap-2 items-end"
+            v-bind="transition"
         >
-            <div
-                v-for="toast in toasts"
+            <ToastItem
+                v-for="toast in errors"
                 :key="toast.id"
-                :class="[
-                    'flex items-center gap-2.5 rounded-xl px-4 py-3 shadow-lg border text-sm font-bold',
-                    colorClass(toast.color),
-                ]"
-            >
-                <component :is="iconFor(toast.color)" :size="18" />
-                <span>{{ toast.text }}</span>
-                <button
-                    type="button"
-                    class="ml-1 text-current opacity-60 hover:opacity-100"
-                    @click="dismiss(toast.id)"
-                >
-                    <X :size="16" />
-                </button>
-            </div>
+                role="alert"
+                :toast="toast"
+                @dismiss="uiStore.dismiss(toast.id)"
+            />
+        </TransitionGroup>
+        <!--
+            Success and info: one live region that is always in the page,
+            so a toast added to it is announced (politely).
+        -->
+        <TransitionGroup
+            tag="div"
+            class="flex flex-col gap-2 items-end"
+            role="status"
+            aria-live="polite"
+            data-testid="toast-status"
+            v-bind="transition"
+        >
+            <ToastItem
+                v-for="toast in notices"
+                :key="toast.id"
+                :toast="toast"
+                @dismiss="uiStore.dismiss(toast.id)"
+            />
         </TransitionGroup>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-import { CheckCircle2, AlertCircle, Info, X } from '@lucide/vue';
-import { useUIStore } from '@/stores/ui';
+import { computed } from 'vue';
+import { Color, useUIStore } from '@/stores/ui';
+import ToastItem from './ToastItem.vue';
 
-interface Toast {
-    id: number;
-    color: string;
-    text: string;
-}
-
+/**
+ * Every queued message, stacked (issue #18), errors above the rest.
+ * Errors stay until closed and are announced (`role="alert"`); success
+ * and info close by themselves (the store times them) and are announced
+ * politely. A long stack scrolls instead of covering the page.
+ */
 const uiStore = useUIStore();
-const toasts = ref<Toast[]>([]);
-let counter = 0;
 
-function colorClass(color: string): string {
-    switch (color) {
-        case 'success':
-            return 'bg-emerald-50 border-emerald-200 text-emerald-800';
-        case 'error':
-            return 'bg-red-50 border-red-200 text-red-800';
-        default:
-            return 'bg-slate-900 border-slate-700 text-white';
-    }
-}
-
-function iconFor(color: string) {
-    if (color === 'success') return CheckCircle2;
-    if (color === 'error') return AlertCircle;
-    return Info;
-}
-
-function dismiss(id: number) {
-    toasts.value = toasts.value.filter((t) => t.id !== id);
-}
-
-watch(
-    () => uiStore.queue.length,
-    () => {
-        const latest = uiStore.queue[uiStore.queue.length - 1];
-        if (!latest) return;
-        const id = ++counter;
-        toasts.value.push({
-            id,
-            color: latest.color ?? 'info',
-            text: latest.text ?? '',
-        });
-        setTimeout(() => dismiss(id), 3000);
-    },
-    { immediate: false },
+const errors = computed(() =>
+    uiStore.toasts.filter((t) => t.color === Color.ERROR),
 );
+const notices = computed(() =>
+    uiStore.toasts.filter((t) => t.color !== Color.ERROR),
+);
+
+const transition = {
+    enterActiveClass: 'transition duration-200 ease-out',
+    enterFromClass: 'opacity-0 -translate-y-2',
+    enterToClass: 'opacity-100 translate-y-0',
+    leaveActiveClass: 'transition duration-200 ease-in',
+    leaveFromClass: 'opacity-100',
+    leaveToClass: 'opacity-0',
+};
 </script>

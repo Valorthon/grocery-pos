@@ -44,8 +44,10 @@
             :headers="headers"
             :items="serverItems"
             :loading="loading"
+            :error="loadError"
             empty-text="No products found"
             :items-length="totalItems"
+            @retry="fetchProducts"
         >
             <template #cell-price="{ value }">
                 <span class="font-medium">{{
@@ -66,9 +68,9 @@ import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
+import { useListFetch } from '@/composables/useListFetch';
 
 const router = useRouter();
-const loading = ref(true);
 const limit = ref(5);
 const page = ref(1);
 const totalItems = ref(0);
@@ -95,28 +97,33 @@ const resetFilters = () => {
     resetSearch();
 };
 
-async function fetchProducts() {
-    loading.value = true;
-    const result = await api.get(`/products`, {
-        params: {
-            page: page.value,
-            limit: limit.value,
-            name: searchName.value?.toUpperCase(),
-            EAN: searchEAN.value,
-        },
-    });
+const {
+    loading,
+    error: loadError,
+    load: fetchProducts,
+} = useListFetch(
+    () =>
+        api.get(`/products`, {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                name: searchName.value?.toUpperCase(),
+                EAN: searchEAN.value,
+            },
+        }),
+    (result) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        serverItems.value = result.data.data.map((product: any) => ({
+            id: product._id,
+            EAN: product.EAN,
+            name: product.name,
+            price: product.price,
+        }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    serverItems.value = result.data.data.map((product: any) => ({
-        id: product._id,
-        EAN: product.EAN,
-        name: product.name,
-        price: product.price,
-    }));
-
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the products.',
+);
 
 fetchProducts();
 

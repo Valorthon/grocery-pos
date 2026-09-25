@@ -72,8 +72,10 @@
             :headers="headers"
             :items="serverItems"
             :loading="loading"
+            :error="loadError"
             empty-text="No details found"
             :items-length="totalItems"
+            @retry="fetchDetails"
         />
     </div>
 </template>
@@ -85,6 +87,7 @@ import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import { useListFetch } from '@/composables/useListFetch';
 import { formatCurrency } from '@/utils/currency';
 
 const props = defineProps<{
@@ -97,7 +100,6 @@ const props = defineProps<{
     };
 }>();
 
-const loading = ref(true);
 const limit = ref(5);
 const totalItems = ref(0);
 const page = ref(1);
@@ -124,37 +126,42 @@ const resetFilters = () => {
     resetSearch();
 };
 
-async function fetchDetails() {
-    loading.value = true;
-    const result = await api.get(`/restocks/details/${props.item.id}`, {
-        params: {
-            page: page.value,
-            limit: limit.value,
-            name: searchName.value?.toUpperCase(),
-            EAN: searchEAN.value,
-        },
-    });
-
-    serverItems.value = result.data.data.map(
-        (details: {
-            id: string;
-            product?: { name: string };
-            quantity: number;
-            unitCost: number;
-        }) => ({
-            id: details.id,
-            name: details.product?.name,
-            quantity: details.quantity,
-            unitCost: formatCurrency(details.unitCost ?? 0),
-            totalCost: formatCurrency(
-                (details.unitCost ?? 0) * (details.quantity ?? 0),
-            ),
+const {
+    loading,
+    error: loadError,
+    load: fetchDetails,
+} = useListFetch(
+    () =>
+        api.get(`/restocks/details/${props.item.id}`, {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                name: searchName.value?.toUpperCase(),
+                EAN: searchEAN.value,
+            },
         }),
-    );
+    (result) => {
+        serverItems.value = result.data.data.map(
+            (details: {
+                id: string;
+                product?: { name: string };
+                quantity: number;
+                unitCost: number;
+            }) => ({
+                id: details.id,
+                name: details.product?.name,
+                quantity: details.quantity,
+                unitCost: formatCurrency(details.unitCost ?? 0),
+                totalCost: formatCurrency(
+                    (details.unitCost ?? 0) * (details.quantity ?? 0),
+                ),
+            }),
+        );
 
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the details.',
+);
 
 onMounted(fetchDetails);
 

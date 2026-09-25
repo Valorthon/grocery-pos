@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { apiErrorMessages, NETWORK_ERROR_MESSAGE } from './api-error';
+import {
+    apiErrorMessages,
+    apiErrorText,
+    NETWORK_ERROR_MESSAGE,
+} from './api-error';
 import { newProductLines } from './payloads';
 
 /** An axios error carrying `data` as the response body. */
@@ -100,12 +104,15 @@ describe('apiErrorMessages', () => {
     });
 
     it('uses the fallback for a body without a message', () => {
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
         expect(apiErrorMessages(httpError(502, '<html>'), 'Try again')).toEqual(
             ['Try again'],
         );
-        expect(apiErrorMessages(new Error('boom'), 'Try again')).toEqual([
-            'Try again',
-        ]);
+        expect(log).not.toHaveBeenCalled();
+        const bug = new Error('boom');
+        expect(apiErrorMessages(bug, 'Try again')).toEqual(['Try again']);
+        // A bug, not a failed request: logged so it stays diagnosable.
+        expect(log).toHaveBeenCalledWith(bug);
     });
 
     it('does not name an unknown clashing field', () => {
@@ -230,5 +237,25 @@ describe('apiErrorMessages', () => {
                 'Item 2: name: Already exists',
             ]);
         });
+    });
+});
+
+describe('apiErrorText', () => {
+    it('joins the messages into one line', () => {
+        expect(
+            apiErrorText(
+                httpError(
+                    400,
+                    body('Validation failed', { messages: ['a', 'b'] }),
+                ),
+            ),
+        ).toBe('a; b');
+    });
+
+    it('uses the fallback for an error that is not from axios', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        expect(
+            apiErrorText(new TypeError('x is undefined'), 'Could not load'),
+        ).toBe('Could not load');
     });
 });

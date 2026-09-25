@@ -88,13 +88,19 @@ function detailMessages(details: unknown, options: ApiErrorOptions): string[] {
  * What to show for a failed API call, as one toast per line: the server's
  * detail list when it sent one, else its `message` (always a string since
  * #8), else `fallback`. A request that got no response is a network error.
+ * Anything that is not an axios error is logged with `console.error`.
  */
 export function apiErrorMessages(
     error: unknown,
     fallback = 'Something went wrong. Please try again.',
     options: ApiErrorOptions = {},
 ): string[] {
-    if (!isAxiosError(error)) return [fallback];
+    if (!isAxiosError(error)) {
+        // Not a failed request but a bug (e.g. a malformed row): the user
+        // sees the fallback, and the console keeps it diagnosable.
+        console.error(error);
+        return [fallback];
+    }
     if (!error.response) return [NETWORK_ERROR_MESSAGE];
 
     const data = error.response.data as Partial<AppErrorResponse> | undefined;
@@ -104,4 +110,16 @@ export function apiErrorMessages(
     if (details.length > 0) return details;
     if (nonEmpty(data.message)) return [data.message];
     return [fallback];
+}
+
+/**
+ * `apiErrorMessages` as one line, for a single inline error (a list-fetch
+ * error state or a modal's error line).
+ */
+export function apiErrorText(
+    error: unknown,
+    fallback?: string,
+    options?: ApiErrorOptions,
+): string {
+    return apiErrorMessages(error, fallback, options).join('; ');
 }

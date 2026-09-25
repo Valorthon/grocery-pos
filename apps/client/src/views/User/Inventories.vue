@@ -44,8 +44,10 @@
             :headers="headers"
             :items="serverItems"
             :loading="loading"
+            :error="loadError"
             empty-text="No inventory found"
             :items-length="totalItems"
+            @retry="fetchInventory"
         />
     </PageCard>
 </template>
@@ -59,9 +61,9 @@ import PageCard from '@/components/ui/PageCard.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import { useListFetch } from '@/composables/useListFetch';
 
 const router = useRouter();
-const loading = ref(true);
 const limit = ref(5);
 const page = ref(1);
 const totalItems = ref(0);
@@ -88,32 +90,37 @@ const resetFilters = () => {
     resetSearch();
 };
 
-async function fetchInventory() {
-    loading.value = true;
-    const result = await api.get(`/inventories`, {
-        params: {
-            page: page.value,
-            limit: limit.value,
-            name: searchName.value?.toUpperCase(),
-            EAN: searchEAN.value,
-        },
-    });
+const {
+    loading,
+    error: loadError,
+    load: fetchInventory,
+} = useListFetch(
+    () =>
+        api.get(`/inventories`, {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                name: searchName.value?.toUpperCase(),
+                EAN: searchEAN.value,
+            },
+        }),
+    (result) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = result.data.data.map((inventory: any) => ({
+            id: inventory.product._id,
+            EAN: inventory.product.EAN,
+            name: inventory.product.name,
+            stock: inventory.stock,
+        }));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data = result.data.data.map((inventory: any) => ({
-        id: inventory.product._id,
-        EAN: inventory.product.EAN,
-        name: inventory.product.name,
-        stock: inventory.stock,
-    }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data.sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data.sort((a: any, b: any) => a.name.localeCompare(b.name));
-
-    serverItems.value = data;
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+        serverItems.value = data;
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the inventory.',
+);
 
 fetchInventory();
 

@@ -109,7 +109,7 @@
         @update="handleUpdateItem"
     />
 
-    <RestockSaveDialog v-model="isSaveDialogOpen" @save="saveToDB" />
+    <RestockSaveDialog v-model="isSaveDialogOpen" :save="saveToDB" />
 </template>
 
 <script setup lang="ts">
@@ -148,7 +148,8 @@ const filteredItems = computed(() => {
     );
 });
 
-const saveToDB = async (saveForm: SaveForm) => {
+/** The save dialog waits on this and closes only when it is true. */
+const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
     // The API numbers insert errors among the new products only.
     const newLines = newProductLines(items.value);
     try {
@@ -156,15 +157,19 @@ const saveToDB = async (saveForm: SaveForm) => {
             '/restocks',
             toRestockBody(items.value, saveForm.description),
         );
-
-        isSaveDialogOpen.value = false;
-        router.push({ name: 'Restocks' });
-        uiStore.queueMessage(Color.SUCCESS, 'Restock saved.');
     } catch (error) {
-        apiErrorMessages(error, 'Error saving. Try again.', {
-            insertLine: (index) => newLines[index] ?? index,
-        }).forEach((message) => uiStore.queueMessage(Color.ERROR, message));
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Error saving. Try again.', {
+                insertLine: (index) => newLines[index] ?? index,
+            }),
+        );
+        return false;
     }
+
+    uiStore.queueMessage(Color.SUCCESS, 'Restock saved.');
+    router.push({ name: 'Restocks' });
+    return true;
 };
 
 const openAddDialog = () => {

@@ -141,10 +141,10 @@ const saveToDB = async () => {
     try {
         await api.post('/products/bulk', toNewProductsBody(items.value));
     } catch (err: unknown) {
-        apiErrorMessages(
-            err,
-            'Error saving products. Please try again',
-        ).forEach((message) => uiStore.queueMessage(Color.ERROR, message));
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(err, 'Error saving products. Please try again'),
+        );
         return;
     }
 

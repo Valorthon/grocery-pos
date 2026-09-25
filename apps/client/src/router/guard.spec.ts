@@ -83,6 +83,12 @@ describe('router guard and the start-up profile fetch', () => {
         await router.push('/admin');
         expect(router.currentRoute.value.name).toBe('Login');
         expect(api.get).toHaveBeenCalledTimes(1);
+        // The login prompt shows once, with no repeat count (#18).
+        const { useUIStore } = await import('@/stores/ui');
+        const toasts = useUIStore().toasts;
+        expect(toasts.map((t) => [t.lines, t.count])).toEqual([
+            [['Please log in to continue'], 1],
+        ]);
     });
 
     it('does not fetch without a session cookie', async () => {

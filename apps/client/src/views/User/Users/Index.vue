@@ -35,8 +35,10 @@
             :headers="headers"
             :items="serverItems"
             :loading="loading"
+            :error="loadError"
             empty-text="No users found"
             :items-length="totalItems"
+            @retry="fetchUsers"
         >
             <template #cell-roles="{ value }">
                 <div class="flex flex-wrap gap-1">
@@ -70,7 +72,12 @@
         </BaseTable>
     </PageCard>
 
-    <BaseModal v-model="isCreateOpen" title="Add User" max-width="28rem">
+    <BaseModal
+        v-model="createModel"
+        title="Add User"
+        max-width="28rem"
+        :closable="!saving"
+    >
         <div class="space-y-4">
             <BaseInput v-model="createForm.name" label="Username" />
             <BaseInput
@@ -99,7 +106,10 @@
             </div>
         </div>
         <template #footer>
-            <BaseButton variant="outline" @click="isCreateOpen = false"
+            <BaseButton
+                variant="outline"
+                :disabled="saving"
+                @click="createModel = false"
                 >Cancel</BaseButton
             >
             <BaseButton
@@ -112,7 +122,12 @@
         </template>
     </BaseModal>
 
-    <BaseModal v-model="isEditOpen" title="Edit User" max-width="28rem">
+    <BaseModal
+        v-model="editModel"
+        title="Edit User"
+        max-width="28rem"
+        :closable="!saving"
+    >
         <div class="space-y-4">
             <BaseInput v-model="editForm.name" label="Username" disabled />
             <BaseInput
@@ -146,7 +161,10 @@
             <BaseCheckbox v-model="editForm.isActive" label="Active" />
         </div>
         <template #footer>
-            <BaseButton variant="outline" @click="isEditOpen = false"
+            <BaseButton
+                variant="outline"
+                :disabled="saving"
+                @click="editModel = false"
                 >Cancel</BaseButton
             >
             <BaseButton
@@ -180,9 +198,9 @@ import {
     canManageUser,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
-import { isAxiosError } from 'axios';
+import { useListFetch } from '@/composables/useListFetch';
+import { apiErrorMessages } from '@/utils/api-error';
 
-const loading = ref(true);
 const limit = ref(5);
 const page = ref(1);
 const totalItems = ref(0);
@@ -224,6 +242,22 @@ const isCreateOpen = ref(false);
 const createForm = ref({ name: '', password: '', roles: [] as Role[] });
 
 const isEditOpen = ref(false);
+
+/**
+ * The dialogs' v-model: Escape, the backdrop and Cancel cannot close one
+ * while its save is in flight (as the save dialogs, issue #18).
+ */
+function guardedOpen(open: typeof isCreateOpen) {
+    return computed({
+        get: () => open.value,
+        set: (value: boolean) => {
+            if (!value && saving.value) return;
+            open.value = value;
+        },
+    });
+}
+const createModel = guardedOpen(isCreateOpen);
+const editModel = guardedOpen(isEditOpen);
 const editForm = ref({
     _id: '',
     name: '',
@@ -265,20 +299,25 @@ const resetFilters = () => {
     resetSearch();
 };
 
-async function fetchUsers() {
-    loading.value = true;
-    const result = await api.get(`/users`, {
-        params: {
-            page: page.value,
-            limit: limit.value,
-            name: searchName.value?.toLowerCase(),
-        },
-    });
-
-    serverItems.value = result.data.data;
-    totalItems.value = result.data.totalItems;
-    loading.value = false;
-}
+const {
+    loading,
+    error: loadError,
+    load: fetchUsers,
+} = useListFetch(
+    () =>
+        api.get(`/users`, {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                name: searchName.value?.toLowerCase(),
+            },
+        }),
+    (result) => {
+        serverItems.value = result.data.data;
+        totalItems.value = result.data.totalItems;
+    },
+    'Could not load the users.',
+);
 
 fetchUsers();
 watch([page, limit], fetchUsers);
@@ -300,12 +339,10 @@ async function createUser() {
         createForm.value = { name: '', password: '', roles: [] };
         fetchUsers();
     } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error.response?.data?.message ?? 'Create failed',
-            );
-        }
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Could not create the user.'),
+        );
     } finally {
         saving.value = false;
     }
@@ -345,12 +382,10 @@ async function updateUser() {
         isEditOpen.value = false;
         fetchUsers();
     } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error.response?.data?.message ?? 'Update failed',
-            );
-        }
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(error, 'Could not update the user.'),
+        );
     } finally {
         saving.value = false;
     }

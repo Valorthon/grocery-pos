@@ -217,6 +217,66 @@ describe('auth store', () => {
         expect(shift.zRead).toBeNull();
     });
 
+    describe('toasts across sessions (#18)', () => {
+        it('clears the last session’s toasts on logout, then shows the reason', async () => {
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({});
+            const store = await loadStore();
+            const { Color, useUIStore } = await import('./ui');
+            const ui = useUIStore();
+            ui.queueMessage(Color.ERROR, 'Sale failed');
+
+            await store.logout('Please log in to continue');
+
+            expect(ui.toasts.map((t) => t.lines)).toEqual([
+                ['Please log in to continue'],
+            ]);
+            expect(ui.toasts[0].color).toBe(Color.ERROR);
+        });
+
+        it('leaves nothing after a plain logout', async () => {
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({});
+            const store = await loadStore();
+            const { Color, useUIStore } = await import('./ui');
+            const ui = useUIStore();
+            ui.queueMessage(Color.ERROR, 'Sale failed');
+
+            await store.logout();
+
+            expect(ui.toasts).toEqual([]);
+        });
+
+        it('clears the login prompt once signed in', async () => {
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({ data: {} });
+            vi.mocked(api.get).mockResolvedValue({
+                data: { username: 'ana', roles: [Role.Seller] },
+            });
+            const store = await loadStore();
+            const { Color, useUIStore } = await import('./ui');
+            const ui = useUIStore();
+            ui.queueMessage(Color.ERROR, 'Please log in to continue');
+
+            await store.login('ana', 'long-enough-1');
+
+            expect(ui.toasts).toEqual([]);
+        });
+
+        it('keeps the toasts when the login fails', async () => {
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockRejectedValue(new Error('401'));
+            const store = await loadStore();
+            const { Color, useUIStore } = await import('./ui');
+            const ui = useUIStore();
+            ui.queueMessage(Color.ERROR, 'Please log in to continue');
+
+            await expect(store.login('ana', 'wrong-pass')).rejects.toThrow();
+
+            expect(ui.toasts).toHaveLength(1);
+        });
+    });
+
     describe('initSession (roles freshness, #12)', () => {
         const staleAdmin = { username: 'admin', roles: [Role.Admin] };
 

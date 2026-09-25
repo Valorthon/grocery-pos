@@ -166,9 +166,7 @@ function homeFor(authStore: ReturnType<typeof useAuthStore>) {
         // end the server session too (best-effort, as logout always is).
         authStore.user = null;
         localStorage.removeItem('user');
-        void authStore.logout();
-        useUIStore().queueMessage(
-            Color.ERROR,
+        void authStore.logout(
             'Your account has no access. Please sign in again.',
         );
     }

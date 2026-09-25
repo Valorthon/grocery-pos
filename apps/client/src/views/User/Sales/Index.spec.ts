@@ -8,6 +8,7 @@ import {
     ShiftStatus,
     TenderType,
 } from '@grocery-pos/contracts';
+import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { useAuthStore } from '@/stores/auth';
 import Index from './Index.vue';
 
@@ -177,6 +178,42 @@ describe('admin void/refund cash payout (issue #2)', () => {
         expect(confirmButton().disabled).toBe(true);
     });
 
+    it('says the open shifts could not be loaded, not that none is open', async () => {
+        serve(CASH_SALE, [openShift(OTHER_SHIFT, 'ben')]);
+        const serveShifts = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url: string, ...rest: unknown[]) =>
+            url === '/shifts'
+                ? Promise.reject(
+                      new AxiosError('Network Error', 'ERR_NETWORK', {
+                          headers: new AxiosHeaders(),
+                      }),
+                  )
+                : serveShifts(url, ...rest),
+        );
+        await startVoid();
+
+        const error = () =>
+            document.querySelector('[data-testid="payout-shifts-error"]');
+        expect(error()?.textContent).toContain('Could not load open shifts');
+        expect(
+            document.querySelector('[data-testid="payout-no-open-shift"]'),
+        ).toBeNull();
+
+        api.get.mockImplementation(serveShifts);
+        [...error()!.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Retry'))!
+            .click();
+        await flush();
+
+        expect(error()).toBeNull();
+        expect(
+            document.querySelector('[data-testid="payout-own-shift"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector('[data-testid="payout-shift"] select'),
+        ).not.toBeNull();
+    });
+
     it('asks nothing for a GCash-only sale, which touches no drawer', async () => {
         serve(
             {
@@ -200,5 +237,69 @@ describe('admin void/refund cash payout (issue #2)', () => {
         expect(api.post).toHaveBeenCalledWith('/sales/sale1/void', {
             reason: 'mis-ring',
         });
+    });
+});
+
+describe('sales errors (issue #18)', () => {
+    const httpError = (status: number, message: string) => {
+        const config = { headers: new AxiosHeaders() };
+        return new AxiosError('Request failed', 'ERR_BAD_REQUEST', config, {}, {
+            status,
+            statusText: '',
+            headers: {},
+            config,
+            data: { statusCode: status, message },
+        } as AxiosResponse);
+    };
+
+    async function mount() {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+        return host;
+    }
+
+    it('shows a failed list in the table, then retries it', async () => {
+        api.get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
+        await mount();
+
+        const error = document.querySelector('[data-testid="table-error"]');
+        expect(error?.textContent).toContain('Internal server error');
+
+        serve(CASH_SALE, []);
+        [...error!.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Retry'))!
+            .click();
+        await flush();
+
+        expect(
+            document.querySelector('[data-testid="table-error"]'),
+        ).toBeNull();
+        expect(document.body.textContent).toContain('ana');
+    });
+
+    it('says the sale details failed instead of listing nothing', async () => {
+        serve(CASH_SALE, []);
+        await mount();
+        api.get.mockRejectedValueOnce(httpError(404, 'Sale not found'));
+
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await flush();
+
+        const error = document.querySelector('[data-testid="details-error"]');
+        expect(error?.getAttribute('role')).toBe('alert');
+        expect(error?.textContent).toContain('Sale not found');
+
+        [...error!.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Retry'))!
+            .click();
+        await flush();
+        expect(api.get).toHaveBeenLastCalledWith('/sales/details/sale1');
+        expect(
+            document.querySelector('[data-testid="details-error"]'),
+        ).toBeNull();
     });
 });
