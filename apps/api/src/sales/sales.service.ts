@@ -38,6 +38,16 @@ import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
 import { ShiftService } from '../shift/shift.service';
 
+/**
+ * Sale fields a non-admin never reads: which shift paid a reversal back and
+ * how much. The cashier is blind to drawer figures until their own Z-read
+ * (issue #2), and a payout may have come out of another cashier's drawer.
+ */
+export const CASHIER_HIDDEN_SALE_FIELDS = {
+    'reversal.payoutShift': 0,
+    'reversal.payoutAmount': 0,
+} as const;
+
 /** A sales filter, or null when the caller may read no sale at all. */
 export type SaleScope = { cashier?: Types.ObjectId; shift?: Types.ObjectId };
 
@@ -92,9 +102,13 @@ export class SalesService {
         const scope = await this.scopeFor(user);
         if (!scope) return { data: [], totalItems: 0 };
 
+        const projection = user.roles.includes(Role.Admin)
+            ? undefined
+            : CASHIER_HIDDEN_SALE_FIELDS;
+
         const [data, totalItems] = await Promise.all([
             this.model
-                .find(scope)
+                .find(scope, projection)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)

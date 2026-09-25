@@ -1,7 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { ClientSession, Types } from 'mongoose';
-import { saleScope, SalesService } from './sales.service';
+import {
+    CASHIER_HIDDEN_SALE_FIELDS,
+    saleScope,
+    SalesService,
+} from './sales.service';
 import { Sales } from './sales.schema';
 import { SalesDetails } from './sales-details.schema';
 import { ProductService } from '../product/product.service';
@@ -1346,9 +1350,19 @@ describe('Sales history scoping (issues #13, #2)', () => {
         await service.getAll(SELLER, { page: 1, limit: 10 });
 
         expect(openShiftIdOf).toHaveBeenCalledWith(SELLER.userId);
-        expect(find).toHaveBeenCalledWith(OWN_SCOPE);
+        expect(find).toHaveBeenCalledWith(
+            OWN_SCOPE,
+            CASHIER_HIDDEN_SALE_FIELDS,
+        );
         expect(countDocuments).toHaveBeenCalledWith(OWN_SCOPE);
         expect(estimatedDocumentCount).not.toHaveBeenCalled();
+    });
+
+    it('hides who paid a reversal back, and how much, from a non-admin', () => {
+        expect(CASHIER_HIDDEN_SALE_FIELDS).toEqual({
+            'reversal.payoutShift': 0,
+            'reversal.payoutAmount': 0,
+        });
     });
 
     it('lists nothing for a cashier with no open shift, without querying sales', async () => {
@@ -1364,7 +1378,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
     it('lists every sale for an admin', async () => {
         await service.getAll(ADMIN, { page: 1, limit: 10 });
 
-        expect(find).toHaveBeenCalledWith({});
+        expect(find).toHaveBeenCalledWith({}, undefined);
         expect(estimatedDocumentCount).toHaveBeenCalled();
         expect(openShiftIdOf).not.toHaveBeenCalled();
     });

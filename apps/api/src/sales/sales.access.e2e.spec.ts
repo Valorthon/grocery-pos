@@ -28,6 +28,11 @@ interface SaleRow {
     cashier: Types.ObjectId;
     shift: Types.ObjectId;
     amount: number;
+    reversal?: {
+        type: string;
+        payoutShift?: Types.ObjectId;
+        payoutAmount?: number;
+    };
 }
 
 const SELLER_A = caller(Role.Seller);
@@ -59,18 +64,48 @@ const SALES: SaleRow[] = [
     sale(SELLER_A, A_OLD_SHIFT, 300),
     sale(SELLER_C, new Types.ObjectId(), 400),
 ];
-const [A_SALE, , B_SALE, A_OLD_SALE, C_SALE] = SALES;
+const [A_SALE, A_REFUNDED, B_SALE, A_OLD_SALE, C_SALE] = SALES;
+// Refunded, with the cash paid back from another cashier's drawer.
+A_REFUNDED.reversal = {
+    type: 'REFUND',
+    payoutShift: OPEN_SHIFTS[SELLER_B.userId],
+    payoutAmount: 200,
+};
 
 function matches(row: SaleRow, filter: Record<string, unknown>): boolean {
     return Object.entries(filter).every(
         ([key, expected]) =>
-            String(row[key as keyof SaleRow]) === String(expected),
+            String(row[key as keyof SaleRow] as Types.ObjectId | number) ===
+            String(expected),
     );
 }
 
+/** Applies an exclusion projection of dotted paths, as Mongo would. */
+function project(row: SaleRow, projection?: Record<string, 0>): SaleRow {
+    const copy = {
+        ...row,
+        reversal: row.reversal && { ...row.reversal },
+    } as unknown as Record<string, unknown>;
+    for (const path of Object.keys(projection ?? {})) {
+        const keys = path.split('.');
+        const last = keys.pop()!;
+        const parent = keys.reduce<Record<string, unknown> | undefined>(
+            (obj, key) => obj?.[key] as Record<string, unknown> | undefined,
+            copy,
+        );
+        if (parent) delete parent[last];
+    }
+    return copy as unknown as SaleRow;
+}
+
 const salesModel = {
-    find: (filter: Record<string, unknown> = {}) => {
-        const rows = SALES.filter((row) => matches(row, filter));
+    find: (
+        filter: Record<string, unknown> = {},
+        projection?: Record<string, 0>,
+    ) => {
+        const rows = SALES.filter((row) => matches(row, filter)).map((row) =>
+            project(row, projection),
+        );
         const chain = {
             sort: () => chain,
             skip: () => chain,
@@ -172,6 +207,37 @@ describe('Sales history scoping (e2e)', () => {
         expect(body.data.map((s) => s._id)).not.toContain(
             String(A_OLD_SALE._id),
         );
+    });
+
+    it('hides which shift paid a reversal back, and how much, from a seller (#2)', async () => {
+        const res = await harness.call(
+            SELLER_A,
+            'GET',
+            '/sales?page=1&limit=10',
+        );
+        const body = (await res.json()) as {
+            data: Array<{ _id: string; reversal?: Record<string, unknown> }>;
+        };
+        const refunded = body.data.find(
+            (s) => s._id === String(A_REFUNDED._id),
+        );
+
+        expect(refunded?.reversal).toEqual({ type: 'REFUND' });
+    });
+
+    it('shows an admin which shift paid a reversal back', async () => {
+        const res = await harness.call(ADMIN, 'GET', '/sales?page=1&limit=10');
+        const body = (await res.json()) as {
+            data: Array<{ _id: string; reversal?: Record<string, unknown> }>;
+        };
+        const refunded = body.data.find(
+            (s) => s._id === String(A_REFUNDED._id),
+        );
+
+        expect(refunded?.reversal).toMatchObject({
+            payoutShift: String(OPEN_SHIFTS[SELLER_B.userId]),
+            payoutAmount: 200,
+        });
     });
 
     it('lists nothing for a seller with no open shift', async () => {
