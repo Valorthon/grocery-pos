@@ -5,23 +5,32 @@ import {
     IsNumber,
     IsNotEmpty,
     MaxLength,
+    IsInt,
+    Min,
 } from 'class-validator';
-import { STRING_LIMITS } from '../../../constants';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '../../../constants';
+import { Trim, TrimLowercase } from '../../../common/validators';
 
 export class GetAllDto {
+    /** Rows with stock at or below this; 0 lists what is out of stock. */
     @IsOptional()
-    @IsNumber()
-    maxStock!: number;
+    @IsInt()
+    @Min(NUMERIC_LIMITS.STOCK_MIN)
+    maxStock?: number;
 
+    /** Matched anywhere in the product name. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    name!: string;
+    @TrimLowercase()
+    name?: string;
 
+    /** Matched as a barcode prefix. */
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.EAN)
-    EAN!: string;
+    @Trim()
+    EAN?: string;
 
     @IsPositive()
     @IsNumber()

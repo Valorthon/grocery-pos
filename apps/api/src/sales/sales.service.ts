@@ -389,7 +389,7 @@ export class SalesService {
                 );
 
                 await this.modelDetails.bulkWrite(inserts, { session });
-                await this.inventoryService.sell(dto, session);
+                await this.inventoryService.sell(user.userId, dto, session);
 
                 return {
                     fullSellDetails,
@@ -551,6 +551,7 @@ export class SalesService {
                     .lean();
 
                 await this.inventoryService.returnStock(
+                    user.userId,
                     lines.map(({ product, quantity }) => ({
                         product: product as Types.ObjectId,
                         quantity,

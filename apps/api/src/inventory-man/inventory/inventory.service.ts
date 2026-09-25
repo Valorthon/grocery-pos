@@ -1,12 +1,12 @@
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Inventory } from './inventory.schema';
-import { ClientSession, Model, Types } from 'mongoose';
-import { RestockDto, RestockFields } from '../restock/types';
+import { ClientSession, Model, PipelineStage, Types } from 'mongoose';
+import { RestockDto } from '../restock/types';
 import { AdjustDto } from '../adjustment/types';
 import { SellDto } from '../../sales/types';
 import { ProductService } from '../../product/product.service';
-import { NewProductFields } from '../../product/types';
+import { productSearchFilter } from '../../product/product-search';
 import { AuthUser } from '../../auth/types';
 import { GetAllDto } from './types';
 import {
@@ -16,6 +16,45 @@ import {
     ValidationError,
 } from '../../common/errors';
 
+/**
+ * The aggregation behind `GET /inventories` (see InventoryService.getAll).
+ * Exported so specs can pin its shape; its behaviour needs a real MongoDB.
+ */
+export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
+    const { page, limit, maxStock, name, EAN } = dto;
+    const productFilter = productSearchFilter({ name, EAN }, 'product.');
+
+    return [
+        ...(maxStock !== undefined && maxStock !== null
+            ? [{ $match: { stock: { $lte: maxStock } } }]
+            : []),
+        {
+            $lookup: {
+                from: 'products',
+                localField: 'product',
+                foreignField: '_id',
+                as: 'product',
+            },
+        },
+        // No preserveNullAndEmptyArrays: an orphan row (its product gone)
+        // is dropped here, before both the count and the page.
+        { $unwind: '$product' },
+        ...(Object.keys(productFilter).length > 0
+            ? [{ $match: productFilter }]
+            : []),
+        {
+            $facet: {
+                metadata: [{ $count: 'total' }],
+                data: [
+                    { $sort: { 'product.name': 1, _id: 1 } },
+                    { $skip: (page - 1) * limit },
+                    { $limit: limit },
+                ],
+            },
+        },
+    ];
+}
+
 @Injectable()
 export class InventoryService {
     constructor(
@@ -24,121 +63,101 @@ export class InventoryService {
         private productService: ProductService,
     ) {}
 
+    /**
+     * The inventory list, one page sorted by product name (then row id),
+     * with `totalItems` counted over exactly the rows that can appear.
+     *
+     * One pipeline over inventory rows joined to their product:
+     * - `maxStock` (0 included: "out of stock") keeps rows at or below it;
+     * - `name` matches anywhere in the name, `EAN` as a barcode prefix,
+     *   the same search as the product list (`productSearchFilter`);
+     * - the inner `$unwind` drops orphans (rows whose product is gone), and
+     *   a product with no inventory row never appears, so the `$facet` count
+     *   and the page agree (issue #14).
+     */
     async getAll(
         dto: GetAllDto,
     ): Promise<{ data: Inventory[]; totalItems: number }> {
-        const { page, limit, maxStock } = dto;
-
-        if (maxStock) {
-            const skip = (page - 1) * limit;
-
-            const matchQuery = { stock: { $lte: maxStock } };
-
-            const [data, totalItems] = await Promise.all([
-                this.model.aggregate<Inventory>([
-                    { $match: matchQuery },
-                    {
-                        $lookup: {
-                            from: 'products',
-                            localField: 'product',
-                            foreignField: '_id',
-                            as: 'product',
-                        },
-                    },
-                    { $unwind: '$product' },
-                    { $sort: { 'product.name': 1, _id: 1 } },
-                    { $skip: skip },
-                    { $limit: limit },
-                ]),
-
-                this.model.countDocuments(matchQuery),
-            ]);
-
-            Logger.log('MAX STOCK', { data });
-            return {
-                data,
-                totalItems,
-            };
-        }
-
-        const { productIds, totalItems } =
-            await this.productService.getAllExec(dto);
-
-        const data = await this.model
-            .find({
-                product: { $in: productIds },
-            })
-            .populate('product')
-            .lean();
+        const [result] = await this.model.aggregate<{
+            data: Inventory[];
+            metadata: { total: number }[];
+        }>(inventoryListPipeline(dto));
 
         return {
-            data,
-            totalItems,
+            data: result?.data ?? [],
+            totalItems: result?.metadata[0]?.total ?? 0,
         };
     }
 
+    /**
+     * Applies a restock's stock increments. Each line names an existing
+     * `product` or a `newProduct` to create (exactly one; RestockFields).
+     * An existing product that does not exist is a 404 PRODUCT_NOT_FOUND
+     * before anything is written, so a bogus or deleted id can never
+     * upsert an orphan inventory row. Must run inside the restock's
+     * transaction: the check reads through `session`.
+     */
     async restock(user: AuthUser, dto: RestockDto, session: ClientSession) {
         const { restockDetails } = dto;
+        const updatedBy = new Types.ObjectId(user.userId);
 
-        const newProducts = restockDetails
-            .filter(
-                (d): d is RestockFields & { newProduct: NewProductFields } =>
-                    !!d.newProduct,
-            )
-            .map((details) => details.newProduct);
-
-        const EANMap = await this.productService.createMany(
-            newProducts,
-            session,
+        const existingIds = restockDetails.flatMap((details) =>
+            details.product ? [details.product] : [],
         );
-
-        const missingProducts = [];
-        const updatedRestockDetails = [];
-
-        for (const [index, details] of restockDetails.entries()) {
-            if (!(
-                details.product ||
-                (details.newProduct?.EAN && EANMap[details.newProduct.EAN])
-            )) {
-                missingProducts.push({
-                    index,
-                    EAN: details.newProduct?.EAN,
-                    name: details.newProduct?.name,
-                });
-
-                continue;
-            }
-
-            const product = details.product ?? EANMap[details.newProduct!.EAN];
-
-            updatedRestockDetails.push({
-                product: new Types.ObjectId(product),
-                quantity: details.quantity,
-                updatedBy: new Types.ObjectId(user.userId),
-                unitCost: details.unitCost,
-            });
-        }
-
-        if (missingProducts.length > 0) {
-            throw new ValidationError(
-                ErrorCode.VALIDATION_INVALID_INPUT,
-                'Unresolved new Products',
-                missingProducts,
+        const found = await this.productService.getMany(existingIds, session);
+        const unknown = restockDetails
+            .map((details, index) => ({ index, product: details.product }))
+            .filter(
+                (line): line is { index: number; product: string } =>
+                    !!line.product &&
+                    // getMany keys by the canonical (lowercase) hex id.
+                    !found.has(new Types.ObjectId(line.product).toString()),
+            );
+        if (unknown.length > 0) {
+            throw new NotFoundError(
+                ErrorCode.PRODUCT_NOT_FOUND,
+                'One or more products do not exist',
+                unknown,
             );
         }
 
-        const updates = updatedRestockDetails
-            .filter(({ product }) => !!product)
-            .map(({ product, quantity, updatedBy }) => ({
-                updateOne: {
-                    filter: { product },
-                    update: {
-                        $inc: { stock: quantity },
-                        $setOnInsert: { updatedBy, product },
-                    },
-                    upsert: true,
+        const newProducts = restockDetails.flatMap((details) =>
+            details.newProduct ? [details.newProduct] : [],
+        );
+        // Ids come back in the order given; createMany never writes the
+        // generated EANs into the DTO, so ids are matched by position.
+        const newIds = await this.productService.createMany(
+            newProducts,
+            session,
+        );
+        if (newIds.length !== newProducts.length) {
+            throw new InternalError('Restock did not create every product', {
+                expected: newProducts.length,
+                created: newIds.length,
+            });
+        }
+
+        let nextNew = 0;
+        const updatedRestockDetails = restockDetails.map((details) => ({
+            product: details.newProduct
+                ? newIds[nextNew++]
+                : new Types.ObjectId(details.product),
+            quantity: details.quantity,
+            updatedBy,
+            unitCost: details.unitCost,
+        }));
+
+        const updates = updatedRestockDetails.map(({ product, quantity }) => ({
+            updateOne: {
+                filter: { product },
+                update: {
+                    $inc: { stock: quantity },
+                    $set: { updatedBy },
+                    $setOnInsert: { product },
                 },
-            }));
+                upsert: true,
+            },
+        }));
 
         const result = await this.model.bulkWrite(updates, { session });
 
@@ -164,9 +183,14 @@ export class InventoryService {
      * Must run inside a transaction: on a 400, ops before the failing one have
      * already applied and are undone only when the transaction aborts.
      */
-    async adjust(dto: AdjustDto, session: ClientSession): Promise<void> {
+    async adjust(
+        userId: string,
+        dto: AdjustDto,
+        session: ClientSession,
+    ): Promise<void> {
         await this.applyChanges(
             dto.adjustDetails.map(({ product, change }) => [product, change]),
+            userId,
             session,
         );
     }
@@ -175,21 +199,26 @@ export class InventoryService {
      * Puts sold stock back, e.g. when a sale is voided or refunded: one
      * positive increment per product, through the same path as adjust().
      * Rejects with 404 if a product no longer has an inventory row.
+     * `userId` is whoever reversed the sale: the row's `updatedBy`.
      */
     async returnStock(
+        userId: string,
         lines: { product: { toString(): string }; quantity: number }[],
         session: ClientSession,
     ): Promise<void> {
         await this.applyChanges(
             lines.map(({ product, quantity }) => [product, quantity]),
+            userId,
             session,
         );
     }
 
     private async applyChanges(
         entries: [product: { toString(): string }, change: number][],
+        userId: string,
         session: ClientSession,
     ): Promise<void> {
+        const updatedBy = new Types.ObjectId(userId);
         const netByProduct = sumByProduct(entries);
 
         // Read before writing: bulkWrite is ordered, so a read afterwards
@@ -223,7 +252,7 @@ export class InventoryService {
                         change < 0
                             ? { product, stock: { $gte: -change } }
                             : { product },
-                    update: { $inc: { stock: change } },
+                    update: { $inc: { stock: change }, $set: { updatedBy } },
                 },
             }));
 
@@ -255,9 +284,15 @@ export class InventoryService {
     /**
      * Sells stock. Quantities are summed per product so each product gets a
      * single guarded decrement, and shortfalls are reported against stock
-     * read before the write (see adjust() for why).
+     * read before the write (see adjust() for why). `userId` is the
+     * cashier: the row's `updatedBy`.
      */
-    async sell(dto: SellDto, session: ClientSession): Promise<void> {
+    async sell(
+        userId: string,
+        dto: SellDto,
+        session: ClientSession,
+    ): Promise<void> {
+        const updatedBy = new Types.ObjectId(userId);
         const quantityByProduct = sumByProduct(
             dto.sellDetails.map(({ product, quantity }) => [product, quantity]),
         );
@@ -273,7 +308,7 @@ export class InventoryService {
                 // does not run on update operators, so an unguarded $inc will
                 // happily drive stock negative when a sale oversells.
                 filter: { product, stock: { $gte: quantity } },
-                update: { $inc: { stock: -quantity } },
+                update: { $inc: { stock: -quantity }, $set: { updatedBy } },
             },
         }));
 

@@ -1,10 +1,11 @@
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { ClientSession } from 'mongoose';
-import { InventoryService } from './inventory.service';
+import { ClientSession, PipelineStage, Types } from 'mongoose';
+import { InventoryService, inventoryListPipeline } from './inventory.service';
 import { Inventory } from './inventory.schema';
 import { ProductService } from '../../product/product.service';
 import {
+    ErrorCode,
     InternalError,
     NotFoundError,
     ValidationError,
@@ -24,6 +25,10 @@ function leanChain(rows: unknown[]) {
     };
     return chain;
 }
+
+/** The acting user; every stock write records it as `updatedBy`. */
+const ACTOR = '507f1f77bcf86cd799439077';
+const ACTOR_ID = new Types.ObjectId(ACTOR);
 
 function sellDto(details: { product: string; quantity: number }[]): SellDto {
     return {
@@ -61,7 +66,11 @@ describe('InventoryService.sell', () => {
         find.mockReturnValue(leanChain([]));
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
 
-        await service.sell(sellDto([{ product: 'p1', quantity: 3 }]), session);
+        await service.sell(
+            ACTOR,
+            sellDto([{ product: 'p1', quantity: 3 }]),
+            session,
+        );
 
         const [operations] = bulkWrite.mock.calls[0] as [
             { updateOne: { filter: Record<string, unknown> } }[],
@@ -83,6 +92,7 @@ describe('InventoryService.sell', () => {
         );
 
         const attempt = service.sell(
+            ACTOR,
             sellDto([{ product: 'p1', quantity: 5 }]),
             session,
         );
@@ -106,6 +116,7 @@ describe('InventoryService.sell', () => {
         );
 
         const attempt = service.sell(
+            ACTOR,
             sellDto([
                 { product: 'p1', quantity: 2 },
                 { product: 'p2', quantity: 4 },
@@ -132,6 +143,7 @@ describe('InventoryService.sell', () => {
 
         await expect(
             service.sell(
+                ACTOR,
                 sellDto([
                     { product: 'p1', quantity: 6 },
                     { product: 'p2', quantity: 20 },
@@ -154,6 +166,7 @@ describe('InventoryService.sell', () => {
 
         await expect(
             service.sell(
+                ACTOR,
                 sellDto([
                     { product: 'p1', quantity: 6 },
                     { product: 'p1', quantity: 6 },
@@ -177,7 +190,11 @@ describe('InventoryService.sell', () => {
         find.mockReturnValue(leanChain([]));
 
         await expect(
-            service.sell(sellDto([{ product: 'ghost', quantity: 1 }]), session),
+            service.sell(
+                ACTOR,
+                sellDto([{ product: 'ghost', quantity: 1 }]),
+                session,
+            ),
         ).rejects.toMatchObject({
             details: [{ product: 'ghost', requested: 1, available: 0 }],
         });
@@ -245,6 +262,7 @@ describe('InventoryService.adjust', () => {
         bulkWrite.mockResolvedValue({ matchedCount: 2 });
 
         await service.adjust(
+            ACTOR,
             adjustDto([
                 { product: 'p1', change: -4 },
                 { product: 'p2', change: 7 },
@@ -263,6 +281,7 @@ describe('InventoryService.adjust', () => {
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
 
         await service.adjust(
+            ACTOR,
             adjustDto([{ product: 'p1', change: -1 }]),
             session,
         );
@@ -278,6 +297,7 @@ describe('InventoryService.adjust', () => {
         bulkWrite.mockResolvedValue({ matchedCount: 0 });
 
         const attempt = service.adjust(
+            ACTOR,
             adjustDto([{ product: 'p1', change: -999999 }]),
             session,
         );
@@ -306,6 +326,7 @@ describe('InventoryService.adjust', () => {
 
         await expect(
             service.adjust(
+                ACTOR,
                 adjustDto([
                     { product: 'p1', change: -6 },
                     { product: 'p2', change: -20 },
@@ -325,6 +346,7 @@ describe('InventoryService.adjust', () => {
 
         await expect(
             service.adjust(
+                ACTOR,
                 adjustDto([
                     { product: 'p1', change: -5 },
                     { product: 'p1', change: -6 },
@@ -337,7 +359,10 @@ describe('InventoryService.adjust', () => {
         expect(operations()).toEqual([
             {
                 filter: { product: 'p1', stock: { $gte: 11 } },
-                update: { $inc: { stock: -11 } },
+                update: {
+                    $inc: { stock: -11 },
+                    $set: { updatedBy: ACTOR_ID },
+                },
             },
         ]);
     });
@@ -349,6 +374,7 @@ describe('InventoryService.adjust', () => {
 
         await expect(
             service.adjust(
+                ACTOR,
                 adjustDto([
                     { product: 'p1', change: -3 },
                     { product: 'p1', change: 5 },
@@ -357,7 +383,13 @@ describe('InventoryService.adjust', () => {
             ),
         ).resolves.toBeUndefined();
         expect(operations()).toEqual([
-            { filter: { product: 'p1' }, update: { $inc: { stock: 2 } } },
+            {
+                filter: { product: 'p1' },
+                update: {
+                    $inc: { stock: 2 },
+                    $set: { updatedBy: ACTOR_ID },
+                },
+            },
         ]);
     });
 
@@ -365,6 +397,7 @@ describe('InventoryService.adjust', () => {
         stock({ p1: 4 });
 
         await service.adjust(
+            ACTOR,
             adjustDto([
                 { product: 'p1', change: 3 },
                 { product: 'p1', change: -3 },
@@ -385,6 +418,7 @@ describe('InventoryService.adjust', () => {
         );
 
         const attempt = service.adjust(
+            ACTOR,
             adjustDto([
                 { product: 'p1', change: 1 },
                 { product: 'orphan', change: 1 },
@@ -407,6 +441,7 @@ describe('InventoryService.adjust', () => {
             bulkWrite.mockResolvedValue({ matchedCount: 2 });
 
             await service.returnStock(
+                ACTOR,
                 [
                     { product: 'p1', quantity: 2 },
                     { product: 'p2', quantity: 3 },
@@ -416,8 +451,20 @@ describe('InventoryService.adjust', () => {
             );
 
             expect(operations()).toEqual([
-                { filter: { product: 'p1' }, update: { $inc: { stock: 3 } } },
-                { filter: { product: 'p2' }, update: { $inc: { stock: 3 } } },
+                {
+                    filter: { product: 'p1' },
+                    update: {
+                        $inc: { stock: 3 },
+                        $set: { updatedBy: ACTOR_ID },
+                    },
+                },
+                {
+                    filter: { product: 'p2' },
+                    update: {
+                        $inc: { stock: 3 },
+                        $set: { updatedBy: ACTOR_ID },
+                    },
+                },
             ]);
         });
 
@@ -426,6 +473,7 @@ describe('InventoryService.adjust', () => {
 
             await expect(
                 service.returnStock(
+                    ACTOR,
                     [
                         { product: 'p1', quantity: 1 },
                         { product: 'gone', quantity: 1 },
@@ -441,6 +489,8 @@ describe('InventoryService.adjust', () => {
 describe('InventoryService.restock', () => {
     let service: InventoryService;
     let bulkWrite: jest.Mock;
+    let getMany: jest.Mock;
+    let createMany: jest.Mock;
 
     const session = {} as ClientSession;
     const user: AuthUser = {
@@ -448,18 +498,18 @@ describe('InventoryService.restock', () => {
         username: 'admin',
         roles: [Role.Admin],
     };
+    const EXISTING = '507f1f77bcf86cd799439011';
     const dto = {
-        restockDetails: [
-            {
-                product: '507f1f77bcf86cd799439011',
-                quantity: 3,
-                unitCost: 1000,
-            },
-        ],
+        restockDetails: [{ product: EXISTING, quantity: 3, unitCost: 1000 }],
     } as RestockDto;
 
     beforeEach(async () => {
         bulkWrite = jest.fn();
+        // Every id asked for exists, unless a test says otherwise.
+        getMany = jest.fn((ids: string[]) =>
+            Promise.resolve(new Map(ids.map((id) => [id, { _id: id }]))),
+        );
+        createMany = jest.fn().mockResolvedValue([]);
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -470,13 +520,26 @@ describe('InventoryService.restock', () => {
                 },
                 {
                     provide: ProductService,
-                    useValue: { createMany: jest.fn().mockResolvedValue({}) },
+                    useValue: { getMany, createMany },
                 },
             ],
         }).compile();
 
         service = moduleRef.get(InventoryService);
     });
+
+    function operations() {
+        const [ops] = bulkWrite.mock.calls[0] as [
+            {
+                updateOne: {
+                    filter: Record<string, unknown>;
+                    update: Record<string, unknown>;
+                    upsert: boolean;
+                };
+            }[],
+        ];
+        return ops.map((op) => op.updateOne);
+    }
 
     it('accepts a write that matched an existing row', async () => {
         bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
@@ -500,5 +563,309 @@ describe('InventoryService.restock', () => {
         await expect(
             service.restock(user, dto, session),
         ).rejects.toBeInstanceOf(InternalError);
+    });
+
+    describe('unknown products (issue #14)', () => {
+        const GHOST = '507f1f77bcf86cd799439022';
+
+        it('rejects a product id that does not exist with a 404, before writing', async () => {
+            getMany.mockResolvedValue(new Map([[EXISTING, {}]]));
+
+            const attempt = service.restock(
+                user,
+                {
+                    restockDetails: [
+                        { product: EXISTING, quantity: 1, unitCost: 100 },
+                        { product: GHOST, quantity: 2, unitCost: 100 },
+                    ],
+                } as RestockDto,
+                session,
+            );
+
+            await expect(attempt).rejects.toBeInstanceOf(NotFoundError);
+            await expect(attempt).rejects.toMatchObject({
+                statusCode: 404,
+                code: ErrorCode.PRODUCT_NOT_FOUND,
+                details: [{ index: 1, product: GHOST }],
+            });
+            // No orphan upsert, and no product (or EAN) spent on the way.
+            expect(bulkWrite).not.toHaveBeenCalled();
+            expect(createMany).not.toHaveBeenCalled();
+        });
+
+        it('checks existence inside the transaction', async () => {
+            bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+
+            await service.restock(user, dto, session);
+
+            expect(getMany).toHaveBeenCalledWith([EXISTING], session);
+        });
+
+        it('accepts an upper-case hex id for a product that exists', async () => {
+            // getMany keys by `_id.toString()`, which is lower case.
+            getMany.mockResolvedValue(new Map([[EXISTING, {}]]));
+            bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+
+            await expect(
+                service.restock(
+                    user,
+                    {
+                        restockDetails: [
+                            {
+                                product: EXISTING.toUpperCase(),
+                                quantity: 1,
+                                unitCost: 100,
+                            },
+                        ],
+                    } as RestockDto,
+                    session,
+                ),
+            ).resolves.toHaveLength(1);
+        });
+    });
+
+    it('matches new products to their lines by position, not by EAN', async () => {
+        const created = [new Types.ObjectId(), new Types.ObjectId()];
+        createMany.mockResolvedValue(created);
+        bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 2 });
+
+        const lines = await service.restock(
+            user,
+            {
+                restockDetails: [
+                    // No EAN: the server generates one without writing it
+                    // back into this DTO.
+                    {
+                        newProduct: { name: 'a', price: 100 },
+                        quantity: 1,
+                        unitCost: 50,
+                    },
+                    { product: EXISTING, quantity: 2, unitCost: 50 },
+                    {
+                        newProduct: {
+                            name: 'b',
+                            price: 100,
+                            EAN: '4006381333931',
+                        },
+                        quantity: 3,
+                        unitCost: 50,
+                    },
+                ],
+            } as RestockDto,
+            session,
+        );
+
+        expect(createMany).toHaveBeenCalledWith(
+            [
+                { name: 'a', price: 100 },
+                { name: 'b', price: 100, EAN: '4006381333931' },
+            ],
+            session,
+        );
+        expect(lines.map((line) => line.product.toString())).toEqual([
+            created[0].toString(),
+            EXISTING,
+            created[1].toString(),
+        ]);
+    });
+
+    it('records the restocker as updatedBy on every write, not only on insert', async () => {
+        bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+
+        await service.restock(user, dto, session);
+
+        const product = new Types.ObjectId(EXISTING);
+        expect(operations()).toEqual([
+            {
+                filter: { product },
+                update: {
+                    $inc: { stock: 3 },
+                    $set: { updatedBy: new Types.ObjectId(user.userId) },
+                    $setOnInsert: { product },
+                },
+                upsert: true,
+            },
+        ]);
+    });
+});
+
+describe('InventoryService stock writes record updatedBy (issue #14)', () => {
+    let service: InventoryService;
+    let bulkWrite: jest.Mock;
+    let find: jest.Mock;
+
+    const session = {} as ClientSession;
+
+    beforeEach(async () => {
+        bulkWrite = jest.fn().mockResolvedValue({ matchedCount: 1 });
+        find = jest
+            .fn()
+            .mockReturnValue(
+                leanChain([
+                    { product: { _id: 'p1', name: 'bread' }, stock: 10 },
+                ]),
+            );
+
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                InventoryService,
+                {
+                    provide: getModelToken(Inventory.name),
+                    useValue: { bulkWrite, find },
+                },
+                { provide: ProductService, useValue: {} },
+            ],
+        }).compile();
+
+        service = moduleRef.get(InventoryService);
+    });
+
+    function updates() {
+        const [ops] = bulkWrite.mock.calls[0] as [
+            { updateOne: { update: Record<string, unknown> } }[],
+        ];
+        return ops.map((op) => op.updateOne.update);
+    }
+
+    it('on a sale', async () => {
+        await service.sell(
+            ACTOR,
+            sellDto([{ product: 'p1', quantity: 2 }]),
+            session,
+        );
+
+        expect(updates()).toEqual([
+            { $inc: { stock: -2 }, $set: { updatedBy: ACTOR_ID } },
+        ]);
+    });
+
+    it('on an adjustment', async () => {
+        await service.adjust(
+            ACTOR,
+            adjustDto([{ product: 'p1', change: -1 }]),
+            session,
+        );
+
+        expect(updates()).toEqual([
+            { $inc: { stock: -1 }, $set: { updatedBy: ACTOR_ID } },
+        ]);
+    });
+
+    it('on a void or refund putting stock back', async () => {
+        await service.returnStock(
+            ACTOR,
+            [{ product: 'p1', quantity: 4 }],
+            session,
+        );
+
+        expect(updates()).toEqual([
+            { $inc: { stock: 4 }, $set: { updatedBy: ACTOR_ID } },
+        ]);
+    });
+});
+
+describe('InventoryService.getAll (issue #14)', () => {
+    let service: InventoryService;
+    let aggregate: jest.Mock;
+
+    beforeEach(async () => {
+        aggregate = jest.fn();
+
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                InventoryService,
+                {
+                    provide: getModelToken(Inventory.name),
+                    useValue: { aggregate },
+                },
+                { provide: ProductService, useValue: {} },
+            ],
+        }).compile();
+
+        service = moduleRef.get(InventoryService);
+    });
+
+    const page = { page: 2, limit: 5 };
+
+    function stage(pipeline: PipelineStage[], key: string) {
+        return pipeline.filter((s) => key in s);
+    }
+
+    it('filters on maxStock 0 instead of listing the whole catalogue', () => {
+        const pipeline = inventoryListPipeline({ ...page, maxStock: 0 });
+
+        expect(pipeline[0]).toEqual({ $match: { stock: { $lte: 0 } } });
+    });
+
+    it('has no stock filter when maxStock is absent', () => {
+        const pipeline = inventoryListPipeline({ ...page });
+
+        expect(stage(pipeline, '$match')).toEqual([]);
+    });
+
+    it('drops orphans before counting, and counts through the same pipeline as the page', () => {
+        const pipeline = inventoryListPipeline({ ...page, maxStock: 3 });
+
+        const unwindAt = pipeline.findIndex((s) => '$unwind' in s);
+        const facetAt = pipeline.findIndex((s) => '$facet' in s);
+        // A plain $unwind (no preserveNullAndEmptyArrays) drops rows whose
+        // product is gone; the count is a branch of the same $facet.
+        expect(pipeline[unwindAt]).toEqual({ $unwind: '$product' });
+        expect(unwindAt).toBeLessThan(facetAt);
+        expect(facetAt).toBe(pipeline.length - 1);
+        expect(pipeline[facetAt]).toEqual({
+            $facet: {
+                metadata: [{ $count: 'total' }],
+                data: [
+                    { $sort: { 'product.name': 1, _id: 1 } },
+                    { $skip: 5 },
+                    { $limit: 5 },
+                ],
+            },
+        });
+    });
+
+    it('searches names anywhere and barcodes by prefix, after the join', () => {
+        const pipeline = inventoryListPipeline({
+            ...page,
+            name: 'c++ (1',
+            EAN: '480',
+        });
+
+        expect(stage(pipeline, '$match')).toEqual([
+            {
+                $match: {
+                    'product.name': { $regex: 'c\\+\\+ \\(1' },
+                    'product.EAN': { $regex: '^480' },
+                },
+            },
+        ]);
+        expect(pipeline.findIndex((s) => '$match' in s)).toBeGreaterThan(
+            pipeline.findIndex((s) => '$unwind' in s),
+        );
+    });
+
+    it('returns the page in pipeline order with the facet count', async () => {
+        const rows = [
+            { product: { name: 'apple' }, stock: 1 },
+            { product: { name: 'bread' }, stock: 0 },
+        ];
+        aggregate.mockResolvedValue([{ data: rows, metadata: [{ total: 7 }] }]);
+
+        await expect(service.getAll({ ...page, maxStock: 1 })).resolves.toEqual(
+            { data: rows, totalItems: 7 },
+        );
+        expect(aggregate).toHaveBeenCalledWith(
+            inventoryListPipeline({ ...page, maxStock: 1 }),
+        );
+    });
+
+    it('returns an empty page and zero when nothing matches', async () => {
+        aggregate.mockResolvedValue([{ data: [], metadata: [] }]);
+
+        await expect(service.getAll({ ...page })).resolves.toEqual({
+            data: [],
+            totalItems: 0,
+        });
     });
 });
