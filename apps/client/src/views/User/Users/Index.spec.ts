@@ -2,8 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { Role } from '@grocery-pos/contracts';
-import { click, flush, type } from '@/testing/form-dom';
+import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
+import {
+    check,
+    click,
+    field,
+    fieldError,
+    flush,
+    type,
+} from '@/testing/form-dom';
+import { PASSWORD_HINT, REQUIRED } from '@/utils/rules';
 import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 import Index from './Index.vue';
@@ -102,6 +110,7 @@ describe('users save errors (issue #18)', () => {
         await click('Add User');
         await type('Username', 'bea');
         await type('Password', 'long-enough-1');
+        await check(Role.Seller, true);
         await click('Save');
     }
 
@@ -109,13 +118,13 @@ describe('users save errors (issue #18)', () => {
         api.post.mockRejectedValueOnce(
             httpError(400, {
                 message: 'Validation failed',
-                details: { messages: ['users.0.roles should not be empty'] },
+                details: { messages: ['A user with this name already exists'] },
             }),
         );
         await createUser();
 
         expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
-            ['users.0.roles should not be empty'],
+            ['A user with this name already exists'],
         ]);
         // The dialog stays open with what was typed.
         expect(
@@ -187,5 +196,148 @@ describe('users save errors (issue #18)', () => {
         expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
             ['Could not create the user.'],
         ]);
+    });
+});
+
+describe('user editor (issue #20)', () => {
+    const rowRoles = () =>
+        document.querySelector('tbody tr')!.querySelectorAll('td')[1]!
+            .textContent;
+
+    it('Cancel leaves the row’s roles as they were', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        document
+            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .click();
+        await flush();
+
+        await check(Role.Restocker, true);
+        await check(Role.Seller, false);
+        await flush();
+        expect(rowRoles()).toContain(Role.Seller);
+        expect(rowRoles()).not.toContain(Role.Restocker);
+
+        await click('Cancel');
+        expect(rowRoles()).toContain(Role.Seller);
+        expect(rowRoles()).not.toContain(Role.Restocker);
+
+        // Reopened, the editor starts again from the row.
+        document
+            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .click();
+        await flush();
+        const seller = [...document.querySelectorAll('label')]
+            .filter((l) => l.textContent?.trim() === Role.Seller)
+            .slice(-1)[0]!
+            .querySelector('input')!;
+        expect(seller.checked).toBe(true);
+        expect(api.patch).not.toHaveBeenCalled();
+    });
+
+    it('blocks a blank create and says why for each field', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await click('Add User');
+        await type('Username', '   ');
+
+        await click('Save');
+
+        expect(api.post).not.toHaveBeenCalled();
+        expect(fieldError('Username')).toBe(REQUIRED);
+        expect(fieldError('Password')).toBe('Password is required');
+        expect(
+            document.querySelector('[data-testid="create-roles-error"]')
+                ?.textContent,
+        ).toContain('Pick at least one role');
+    });
+
+    it('blocks a short password', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await click('Add User');
+        await type('Username', 'bea');
+        await type('Password', 'short');
+        await check(Role.Seller, true);
+
+        await click('Save');
+
+        expect(api.post).not.toHaveBeenCalled();
+        expect(fieldError('Password')).toBe(PASSWORD_HINT);
+    });
+
+    it('opens Add User empty after a Cancel', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await click('Add User');
+        await type('Username', 'bea');
+        await click('Save');
+        await click('Cancel');
+
+        await click('Add User');
+
+        expect(field('Username').value).toBe('');
+        expect(fieldError('Username')).toBe('');
+    });
+});
+
+describe('users search and create errors (issue #20 review)', () => {
+    it('pages and retries with the last search, not unsearched text', async () => {
+        api.get.mockResolvedValue({ data: { ...USERS, totalItems: 30 } });
+        await mount();
+        await type('Search Name', 'Ana');
+        await click('Search');
+        await type('Search Name', 'bob');
+        api.get.mockClear();
+        api.get.mockRejectedValueOnce(
+            httpError(500, { message: 'Internal server error' }),
+        );
+
+        await click('Next');
+        expect(tableError()).not.toBeNull();
+        await click('Retry');
+
+        expect(api.get.mock.calls.map(([, c]) => c.params)).toEqual([
+            expect.objectContaining({ page: 2, name: 'ana' }),
+            expect.objectContaining({ page: 2, name: 'ana' }),
+        ]);
+    });
+
+    it('clears each Save error once its field is edited', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await click('Add User');
+        await click('Save');
+        const rolesError = () =>
+            document.querySelector('[data-testid="create-roles-error"]');
+        expect(fieldError('Username')).toBe(REQUIRED);
+        expect(fieldError('Password')).toBe('Password is required');
+        expect(rolesError()).not.toBeNull();
+
+        await type('Username', 'bea');
+        expect(fieldError('Username')).toBe('');
+        expect(fieldError('Password')).toBe('Password is required');
+
+        await type('Password', 'long-enough-1');
+        expect(fieldError('Password')).toBe('');
+
+        await check(Role.Seller, true);
+        expect(rolesError()).toBeNull();
+    });
+
+    it('checks the trimmed username length, as the API does', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.post.mockResolvedValueOnce({ data: {} });
+        await mount();
+        await click('Add User');
+        // The limit inside spaces: the API trims, so this is accepted.
+        await type('Username', `  ${'a'.repeat(STRING_LIMITS.USERNAME)}  `);
+        await type('Password', 'long-enough-1');
+        await check(Role.Seller, true);
+
+        await click('Save');
+
+        expect(fieldError('Username')).toBe('');
+        expect(api.post).toHaveBeenCalledTimes(1);
     });
 });

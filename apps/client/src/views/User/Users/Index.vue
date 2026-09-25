@@ -4,7 +4,7 @@
             <Users class="w-5 h-5 text-primary-600" />
         </template>
         <template #actions>
-            <BaseButton size="sm" @click="isCreateOpen = true">
+            <BaseButton size="sm" @click="openCreate">
                 <Plus class="w-4 h-4" />
                 Add User
             </BaseButton>
@@ -18,10 +18,14 @@
                 label="Search Name"
                 :maxlength="STRING_LIMITS.USERNAME"
                 clearable
-                @enter="resetSearch"
-                @clear="resetSearch"
+                @enter="applySearch"
+                @clear="applySearch"
             />
-            <div class="md:col-span-3 flex items-end">
+            <div class="md:col-span-3 flex items-end gap-2">
+                <BaseButton size="sm" @click="applySearch">
+                    <Search class="w-4 h-4" />
+                    Search
+                </BaseButton>
                 <BaseButton variant="outline" size="sm" @click="resetFilters">
                     <X class="w-4 h-4" />
                     Clear Filters
@@ -79,13 +83,23 @@
         :closable="!saving"
     >
         <div class="space-y-4">
-            <BaseInput v-model="createForm.name" label="Username" />
+            <BaseInput
+                v-model="createForm.name"
+                label="Username"
+                :maxlength="STRING_LIMITS.USERNAME"
+                :error="createErrors.name"
+                @update:model-value="clearCreateError('name')"
+            />
             <BaseInput
                 v-model="createForm.password"
                 label="Password"
                 type="password"
                 :placeholder="PASSWORD_HINT"
-                :error="createForm.password ? createPasswordError : ''"
+                :error="
+                    createErrors.password ||
+                    (createForm.password ? createPasswordError : '')
+                "
+                @update:model-value="clearCreateError('password')"
             />
             <div>
                 <label
@@ -99,10 +113,18 @@
                         :model-value="createForm.roles.includes(role)"
                         :label="role"
                         @update:model-value="
-                            toggleRole(createForm.roles, role, $event)
+                            toggleRole(createForm.roles, role, $event);
+                            clearCreateError('roles');
                         "
                     />
                 </div>
+                <p
+                    v-if="createErrors.roles"
+                    data-testid="create-roles-error"
+                    class="text-xs text-red-600 mt-1"
+                >
+                    {{ createErrors.roles }}
+                </p>
             </div>
         </div>
         <template #footer>
@@ -112,11 +134,7 @@
                 @click="createModel = false"
                 >Cancel</BaseButton
             >
-            <BaseButton
-                class="flex-1"
-                :loading="saving"
-                :disabled="!!createPasswordError"
-                @click="createUser"
+            <BaseButton class="flex-1" :loading="saving" @click="createUser"
                 >Save</BaseButton
             >
         </template>
@@ -179,8 +197,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { Pencil, Plus, Users, X } from '@lucide/vue';
+import { computed, ref } from 'vue';
+import { Pencil, Plus, Search, Users, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
@@ -189,7 +207,12 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
-import { PASSWORD_HINT, passwordError } from '@/utils/rules';
+import {
+    fieldErrors,
+    PASSWORD_HINT,
+    passwordError,
+    textError,
+} from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { Role, useAuthStore } from '@/stores/auth';
 import {
@@ -198,13 +221,21 @@ import {
     canManageUser,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
-import { useListFetch } from '@/composables/useListFetch';
+import {
+    useAppliedFilters,
+    useListFetch,
+    useListPaging,
+} from '@/composables/useListFetch';
 import { apiErrorMessages } from '@/utils/api-error';
 
-const limit = ref(5);
-const page = ref(1);
+const { page, limit, search } = useListPaging(() => fetchUsers());
 const totalItems = ref(0);
 const searchName = ref('');
+// What the list was last searched for: paging and Retry reuse it.
+const { applied, apply: applySearch } = useAppliedFilters(
+    () => ({ name: searchName.value }),
+    search,
+);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const serverItems = ref<any[]>([]);
 
@@ -289,14 +320,9 @@ function toggleRole(list: Role[], role: Role, checked: boolean) {
     }
 }
 
-const resetSearch = () => {
-    page.value = 1;
-    fetchUsers();
-};
-
 const resetFilters = () => {
     searchName.value = '';
-    resetSearch();
+    applySearch();
 };
 
 const {
@@ -309,7 +335,7 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                name: searchName.value?.toLowerCase(),
+                name: applied.value.name?.toLowerCase(),
             },
         }),
     (result) => {
@@ -320,9 +346,40 @@ const {
 );
 
 fetchUsers();
-watch([page, limit], fetchUsers);
+
+/** Why each create field would be refused, set when Save is pressed. */
+const createErrors = ref<Record<string, string>>({});
+
+/**
+ * The API's `CreateFields` rules (issue #20): a username, trimmed, of at
+ * most `STRING_LIMITS.USERNAME`; the password policy; at least one role.
+ */
+function createFormErrors(): Record<string, string> {
+    return fieldErrors({
+        name: textError(createForm.value.name, STRING_LIMITS.USERNAME),
+        password: passwordError(createForm.value.password),
+        roles: createForm.value.roles.length ? '' : 'Pick at least one role',
+    });
+}
+
+/** Drops a field's Save error once it is edited (as #17's dialogs). */
+function clearCreateError(field: string) {
+    const next = { ...createErrors.value };
+    delete next[field];
+    createErrors.value = next;
+}
+
+/** Opens the Add User dialog empty: an earlier Cancel kept nothing. */
+function openCreate() {
+    createForm.value = { name: '', password: '', roles: [] };
+    createErrors.value = {};
+    isCreateOpen.value = true;
+}
 
 async function createUser() {
+    if (saving.value) return;
+    createErrors.value = createFormErrors();
+    if (Object.keys(createErrors.value).length) return;
     saving.value = true;
     try {
         await api.post('/users', {
@@ -354,7 +411,9 @@ function openEdit(item: any) {
         _id: item._id,
         name: item.name,
         password: '',
-        // Drops roles that can't be stored (e.g. UNAUTHENTICATED on legacy
+        // A new array (issue #20): ticking roles edits this copy, never
+        // the table row, so Cancel leaves the row as it was. It also drops
+        // roles that can't be stored (e.g. UNAUTHENTICATED on legacy
         // documents), so saving cleans them up.
         roles: (item.roles ?? []).filter((role: Role) =>
             ASSIGNABLE_ROLES.includes(role),

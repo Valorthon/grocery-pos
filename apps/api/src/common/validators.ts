@@ -157,3 +157,44 @@ export function IsCalendarDate(validationOptions?: ValidationOptions) {
         });
     };
 }
+
+/**
+ * A `YYYY-MM-DD` day that is not before the day in `property` (issue #20),
+ * e.g. `dateTo` of a date-range filter: a reversed range is a 400 instead
+ * of a silently empty list. It only compares two real calendar dates; a
+ * missing or malformed end is left to `@IsOptional`/`@IsCalendarDate`.
+ * Strict `YYYY-MM-DD` strings sort in the order of the days they name.
+ */
+export function IsNotBefore(
+    property: string,
+    validationOptions?: ValidationOptions,
+) {
+    return function (target: object, propertyName: string) {
+        registerDecorator({
+            name: 'isNotBefore',
+            target: target.constructor,
+            propertyName,
+            options: validationOptions,
+            constraints: [property],
+            validator: {
+                validate(value: unknown, args: ValidationArguments) {
+                    const start = (args.object as Record<string, unknown>)[
+                        property
+                    ];
+                    if (
+                        typeof value !== 'string' ||
+                        typeof start !== 'string' ||
+                        parseIsoDate(value) === null ||
+                        parseIsoDate(start) === null
+                    ) {
+                        return true;
+                    }
+                    return value >= start;
+                },
+                defaultMessage(args: ValidationArguments) {
+                    return `${args.property} must not be before ${property}`;
+                },
+            },
+        });
+    };
+}

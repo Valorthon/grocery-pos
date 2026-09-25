@@ -20,18 +20,23 @@
                 v-model="searchRestockedBy"
                 :options="userOptions"
                 label="Restocked By"
+                all-label="All users"
+                @update:model-value="applyFilters"
             />
             <BaseInput
                 v-model="searchDateStart"
                 label="From"
                 type="date"
-                @update:model-value="resetSearch"
+                :max="searchDateEnd || undefined"
+                @update:model-value="applyFilters"
             />
             <BaseInput
                 v-model="searchDateEnd"
                 label="To"
                 type="date"
-                @update:model-value="resetSearch"
+                :min="searchDateStart || undefined"
+                :error="rangeError"
+                @update:model-value="applyFilters"
             />
             <div class="md:col-span-2 flex items-end">
                 <BaseButton variant="outline" size="sm" @click="resetFilters">
@@ -67,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Truck, X } from '@lucide/vue';
 import api from '@/axios';
@@ -77,7 +82,8 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
-import { useListFetch } from '@/composables/useListFetch';
+import { useListFetch, useListPaging } from '@/composables/useListFetch';
+import { dateRangeError } from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
@@ -85,9 +91,8 @@ import { formatCurrency } from '@/utils/currency';
 
 const router = useRouter();
 const uiStore = useUIStore();
-const limit = ref(5);
+const { page, limit, search } = useListPaging(() => fetchRestock());
 const totalItems = ref(0);
-const page = ref(1);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const serverItems = ref<any[]>([]);
 
@@ -126,16 +131,49 @@ onMounted(() => {
     fetchUserOptions();
 });
 
-const resetSearch = () => {
-    page.value = 1;
-    fetchRestock();
+const rangeError = computed(() =>
+    dateRangeError(searchDateStart.value, searchDateEnd.value),
+);
+
+/**
+ * The filters the list was last loaded with: paging and Retry reuse them,
+ * so a reversed range still being typed is never sent.
+ */
+const applied = ref({
+    restockedBy: undefined as string | undefined,
+    // Calendar days as YYYY-MM-DD (the date input's value). The server
+    // reads them in the store timezone; either may be blank.
+    dateFrom: undefined as string | undefined,
+    dateTo: undefined as string | undefined,
+});
+
+/**
+ * A filter changed: list page 1 with it, once. A reversed date range is
+ * shown on the To field and not sent (the API would refuse it): while it
+ * is, the list keeps its last valid range, and a user pick still applies
+ * with that range.
+ */
+const applyFilters = () => {
+    const reversed = !!rangeError.value;
+    const restockedBy = searchRestockedBy.value ?? undefined;
+    if (reversed && restockedBy === applied.value.restockedBy) return;
+    applied.value = {
+        restockedBy,
+        dateFrom: reversed
+            ? applied.value.dateFrom
+            : searchDateStart.value || undefined,
+        dateTo: reversed
+            ? applied.value.dateTo
+            : searchDateEnd.value || undefined,
+    };
+    search();
 };
 
 const resetFilters = () => {
     searchRestockedBy.value = null;
     searchDateStart.value = '';
     searchDateEnd.value = '';
-    resetSearch();
+    applyFilters();
 };
 
 const {
@@ -148,11 +186,7 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                restockedBy: searchRestockedBy.value,
-                // Calendar days as YYYY-MM-DD (the date input's value). The
-                // server reads them in the store timezone; either may be blank.
-                dateFrom: searchDateStart.value || undefined,
-                dateTo: searchDateEnd.value || undefined,
+                ...applied.value,
             },
         }),
     (result) => {
@@ -178,8 +212,6 @@ const {
 );
 
 fetchRestock();
-
-watch([page, limit], fetchRestock);
 
 const isDialogOpen = ref(false);
 const selectedItem = ref();

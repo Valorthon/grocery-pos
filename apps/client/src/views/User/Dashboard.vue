@@ -144,6 +144,7 @@
                     <div
                         v-for="act in activities"
                         :key="act.id"
+                        data-testid="activity"
                         class="flex gap-3"
                     >
                         <div
@@ -276,12 +277,18 @@ const stats = computed(() => [
 
 const recentSales = computed(() => data.value?.recentSales ?? []);
 
+/**
+ * The newest sales, restocks and adjustments together, newest first
+ * (issue #20): sorted on the raw timestamps, then cut to 7, and only then
+ * formatted as "5 min ago".
+ */
 const activities = computed(() => {
     if (!data.value) return [];
     const items: Array<{
         id: string;
         title: string;
-        time: string;
+        createdAt: string;
+        at: number;
         color: string;
     }> = [];
 
@@ -289,7 +296,8 @@ const activities = computed(() => {
         items.push({
             id: `sale-${s._id}`,
             title: `Sale: ${formatCurrency(s.amount ?? 0)}`,
-            time: formatRelative(s.createdAt),
+            createdAt: s.createdAt,
+            at: timestamp(s.createdAt),
             color: 'success',
         });
     });
@@ -298,7 +306,8 @@ const activities = computed(() => {
         items.push({
             id: `restock-${r._id}`,
             title: `Restocked: ${r.description ?? 'Restock'}`,
-            time: formatRelative(r.createdAt),
+            createdAt: r.createdAt,
+            at: timestamp(r.createdAt),
             color: 'info',
         });
     });
@@ -307,15 +316,28 @@ const activities = computed(() => {
         items.push({
             id: `adjust-${a._id}`,
             title: `Adjusted: ${a.description ?? 'Adjustment'}`,
-            time: formatRelative(a.createdAt),
+            createdAt: a.createdAt,
+            at: timestamp(a.createdAt),
             color: 'warning',
         });
     });
 
     return items
-        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-        .slice(0, 7);
+        .sort((a, b) => b.at - a.at)
+        .slice(0, 7)
+        .map(({ id, title, color, createdAt }) => ({
+            id,
+            title,
+            color,
+            time: formatRelative(createdAt),
+        }));
 });
+
+/** Milliseconds since the epoch; an unreadable date sorts last. */
+function timestamp(iso: string): number {
+    const ms = new Date(iso).getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+}
 
 function dotClass(color: string) {
     switch (color) {

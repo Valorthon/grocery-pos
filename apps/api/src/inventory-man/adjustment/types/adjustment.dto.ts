@@ -22,6 +22,7 @@ import {
 } from '../../../constants';
 import {
     IsCalendarDate,
+    IsNotBefore,
     Trim,
     TrimLowercase,
 } from '../../../common/validators';
@@ -112,6 +113,7 @@ export class GetAllDto {
     /** Inclusive end day, `YYYY-MM-DD`, read in the store timezone. */
     @IsOptional()
     @IsCalendarDate()
+    @IsNotBefore('dateFrom')
     dateTo?: string;
 
     @IsNumber()

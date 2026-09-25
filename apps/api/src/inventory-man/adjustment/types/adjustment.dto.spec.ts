@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { AdjustFields } from './adjustment.dto';
+import { AdjustFields, GetAllDto } from './adjustment.dto';
+import { describeDateRange } from '../../../common/testing/date-range';
 
 async function changeErrors(change: unknown) {
     const dto = plainToInstance(AdjustFields, {
@@ -31,3 +32,5 @@ describe('AdjustFields.change', () => {
         expect(error?.constraints).toHaveProperty('notEquals');
     });
 });
+
+describeDateRange('adjustment GetAllDto', GetAllDto);

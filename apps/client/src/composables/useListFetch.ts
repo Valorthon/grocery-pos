@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { type Ref, ref, watch } from 'vue';
 import { apiErrorText } from '@/utils/api-error';
 
 /**
@@ -34,4 +34,49 @@ export function useListFetch<T>(
     }
 
     return { loading, error, load };
+}
+
+/**
+ * Page and page size of a server-paged list (issue #20). Every change
+ * loads exactly once:
+ *
+ * - a new page loads that page;
+ * - a new page size goes back to page 1 (page 4 of 5 rows is past the end
+ *   at 50 rows);
+ * - `search()`, for a filter change, goes back to page 1 and loads.
+ *
+ * Going back to page 1 from another page loads through the page watcher,
+ * so `search()` never loads twice. `load` is read lazily, so it may be the
+ * `useListFetch` loader declared after this.
+ */
+export function useListPaging(load: () => unknown, initialLimit = 5) {
+    const page = ref(1);
+    const limit = ref(initialLimit);
+
+    function search(): void {
+        if (page.value === 1) void load();
+        else page.value = 1;
+    }
+
+    watch(page, () => void load());
+    watch(limit, search);
+
+    return { page, limit, search };
+}
+
+/**
+ * The search filters a list was last loaded with (issue #20). `read`
+ * takes the live inputs; `apply()` snapshots them into `applied` and
+ * searches. Requests read `applied`, so paging, a page-size change and
+ * Retry never send text that was typed but not searched yet.
+ */
+export function useAppliedFilters<T>(read: () => T, search: () => void) {
+    const applied = ref(read()) as Ref<T>;
+
+    function apply(): void {
+        applied.value = read();
+        search();
+    }
+
+    return { applied, apply };
 }

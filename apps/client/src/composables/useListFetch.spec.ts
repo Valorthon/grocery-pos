@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { nextTick, ref } from 'vue';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { NETWORK_ERROR_MESSAGE } from '@/utils/api-error';
-import { useListFetch } from './useListFetch';
+import { useAppliedFilters, useListFetch, useListPaging } from './useListFetch';
 
 function httpError(status: number, message: string): AxiosError {
     const config = { headers: new AxiosHeaders() };
@@ -160,5 +161,90 @@ describe('useListFetch (issue #18)', () => {
         expect(apply).toHaveBeenCalledWith('page 2');
         expect(list.error.value).toBe('');
         expect(list.loading.value).toBe(false);
+    });
+});
+
+describe('useListPaging (issue #20)', () => {
+    async function settle() {
+        for (let i = 0; i < 3; i++) await nextTick();
+    }
+
+    it('loads a new page', async () => {
+        const load = vi.fn();
+        const paging = useListPaging(load);
+
+        paging.page.value = 3;
+        await settle();
+
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('goes back to page 1 when the page size changes, loading once', async () => {
+        const load = vi.fn();
+        const paging = useListPaging(load);
+        paging.page.value = 4;
+        await settle();
+        load.mockClear();
+
+        paging.limit.value = 50;
+        await settle();
+
+        expect(paging.page.value).toBe(1);
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('loads once for a page size change on page 1', async () => {
+        const load = vi.fn();
+        const paging = useListPaging(load);
+
+        paging.limit.value = 25;
+        await settle();
+
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('searches from page 1 with a single load, from any page', async () => {
+        const load = vi.fn();
+        const paging = useListPaging(load);
+
+        paging.search();
+        await settle();
+        expect(load).toHaveBeenCalledTimes(1);
+
+        paging.page.value = 3;
+        await settle();
+        load.mockClear();
+
+        paging.search();
+        await settle();
+        expect(paging.page.value).toBe(1);
+        expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts at page 1 with the given page size', () => {
+        const paging = useListPaging(vi.fn(), 10);
+
+        expect(paging.page.value).toBe(1);
+        expect(paging.limit.value).toBe(10);
+    });
+});
+
+describe('useAppliedFilters (issue #20)', () => {
+    it('keeps the last applied inputs until apply() runs again', () => {
+        const name = ref('');
+        const search = vi.fn();
+        const filters = useAppliedFilters(() => ({ name: name.value }), search);
+        expect(filters.applied.value).toEqual({ name: '' });
+
+        name.value = 'milk';
+        expect(filters.applied.value).toEqual({ name: '' });
+        expect(search).not.toHaveBeenCalled();
+
+        filters.apply();
+        expect(filters.applied.value).toEqual({ name: 'milk' });
+        expect(search).toHaveBeenCalledTimes(1);
+
+        name.value = 'bread';
+        expect(filters.applied.value).toEqual({ name: 'milk' });
     });
 });

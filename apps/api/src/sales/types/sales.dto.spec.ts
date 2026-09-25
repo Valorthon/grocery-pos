@@ -2,7 +2,8 @@ import 'reflect-metadata';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
-import { ReverseSaleDto, SellDto } from './sales.dto';
+import { GetAllDto, ReverseSaleDto, SellDto } from './sales.dto';
+import { describeDateRange } from '../../common/testing/date-range';
 import { DiscountType, PaymentType, TenderType } from './sales.types';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
 
@@ -419,3 +420,5 @@ describe('ReverseSaleDto', () => {
         expect(bad[0]?.constraints).toHaveProperty('isMongoId');
     });
 });
+
+describeDateRange('sales GetAllDto', GetAllDto);

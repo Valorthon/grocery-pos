@@ -48,17 +48,21 @@
                 v-model="searchEAN"
                 label="EAN / Barcode"
                 clearable
-                @enter="resetSearch"
-                @clear="resetSearch"
+                @enter="applySearch"
+                @clear="applySearch"
             />
             <BaseInput
                 v-model="searchName"
                 label="Product Name"
                 clearable
-                @enter="resetSearch"
-                @clear="resetSearch"
+                @enter="applySearch"
+                @clear="applySearch"
             />
-            <div class="md:col-span-2 flex items-end">
+            <div class="md:col-span-2 flex items-end gap-2">
+                <BaseButton size="sm" @click="applySearch">
+                    <Search class="w-4 h-4" />
+                    Search
+                </BaseButton>
                 <BaseButton variant="outline" size="sm" @click="resetFilters">
                     <X class="w-4 h-4" />
                     Clear Filters
@@ -81,13 +85,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
-import { X } from '@lucide/vue';
+import { onMounted, ref } from 'vue';
+import { Search, X } from '@lucide/vue';
 import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import { useListFetch } from '@/composables/useListFetch';
+import {
+    useAppliedFilters,
+    useListFetch,
+    useListPaging,
+} from '@/composables/useListFetch';
 import { formatCurrency } from '@/utils/currency';
 
 const props = defineProps<{
@@ -100,11 +108,15 @@ const props = defineProps<{
     };
 }>();
 
-const limit = ref(5);
+const { page, limit, search } = useListPaging(() => fetchDetails());
 const totalItems = ref(0);
-const page = ref(1);
 const searchName = ref('');
 const searchEAN = ref('');
+// What the list was last searched for: paging and Retry reuse it.
+const { applied, apply: applySearch } = useAppliedFilters(
+    () => ({ name: searchName.value, EAN: searchEAN.value }),
+    search,
+);
 
 const headers = [
     { key: 'name', title: 'Name' },
@@ -115,15 +127,10 @@ const headers = [
 
 const serverItems = ref<Array<Record<string, unknown>>>([]);
 
-const resetSearch = () => {
-    page.value = 1;
-    fetchDetails();
-};
-
 const resetFilters = () => {
     searchEAN.value = '';
     searchName.value = '';
-    resetSearch();
+    applySearch();
 };
 
 const {
@@ -136,8 +143,8 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                name: searchName.value?.toUpperCase(),
-                EAN: searchEAN.value,
+                name: applied.value.name?.toUpperCase(),
+                EAN: applied.value.EAN,
             },
         }),
     (result) => {
@@ -164,6 +171,4 @@ const {
 );
 
 onMounted(fetchDetails);
-
-watch([page, limit], fetchDetails);
 </script>

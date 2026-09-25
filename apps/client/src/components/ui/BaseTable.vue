@@ -121,8 +121,9 @@
             </table>
         </div>
 
+        <!-- No pager beside an error: its page count is from the last load. -->
         <div
-            v-if="itemsLength > 0"
+            v-if="itemsLength > 0 && !error"
             class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-slate-100"
         >
             <div class="flex items-center gap-2 text-xs text-slate-500">

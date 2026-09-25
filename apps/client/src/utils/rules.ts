@@ -111,6 +111,17 @@ export function barcodeFieldError(
     return barcodeError(code) ?? '';
 }
 
+export const DATE_RANGE_REVERSED = 'The end date is before the start date';
+
+/**
+ * Why a `From`/`To` date filter (`YYYY-MM-DD`, as a date input holds it)
+ * would be refused, or '' when it is fine (issue #20). Mirrors the API's
+ * `@IsNotBefore('dateFrom')` on `dateTo`; either end may be blank.
+ */
+export function dateRangeError(from: string, to: string): string {
+    return from && to && to < from ? DATE_RANGE_REVERSED : '';
+}
+
 /** Keeps only the fields whose rule refused them: `{}` means valid. */
 export function fieldErrors(
     checks: Record<string, string>,
