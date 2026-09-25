@@ -144,14 +144,26 @@ const saveToDB = async () => {
         const error = err as {
             status?: number;
             response?: {
-                data: { message: { property: string; msg: string }[] };
+                data?: {
+                    message?: string;
+                    details?: unknown;
+                };
             };
         };
         const messages: string[] = [];
         if (error.status === 400) {
-            (error.response?.data.message ?? []).forEach((message) =>
-                messages.push(`${message.property} ${message.msg}`),
-            );
+            // A duplicate key (DB_DUPLICATE_KEY) lists `{ property, msg }`
+            // per clash in `details`; any other 400 says it in `message`.
+            const data = error.response?.data;
+            const clashes = Array.isArray(data?.details)
+                ? (data.details as { property?: string; msg?: string }[])
+                : [];
+            clashes.forEach(({ property, msg }) => {
+                if (property && msg) messages.push(`${property} ${msg}`);
+            });
+            if (messages.length === 0 && data?.message) {
+                messages.push(data.message);
+            }
         } else {
             messages.push('Error saving products. Please try again');
         }
