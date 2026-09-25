@@ -3,13 +3,13 @@ import { UserService } from './user.service';
 import {
     ChangePasswordDto,
     CreateBulkDto,
+    GetAllDto,
     UpdateBulkDto,
 } from './types/user.dto';
 import { Roles } from '../auth/auth.decorator';
 import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
-import { GetAllDto } from '../product/types';
 import { RefreshTokenService } from '../auth/refresh-token/refresh-token.service';
 import { PasswordChangeRateLimit } from '../auth/rate-limit/rate-limit';
 

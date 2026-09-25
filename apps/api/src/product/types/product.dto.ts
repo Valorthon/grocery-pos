@@ -17,9 +17,15 @@ import {
     MaxLength,
     Min,
     ValidateNested,
+    ArrayMaxSize,
 } from 'class-validator';
 import { Category } from './product.types';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
+import {
+    NUMERIC_LIMITS,
+    STRING_LIMITS,
+    PAGINATION,
+    BATCH_LIMITS,
+} from '../../constants';
 import {
     AtLeastOneOf,
     IsBarcode,
@@ -96,6 +102,7 @@ export class NewProductFields {
 export class NewProductsDto {
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
+    @ArrayMaxSize(BATCH_LIMITS.NEW_PRODUCTS)
     @Type(() => NewProductFields)
     newProducts!: NewProductFields[];
 }
@@ -141,6 +148,7 @@ export class UpdateBulkDto {
     @Type(() => UpdateBulkFields)
     @IsArray()
     @ArrayNotEmpty()
+    @ArrayMaxSize(BATCH_LIMITS.PRODUCT_UPDATES)
     updates!: UpdateBulkFields[];
 }
 
@@ -167,6 +175,7 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }
 

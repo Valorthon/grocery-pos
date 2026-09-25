@@ -20,7 +20,7 @@ import {
     SHIFT_LIMITS,
     ShiftStatus,
 } from '@grocery-pos/contracts';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
+import { NUMERIC_LIMITS, STRING_LIMITS, PAGINATION } from '../../constants';
 
 /**
  * A drawer count: a plain object of denomination id (see
@@ -105,7 +105,7 @@ export class ListShiftsDto {
 
     @IsInt()
     @Min(1)
-    @Max(100)
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 
     @IsOptional()

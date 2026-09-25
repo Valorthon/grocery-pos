@@ -16,10 +16,12 @@ import {
     MaxLength,
     MinLength,
     ValidateNested,
+    Max,
+    ArrayMaxSize,
 } from 'class-validator';
 import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from '../../auth/types';
-import { STRING_LIMITS } from '../../constants';
+import { STRING_LIMITS, PAGINATION, BATCH_LIMITS } from '../../constants';
 
 class CreateFields {
     @IsString()
@@ -44,6 +46,7 @@ class CreateFields {
     })
     @ArrayUnique()
     @ArrayNotEmpty()
+    @ArrayMaxSize(ASSIGNABLE_ROLES.length)
     @IsArray()
     roles!: Role[];
 }
@@ -51,6 +54,7 @@ export class CreateBulkDto {
     @ValidateNested({ each: true })
     @IsArray()
     @ArrayNotEmpty()
+    @ArrayMaxSize(BATCH_LIMITS.USERS)
     @Type(() => CreateFields)
     users!: CreateFields[];
 }
@@ -81,6 +85,7 @@ class UpdateFields {
     })
     @ArrayUnique()
     @ArrayNotEmpty()
+    @ArrayMaxSize(ASSIGNABLE_ROLES.length)
     @IsArray()
     roles?: Role[];
 
@@ -109,6 +114,7 @@ export class UpdateBulkDto {
     })
     @IsArray()
     @ArrayNotEmpty()
+    @ArrayMaxSize(BATCH_LIMITS.USERS)
     updates!: UpdateBulkFields[];
 }
 
@@ -144,5 +150,6 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }

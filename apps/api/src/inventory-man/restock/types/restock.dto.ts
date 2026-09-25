@@ -12,6 +12,7 @@ import {
     MaxLength,
     Min,
     ValidateNested,
+    ArrayMaxSize,
 } from 'class-validator';
 import {
     ExactlyOneOf,
@@ -20,7 +21,12 @@ import {
     TrimLowercase,
 } from '../../../common/validators';
 import { NewProductFields } from '../../../product/types';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '../../../constants';
+import {
+    NUMERIC_LIMITS,
+    STRING_LIMITS,
+    PAGINATION,
+    BATCH_LIMITS,
+} from '../../../constants';
 
 export class GetDetailsParamDto {
     @IsNotEmpty()
@@ -50,6 +56,7 @@ export class GetDetailsQueryDto {
     @IsNumber()
     @IsPositive()
     @IsNotEmpty()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }
 
@@ -88,6 +95,7 @@ export class RestockFields {
 export class RestockDto {
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
+    @ArrayMaxSize(BATCH_LIMITS.RESTOCK_LINES)
     @Type(() => RestockFields)
     restockDetails!: RestockFields[];
 
@@ -123,5 +131,6 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }

@@ -36,8 +36,11 @@ import {
     NUMERIC_LIMITS,
     REFERENCE_NUMBER_LIMITS,
     STRING_LIMITS,
+    PAGINATION,
+    BATCH_LIMITS,
 } from '../../constants';
 import { normalizeReferenceNumber } from '@grocery-pos/contracts';
+import { IsCalendarDate } from '../../common/validators';
 
 export class GetDetailsDto {
     @IsNotEmpty()
@@ -199,6 +202,7 @@ export class SellDto {
 
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
+    @ArrayMaxSize(BATCH_LIMITS.SALE_LINES)
     @Type(() => SellDetailsFields)
     sellDetails!: SellDetailsFields[];
 
@@ -250,7 +254,27 @@ export class ReceiptDto {
     totalAmount!: number;
 }
 
+/**
+ * Query of `GET /sales`. The filters narrow the caller's scope and never
+ * widen it: for a non-admin they apply inside "own sales in the current
+ * open shift" (`saleScope`), so naming another cashier returns nothing.
+ */
 export class GetAllDto {
+    /** Only sales rung up by this user. */
+    @IsOptional()
+    @IsMongoId()
+    cashier?: string;
+
+    /** Inclusive start day, `YYYY-MM-DD`, read in the store timezone. */
+    @IsOptional()
+    @IsCalendarDate()
+    dateFrom?: string;
+
+    /** Inclusive end day, `YYYY-MM-DD`, read in the store timezone. */
+    @IsOptional()
+    @IsCalendarDate()
+    dateTo?: string;
+
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
@@ -259,6 +283,7 @@ export class GetAllDto {
     @IsPositive()
     @IsNumber()
     @IsNotEmpty()
+    @Max(PAGINATION.LIMIT_MAX)
     limit!: number;
 }
 
