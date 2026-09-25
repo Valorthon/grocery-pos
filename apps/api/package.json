@@ -13,14 +13,14 @@
         "start:dev": "nest start --watch",
         "start:debug": "nest start --debug --watch",
         "start:prod": "node dist/main",
-        "lint": "eslint \"src/**/*.ts\"",
-        "test": "jest --passWithNoTests",
-        "test:watch": "jest --watch --passWithNoTests",
-        "test:cov": "jest --coverage --passWithNoTests",
+        "lint": "eslint . --max-warnings 0",
+        "test": "jest --coverage",
+        "test:watch": "jest --watch",
+        "test:cov": "jest --coverage",
         "test:debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "dev": "nest start --watch",
-        "lint:fix": "eslint \"src/**/*.ts\" --fix"
+        "lint:fix": "eslint . --fix"
     },
     "dependencies": {
         "@grocery-pos/contracts": "workspace:*",
@@ -76,9 +76,22 @@
             "^.+\\.(t|j)s$": "ts-jest"
         },
         "collectCoverageFrom": [
-            "**/*.(t|j)s"
+            "**/*.(t|j)s",
+            "!**/testing/**"
         ],
         "coverageDirectory": "../coverage",
-        "testEnvironment": "node"
+        "testEnvironment": "node",
+        "coverageReporters": [
+            "text-summary",
+            "lcov"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "statements": 87,
+                "branches": 81,
+                "functions": 91,
+                "lines": 88
+            }
+        }
     }
 }
