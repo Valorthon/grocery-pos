@@ -142,8 +142,12 @@ describe('users save errors (issue #18)', () => {
     });
 
     it('no longer swallows an error that is not from axios', async () => {
-        api.post.mockRejectedValueOnce(new TypeError('boom'));
+        const bug = new TypeError('boom');
+        api.post.mockRejectedValueOnce(bug);
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
         await createUser();
+
+        expect(log).toHaveBeenCalledWith(bug);
 
         expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
             ['Could not create the user.'],

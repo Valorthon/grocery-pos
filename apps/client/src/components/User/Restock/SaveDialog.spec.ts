@@ -99,10 +99,14 @@ describe.each([
     });
 
     it('shows a message when the save throws something unexpected', async () => {
-        const save = vi.fn(() => Promise.reject(new TypeError('boom')));
+        const bug = new TypeError('boom');
+        const save = vi.fn(() => Promise.reject(bug));
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
         const isOpen = await open(dialog, save);
 
         await click('Save');
+
+        expect(log).toHaveBeenCalledWith(bug);
 
         expect(isOpen.value).toBe(true);
         expect(useUIStore().toasts.map((t) => t.lines)).toEqual([

@@ -74,10 +74,12 @@ describe('useListFetch (issue #18)', () => {
             'Could not load restocks.',
         );
 
+        const log = vi.spyOn(console, 'error').mockImplementation(() => {});
         await list.load();
 
         expect(list.error.value).toBe('Could not load restocks.');
         expect(list.loading.value).toBe(false);
+        expect(log).toHaveBeenCalledWith(expect.any(TypeError));
     });
 
     it('clears the error when a retry succeeds', async () => {
@@ -94,6 +96,47 @@ describe('useListFetch (issue #18)', () => {
         await list.load();
         expect(list.error.value).toBe('');
         expect(apply).toHaveBeenCalledWith(['row']);
+    });
+
+    it('drops an older success that lands after a newer one', async () => {
+        const first = deferred<string>();
+        const second = deferred<string>();
+        const request = vi
+            .fn()
+            .mockReturnValueOnce(first.promise)
+            .mockReturnValueOnce(second.promise);
+        const apply = vi.fn();
+        const list = useListFetch(request, apply);
+
+        const a = list.load();
+        const b = list.load();
+        second.resolve('page 2');
+        await b;
+        first.resolve('page 1');
+        await a;
+
+        expect(apply.mock.calls).toEqual([['page 2']]);
+        expect(list.loading.value).toBe(false);
+    });
+
+    it('stays loading until the newest call settles', async () => {
+        const first = deferred<string>();
+        const second = deferred<string>();
+        const request = vi
+            .fn()
+            .mockReturnValueOnce(first.promise)
+            .mockReturnValueOnce(second.promise);
+        const list = useListFetch(request, vi.fn());
+
+        const a = list.load();
+        const b = list.load();
+        first.resolve('page 1');
+        await a;
+        expect(list.loading.value).toBe(true);
+
+        second.resolve('page 2');
+        await b;
+        expect(list.loading.value).toBe(false);
     });
 
     it('drops an older response that lands after a newer one', async () => {
