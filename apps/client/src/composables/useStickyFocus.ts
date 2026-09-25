@@ -4,8 +4,9 @@ import { isTextEntry } from './useRegisterShortcuts';
 
 /**
  * Whether the focus may be taken from `el` (issue #22): only from nowhere
- * (the page body) or from a button. Never from a field the user is typing
- * in (a text input or textarea), a select, or an open menu.
+ * (the page body), a button or a link (e.g. a nav link). Never from a
+ * field the user is typing in (a text input or textarea), a select, or an
+ * open menu.
  */
 export function canTakeFocusFrom(el: Element | null): boolean {
     if (!el || el === document.body || el === document.documentElement) {
@@ -14,7 +15,9 @@ export function canTakeFocusFrom(el: Element | null): boolean {
     if (isTextEntry(el) || el instanceof HTMLSelectElement) return false;
     if (el.closest('[role="menu"]')) return false;
     return (
-        el instanceof HTMLButtonElement || el.getAttribute('role') === 'button'
+        el instanceof HTMLButtonElement ||
+        el instanceof HTMLAnchorElement ||
+        el.getAttribute('role') === 'button'
     );
 }
 

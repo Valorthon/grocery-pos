@@ -95,7 +95,7 @@
                             v-model.number="scanMultiplier"
                             aria-label="Quantity per scan"
                             class="bg-transparent text-slate-900 font-extrabold text-sm cursor-pointer rounded focus-ring"
-                            @change="sticky.refocus"
+                            @change="onMultiplierChange"
                         >
                             <option v-for="q in qtyOptions" :key="q" :value="q">
                                 {{ q }}x
@@ -794,6 +794,18 @@ function resetQuery(submitted: string) {
     cancelPendingSearch();
     search.reset();
     searchQuery.value = '';
+}
+
+/**
+ * A multiplier was picked: back to the scan box, always (issue #22). A
+ * select keeps its focus otherwise, and a scan's digits would then act as
+ * type-ahead on it (changing the multiplier) instead of being scanned.
+ * Arrowing through a closed select therefore moves one step per visit;
+ * Alt+↓ or Space opens the list, which commits one pick with Enter, and
+ * typing a number on it (e.g. "6") picks that entry directly.
+ */
+function onMultiplierChange() {
+    scanInput.value?.focus();
 }
 
 function clearQuery() {

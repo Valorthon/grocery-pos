@@ -546,3 +546,31 @@ describe('Sell sticky scan box (issue #22)', () => {
         expect(document.activeElement).toBe(input());
     });
 });
+
+describe('Sell scan box after the other controls (issue #22 review)', () => {
+    it('goes back to the scan box once a multiplier is picked', async () => {
+        mount();
+        const select = document.querySelector<HTMLSelectElement>(
+            'select[aria-label="Quantity per scan"]',
+        )!;
+        select.focus();
+        select.value = '6';
+        select.dispatchEvent(new Event('change'));
+        await flush();
+
+        expect(document.activeElement).toBe(input());
+        // The next scan now lands in the box, not as type-ahead on the select.
+        expect(select.value).toBe('6');
+    });
+
+    it('takes a scan typed while a link has the focus', async () => {
+        mount();
+        const link = document.createElement('a');
+        link.href = '#';
+        document.body.appendChild(link);
+        link.focus();
+
+        await press('4');
+        expect(document.activeElement).toBe(input());
+    });
+});
