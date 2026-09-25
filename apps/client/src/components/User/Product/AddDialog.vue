@@ -129,8 +129,9 @@ const submitProduct = async () => {
             params: toEnsureValidQuery(formData),
         });
     } catch (err) {
-        apiErrorMessages(err, 'Could not check the product').forEach((msg) =>
-            uiStore.queueMessage(Color.ERROR, msg),
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessages(err, 'Could not check the product'),
         );
         return;
     }

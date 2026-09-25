@@ -1,5 +1,7 @@
 <template>
-    <div class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end">
+    <div
+        class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end max-w-[calc(100vw-2rem)] sm:max-w-md"
+    >
         <TransitionGroup
             enter-active-class="transition duration-200 ease-out"
             enter-from-class="opacity-0 -translate-y-2"
@@ -9,21 +11,48 @@
             leave-to-class="opacity-0"
         >
             <div
-                v-for="toast in toasts"
+                v-for="toast in uiStore.toasts"
                 :key="toast.id"
+                :role="toast.color === Color.ERROR ? 'alert' : 'status'"
+                :aria-live="
+                    toast.color === Color.ERROR ? 'assertive' : 'polite'
+                "
+                data-testid="toast"
+                :data-color="toast.color"
                 :class="[
-                    'flex items-center gap-2.5 rounded-xl px-4 py-3 shadow-lg border text-sm font-bold',
+                    'flex items-start gap-2.5 rounded-xl px-4 py-3 shadow-lg border text-sm font-bold',
                     colorClass(toast.color),
                 ]"
             >
-                <component :is="iconFor(toast.color)" :size="18" />
-                <span>{{ toast.text }}</span>
+                <component
+                    :is="iconFor(toast.color)"
+                    :size="18"
+                    class="shrink-0 mt-px"
+                    aria-hidden="true"
+                />
+                <div class="min-w-0 break-words">
+                    <span v-if="toast.lines.length === 1">{{
+                        toast.lines[0]
+                    }}</span>
+                    <ul v-else class="list-disc pl-4 space-y-0.5">
+                        <li v-for="(line, i) in toast.lines" :key="i">
+                            {{ line }}
+                        </li>
+                    </ul>
+                </div>
+                <span
+                    v-if="toast.count > 1"
+                    class="shrink-0 rounded-full bg-current/10 px-1.5 text-xs"
+                    :aria-label="`shown ${toast.count} times`"
+                    >×{{ toast.count }}</span
+                >
                 <button
                     type="button"
-                    class="ml-1 text-current opacity-60 hover:opacity-100"
-                    @click="dismiss(toast.id)"
+                    class="ml-1 shrink-0 text-current opacity-60 hover:opacity-100"
+                    aria-label="Dismiss notification"
+                    @click="uiStore.dismiss(toast.id)"
                 >
-                    <X :size="16" />
+                    <X :size="16" aria-hidden="true" />
                 </button>
             </div>
         </TransitionGroup>
@@ -31,54 +60,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
 import { CheckCircle2, AlertCircle, Info, X } from '@lucide/vue';
-import { useUIStore } from '@/stores/ui';
+import { Color, useUIStore } from '@/stores/ui';
 
-interface Toast {
-    id: number;
-    color: string;
-    text: string;
-}
-
+/**
+ * Every queued message, stacked (issue #18). Errors stay until closed and
+ * are announced (`role="alert"`); success and info close by themselves
+ * (the store times them) and are announced politely.
+ */
 const uiStore = useUIStore();
-const toasts = ref<Toast[]>([]);
-let counter = 0;
 
-function colorClass(color: string): string {
+function colorClass(color: Color): string {
     switch (color) {
-        case 'success':
+        case Color.SUCCESS:
             return 'bg-emerald-50 border-emerald-200 text-emerald-800';
-        case 'error':
+        case Color.ERROR:
             return 'bg-red-50 border-red-200 text-red-800';
         default:
             return 'bg-slate-900 border-slate-700 text-white';
     }
 }
 
-function iconFor(color: string) {
-    if (color === 'success') return CheckCircle2;
-    if (color === 'error') return AlertCircle;
+function iconFor(color: Color) {
+    if (color === Color.SUCCESS) return CheckCircle2;
+    if (color === Color.ERROR) return AlertCircle;
     return Info;
 }
-
-function dismiss(id: number) {
-    toasts.value = toasts.value.filter((t) => t.id !== id);
-}
-
-watch(
-    () => uiStore.queue.length,
-    () => {
-        const latest = uiStore.queue[uiStore.queue.length - 1];
-        if (!latest) return;
-        const id = ++counter;
-        toasts.value.push({
-            id,
-            color: latest.color ?? 'info',
-            text: latest.text ?? '',
-        });
-        setTimeout(() => dismiss(id), 3000);
-    },
-    { immediate: false },
-);
 </script>
