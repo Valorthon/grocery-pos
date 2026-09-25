@@ -1132,3 +1132,221 @@ describe('Sell price change notice (#23)', () => {
         ).toBeNull();
     });
 });
+
+describe('Sell checkout across a reload (#23 review)', () => {
+    function networkError() {
+        return new AxiosError('Network Error', 'ERR_NETWORK');
+    }
+
+    async function payExactCash() {
+        await press('F9');
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '300';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+    }
+
+    /** A refresh: the page and the stores start again from localStorage. */
+    function reload() {
+        app!.unmount();
+        app = null;
+        document.body.innerHTML = '';
+        pinia = createPinia();
+        setActivePinia(pinia);
+        useCartStore().setOwner('u-ana');
+        mount();
+    }
+
+    function saved() {
+        return JSON.parse(localStorage.getItem('grocery_pos_cart_v1:u-ana')!);
+    }
+
+    it('saves the key with the basket before the sale is sent', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        let savedAtSend: unknown = null;
+        post.mockImplementation(() => {
+            savedAtSend = saved().attempt;
+            return new Promise(() => {});
+        });
+        mount();
+
+        await payExactCash();
+
+        const key = post.mock.calls[0][1].idempotencyKey;
+        expect(savedAtSend).toMatchObject({ idempotencyKey: key });
+    });
+
+    it('retries with the same key after a reload, and settles on the replayed receipt', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        post.mockRejectedValueOnce(networkError());
+        mount();
+        await payExactCash();
+        const firstKey = post.mock.calls[0][1].idempotencyKey;
+        expect(dialog('Complete Payment')).not.toBeNull();
+
+        reload();
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+
+        // The server recorded the first try: it replays that receipt.
+        post.mockResolvedValueOnce({
+            data: { ...RECEIPT, subtotal: 21500, totalAmount: 21500 },
+        });
+        await payExactCash();
+
+        expect(post).toHaveBeenCalledTimes(2);
+        expect(post.mock.calls[1][1].idempotencyKey).toBe(firstKey);
+        expect(dialog('Transaction Complete')).not.toBeNull();
+        expect(cartNames()).toEqual([]);
+        expect(localStorage.getItem('grocery_pos_cart_v1:u-ana')).toBeNull();
+    });
+
+    it('uses a new key when the ticket changed after the reload', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        post.mockRejectedValueOnce(networkError());
+        mount();
+        await payExactCash();
+        const firstKey = post.mock.calls[0][1].idempotencyKey;
+
+        reload();
+        await clickButton(buttonNamed('Remove mints'));
+        post.mockResolvedValueOnce({ data: RECEIPT });
+        await press('F9');
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '190';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+
+        expect(post.mock.calls[1][1].idempotencyKey).not.toBe(firstKey);
+    });
+
+    it('drops the saved key with the ticket on a void', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        post.mockRejectedValueOnce(networkError());
+        mount();
+        await payExactCash();
+        await escape();
+        expect(saved().attempt).not.toBeNull();
+
+        await clickButton(buttonNamed('Void Ticket'));
+        const confirmVoid = [
+            ...dialog('Void this ticket')!.querySelectorAll('button'),
+        ].find((b) => b.textContent?.trim() === 'Void Ticket')!;
+        await clickButton(confirmVoid);
+        await settleTransitions();
+
+        expect(useCartStore().attempt).toBeNull();
+        expect(localStorage.getItem('grocery_pos_cart_v1:u-ana')).toBeNull();
+    });
+});
+
+describe('Sell Delete only on a ticket line (#23 review)', () => {
+    it('does nothing from a discount button', async () => {
+        withTicket();
+        mount();
+        await clickLine(0);
+        await press('F8');
+        expect(document.activeElement?.textContent?.trim()).toBe('None');
+
+        await press('Delete');
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+        expect(document.querySelector('[data-testid="undo-bar"]')).toBeNull();
+    });
+
+    it('does nothing from the Qty picker or with nothing focused', async () => {
+        withTicket();
+        mount();
+        await clickLine(0);
+
+        document
+            .querySelector<HTMLSelectElement>(
+                'select[aria-label="Quantity per scan"]',
+            )!
+            .focus();
+        await press('Delete');
+        (document.activeElement as HTMLElement).blur();
+        await press('Delete');
+
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('works on a line button', async () => {
+        withTicket();
+        mount();
+        await clickLine(1);
+        buttonNamed('One more mints').focus();
+        await press('Delete');
+        expect(cartNames()).toEqual(['2x milk']);
+    });
+});
+
+describe('Sell multiplier on a clicked match (#23 review)', () => {
+    it('adds the typed N* quantity when a match is clicked', async () => {
+        serve(() => Promise.resolve([MILK]));
+        mount();
+        await type('12*milk');
+
+        await clickButton(
+            document.querySelector<HTMLElement>(
+                '[data-testid="search-match"]',
+            )!,
+        );
+        expect(cartNames()).toEqual(['12x milk']);
+        expect(
+            document.querySelector('[data-testid="multiplier-badge"]'),
+        ).toBeNull();
+    });
+
+    it('adds the picked quantity when a match is clicked', async () => {
+        serve(() => Promise.resolve([MILK]));
+        mount();
+        const select = document.querySelector<HTMLSelectElement>(
+            'select[aria-label="Quantity per scan"]',
+        )!;
+        select.value = '6';
+        select.dispatchEvent(new Event('change'));
+        await type('milk');
+        await clickButton(
+            document.querySelector<HTMLElement>(
+                '[data-testid="search-match"]',
+            )!,
+        );
+        expect(cartNames()).toEqual(['6x milk']);
+        expect(select.value).toBe('1');
+    });
+});
+
+describe('Sell quantity cap (#23 review)', () => {
+    it('reports a huge multiplier as an error and adds nothing', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        input().value = `99999999999999999999*${MILK.EAN}`;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+
+        expect(cartNames()).toEqual([]);
+        expect(text('scan-alert')).toContain("a sale can't exceed");
+        expect(text('scan-status')?.trim()).toBe('');
+    });
+
+    it('refuses a typed quantity that takes the sale past the limit', async () => {
+        withTicket();
+        mount();
+        await typeQty(qtyInputs()[0], '200000');
+
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+        expect(
+            document.querySelector('[data-testid="line-quantity-error"]')
+                ?.textContent,
+        ).toContain("a sale can't exceed ₱10,000,000.00");
+    });
+});

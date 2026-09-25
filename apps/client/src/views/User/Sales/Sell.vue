@@ -276,7 +276,7 @@
                                 ? 'border-slate-900 ring-2 ring-slate-900/20'
                                 : 'border-slate-200'
                         "
-                        @click="selectMatch(m, scanMultiplier)"
+                        @click="selectMatch(m, nextScanQty)"
                     >
                         <div>
                             <h4
@@ -855,7 +855,7 @@ import {
     X,
 } from '@lucide/vue';
 import api from '@/axios';
-import { type CartItem, useCartStore } from '@/stores/cart';
+import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
 import { apiErrorCode, useShiftStore } from '@/stores/shift';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -1046,17 +1046,21 @@ function typedQuantity(text: string): unknown {
 }
 
 /** Why a typed quantity is refused (`@IsInt() @Min(1)`), or ''. */
-function quantityError(text: string): string {
+function quantityError(product: string, text: string): string {
     const value = typedQuantity(text);
     const error = integerError(value, { min: 1 });
     if (error) return error;
-    return Number.isSafeInteger(value) ? '' : 'Enter a smaller number';
+    const item = cartStore.items.find((i) => i.product === product);
+    const max = item ? cartStore.maxQuantity(product, item.unitPrice) : 0;
+    return (value as number) > max
+        ? `At most ${max}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`
+        : '';
 }
 
 const qtyErrors = computed<Record<string, string>>(() =>
     Object.fromEntries(
         Object.entries(qtyDrafts)
-            .map(([product, text]) => [product, quantityError(text)])
+            .map(([product, text]) => [product, quantityError(product, text)])
             .filter(([, error]) => error),
     ),
 );
@@ -1107,7 +1111,7 @@ function onQtyInput(product: string, event: Event) {
 function commitQuantity(product: string): boolean {
     const text = qtyDrafts[product];
     if (text === undefined) return true;
-    if (quantityError(text)) return false;
+    if (quantityError(product, text)) return false;
     cartStore.setQuantity(product, Number(text.trim()));
     delete qtyDrafts[product];
     return true;
@@ -1189,8 +1193,15 @@ function removeLine(product: string) {
     }
 }
 
+/**
+ * Delete: only with the focus on a ticket line or one of its buttons, so
+ * it never removes a line from the discount, the Qty picker or nowhere.
+ */
 function removeSelected() {
-    if (selectedLine.value) removeLine(selectedLine.value);
+    const line =
+        document.activeElement?.closest<HTMLElement>('[data-ticket-line]');
+    if (!line || !selectedLine.value) return;
+    removeLine(selectedLine.value);
 }
 
 function undoRemove() {
@@ -1392,7 +1403,7 @@ function addProduct(product: Product, quantity: number, submitted: string) {
         showFeedback('error', 'Wait for the sale to finish recording');
         return;
     }
-    cartStore.add(
+    const added = cartStore.add(
         {
             product: product._id,
             EAN: product.EAN,
@@ -1401,6 +1412,14 @@ function addProduct(product: Product, quantity: number, submitted: string) {
         },
         quantity,
     );
+    if (!added) {
+        // Nothing was added: the multiplier and the text stay for a retry.
+        showFeedback(
+            'error',
+            `Can't add ${quantity}x ${product.name}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`,
+        );
+        return;
+    }
     // Rung up again: the removed line is not put back on top of it.
     if (undo.value?.item.product === product._id) dismissUndo();
     selectedLine.value = product._id;
@@ -1497,6 +1516,12 @@ const checkout = useSaleCheckout({
     cart: cartStore,
     ticket: () => toSaleTicket(cartStore.items, discountRequest.value),
     post: async (body) => (await api.post<Receipt>('/sales', body)).data,
+    // Saved with the basket (#23 review): a retry after a refresh or crash
+    // mid-sale reuses the key, so the server replays the recorded sale.
+    attemptStore: {
+        get: () => cartStore.attempt,
+        set: (attempt) => cartStore.setAttempt(attempt),
+    },
 });
 
 /** True while `POST /sales` is in flight: the ticket cannot be edited. */
