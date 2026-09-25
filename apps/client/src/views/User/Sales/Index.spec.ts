@@ -303,3 +303,82 @@ describe('sales errors (issue #18)', () => {
         ).toBeNull();
     });
 });
+
+describe('sale details freshness (issue #20)', () => {
+    const SALE_B = { ...CASH_SALE, _id: 'sale2', cashier: { name: 'ben' } };
+    const line = (name: string) => [
+        { _id: `d-${name}`, product: { name }, quantity: 1, unitPrice: 100 },
+    ];
+
+    /** Details requests that answer only when the test says so. */
+    function serveDeferredDetails() {
+        const pending = new Map<string, (lines: unknown) => void>();
+        api.get.mockImplementation((url: string) => {
+            if (url === '/sales') {
+                return Promise.resolve({
+                    data: { data: [CASH_SALE, SALE_B], totalItems: 2 },
+                });
+            }
+            if (url.startsWith('/sales/details/')) {
+                return new Promise((resolve) => {
+                    pending.set(url.slice('/sales/details/'.length), (data) =>
+                        resolve({ data }),
+                    );
+                });
+            }
+            return Promise.resolve({ data: { data: [], totalItems: 0 } });
+        });
+        return pending;
+    }
+
+    async function mount() {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+    }
+
+    async function openRow(index: number) {
+        document
+            .querySelectorAll<HTMLElement>('tbody tr.cursor-pointer')
+            [index]!.click();
+        await flush();
+    }
+
+    const modalText = () => document.body.textContent ?? '';
+
+    it('never shows the previous sale’s lines while the next one loads', async () => {
+        const pending = serveDeferredDetails();
+        await mount();
+
+        await openRow(0);
+        pending.get('sale1')!(line('apple'));
+        await flush();
+        expect(modalText()).toContain('apple');
+
+        await openRow(1);
+
+        expect(modalText()).not.toContain('apple');
+        pending.get('sale2')!(line('banana'));
+        await flush();
+        expect(modalText()).toContain('banana');
+    });
+
+    it('drops a late answer for a sale clicked earlier', async () => {
+        const pending = serveDeferredDetails();
+        await mount();
+
+        await openRow(0);
+        await openRow(1);
+        pending.get('sale2')!(line('banana'));
+        await flush();
+        pending.get('sale1')!(line('apple'));
+        await flush();
+
+        expect(modalText()).toContain('banana');
+        expect(modalText()).not.toContain('apple');
+        expect(document.querySelector('.animate-spin')).toBeNull();
+    });
+});

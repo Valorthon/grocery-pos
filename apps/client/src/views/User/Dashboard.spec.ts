@@ -178,3 +178,55 @@ describe('Dashboard load failure (issue #18)', () => {
         expect(host.textContent).toContain('Restocked: weekly delivery');
     });
 });
+
+describe('Dashboard recent activity (issue #20)', () => {
+    const ago = (minutes: number) =>
+        new Date(Date.now() - minutes * 60_000).toISOString();
+
+    it('lists the newest first across kinds, cut to 7 after sorting', async () => {
+        // Eight older sales, then a newer restock and a newest adjustment:
+        // sorting after formatting ("2 hr ago") kept the sales and hid both.
+        const sales = Array.from({ length: 8 }, (_, i) => ({
+            _id: `s${i}`,
+            amount: 100 * (i + 1),
+            paymentType: 'CASH',
+            status: 'COMPLETED',
+            createdAt: ago(120 + i),
+            cashier: { name: 'ana' },
+        }));
+        await render({
+            ...WITH_MONEY,
+            recentSales: sales,
+            recentRestocks: [
+                {
+                    _id: 'r1',
+                    description: 'weekly delivery',
+                    createdAt: ago(30),
+                    restockedBy: { name: 'rex' },
+                },
+            ],
+            recentAdjustments: [
+                {
+                    _id: 'a1',
+                    description: 'recount',
+                    createdAt: ago(5),
+                    adjustedBy: { name: 'ada' },
+                },
+            ],
+        });
+
+        const titles = [
+            ...document.querySelectorAll('[data-testid="activity"]'),
+        ].map((el) => el.querySelector('.text-sm')?.textContent?.trim());
+
+        expect(titles).toHaveLength(7);
+        expect(titles.slice(0, 3)).toEqual([
+            'Adjusted: recount',
+            'Restocked: weekly delivery',
+            'Sale: ₱1.00',
+        ]);
+        // The oldest sales are the ones cut.
+        expect(titles).not.toContain('Sale: ₱8.00');
+        expect(titles).not.toContain('Sale: ₱7.00');
+    });
+});

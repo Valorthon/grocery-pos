@@ -353,7 +353,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';
 import api from '@/axios';
@@ -365,7 +365,7 @@ import Spinner from '@/components/ui/Spinner.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages, apiErrorText } from '@/utils/api-error';
-import { useListFetch } from '@/composables/useListFetch';
+import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import {
     DiscountType,
     ErrorCode,
@@ -409,8 +409,7 @@ const uiStore = useUIStore();
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
-const limit = ref(5);
-const page = ref(1);
+const { page, limit } = useListPaging(() => fetchSales());
 const totalItems = ref(0);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const serverItems = ref<any[]>([]);
@@ -480,7 +479,6 @@ const {
 );
 
 fetchSales();
-watch([page, limit], fetchSales);
 
 const isDialogOpen = ref(false);
 const detailsLoading = ref(false);
@@ -647,20 +645,32 @@ async function showDetails(row: any) {
     await loadDetails();
 }
 
+/** Counts detail loads, so only the latest one may write (issue #20). */
+let detailsCall = 0;
+
+/**
+ * Loads the selected sale's lines. The previous sale's lines are cleared
+ * first, so they never show under this one's spinner, and a slower
+ * response for a sale clicked earlier is dropped when it lands after a
+ * later click (issue #20).
+ */
 async function loadDetails() {
+    const call = ++detailsCall;
     detailsLoading.value = true;
     detailsError.value = '';
     details.value = [];
     try {
         const res = await api.get(`/sales/details/${selectedId.value}`);
-        details.value = res.data;
+        if (call === detailsCall) details.value = res.data;
     } catch (error) {
-        detailsError.value = apiErrorText(
-            error,
-            'Could not load the sale details.',
-        );
+        if (call === detailsCall) {
+            detailsError.value = apiErrorText(
+                error,
+                'Could not load the sale details.',
+            );
+        }
     } finally {
-        detailsLoading.value = false;
+        if (call === detailsCall) detailsLoading.value = false;
     }
 }
 </script>

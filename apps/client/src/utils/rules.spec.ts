@@ -6,6 +6,8 @@ import {
 } from '@grocery-pos/contracts';
 import {
     barcodeFieldError,
+    DATE_RANGE_REVERSED,
+    dateRangeError,
     fieldErrors,
     integerError,
     moneyError,
@@ -155,5 +157,24 @@ describe('fieldErrors', () => {
     it('keeps only the refused fields', () => {
         expect(fieldErrors({ a: '', b: 'bad' })).toEqual({ b: 'bad' });
         expect(fieldErrors({ a: '' })).toEqual({});
+    });
+});
+
+describe('dateRangeError (the API dateTo rule, #20)', () => {
+    it('refuses an end before the start', () => {
+        expect(dateRangeError('2026-03-02', '2026-03-01')).toBe(
+            DATE_RANGE_REVERSED,
+        );
+        expect(dateRangeError('2026-01-01', '2025-12-31')).toBe(
+            DATE_RANGE_REVERSED,
+        );
+    });
+
+    it('accepts a one-day or forward range, or an open end', () => {
+        expect(dateRangeError('2026-03-01', '2026-03-01')).toBe('');
+        expect(dateRangeError('2026-02-28', '2026-03-01')).toBe('');
+        expect(dateRangeError('2026-03-01', '')).toBe('');
+        expect(dateRangeError('', '2026-03-01')).toBe('');
+        expect(dateRangeError('', '')).toBe('');
     });
 });

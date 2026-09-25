@@ -20,18 +20,23 @@
                 v-model="searchAdjustedBy"
                 :options="userOptions"
                 label="Adjusted By"
+                all-label="All users"
+                @update:model-value="applyFilters"
             />
             <BaseInput
                 v-model="searchDateStart"
                 label="From"
                 type="date"
-                @update:model-value="resetSearch"
+                :max="searchDateEnd || undefined"
+                @update:model-value="applyFilters"
             />
             <BaseInput
                 v-model="searchDateEnd"
                 label="To"
                 type="date"
-                @update:model-value="resetSearch"
+                :min="searchDateStart || undefined"
+                :error="rangeError"
+                @update:model-value="applyFilters"
             />
             <div class="md:col-span-2 flex items-end">
                 <BaseButton variant="outline" size="sm" @click="resetFilters">
@@ -67,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ClipboardEdit, Pencil, X } from '@lucide/vue';
 import api from '@/axios';
@@ -77,16 +82,16 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
-import { useListFetch } from '@/composables/useListFetch';
+import { useListFetch, useListPaging } from '@/composables/useListFetch';
+import { dateRangeError } from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
 import AdjustDetails from '@/components/User/Adjustments/DetailsDialog.vue';
 
 const router = useRouter();
 const uiStore = useUIStore();
-const limit = ref(5);
+const { page, limit, search } = useListPaging(() => fetchAdjust());
 const totalItems = ref(0);
-const page = ref(1);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const serverItems = ref<any[]>([]);
 
@@ -124,16 +129,41 @@ onMounted(() => {
     fetchUserOptions();
 });
 
-const resetSearch = () => {
-    page.value = 1;
-    fetchAdjust();
+const rangeError = computed(() =>
+    dateRangeError(searchDateStart.value, searchDateEnd.value),
+);
+
+/**
+ * The filters the list was last loaded with: paging and Retry reuse them,
+ * so a reversed range still being typed is never sent.
+ */
+const applied = ref({
+    adjustedBy: undefined as string | undefined,
+    // Calendar days as YYYY-MM-DD (the date input's value). The server
+    // reads them in the store timezone; either may be blank.
+    dateFrom: undefined as string | undefined,
+    dateTo: undefined as string | undefined,
+});
+
+/**
+ * A filter changed: list page 1 with it, once. A reversed date range is
+ * shown on the To field and not sent (the API would refuse it).
+ */
+const applyFilters = () => {
+    if (rangeError.value) return;
+    applied.value = {
+        adjustedBy: searchAdjustedBy.value ?? undefined,
+        dateFrom: searchDateStart.value || undefined,
+        dateTo: searchDateEnd.value || undefined,
+    };
+    search();
 };
 
 const resetFilters = () => {
     searchAdjustedBy.value = null;
     searchDateStart.value = '';
     searchDateEnd.value = '';
-    resetSearch();
+    applyFilters();
 };
 
 const {
@@ -146,11 +176,7 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                adjustedBy: searchAdjustedBy.value,
-                // Calendar days as YYYY-MM-DD (the date input's value). The
-                // server reads them in the store timezone; either may be blank.
-                dateFrom: searchDateStart.value || undefined,
-                dateTo: searchDateEnd.value || undefined,
+                ...applied.value,
             },
         }),
     (result) => {
@@ -175,8 +201,6 @@ const {
 );
 
 fetchAdjust();
-
-watch([page, limit], fetchAdjust);
 
 const isDialogOpen = ref(false);
 const selectedItem = ref();

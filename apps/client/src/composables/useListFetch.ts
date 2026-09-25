@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { apiErrorText } from '@/utils/api-error';
 
 /**
@@ -34,4 +34,32 @@ export function useListFetch<T>(
     }
 
     return { loading, error, load };
+}
+
+/**
+ * Page and page size of a server-paged list (issue #20). Every change
+ * loads exactly once:
+ *
+ * - a new page loads that page;
+ * - a new page size goes back to page 1 (page 4 of 5 rows is past the end
+ *   at 50 rows);
+ * - `search()`, for a filter change, goes back to page 1 and loads.
+ *
+ * Going back to page 1 from another page loads through the page watcher,
+ * so `search()` never loads twice. `load` is read lazily, so it may be the
+ * `useListFetch` loader declared after this.
+ */
+export function useListPaging(load: () => unknown, initialLimit = 5) {
+    const page = ref(1);
+    const limit = ref(initialLimit);
+
+    function search(): void {
+        if (page.value === 1) void load();
+        else page.value = 1;
+    }
+
+    watch(page, () => void load());
+    watch(limit, search);
+
+    return { page, limit, search };
 }

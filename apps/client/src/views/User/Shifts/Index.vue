@@ -153,7 +153,7 @@ import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
 import { apiErrorMessage } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
-import { useListFetch } from '@/composables/useListFetch';
+import { useListFetch, useListPaging } from '@/composables/useListFetch';
 
 /**
  * ADMIN only (issue #2): every shift, open and closed, with each closed
@@ -162,8 +162,7 @@ import { useListFetch } from '@/composables/useListFetch';
  */
 const uiStore = useUIStore();
 
-const page = ref(1);
-const limit = ref(10);
+const { page, limit, search } = useListPaging(() => fetchShifts(), 10);
 const totalItems = ref(0);
 const shifts = ref<ShiftListItem[]>([]);
 const statusFilter = ref<string>('');
@@ -236,11 +235,7 @@ const {
 );
 
 fetchShifts();
-watch([page, limit], fetchShifts);
-watch(statusFilter, () => {
-    if (page.value === 1) fetchShifts();
-    else page.value = 1;
-});
+watch(statusFilter, search);
 
 const isDialogOpen = ref(false);
 const selected = ref<ShiftListItem | null>(null);
