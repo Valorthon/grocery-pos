@@ -367,7 +367,10 @@ function setPath(doc: Row, path: string, value: unknown): void {
 /** The fakes use string ids, so plain equality is enough. */
 const same = (a: unknown, b: unknown) => a === b;
 
-/** Does `row` match a filter of equalities, `$in`s and a (skipped) `$or`? */
+/**
+ * Does `row` match a filter of equalities, `$in`, `$ne`, `$nin` and a
+ * (skipped) `$or`?
+ */
 function matches(row: Row, filter: Record<string, unknown>): boolean {
     return Object.entries(filter).every(([path, cond]) => {
         if (path === '$or') return true; // planDocument does the filtering
@@ -375,21 +378,40 @@ function matches(row: Row, filter: Record<string, unknown>): boolean {
             return ((row.runs as Row[]) ?? []).some((r) => r.runId === cond);
         }
         const value = valueAt(row, path);
-        if (cond !== null && typeof cond === 'object' && '$in' in cond) {
-            return (cond as { $in: unknown[] }).$in.some((v) => same(value, v));
+        if (cond !== null && typeof cond === 'object') {
+            const op = cond as {
+                $in?: unknown[];
+                $nin?: unknown[];
+                $ne?: unknown;
+            };
+            if (op.$in) return op.$in.some((v) => same(value, v));
+            if (op.$nin) return !op.$nin.some((v) => same(value, v));
+            if ('$ne' in op) return !same(value, op.$ne);
         }
         return same(value, cond);
     });
 }
 
+const duplicateKey = () =>
+    Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
+
 /**
  * An in-memory collection with the slice of MongoDB semantics the
- * migration uses: equality/`$in` filters, `$set` (dotted and `runs.$.x`
- * positional), `$push`, upsert.
+ * migration uses: equality/`$in`/`$ne`/`$nin` filters, `$set` (dotted and
+ * `runs.$.x` positional), `$unset`, `$push`, upsert (a duplicate `_id`
+ * throws E11000, as MongoDB does), and an optional unique field.
  */
 class FakeCollection<T extends Row = Row> {
     /** Called before each `updateOne`, with its filter. */
     beforeWrite?: (filter: Record<string, unknown>) => void;
+    /** Called after each `updateOne` has applied (a crash just after). */
+    afterWrite?: (filter: Record<string, unknown>) => void;
+    /** Awaited by each `find` before it reads: lets a test pause a run. */
+    beforeFind?: (filter: Record<string, unknown>) => Promise<void>;
+    /** Awaited by each `find` after it has read, before it returns. */
+    afterFind?: (filter: Record<string, unknown>) => Promise<void>;
+    /** A field with a unique index. */
+    unique?: string;
     /** Ids whose document write throws this error. */
     readonly throwOn = new Map<string, unknown>();
     readonly writes: Record<string, unknown>[] = [];
@@ -400,8 +422,16 @@ class FakeCollection<T extends Row = Row> {
     ) {}
 
     find(filter: Record<string, unknown>) {
-        const rows = this.rows.filter((row) => matches(row, filter));
-        return { toArray: () => Promise.resolve(structuredClone(rows)) };
+        return {
+            toArray: async () => {
+                await this.beforeFind?.(filter);
+                const rows = structuredClone(
+                    this.rows.filter((row) => matches(row, filter)),
+                );
+                await this.afterFind?.(filter);
+                return rows;
+            },
+        };
     }
 
     updateOne(
@@ -415,12 +445,22 @@ class FakeCollection<T extends Row = Row> {
         this.writes.push(filter);
 
         let row = this.rows.find((r) => matches(r, filter));
+        const $set = (update.$set ?? {}) as Record<string, unknown>;
+        const taken =
+            this.unique !== undefined &&
+            this.unique in $set &&
+            this.rows.some(
+                (r) => r !== row && r[this.unique!] === $set[this.unique!],
+            );
+        if (taken) return Promise.reject(duplicateKey());
         if (!row) {
             if (!options?.upsert) return Promise.resolve({ matchedCount: 0 });
+            if (this.rows.some((r) => r._id === filter._id)) {
+                return Promise.reject(duplicateKey());
+            }
             row = { _id: filter._id } as T;
             this.rows.push(row);
         }
-        const $set = (update.$set ?? {}) as Record<string, unknown>;
         for (const [path, value] of Object.entries($set)) {
             if (path.startsWith('runs.$.')) {
                 const run = (row.runs as Row[]).find(
@@ -431,11 +471,15 @@ class FakeCollection<T extends Row = Row> {
                 setPath(row, path, structuredClone(value));
             }
         }
+        for (const path of Object.keys(update.$unset ?? {})) {
+            delete row[path];
+        }
         const $push = (update.$push ?? {}) as Record<string, unknown>;
         for (const [path, value] of Object.entries($push)) {
             const list = (valueAt(row, path) as unknown[]) ?? [];
             setPath(row, path, [...list, value]);
         }
+        this.afterWrite?.(filter);
         return Promise.resolve({ matchedCount: 1 });
     }
 }
@@ -446,10 +490,12 @@ describe('runMigration', () => {
     let progress: FakeCollection<ProgressRecord & Row>;
     let runs = 0;
 
-    function run(apply: boolean) {
+    function run(apply: boolean, resumeStale = false) {
         runs += 1;
         return runMigration({
             apply,
+            resumeStale,
+            owner: `host:${runs}`,
             runId: `run-${runs}`,
             migrations: migrations as unknown as MigrationRun['migrations'],
             progress: progress as unknown as MigrationRun['progress'],
@@ -588,23 +634,29 @@ describe('runMigration', () => {
         const crash = new Error('process killed');
 
         /**
-         * Kills the run on the Sales document, after products were written:
-         * the process dies on the progress update that follows s1's write
-         * attempt. 'before-write': the write itself never landed (it threw,
-         * as a killed process would not have written). 'after-write': the
-         * write landed but its `done` mark was never stored.
+         * Kills the run at the Sales document, after products were written.
+         * 'before-write': dies right after s1's progress record is stored,
+         * before the document write. 'after-write': s1 is written but its
+         * `done` mark fails, and the process dies at the next document.
          */
         async function crashAt(where: 'before-write' | 'after-write') {
-            const id = progressId('sales', 's1');
+            const s1 = progressId('sales', 's1');
+            const h1 = progressId('shift', 'h1');
             if (where === 'before-write') {
-                collections.Sales.throwOn.set('s1', crash);
+                progress.afterWrite = (filter) => {
+                    if (filter._id === s1) throw crash;
+                };
+            } else {
+                progress.beforeWrite = (filter) => {
+                    const earlier = progress.writes.filter((w) => w._id === s1);
+                    if (filter._id === s1 && earlier.length === 1) {
+                        throw new Error('network blip');
+                    }
+                    if (filter._id === h1) throw crash;
+                };
             }
-            progress.beforeWrite = (filter) => {
-                const earlier = progress.writes.filter((w) => w._id === id);
-                if (filter._id === id && earlier.length === 1) throw crash;
-            };
             await expect(run(true)).rejects.toBe(crash);
-            collections.Sales.throwOn.clear();
+            progress.afterWrite = undefined;
             progress.beforeWrite = undefined;
         }
 
@@ -625,7 +677,12 @@ describe('runMigration', () => {
             async (where) => {
                 await crashAt(where);
 
-                const rerun = await run(true);
+                // The dead run still holds the lock.
+                const plain = await run(true);
+                expect(plain.exitCode).toBe(1);
+                expect(plain.lines[0]).toMatch(/--resume-stale/);
+
+                const rerun = await run(true, true);
 
                 expect(rerun.exitCode).toBe(0);
                 expect(rerun.lines[0]).toMatch(/^Resuming: /);
@@ -707,6 +764,179 @@ describe('runMigration', () => {
             '  SKIPPED p1 (name): "m&amp;m peanut" -> "m&m peanut" would duplicate (unique index); rename one of them by hand',
         );
         expect(outcome.skipped).toBe(2);
+    });
+
+    /** A pause point: `reached` resolves when a run hits it, `open` lets it on. */
+    function pausePoint() {
+        let reach!: () => void;
+        let release!: () => void;
+        const reached = new Promise<void>((r) => (reach = r));
+        const released = new Promise<void>((r) => (release = r));
+        return {
+            reached,
+            open: () => release(),
+            wait: () => {
+                reach();
+                return released;
+            },
+        };
+    }
+
+    describe('two runs at once', () => {
+        it('the second refuses while the first is between its reads, and nothing is decoded twice', async () => {
+            // Run 1 pauses in the Sales pass after reading its progress
+            // records and before reading the candidates.
+            const pause = pausePoint();
+            let paused = false;
+            collections.Sales.beforeFind = async (filter) => {
+                if ('$or' in filter && !paused) {
+                    paused = true;
+                    await pause.wait();
+                }
+            };
+            const first = run(true);
+            await pause.reached;
+
+            const second = await run(true);
+
+            expect(second.exitCode).toBe(1);
+            expect(second.lines[0]).toMatch(
+                /^Refusing: .* is being applied by run run-1 on host:1, started .*--resume-stale/,
+            );
+            pause.open();
+            expect((await first).exitCode).toBe(0);
+            // Decoded exactly once.
+            expect(reversal()).toBe('typed &lt; literally');
+            expect(marker().status).toBe('complete');
+            expect(marker().runs).toHaveLength(1);
+        });
+
+        it('two first runs racing to create the marker: one wins, one refuses', async () => {
+            // Run 1 has read "no marker" but not claimed it yet.
+            const read = pausePoint();
+            migrations.afterFind = async () => {
+                migrations.afterFind = undefined;
+                await read.wait();
+            };
+            const first = run(true);
+            await read.reached;
+            // Run 2 claims the marker and pauses mid-run.
+            const mid = pausePoint();
+            collections.Sales.beforeFind = async (filter) => {
+                if ('$or' in filter) {
+                    collections.Sales.beforeFind = undefined;
+                    await mid.wait();
+                }
+            };
+            const second = run(true);
+            await mid.reached;
+
+            read.open();
+            const firstOutcome = await first;
+            mid.open();
+
+            expect(firstOutcome.exitCode).toBe(1);
+            expect(firstOutcome.lines[0]).toMatch(
+                /is being applied by run run-2/,
+            );
+            expect((await second).exitCode).toBe(0);
+            expect(reversal()).toBe('typed &lt; literally');
+        });
+
+        it('a dry run next to a live run only warns', async () => {
+            const pause = pausePoint();
+            collections.Sales.beforeFind = async (filter) => {
+                if ('$or' in filter) await pause.wait();
+            };
+            const first = run(true);
+            await pause.reached;
+            collections.Sales.beforeFind = undefined;
+
+            const dry = await run(false);
+            pause.open();
+            await first;
+
+            expect(dry.exitCode).toBe(0);
+            expect(dry.lines[0]).toMatch(/^WARNING: a run holds the lock/);
+        });
+    });
+
+    describe('collision chains on a unique name', () => {
+        beforeEach(() => {
+            collections.Product.unique = 'name';
+            collections.Product.rows.splice(0);
+            // A decodes to `&lt;x`, which B holds until B decodes to `<x`.
+            collections.Product.rows.push(
+                { _id: 'A', name: '&amp;lt;x' },
+                { _id: 'B', name: '&lt;x' },
+                // A genuine duplicate stays skipped.
+                { _id: 'C', name: 'a&amp;b' },
+                { _id: 'D', name: 'a&b' },
+            );
+        });
+
+        it('--apply resolves the chain and skips only the real duplicate', async () => {
+            const outcome = await run(true);
+
+            expect(outcome.exitCode).toBe(0);
+            expect(collections.Product.rows.map((r) => r.name)).toEqual([
+                '&lt;x',
+                '<x',
+                'a&amp;b',
+                'a&b',
+            ]);
+            expect(outcome.lines).toContain(
+                '  SKIPPED C (name): "a&amp;b" -> "a&b" would duplicate D; rename one of them by hand',
+            );
+            expect(
+                outcome.lines.filter((l) => l.startsWith('  SKIPPED')),
+            ).toHaveLength(1);
+            expect(outcome.reports[0].documents).toBe(2);
+        });
+
+        it('the dry run predicts the same', async () => {
+            const outcome = await run(false);
+
+            expect(outcome.reports[0].documents).toBe(2);
+            expect(outcome.reports[0].collisions.map((c) => c._id)).toEqual([
+                'C',
+            ]);
+        });
+    });
+
+    it('a landed write whose done-mark fails is a note, not a failure', async () => {
+        const s1 = progressId('sales', 's1');
+        progress.beforeWrite = (filter) => {
+            const earlier = progress.writes.filter((w) => w._id === s1);
+            if (filter._id === s1 && earlier.length === 1) {
+                throw new Error('network blip');
+            }
+        };
+
+        const outcome = await run(true);
+
+        expect(outcome.exitCode).toBe(0);
+        expect(outcome.failed).toBe(0);
+        expect(outcome.lines).toContain(
+            '  NOTE sales s1: written; its progress mark failed (network blip), a rerun will confirm it',
+        );
+        expect(reversal()).toBe('typed &lt; literally');
+    });
+
+    it('a resume leaves settled records alone, even if the document changed since', async () => {
+        collections.Sales.throwOn.set('s1', new Error('boom'));
+        expect((await run(true)).exitCode).toBe(1);
+        collections.Sales.throwOn.clear();
+        // p1 was decoded by run 1; someone renamed it afterwards.
+        collections.Product.rows[0].name = 'renamed';
+
+        const rerun = await run(true);
+
+        expect(rerun.exitCode).toBe(0);
+        expect(rerun.lines.join('\n')).not.toMatch(/SKIPPED product p1/);
+        expect(rerun.lines).toContain('  already decoded by an earlier run: 1');
+        expect(collections.Product.rows[0].name).toBe('renamed');
+        expect(reversal()).toBe('typed &lt; literally');
     });
 });
 

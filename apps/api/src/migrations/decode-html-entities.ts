@@ -379,10 +379,19 @@ export interface ProgressRecord {
     error?: string;
 }
 
-/** The run marker in `migrations`. */
+/** Who holds the run marker while a run is in progress. */
+export interface MigrationLock {
+    runId: string;
+    /** `host:pid` of the process, for the operator. */
+    owner: string;
+    startedAt: Date;
+}
+
+/** The run marker in `migrations`: the lock and the run history. */
 export interface MigrationMarker {
     _id: string;
     status: 'running' | 'incomplete' | 'complete';
+    lock?: MigrationLock;
     runs: Record<string, unknown>[];
 }
 
@@ -396,10 +405,20 @@ export interface MigrationRun {
     apply: boolean;
     /** Identifies this run in the marker and the progress records. */
     runId: string;
+    /** `host:pid`, stored in the lock. */
+    owner: string;
+    /**
+     * Take over a `running` marker. Only for a run that is known to be dead
+     * (crashed or killed): two live runs can decode a document twice.
+     */
+    resumeStale?: boolean;
 }
 
 export interface MigrationOutcome {
-    /** 0 when it ran cleanly; 1 when a write failed or apply was refused. */
+    /**
+     * 0 when it ran cleanly; 1 when a write failed, or the run was refused
+     * (already complete, or another run holds the lock).
+     */
     exitCode: number;
     /** Everything to print, in order. */
     lines: string[];
@@ -410,36 +429,120 @@ export interface MigrationOutcome {
     failed: number;
 }
 
+/** The flag that takes over a `running` marker left by a dead run. */
+export const RESUME_STALE_FLAG = '--resume-stale';
+
 function isDuplicateKey(err: unknown): boolean {
     return (err as { code?: unknown } | null)?.code === 11000;
+}
+
+function messageOf(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
 }
 
 export function progressId(collection: string, id: unknown): string {
     return `${MIGRATION_ID}/${collection}/${String(id)}`;
 }
 
+function refused(message: string): MigrationOutcome {
+    return {
+        exitCode: 1,
+        lines: [`Refusing: ${message}`],
+        reports: [],
+        skipped: 0,
+        failed: 0,
+    };
+}
+
+/** Progress statuses a rerun leaves alone: settled by an earlier run. */
+const SETTLED: ReadonlySet<ProgressStatus> = new Set([
+    'done',
+    'moved',
+    'collision',
+]);
+
+/**
+ * Takes the run marker for this run, atomically: the filter only matches a
+ * marker that no live run holds (or any unfinished one, with
+ * `resumeStale`), and the upsert inserts one when there is none. Losing
+ * either race surfaces as a duplicate key on the marker's `_id`.
+ */
+async function claimLock(run: MigrationRun): Promise<string | null> {
+    const lock: MigrationLock = {
+        runId: run.runId,
+        owner: run.owner,
+        startedAt: new Date(),
+    };
+    try {
+        await run.migrations.updateOne(
+            {
+                _id: MIGRATION_ID,
+                status: run.resumeStale
+                    ? { $ne: 'complete' }
+                    : { $nin: ['running', 'complete'] },
+            },
+            {
+                $set: { status: 'running', lock },
+                $push: {
+                    runs: {
+                        runId: run.runId,
+                        owner: run.owner,
+                        startedAt: lock.startedAt,
+                    },
+                },
+            },
+            { upsert: true },
+        );
+        return null;
+    } catch (err) {
+        if (!isDuplicateKey(err)) throw err;
+        const [marker] = await run.migrations
+            .find({ _id: MIGRATION_ID })
+            .toArray();
+        if (marker?.status === 'complete') {
+            return `${MIGRATION_ID} is already complete.`;
+        }
+        const holder = marker?.lock
+            ? `run ${marker.lock.runId} on ${marker.lock.owner}, started ${new Date(marker.lock.startedAt).toISOString()}`
+            : 'another run';
+        return (
+            `${MIGRATION_ID} is being applied by ${holder}. Two runs at ` +
+            'once can decode a document twice. If that run is dead ' +
+            `(crashed or killed), rerun with ${RESUME_STALE_FLAG}.`
+        );
+    }
+}
+
+type WriteResult =
+    | { kind: 'written' }
+    | { kind: 'moved' }
+    | { kind: 'collision' }
+    | { kind: 'failed'; error: string };
+
 /**
  * Plans every target collection and, with `apply`, writes the plan one
- * document at a time. Crash-safe and resumable:
+ * document at a time. Safe against crashes and concurrent runs:
  *
- * - The run marker (`migrations`, status `running`, with the run id) is
- *   written before any document is.
+ * - The run first claims the marker in `migrations` atomically (status
+ *   `running`, with its run id and `host:pid`). A second run refuses while
+ *   it is held; `resumeStale` takes over one left by a dead run.
  * - Before a document is written, its exact edit (paths, old and new
  *   values) is recorded in `migration_progress`; the write itself filters
  *   on the old values.
  * - A document with a progress record is never planned again. A rerun
- *   compares it with its record instead: holding the new values, it is done
- *   and is NOT decoded again; holding the old values, the write never
- *   landed (a crash, or a failure) and it is retried; holding neither, it
- *   was edited meanwhile and is reported. So a crash between the record
- *   and the write, or between the write and its `done` status, is harmless.
- * - The marker ends `complete` only when no write failed, and then further
- *   applies are refused: text typed after the fix may legitimately contain
- *   `&amp;`. With failed writes it ends `incomplete`, the exit code is 1,
- *   and a rerun retries exactly those documents.
- *
- * A unique-name collision or a document edited meanwhile is skipped and
- * reported, not failed: it needs the operator, not a retry.
+ *   leaves settled records (done, moved, collision) alone, and compares the
+ *   others (pending, failed) with the document: holding the new values, it
+ *   is done and NOT decoded again; holding the old values, the write never
+ *   landed and it is retried; holding neither, it was edited meanwhile and
+ *   is reported. So a crash at any point is harmless.
+ * - On a collection with a unique name, an edit whose decoded name is taken
+ *   is retried after the others are written, as long as that frees names
+ *   (`&amp;lt;x` waits for the `&lt;x` that becomes `<x`). What still
+ *   collides after that is a real duplicate, skipped and reported.
+ * - The marker ends `complete` only when no write failed; then further
+ *   applies are refused, because text typed after the fix may legitimately
+ *   contain `&amp;`. With failed writes it ends `incomplete`, the exit code
+ *   is 1, and a rerun retries exactly those documents.
  */
 export async function runMigration(
     run: MigrationRun,
@@ -450,32 +553,23 @@ export async function runMigration(
         const message =
             `${MIGRATION_ID} is already complete; running it again would ` +
             'decode text typed since the fix.';
-        if (run.apply) {
-            return {
-                exitCode: 1,
-                lines: [`Refusing: ${message}`],
-                reports: [],
-                skipped: 0,
-                failed: 0,
-            };
-        }
+        if (run.apply) return refused(message);
         lines.push(`WARNING: ${message}`);
+    } else if (marker?.status === 'running' && !run.apply) {
+        lines.push(
+            `WARNING: a run holds the lock (${marker.lock?.owner ?? '?'}); ` +
+                'this dry run may be out of date by the time it prints.',
+        );
     } else if (marker) {
         lines.push(
-            `Resuming: an earlier run ended ${marker.status}. Documents it ` +
+            `Resuming: an earlier run left it ${marker.status}. Documents it ` +
                 'decoded are not decoded again; failed ones are retried.',
         );
     }
 
     if (run.apply) {
-        await run.migrations.updateOne(
-            { _id: MIGRATION_ID },
-            {
-                $set: { status: 'running' },
-                $push: { runs: { runId: run.runId, startedAt: new Date() } },
-            },
-            { upsert: true },
-        );
+        const refusal = await claimLock(run);
+        if (refusal) return refused(refusal);
     }
 
     const reports: CollectionReport[] = [];
@@ -488,22 +582,23 @@ export async function runMigration(
         const collection = run.collectionFor(target.model);
         const name = collection.collectionName;
 
-        // What earlier runs planned here, and where those documents stand.
+        // What earlier runs planned here. Settled records are left alone.
         const records = await run.progress
             .find({ migration: MIGRATION_ID, collection: name })
             .toArray();
         const recorded = new Set(records.map((r) => String(r.doc)));
+        const open = records.filter((r) => !SETTLED.has(r.status));
+        let alreadyDone = records.length - open.length;
         const current =
-            records.length > 0
+            open.length > 0
                 ? await collection
-                      .find({ _id: { $in: records.map((r) => r.doc) } })
+                      .find({ _id: { $in: open.map((r) => r.doc) } })
                       .toArray()
                 : [];
         const byId = new Map(current.map((d) => [String(d._id), d]));
 
-        let alreadyDone = 0;
         const retries: DocumentEdit[] = [];
-        for (const record of records) {
+        for (const record of open) {
             const state = progressState(
                 byId.get(String(record.doc)),
                 record.changes,
@@ -523,7 +618,7 @@ export async function runMigration(
         const docs = await collection
             .find(candidateFilter(target.fields))
             .toArray();
-        let edits: DocumentEdit[] = [
+        const edits: DocumentEdit[] = [
             ...retries,
             ...docs
                 .filter((doc) => !recorded.has(String(doc._id)))
@@ -531,98 +626,183 @@ export async function runMigration(
                 .filter((edit): edit is DocumentEdit => edit !== null),
         ];
 
-        let collisions: Collision[] = [];
-        if (target.unique && edits.length > 0) {
-            const field = target.unique;
-            const decoded = edits.flatMap((edit) =>
+        const field = target.unique;
+        const editById = new Map(edits.map((e) => [String(e._id), e] as const));
+        const editsOf = (list: Collision[]) =>
+            list
+                .map((c) => editById.get(String(c._id)))
+                .filter((e): e is DocumentEdit => e !== undefined);
+
+        /**
+         * Splits `candidates` by whether their decoded name is free, given
+         * the names in the database now plus `claimed` (edits accepted in a
+         * dry run, which would have moved by then).
+         */
+        const guard = async (
+            candidates: DocumentEdit[],
+            claimed: DocumentEdit[] = [],
+        ): Promise<{ kept: DocumentEdit[]; collisions: Collision[] }> => {
+            if (!field || candidates.length === 0) {
+                return { kept: candidates, collisions: [] };
+            }
+            const decoded = candidates.flatMap((edit) =>
                 edit.changes.filter((c) => c.path === field).map((c) => c.to),
             );
-            const owners = await collection
-                .find(
-                    { [field]: { $in: decoded } },
-                    { projection: { [field]: 1 } },
-                )
-                .toArray();
-            ({ kept: edits, collisions } = guardUnique(edits, field, owners));
+            const moved = new Set(claimed.map((e) => String(e._id)));
+            const owners = [
+                ...(
+                    await collection
+                        .find(
+                            { [field]: { $in: decoded } },
+                            { projection: { [field]: 1 } },
+                        )
+                        .toArray()
+                ).filter((o) => !moved.has(String(o._id))),
+                ...claimed.flatMap((e) =>
+                    e.changes
+                        .filter((c) => c.path === field)
+                        .map((c) => ({ _id: e._id, [field]: c.to })),
+                ),
+            ];
+            return guardUnique(candidates, field, owners);
+        };
+
+        const first = await guard(edits);
+        let collisions = first.collisions;
+
+        if (!run.apply) {
+            // Simulate the retry below: names freed by accepted edits.
+            let accepted = first.kept;
+            while (collisions.length > 0) {
+                const next = await guard(editsOf(collisions), accepted);
+                if (next.kept.length === 0) break;
+                accepted = [...accepted, ...next.kept];
+                collisions = next.collisions;
+            }
+            skipped += collisions.length;
+            reports.push(
+                summarize(name, target, accepted, collisions, alreadyDone),
+            );
+            continue;
         }
-        skipped += collisions.length;
 
-        if (run.apply) {
-            const done: DocumentEdit[] = [];
-            for (const edit of edits) {
-                const _id = progressId(name, edit._id);
-                const mark = (status: ProgressStatus, error?: string) =>
-                    run.progress.updateOne(
-                        { _id },
-                        { $set: { status, ...(error ? { error } : {}) } },
+        const done: DocumentEdit[] = [];
+        /** Edits that lost a race on the unique index in `write`. */
+        let raced: Collision[] = [];
+
+        const write = async (edit: DocumentEdit): Promise<void> => {
+            const _id = progressId(name, edit._id);
+            // The record first: whatever happens next, a rerun can tell.
+            await run.progress.updateOne(
+                { _id },
+                {
+                    $set: {
+                        migration: MIGRATION_ID,
+                        collection: name,
+                        doc: edit._id,
+                        changes: edit.changes,
+                        status: 'pending',
+                        runId: run.runId,
+                    },
+                },
+                { upsert: true },
+            );
+
+            let result: WriteResult;
+            const { filter, update } = editToUpdate(edit);
+            try {
+                const res = await collection.updateOne(filter, update);
+                result = {
+                    kind: res.matchedCount === 1 ? 'written' : 'moved',
+                };
+            } catch (err) {
+                result = isDuplicateKey(err)
+                    ? { kind: 'collision' }
+                    : { kind: 'failed', error: messageOf(err) };
+            }
+
+            const change = edit.changes[0];
+            switch (result.kind) {
+                case 'written':
+                    done.push(edit);
+                    break;
+                case 'moved':
+                    skipped += 1;
+                    problems.push(
+                        `  SKIPPED ${name} ${String(edit._id)}: changed since it was read; check it by hand`,
                     );
+                    break;
+                case 'collision':
+                    raced.push({
+                        _id: edit._id,
+                        field: change.field,
+                        from: change.from,
+                        to: change.to,
+                        conflictsWith: ['(unique index)'],
+                    });
+                    break;
+                case 'failed':
+                    failed += 1;
+                    problems.push(
+                        `  FAILED ${name} ${String(edit._id)}: ${result.error} (a rerun retries it)`,
+                    );
+                    break;
+            }
 
-                // The record first: whatever happens next, a rerun can tell.
+            // The outcome, outside the write's error handling: if this
+            // fails the record stays `pending`, and a rerun re-examines it.
+            const status: ProgressStatus =
+                result.kind === 'written' ? 'done' : result.kind;
+            try {
                 await run.progress.updateOne(
                     { _id },
                     {
                         $set: {
-                            migration: MIGRATION_ID,
-                            collection: name,
-                            doc: edit._id,
-                            changes: edit.changes,
-                            status: 'pending',
-                            runId: run.runId,
+                            status,
+                            ...(result.kind === 'failed'
+                                ? { error: result.error }
+                                : {}),
                         },
                     },
-                    { upsert: true },
                 );
-
-                const { filter, update } = editToUpdate(edit);
-                try {
-                    const res = await collection.updateOne(filter, update);
-                    if (res.matchedCount === 1) {
-                        done.push(edit);
-                        await mark('done');
-                    } else {
-                        skipped += 1;
-                        await mark('moved');
-                        problems.push(
-                            `  SKIPPED ${name} ${String(edit._id)}: changed since it was read; check it by hand`,
-                        );
-                    }
-                } catch (err) {
-                    const change = edit.changes[0];
-                    if (isDuplicateKey(err)) {
-                        // Another write took the name after the plan.
-                        skipped += 1;
-                        await mark('collision');
-                        collisions.push({
-                            _id: edit._id,
-                            field: change.field,
-                            from: change.from,
-                            to: change.to,
-                            conflictsWith: ['(unique index)'],
-                        });
-                    } else {
-                        failed += 1;
-                        const message =
-                            err instanceof Error ? err.message : String(err);
-                        await mark('failed', message);
-                        problems.push(
-                            `  FAILED ${name} ${String(edit._id)}: ${message} (a rerun retries it)`,
-                        );
-                    }
-                }
+            } catch (err) {
+                problems.push(
+                    `  NOTE ${name} ${String(edit._id)}: ${result.kind}; ` +
+                        `its progress mark failed (${messageOf(err)}), a rerun will confirm it`,
+                );
             }
-            written += done.length;
-            edits = done;
-        }
+        };
 
-        reports.push(summarize(name, target, edits, collisions, alreadyDone));
+        for (const edit of first.kept) await write(edit);
+
+        // Edits whose name was taken may be free now that other renames in
+        // this run have landed (`&amp;lt;x` waits for the `&lt;x` that
+        // became `<x`): retry while that makes progress.
+        collisions = [...collisions, ...raced];
+        while (collisions.length > 0) {
+            raced = [];
+            const next = await guard(editsOf(collisions));
+            const before = done.length;
+            for (const edit of next.kept) await write(edit);
+            collisions = [...next.collisions, ...raced];
+            if (done.length === before) break;
+        }
+        skipped += collisions.length;
+
+        written += done.length;
+        reports.push(summarize(name, target, done, collisions, alreadyDone));
     }
 
     lines.push(...formatReport(reports, run.apply), ...problems);
 
     if (run.apply) {
         const status = failed > 0 ? 'incomplete' : 'complete';
-        await run.migrations.updateOne(
-            { _id: MIGRATION_ID, 'runs.runId': run.runId },
+        const res = await run.migrations.updateOne(
+            {
+                _id: MIGRATION_ID,
+                'lock.runId': run.runId,
+                'runs.runId': run.runId,
+            },
             {
                 $set: {
                     status,
@@ -631,17 +811,27 @@ export async function runMigration(
                     'runs.$.skipped': skipped,
                     'runs.$.failed': failed,
                 },
+                $unset: { lock: '' },
             },
         );
-        lines.push(`Marked ${MIGRATION_ID} ${status} in 'migrations'.`);
+        if (res.matchedCount === 1) {
+            lines.push(`Marked ${MIGRATION_ID} ${status} in 'migrations'.`);
+        } else {
+            failed += 1;
+            lines.push(
+                `The lock was taken over (${RESUME_STALE_FLAG}) while this ` +
+                    'run was going; the marker was left to that run. Check ' +
+                    'both runs’ output.',
+            );
+        }
     }
     if (skipped > 0) {
         lines.push(`${skipped} document(s) left unchanged: see SKIPPED above.`);
     }
     if (failed > 0) {
         lines.push(
-            `${failed} write(s) FAILED: fix the cause and run --apply again. ` +
-                'It retries them and decodes nothing twice.',
+            `${failed} problem(s) FAILED: fix the cause and run --apply ` +
+                'again. It retries them and decodes nothing twice.',
         );
     }
     return {

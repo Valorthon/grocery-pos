@@ -6,11 +6,15 @@
  *
  *   pnpm migrate:decode-entities            # dry run: report only
  *   pnpm migrate:decode-entities --apply    # write the changes
+ *   pnpm migrate:decode-entities --apply --resume-stale
+ *                                           # take over the lock of a run
+ *                                           # that is known to be dead
  *
  * It reads DATABASE_URL, as `pnpm seed` does. The logic, and its tests,
  * live in src/migrations/decode-html-entities.ts; this file only connects.
  */
 import 'dotenv/config';
+import { hostname } from 'node:os';
 import mongoose from 'mongoose';
 import { User, UserSchema } from './src/user/user.schema';
 import { Product, ProductSchema } from './src/product/product.schema';
@@ -32,6 +36,7 @@ import { describeDatabase } from './src/common/utils/seed-guard';
 import {
     MigrationMarker,
     ProgressRecord,
+    RESUME_STALE_FLAG,
     runMigration,
 } from './src/migrations/decode-html-entities';
 
@@ -51,7 +56,9 @@ const COLLECTIONS: Record<string, string> = Object.fromEntries(
 );
 
 async function main(): Promise<number> {
-    const apply = process.argv.slice(2).includes(APPLY_FLAG);
+    const args = process.argv.slice(2);
+    const apply = args.includes(APPLY_FLAG);
+    const resumeStale = args.includes(RESUME_STALE_FLAG);
     const databaseUrl =
         process.env.DATABASE_URL ?? 'mongodb://127.0.0.1:27017/grocery';
 
@@ -75,6 +82,8 @@ async function main(): Promise<number> {
         migrations: db.collection<MigrationMarker>('migrations'),
         progress: db.collection<ProgressRecord>('migration_progress'),
         runId: new mongoose.Types.ObjectId().toString(),
+        owner: `${hostname()}:${process.pid}`,
+        resumeStale,
     });
 
     for (const line of outcome.lines) console.log(line);
