@@ -92,6 +92,83 @@ describe('api 401 handling', () => {
         expect(calls).toBe(2);
     });
 
+    it('accepts any 2xx from the refresh, not only 201 (#21)', async () => {
+        let calls = 0;
+        api.defaults.adapter = ((config) => {
+            calls += 1;
+            return calls === 1
+                ? fail(config, 401, { error: 'AUTH_002' })
+                : Promise.resolve(respond(config, 200, { ok: true }));
+        }) as AxiosAdapter;
+        refresh.mockResolvedValue({ status: 200 });
+
+        const res = await api.get('/users/profile');
+
+        expect(res.data).toEqual({ ok: true });
+        expect(logout).not.toHaveBeenCalled();
+    });
+
+    it('bounds the refresh with the API timeout (#21)', async () => {
+        let calls = 0;
+        api.defaults.adapter = ((config) => {
+            calls += 1;
+            return calls === 1
+                ? fail(config, 401)
+                : Promise.resolve(respond(config, 200));
+        }) as AxiosAdapter;
+        refresh.mockResolvedValue({ status: 201 });
+
+        await api.get('/users/profile');
+
+        expect(refresh.mock.calls[0]?.[2]).toMatchObject({
+            timeout: 1000,
+            withCredentials: true,
+        });
+    });
+
+    it('refreshes once for requests queued behind a refresh; a second 401 is final (#21)', async () => {
+        const seen: string[] = [];
+        // Every request 401s, before and after the refresh.
+        api.defaults.adapter = ((config) => {
+            seen.push(config.url ?? '');
+            return fail(config, 401, { error: 'AUTH_002' });
+        }) as AxiosAdapter;
+        refresh.mockImplementation(
+            () =>
+                new Promise((resolve) =>
+                    setTimeout(() => resolve({ status: 201 }), 5),
+                ),
+        );
+
+        const results = await Promise.allSettled([
+            api.get('/users/profile'),
+            api.get('/products'),
+            api.get('/shifts/current'),
+        ]);
+
+        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(results.map((r) => r.status)).toEqual([
+            'rejected',
+            'rejected',
+            'rejected',
+        ]);
+        for (const r of results) {
+            expect(
+                ((r as PromiseRejectedResult).reason as AxiosError).response
+                    ?.status,
+            ).toBe(401);
+        }
+        // Each request went out twice: the original and one replay.
+        expect(seen.sort()).toEqual([
+            '/products',
+            '/products',
+            '/shifts/current',
+            '/shifts/current',
+            '/users/profile',
+            '/users/profile',
+        ]);
+    });
+
     it('passes a 401 from login straight to the caller without refreshing', async () => {
         api.defaults.adapter = ((config) =>
             fail(config, 401, { error: 'AUTH_001' })) as AxiosAdapter;

@@ -66,12 +66,18 @@
                         <span
                             class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
                         >
-                            <Mail class="w-5 h-5" />
+                            <UserIcon class="w-5 h-5" />
                         </span>
                         <input
+                            id="login-username"
                             v-model="form.username"
                             type="text"
-                            placeholder="you@example.com"
+                            name="username"
+                            autocomplete="username"
+                            autocapitalize="none"
+                            spellcheck="false"
+                            aria-label="Username"
+                            placeholder="Username"
                             :disabled="loading"
                             class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
                         />
@@ -84,8 +90,12 @@
                             <Lock class="w-5 h-5" />
                         </span>
                         <input
+                            id="login-password"
                             v-model="form.password"
                             :type="showPassword ? 'text' : 'password'"
+                            name="password"
+                            autocomplete="current-password"
+                            aria-label="Password"
                             placeholder="••••••••"
                             :disabled="loading"
                             class="w-full pl-11 pr-11 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
@@ -93,6 +103,9 @@
                         <button
                             type="button"
                             class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            :aria-label="
+                                showPassword ? 'Hide password' : 'Show password'
+                            "
                             @click="showPassword = !showPassword"
                         >
                             <EyeOff v-if="showPassword" class="w-5 h-5" />
@@ -100,21 +113,17 @@
                         </button>
                     </div>
 
-                    <div class="flex items-center justify-between mb-5">
-                        <BaseCheckbox
-                            v-model="rememberMe"
-                            label="Remember me"
-                        />
-                        <button
-                            type="button"
-                            class="text-sm text-primary-600 font-medium hover:underline"
-                        >
-                            Forgot password?
-                        </button>
-                    </div>
+                    <p
+                        class="mb-5 text-sm text-slate-500"
+                        data-testid="forgot-password"
+                    >
+                        Forgot your password? Ask an admin to reset it.
+                    </p>
 
                     <div
                         v-if="errorMsg"
+                        role="alert"
+                        data-testid="login-error"
                         class="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium"
                     >
                         {{ errorMsg }}
@@ -131,21 +140,6 @@
                     </BaseButton>
                 </form>
             </div>
-
-            <div class="absolute bottom-6 flex gap-8">
-                <button
-                    type="button"
-                    class="text-slate-500 text-sm hover:text-slate-700"
-                >
-                    Privacy
-                </button>
-                <button
-                    type="button"
-                    class="text-slate-500 text-sm hover:text-slate-700"
-                >
-                    Terms
-                </button>
-            </div>
         </div>
     </div>
 </template>
@@ -153,18 +147,17 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from '@lucide/vue';
+import { ArrowRight, Eye, EyeOff, Lock, User as UserIcon } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import { useAuthStore } from '@/stores/auth';
 import { homeRouteFor } from '@/router/access';
 import logo from '@/assets/logo-icon.svg';
+import { loginErrorMessage } from './login-error';
 
 const router = useRouter();
 const authStore = useAuthStore();
 const loading = ref(false);
 const showPassword = ref(false);
-const rememberMe = ref(false);
 const errorMsg = ref('');
 
 const form = reactive({ username: '', password: '' });
@@ -188,13 +181,8 @@ const handleLogin = async () => {
             return;
         }
         router.push(home);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-        // The API's message: one generic line for any bad credentials, or
-        // how long to wait after too many attempts (429).
-        errorMsg.value =
-            err?.response?.data?.message ??
-            'Invalid credentials. Please try again.';
+    } catch (err) {
+        errorMsg.value = loginErrorMessage(err);
     } finally {
         loading.value = false;
     }

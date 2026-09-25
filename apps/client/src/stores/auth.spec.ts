@@ -7,9 +7,13 @@ vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
 
 /** The API marks sessions with a readable `dummy` cookie alongside httpOnly ones. */
 function setDummyCookie(present: boolean) {
+    setCookies(present ? 'dummy=true' : '');
+}
+
+function setCookies(cookies: string) {
     Object.defineProperty(document, 'cookie', {
         configurable: true,
-        get: () => (present ? 'dummy=true' : ''),
+        get: () => cookies,
     });
 }
 
@@ -76,6 +80,37 @@ describe('auth store', () => {
         const store = await loadStore();
 
         expect(store.isAuthenticated).toBe(false);
+    });
+
+    it.each([
+        ['a longer name', 'dummy_analytics=1'],
+        ['a cleared marker', 'dummy='],
+        ['the name as a value', 'theme=dummy'],
+    ])(
+        'is not authenticated by %s: the marker must match exactly (#21)',
+        async (_label, cookies) => {
+            localStorage.setItem(
+                'user',
+                JSON.stringify({ username: 'seller', roles: [Role.Seller] }),
+            );
+            setCookies(cookies);
+
+            const store = await loadStore();
+
+            expect(store.isAuthenticated).toBe(false);
+        },
+    );
+
+    it('finds the marker among other cookies', async () => {
+        localStorage.setItem(
+            'user',
+            JSON.stringify({ username: 'seller', roles: [Role.Seller] }),
+        );
+        setCookies('dummy_analytics=1; theme=dark; dummy=true');
+
+        const store = await loadStore();
+
+        expect(store.isAuthenticated).toBe(true);
     });
 
     // NOTE: isAuthenticated is a computed that reads document.cookie, which is
