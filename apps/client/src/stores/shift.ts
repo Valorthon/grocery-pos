@@ -209,7 +209,7 @@ export const useShiftStore = defineStore('shift', () => {
     async function goToRegister() {
         if (activeShift.value) {
             const { default: router } = await import('@/router');
-            router.push({ name: 'Sell' });
+            void router.push({ name: 'Sell' });
             return;
         }
         shiftInOpen.value = true;

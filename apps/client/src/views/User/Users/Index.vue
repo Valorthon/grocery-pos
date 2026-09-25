@@ -350,7 +350,7 @@ const {
     'Could not load the users.',
 );
 
-fetchUsers();
+void fetchUsers();
 
 /** Why each create field would be refused, set when Save is pressed. */
 const createErrors = ref<Record<string, string>>({});
@@ -399,7 +399,7 @@ async function createUser() {
         uiStore.queueMessage(Color.SUCCESS, 'User created');
         isCreateOpen.value = false;
         createForm.value = { name: '', password: '', roles: [] };
-        fetchUsers();
+        void fetchUsers();
     } catch (error) {
         uiStore.queueMessage(
             Color.ERROR,
@@ -444,7 +444,7 @@ async function updateUser() {
         });
         uiStore.queueMessage(Color.SUCCESS, 'User updated');
         isEditOpen.value = false;
-        fetchUsers();
+        void fetchUsers();
     } catch (error) {
         uiStore.queueMessage(
             Color.ERROR,

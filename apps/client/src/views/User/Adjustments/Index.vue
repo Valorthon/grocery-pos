@@ -127,7 +127,7 @@ const fetchUserOptions = async () => {
 };
 
 onMounted(() => {
-    fetchUserOptions();
+    void fetchUserOptions();
 });
 
 const rangeError = computed(() =>
@@ -202,7 +202,7 @@ const {
     'Could not load the adjustments.',
 );
 
-fetchAdjust();
+void fetchAdjust();
 
 const isDialogOpen = ref(false);
 const selectedItem = ref();

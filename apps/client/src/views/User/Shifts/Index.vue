@@ -239,7 +239,7 @@ const {
     'Could not load the shifts.',
 );
 
-fetchShifts();
+void fetchShifts();
 watch(statusFilter, search);
 
 const isDialogOpen = ref(false);

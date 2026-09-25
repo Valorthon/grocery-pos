@@ -290,9 +290,9 @@ function isActive(id: string) {
 function handleClick(item: { id: string; route: string }) {
     closeDrawer();
     if (item.id === 'register') {
-        shiftStore.goToRegister();
+        void shiftStore.goToRegister();
         return;
     }
-    router.push({ name: item.route });
+    void router.push({ name: item.route });
 }
 </script>

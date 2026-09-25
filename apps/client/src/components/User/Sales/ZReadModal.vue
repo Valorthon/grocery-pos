@@ -48,6 +48,6 @@ const open = computed({
 async function done() {
     shiftStore.zRead = null;
     const { default: router } = await import('@/router');
-    router.push({ name: 'SellerDashboard' });
+    void router.push({ name: 'SellerDashboard' });
 }
 </script>

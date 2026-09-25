@@ -199,7 +199,7 @@ const saveToDB = async () => {
     if (unmounted) return;
     // Saved: nothing is left unsaved, so the leave guard lets this go.
     clear();
-    router.push({ name: 'Products' });
+    void router.push({ name: 'Products' });
     uiStore.queueMessage(Color.SUCCESS, 'Products saved');
 };
 
@@ -215,7 +215,7 @@ const openAddDialog = () => {
     isAddDialogOpen.value = true;
 };
 
-const handleNewProduct = async (newProduct: ProductDraft) => {
+const handleNewProduct = (newProduct: ProductDraft) => {
     add(newProduct);
     isAddDialogOpen.value = false;
     uiStore.queueMessage(Color.SUCCESS, 'Product added');

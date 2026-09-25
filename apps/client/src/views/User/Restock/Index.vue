@@ -129,7 +129,7 @@ const fetchUserOptions = async () => {
 };
 
 onMounted(() => {
-    fetchUserOptions();
+    void fetchUserOptions();
 });
 
 const rangeError = computed(() =>
@@ -205,7 +205,7 @@ const {
     'Could not load the restocks.',
 );
 
-fetchRestock();
+void fetchRestock();
 
 const isDialogOpen = ref(false);
 const selectedItem = ref();

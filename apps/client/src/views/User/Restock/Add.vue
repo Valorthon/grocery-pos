@@ -218,7 +218,7 @@ const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
     // Saved: nothing is left unsaved, so the leave guard lets this go.
     clear();
     uiStore.queueMessage(Color.SUCCESS, 'Restock saved.');
-    router.push({ name: 'Restocks' });
+    void router.push({ name: 'Restocks' });
     return true;
 };
 

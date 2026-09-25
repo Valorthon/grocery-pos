@@ -241,7 +241,7 @@ function isActive(name: string) {
 }
 
 function navigate(name: string) {
-    router.push({ name });
+    void router.push({ name });
     emit('update:modelValue', false);
 }
 </script>

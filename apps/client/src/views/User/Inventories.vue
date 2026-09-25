@@ -129,5 +129,5 @@ const {
     'Could not load the inventory.',
 );
 
-fetchInventory();
+void fetchInventory();
 </script>

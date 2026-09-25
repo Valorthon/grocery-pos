@@ -81,7 +81,7 @@ const isDashboard = computed(() => route.name === 'SellerDashboard');
 function requireShift() {
     if (route.name === 'Sell' && shiftStore.loaded && !shiftStore.activeShift) {
         shiftStore.shiftInOpen = true;
-        router.replace({ name: 'SellerDashboard' });
+        void router.replace({ name: 'SellerDashboard' });
     }
 }
 
@@ -116,7 +116,7 @@ watch(
             return;
         }
         if (route.name === 'Sell') {
-            router.replace({ name: 'SellerDashboard' });
+            void router.replace({ name: 'SellerDashboard' });
         }
     },
 );

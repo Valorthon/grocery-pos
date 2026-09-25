@@ -187,7 +187,7 @@ const handleLogin = async () => {
             errorMsg.value = 'This account has no access to the app.';
             return;
         }
-        router.push(home);
+        void router.push(home);
     } catch (err) {
         errorMsg.value = loginErrorMessage(err);
     } finally {
