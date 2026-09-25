@@ -402,6 +402,7 @@
                                     "
                                     tabindex="-1"
                                     data-ticket-line
+                                    :data-product="item.product"
                                     :data-testid="`ticket-line-${index}`"
                                     :aria-current="
                                         selectedLine === item.product
@@ -415,6 +416,7 @@
                                             : 'hover:bg-slate-50/80'
                                     "
                                     @click="onLineClick(item.product, $event)"
+                                    @focusin="selectedLine = item.product"
                                     @keydown.up.self.prevent="moveSelection(-1)"
                                     @keydown.down.self.prevent="
                                         moveSelection(1)
@@ -857,6 +859,7 @@ import {
 import api from '@/axios';
 import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
 import { apiErrorCode, useShiftStore } from '@/stores/shift';
+import { Color, useUIStore } from '@/stores/ui';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
@@ -917,6 +920,7 @@ const PRICES_CHANGED_NOTICE =
     'Prices changed since scanning; the receipt shows the charged amounts.';
 
 const cartStore = useCartStore();
+const uiStore = useUIStore();
 const shiftStore = useShiftStore();
 
 const scanInput = ref<HTMLInputElement | null>(null);
@@ -1000,6 +1004,21 @@ watch(fixedText, (text) => {
     });
 });
 
+// The discount changed outside this page (another tab, #23 review): show
+// it. Typing here round-trips through the store and changes nothing.
+watch(
+    () => cartStore.discount,
+    (d, before) => {
+        if (d && !before) showDiscount.value = true;
+        if (d?.type !== DiscountType.FIXED) return;
+        const typed = parsePesos(fixedText.value);
+        if ((typed !== null && typed > 0 ? typed : 0) !== d.value) {
+            fixedText.value = d.value ? centavosToPesoInput(d.value) : '';
+        }
+    },
+    { deep: true },
+);
+
 const discountReason = computed({
     get: () => cartStore.discount?.reason ?? '',
     set: (reason: string) => {
@@ -1048,10 +1067,13 @@ function typedQuantity(text: string): unknown {
 /** Why a typed quantity is refused (`@IsInt() @Min(1)`), or ''. */
 function quantityError(product: string, text: string): string {
     const value = typedQuantity(text);
+    if (!cartStore.items.some((i) => i.product === product)) return '';
     const error = integerError(value, { min: 1 });
     if (error) return error;
     const item = cartStore.items.find((i) => i.product === product);
-    const max = item ? cartStore.maxQuantity(product, item.unitPrice) : 0;
+    // A line gone (e.g. removed in another tab) has nothing to check.
+    if (!item) return '';
+    const max = cartStore.maxQuantity(product, item.unitPrice);
     return (value as number) > max
         ? `At most ${max}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`
         : '';
@@ -1200,8 +1222,9 @@ function removeLine(product: string) {
 function removeSelected() {
     const line =
         document.activeElement?.closest<HTMLElement>('[data-ticket-line]');
-    if (!line || !selectedLine.value) return;
-    removeLine(selectedLine.value);
+    // The line the focus is on, which focusing it also selected.
+    const product = line?.dataset.product;
+    if (product) removeLine(product);
 }
 
 function undoRemove() {
@@ -1210,9 +1233,38 @@ function undoRemove() {
     if (!removed) return;
     if (cartStore.restore(removed.item, removed.index)) {
         selectedLine.value = removed.item.product;
+    } else if (
+        !cartStore.items.some((i) => i.product === removed.item.product)
+    ) {
+        uiStore.queueMessage(
+            Color.ERROR,
+            `Couldn't put back ${removed.item.quantity}x ${removed.item.name}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}.`,
+        );
     }
     scanInput.value?.focus();
 }
+
+/**
+ * Lines can go without this page removing them: another tab's sale, void
+ * or edit (#23 review). What the page kept for them goes too: a typed
+ * quantity (it would hold the charge with no field to show why), the
+ * selection and a pending Undo.
+ */
+watch(
+    () => cartStore.items.map((i) => i.product),
+    (products) => {
+        const onTicket = new Set(products);
+        for (const product of Object.keys(qtyDrafts)) {
+            if (!onTicket.has(product)) delete qtyDrafts[product];
+        }
+        if (selectedLine.value && !onTicket.has(selectedLine.value)) {
+            selectedLine.value = null;
+        }
+    },
+);
+// Another tab replaced the basket: an Undo from before would put a line
+// back into a ticket it no longer belongs to.
+watch(() => cartStore.remoteChanges, dismissUndo);
 
 // ---- Scanning
 

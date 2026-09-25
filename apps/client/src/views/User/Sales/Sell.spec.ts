@@ -1350,3 +1350,114 @@ describe('Sell quantity cap (#23 review)', () => {
         ).toContain("a sale can't exceed ₱10,000,000.00");
     });
 });
+
+describe('Sell re-review fixes (#23)', () => {
+    function basket(items: unknown[], discount: unknown = null) {
+        return JSON.stringify({ version: 1, items, discount, attempt: null });
+    }
+
+    /** Another tab of the same cashier saved `json` as the basket. */
+    async function otherTabSaves(json: string) {
+        localStorage.setItem('grocery_pos_cart_v1:u-ana', json);
+        window.dispatchEvent(
+            new StorageEvent('storage', {
+                key: 'grocery_pos_cart_v1:u-ana',
+                newValue: json,
+            }),
+        );
+        await flush();
+    }
+
+    const MILK_LINE = {
+        product: 'p1',
+        EAN: MILK.EAN,
+        name: 'milk',
+        unitPrice: 9500,
+        quantity: 2,
+    };
+
+    it('Delete removes the line the focus is on, even after tabbing from another', async () => {
+        withTicket();
+        mount();
+        await clickLine(0);
+        expect(line(0).getAttribute('aria-current')).toBe('true');
+
+        // Tab onto mints' "One more": that line is now the selected one.
+        buttonNamed('One more mints').focus();
+        await flush();
+        expect(line(1).getAttribute('aria-current')).toBe('true');
+
+        await press('Delete');
+        expect(cartNames()).toEqual(['2x milk']);
+    });
+
+    it('drops a typed quantity for a line another tab removed, so the charge is not held', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        mount();
+        await typeQty(qtyInputs()[1], '0');
+        expect(buttonNamed('Tender & Charge').disabled).toBe(true);
+
+        await otherTabSaves(basket([MILK_LINE]));
+
+        expect(cartNames()).toEqual(['2x milk']);
+        expect(
+            document.querySelector('[data-testid="line-quantity-error"]'),
+        ).toBeNull();
+        expect(buttonNamed('Tender & Charge').disabled).toBe(false);
+    });
+
+    it('drops a pending Undo when another tab replaces the basket', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        mount();
+        await clickButton(buttonNamed('Remove mints'));
+        expect(
+            document.querySelector('[data-testid="undo-bar"]'),
+        ).not.toBeNull();
+
+        await otherTabSaves(basket([MILK_LINE]));
+        expect(document.querySelector('[data-testid="undo-bar"]')).toBeNull();
+    });
+
+    it('shows a fixed discount another tab set', async () => {
+        useCartStore().setOwner('u-ana');
+        withTicket();
+        mount();
+
+        await otherTabSaves(
+            basket([MILK_LINE], {
+                type: 'FIXED',
+                value: 1500,
+                reason: 'loyalty',
+            }),
+        );
+
+        expect(
+            document.querySelector<HTMLInputElement>('#discount-amount')!.value,
+        ).toBe('15.00');
+        expect(document.body.textContent).toContain(
+            'Discount Applied (₱15.00)',
+        );
+        expect(
+            document.querySelector('[data-testid="discount-amount-error"]'),
+        ).toBeNull();
+    });
+
+    it('says why Undo cannot put a line back past the sale limit', async () => {
+        withTicket();
+        mount();
+        await clickButton(buttonNamed('Remove mints'));
+        // Milk now fills the ticket up to the limit.
+        const cart = useCartStore();
+        cart.setQuantity('p1', cart.maxQuantity('p1', 9500));
+
+        await clickButton(buttonNamed('Undo'));
+
+        expect(cartNames()).toEqual([`${cart.maxQuantity('p1', 9500)}x milk`]);
+        const { useUIStore } = await import('@/stores/ui');
+        expect(useUIStore().toasts.map((t) => t.lines.join(' '))).toEqual([
+            "Couldn't put back 1x mints: a sale can't exceed ₱10,000,000.00.",
+        ]);
+    });
+});
