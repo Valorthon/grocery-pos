@@ -6,7 +6,7 @@
         max-width="56rem"
         scrollable
     >
-        <BillCountInput v-model="billCounts" />
+        <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 
         <div
             class="mt-4 bg-slate-900 text-white rounded-xl p-3.5 flex items-center justify-between"
@@ -24,7 +24,12 @@
             <ShieldCheck class="w-5 h-5 text-primary-300" />
         </div>
 
-        <p v-if="error" class="mt-3 text-xs font-semibold text-red-600">
+        <p
+            v-if="error"
+            role="alert"
+            class="mt-3 text-xs font-semibold text-red-600"
+            data-testid="shift-in-error"
+        >
             {{ error }}
         </p>
 
@@ -38,7 +43,7 @@
             <BaseButton
                 class="flex-1"
                 :loading="submitting"
-                :disabled="total <= 0"
+                data-testid="shift-in-confirm"
                 @click="confirm"
             >
                 Open Register
@@ -51,11 +56,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ArrowRight, ShieldCheck } from '@lucide/vue';
-import { billCountTotal, DEFAULT_TERMINAL } from '@grocery-pos/contracts';
+import {
+    billCountTotal,
+    DEFAULT_TERMINAL,
+    SHIFT_LIMITS,
+} from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { countPieces } from './shift';
+import { COUNTS_INVALID, countPieces, FLOAT_REQUIRED } from './shift';
 import type { BillCounts } from './shift';
 import { apiErrorMessage, useShiftStore } from '@/stores/shift';
 import { useAuthStore } from '@/stores/auth';
@@ -69,8 +78,14 @@ const terminal = DEFAULT_TERMINAL;
 const cashierName = computed(() => authStore.user?.username ?? 'cashier');
 
 const billCounts = ref<BillCounts>({});
+const countsInvalid = ref(false);
 const submitting = ref(false);
 const error = ref('');
+
+// A changed count answers the last refusal; a new one shows on submit.
+watch(billCounts, () => {
+    if (!submitting.value) error.value = '';
+});
 
 const open = computed({
     get: () => shiftStore.shiftInOpen,
@@ -98,7 +113,17 @@ function currency(value: number): string {
 }
 
 async function confirm() {
-    if (total.value <= 0 || submitting.value) return;
+    if (submitting.value) return;
+    // Refused here with a reason, never silently (issue #25): the server
+    // refuses a count below OPENING_FLOAT_MIN too.
+    if (countsInvalid.value) {
+        error.value = COUNTS_INVALID;
+        return;
+    }
+    if (total.value < SHIFT_LIMITS.OPENING_FLOAT_MIN) {
+        error.value = FLOAT_REQUIRED;
+        return;
+    }
     submitting.value = true;
     error.value = '';
     try {

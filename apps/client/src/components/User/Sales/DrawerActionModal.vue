@@ -15,7 +15,10 @@
     >
         <div class="space-y-4 text-xs">
             <div>
-                <label class="block font-bold text-slate-700 mb-1">
+                <label
+                    for="drawer-amount"
+                    class="block font-bold text-slate-700 mb-1"
+                >
                     Amount to {{ isCashIn ? 'Add' : 'Drop' }} (₱)
                 </label>
                 <div class="relative">
@@ -24,13 +27,33 @@
                         >₱</span
                     >
                     <input
+                        id="drawer-amount"
                         v-model="amount"
-                        type="number"
-                        min="1"
-                        step="any"
-                        class="w-full pl-7 pr-3 py-2 text-base font-mono font-black text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                        type="text"
+                        inputmode="decimal"
+                        autocomplete="off"
+                        placeholder="0.00"
+                        data-testid="drawer-amount"
+                        :aria-invalid="errors.amount ? 'true' : undefined"
+                        :aria-describedby="
+                            errors.amount ? 'drawer-amount-error' : undefined
+                        "
+                        class="w-full pl-7 pr-3 py-2 text-base font-mono font-black text-slate-900 border rounded-xl focus:outline-none focus:ring-1"
+                        :class="
+                            errors.amount
+                                ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
+                                : 'border-slate-300 focus:border-primary-500 focus:ring-primary-500'
+                        "
                     />
                 </div>
+                <p
+                    v-if="errors.amount"
+                    id="drawer-amount-error"
+                    class="mt-1 text-red-600"
+                    data-testid="drawer-amount-error"
+                >
+                    {{ errors.amount }}
+                </p>
 
                 <div class="flex items-center gap-1.5 mt-2">
                     <button
@@ -51,18 +74,43 @@
             </div>
 
             <div>
-                <label class="block font-bold text-slate-700 mb-1">
-                    Reason / Notes
+                <label
+                    for="drawer-reason"
+                    class="block font-bold text-slate-700 mb-1"
+                >
+                    Reason
                 </label>
                 <input
+                    id="drawer-reason"
                     v-model="reason"
                     type="text"
-                    placeholder="e.g., Adding ₱5 and ₱10 coins..."
-                    class="w-full px-3 py-2 text-xs text-slate-800 border border-slate-300 rounded-xl focus:outline-none focus:border-primary-500"
+                    :maxlength="STRING_LIMITS.REASON"
+                    :placeholder="
+                        isCashIn
+                            ? 'e.g., ₱1 and ₱5 coins for change'
+                            : 'e.g., Excess bills to the safe'
+                    "
+                    data-testid="drawer-reason"
+                    :aria-invalid="errors.reason ? 'true' : undefined"
+                    :aria-describedby="
+                        errors.reason ? 'drawer-reason-error' : undefined
+                    "
+                    class="w-full px-3 py-2 text-xs text-slate-800 border rounded-xl focus:outline-none"
+                    :class="
+                        errors.reason
+                            ? 'border-red-400 focus:border-red-500'
+                            : 'border-slate-300 focus:border-primary-500'
+                    "
                 />
+                <p
+                    v-if="errors.reason"
+                    id="drawer-reason-error"
+                    class="mt-1 text-red-600"
+                    data-testid="drawer-reason-error"
+                >
+                    {{ errors.reason }}
+                </p>
             </div>
-
-            <p v-if="error" class="text-red-600 font-semibold">{{ error }}</p>
         </div>
 
         <template #footer>
@@ -74,8 +122,8 @@
             >
             <BaseButton
                 class="flex-1"
-                :disabled="amountCentavos <= 0"
                 :loading="submitting"
+                data-testid="drawer-confirm"
                 @click="confirm"
             >
                 <Check class="w-3.5 h-3.5" />
@@ -88,7 +136,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Check } from '@lucide/vue';
-import { DrawerMovementType, NUMERIC_LIMITS } from '@grocery-pos/contracts';
+import {
+    DrawerMovementType,
+    NUMERIC_LIMITS,
+    STRING_LIMITS,
+} from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { apiErrorMessage, useShiftStore } from '@/stores/shift';
@@ -97,15 +149,18 @@ import {
     CENTAVOS_PER_PESO,
     centavosToPesoInput,
     formatCurrency,
-    pesosToCentavos,
+    parsePesos,
 } from '@/utils/currency';
+import { fieldErrors, moneyError, textError } from '@/utils/rules';
 
 const shiftStore = useShiftStore();
 const uiStore = useUIStore();
 
-const amount = ref('500');
+// Both start empty on every open (issue #25): a distracted tap must not
+// book a pre-filled amount, and every movement says why it happened.
+const amount = ref('');
 const reason = ref('');
-const error = ref('');
+const errors = ref<Record<string, string>>({});
 const submitting = ref(false);
 
 const open = computed({
@@ -118,7 +173,8 @@ const open = computed({
 const type = computed(() => shiftStore.drawerAction);
 const isCashIn = computed(() => type.value === DrawerMovementType.CASH_IN);
 
-const amountCentavos = computed(() => pesosToCentavos(amount.value));
+/** Only highlights the matching quick amount; null while blank or mistyped. */
+const amountCentavos = computed(() => parsePesos(amount.value));
 
 const quickAmounts = computed(() =>
     (isCashIn.value ? [200, 500, 1000, 2000] : [1000, 2000, 3000, 5000]).map(
@@ -130,50 +186,56 @@ watch(
     () => shiftStore.drawerAction,
     (action) => {
         if (action) {
-            amount.value = '500';
-            reason.value =
-                action === DrawerMovementType.CASH_IN
-                    ? 'Change replenishment'
-                    : 'Excess cash drop to safe';
-            error.value = '';
+            amount.value = '';
+            reason.value = '';
+            errors.value = {};
         }
     },
 );
+
+// A field's error clears once it is edited; it is checked again on submit.
+watch(amount, () => {
+    delete errors.value.amount;
+});
+watch(reason, () => {
+    delete errors.value.reason;
+});
 
 function currency(value: number): string {
     return formatCurrency(value);
 }
 
 /**
- * Records the movement on the server. A cash drop is not checked against
- * the drawer (the cashier never sees expected cash): a drop larger than
+ * Records the movement on the server. The rules mirror `DrawerMovementDto`:
+ * an amount of AMOUNT_MIN to AMOUNT_MAX centavos and a non-blank reason of
+ * at most STRING_LIMITS.REASON. A cash drop is not checked against the
+ * drawer (the cashier never sees expected cash, #2): a drop larger than
  * what is there shows up as a shortfall in the Z-read.
  */
 async function confirm() {
     const action = type.value;
-    if (!action || amountCentavos.value <= 0 || submitting.value) return;
-    if (amountCentavos.value > NUMERIC_LIMITS.AMOUNT_MAX) {
-        error.value = 'That amount is too large';
-        return;
-    }
+    if (!action || submitting.value) return;
+
+    errors.value = fieldErrors({
+        amount: moneyError(amount.value, NUMERIC_LIMITS.AMOUNT_MIN),
+        reason: textError(reason.value, STRING_LIMITS.REASON),
+    });
+    const centavos = parsePesos(amount.value);
+    if (Object.keys(errors.value).length > 0 || centavos === null) return;
 
     submitting.value = true;
-    error.value = '';
     try {
-        await shiftStore.recordDrawer(
-            action,
-            amountCentavos.value,
-            reason.value.trim() ||
-                (isCashIn.value ? 'Cash In (Change)' : 'Cash Drop (Safe)'),
-        );
+        await shiftStore.recordDrawer(action, centavos, reason.value.trim());
         uiStore.queueMessage(
             Color.SUCCESS,
-            `${isCashIn.value ? 'Cash in' : 'Cash drop'} of ${currency(amountCentavos.value)} recorded`,
+            `${isCashIn.value ? 'Cash in' : 'Cash drop'} of ${currency(centavos)} recorded`,
         );
         shiftStore.drawerAction = null;
     } catch (err) {
-        error.value = apiErrorMessage(err, 'Could not record the movement');
-        uiStore.queueMessage(Color.ERROR, error.value);
+        uiStore.queueMessage(
+            Color.ERROR,
+            apiErrorMessage(err, 'Could not record the movement'),
+        );
     } finally {
         submitting.value = false;
     }

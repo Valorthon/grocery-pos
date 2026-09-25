@@ -16,7 +16,7 @@
             >
         </div>
 
-        <BillCountInput v-model="billCounts" />
+        <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 
         <div
             class="mt-4 bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between"
@@ -77,7 +77,7 @@ import { billCountTotal, ErrorCode } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { countPieces } from './shift';
+import { COUNTS_INVALID, countPieces } from './shift';
 import type { BillCounts } from './shift';
 import { apiErrorCode, apiErrorMessage, useShiftStore } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
@@ -92,8 +92,14 @@ const shiftStore = useShiftStore();
 const uiStore = useUIStore();
 
 const billCounts = ref<BillCounts>({});
+const countsInvalid = ref(false);
 const submitting = ref(false);
 const error = ref('');
+
+// A changed count answers the last refusal; a new one shows on submit.
+watch(billCounts, () => {
+    if (!submitting.value) error.value = '';
+});
 
 const open = computed({
     get: () => shiftStore.shiftOutOpen,
@@ -122,6 +128,10 @@ function currency(value: number): string {
 
 async function confirm() {
     if (submitting.value) return;
+    if (countsInvalid.value) {
+        error.value = COUNTS_INVALID;
+        return;
+    }
     submitting.value = true;
     error.value = '';
     try {

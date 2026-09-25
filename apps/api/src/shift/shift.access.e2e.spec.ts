@@ -300,6 +300,15 @@ describe('Shift routes (e2e)', () => {
                 'a blank reason',
                 { type: DrawerMovementType.CASH_IN, amount: 100, reason: ' ' },
             ],
+            ['no reason', { type: DrawerMovementType.CASH_IN, amount: 100 }],
+            [
+                'no amount',
+                { type: DrawerMovementType.CASH_DROP, reason: 'safe' },
+            ],
+            [
+                'a fractional amount',
+                { type: DrawerMovementType.CASH_IN, amount: 1.5, reason: 'x' },
+            ],
         ])('refuses a drawer movement with %s', async (_, body) => {
             const who = caller(Role.Seller);
             await open(who);
