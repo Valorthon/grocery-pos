@@ -125,7 +125,8 @@ import RestockSaveDialog from '@/components/User/Restock/SaveDialog.vue';
 import { AddForm, SaveForm } from '@/components/User/Restock/dto';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
-import { isAxiosError } from 'axios';
+import { apiErrorMessages } from '@/utils/api-error';
+import { toRestockBody } from '@/utils/payloads';
 
 const isAddDialogOpen = ref(false);
 const isSaveDialogOpen = ref(false);
@@ -149,40 +150,18 @@ const filteredItems = computed(() => {
 
 const saveToDB = async (saveForm: SaveForm) => {
     try {
-        const restockDetails = items.value.map((item: AddForm) => {
-            const result: Record<string, unknown> = {};
-
-            if (item.isNewProduct) {
-                result.newProduct = {
-                    // Blank or omitted: the server generates the barcode.
-                    EAN: item.autoGenerateEAN ? undefined : item.EAN,
-                    name: item.name,
-                    price: item.price,
-                };
-            } else {
-                result.product = item.product;
-            }
-
-            result.quantity = item.quantity;
-            result.unitCost = item.unitCost;
-            return result;
-        });
-
-        await api.post('/restocks', {
-            restockDetails,
-            description: saveForm?.description,
-        });
+        await api.post(
+            '/restocks',
+            toRestockBody(items.value, saveForm.description),
+        );
 
         isSaveDialogOpen.value = false;
         router.push({ name: 'Restocks' });
         uiStore.queueMessage(Color.SUCCESS, 'Restock saved.');
     } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error?.response?.data?.message ?? 'Error saving. Try again.',
-            );
-        }
+        apiErrorMessages(error, 'Error saving. Try again.').forEach((message) =>
+            uiStore.queueMessage(Color.ERROR, message),
+        );
     }
 };
 

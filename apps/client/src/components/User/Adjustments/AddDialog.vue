@@ -35,6 +35,9 @@
                     rows="3"
                     class="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 text-sm focus:outline-none focus:border-primary-600 focus:bg-white resize-none transition-all"
                 />
+                <p v-if="errors.reason" class="mt-1 text-xs text-red-600">
+                    {{ errors.reason }}
+                </p>
             </div>
         </div>
 
@@ -148,6 +151,8 @@ function validate(): boolean {
     if (!formData.EAN) e.EAN = 'Select a product';
     if (formData.change == null || formData.change === 0)
         e.change = 'Change is required';
+    // The API requires a reason on every line (AdjustFields).
+    if (!formData.reason.trim()) e.reason = 'This field is required';
     errors.value = e;
     return Object.keys(e).length === 0;
 }

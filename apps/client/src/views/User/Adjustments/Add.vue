@@ -113,7 +113,8 @@ import AdjustAddDialog from '@/components/User/Adjustments/AddDialog.vue';
 import AdjustSaveDialog from '@/components/User/Adjustments/SaveDialog.vue';
 import { AddForm, SaveForm } from '@/components/User/Adjustments/dto';
 import { Color, useUIStore } from '@/stores/ui';
-import { isAxiosError } from 'axios';
+import { apiErrorMessages } from '@/utils/api-error';
+import { toAdjustmentBody } from '@/utils/payloads';
 
 const isAddDialogOpen = ref(false);
 const isSaveDialogOpen = ref(false);
@@ -137,21 +138,18 @@ const filteredItems = computed(() => {
 
 const saveToDB = async (saveForm: SaveForm) => {
     try {
-        await api.post('/adjustments', {
-            adjustDetails: items.value,
-            description: saveForm?.description,
-        });
+        await api.post(
+            '/adjustments',
+            toAdjustmentBody(items.value, saveForm.description),
+        );
 
         isSaveDialogOpen.value = false;
         router.push({ name: 'Adjustments' });
         uiStore.queueMessage(Color.SUCCESS, 'Adjustments saved.');
     } catch (error) {
-        if (isAxiosError(error)) {
-            uiStore.queueMessage(
-                Color.ERROR,
-                error.response?.data?.message ?? 'Error saving. Try again.',
-            );
-        }
+        apiErrorMessages(error, 'Error saving. Try again.').forEach((message) =>
+            uiStore.queueMessage(Color.ERROR, message),
+        );
     }
 };
 
