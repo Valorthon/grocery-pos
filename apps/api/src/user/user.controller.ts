@@ -6,6 +6,7 @@ import {
     UpdateBulkDto,
 } from './types/user.dto';
 import { Roles } from '../auth/auth.decorator';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { GetAllDto } from '../product/types';
@@ -15,8 +16,9 @@ import { GetAllDto } from '../product/types';
 export class UserController {
     constructor(private service: UserService) {}
 
-    // Empty Roles() allow all authenticated users to access the endpoint
-    @Roles()
+    // Every signed-in user, whatever their roles (issue #13: an explicit
+    // list, never an empty @Roles()).
+    @Roles(...ASSIGNABLE_ROLES)
     @Get('/profile')
     getProfile(@CurrentUser() user: AuthUser) {
         return {
@@ -33,7 +35,7 @@ export class UserController {
 
     // Open to every signed-in user (cashiers included); the current
     // password is required.
-    @Roles()
+    @Roles(...ASSIGNABLE_ROLES)
     @Patch('/me/password')
     async changeOwnPassword(
         @CurrentUser() user: AuthUser,
