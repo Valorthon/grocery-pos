@@ -14,6 +14,7 @@ import {
     IsPositive,
     IsString,
     MaxLength,
+    MinLength,
     ValidateNested,
 } from 'class-validator';
 import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
@@ -32,7 +33,7 @@ class CreateFields {
     name!: string;
 
     @IsString()
-    @IsNotEmpty()
+    @MinLength(STRING_LIMITS.PASSWORD_MIN)
     @MaxLength(STRING_LIMITS.PASSWORD)
     password!: string;
 
@@ -65,8 +66,10 @@ class UpdateFields {
     )
     name?: string;
 
+    /** An admin reset: the same policy as a new account's password. */
     @IsOptional()
     @IsString()
+    @MinLength(STRING_LIMITS.PASSWORD_MIN)
     @MaxLength(STRING_LIMITS.PASSWORD)
     password?: string;
 
@@ -117,7 +120,7 @@ export class ChangePasswordDto {
     currentPassword!: string;
 
     @IsString()
-    @IsNotEmpty()
+    @MinLength(STRING_LIMITS.PASSWORD_MIN)
     @MaxLength(STRING_LIMITS.PASSWORD)
     newPassword!: string;
 }
