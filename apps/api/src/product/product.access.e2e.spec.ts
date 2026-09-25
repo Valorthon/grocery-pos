@@ -25,6 +25,7 @@ import { RoleGuard } from '../auth/guards/role.guard';
 import { JWTStrategy } from '../auth/jwt.strategy';
 import { Role } from '../auth/types';
 import { GlobalFilter } from '../common/global/global.filter';
+import { ErrorCode } from '../common/errors';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { ProductController } from './product.controller';
 import { ProductService } from './product.service';
@@ -71,18 +72,37 @@ const ROUTES: Route[] = [
         allowed: [Role.Restocker, Role.Adjuster, Role.Seller],
     },
     {
-        label: 'PATCH /products',
+        label: 'PATCH /products (no price)',
         method: 'PATCH',
         path: '/products',
         body: {
             updates: [
                 {
                     product: new Types.ObjectId().toString(),
-                    update: { price: 1999 },
+                    update: { name: 'milk' },
                 },
             ],
         },
         allowed: [Role.Restocker, Role.Adjuster],
+    },
+    {
+        // Price changes are Admin only (issue #13).
+        label: 'PATCH /products (with price)',
+        method: 'PATCH',
+        path: '/products',
+        body: {
+            updates: [
+                {
+                    product: new Types.ObjectId().toString(),
+                    update: { name: 'milk' },
+                },
+                {
+                    product: new Types.ObjectId().toString(),
+                    update: { price: 1999 },
+                },
+            ],
+        },
+        allowed: [],
     },
     {
         label: 'GET /products',
@@ -121,11 +141,26 @@ describe('Product route access by role (e2e)', () => {
     let base: string;
     let jwt: JwtService;
 
+    // PATCH runs the real ProductService.update, so its price rule is under
+    // test too; only the database behind it is faked.
+    const updateOne = jest.fn().mockResolvedValue(undefined);
+    const realUpdate = ProductService.prototype.update.bind({
+        connection: {
+            startSession: () =>
+                Promise.resolve({
+                    withTransaction: async (fn: (s: unknown) => unknown) =>
+                        fn({}),
+                    endSession: () => undefined,
+                }),
+        },
+        model: { updateOne },
+    } as unknown as ProductService);
+
     const service = {
         getMatches: jest.fn().mockResolvedValue([]),
         ensureValid: jest.fn().mockResolvedValue(undefined),
         getByBarcode: jest.fn().mockResolvedValue({ EAN }),
-        update: jest.fn().mockResolvedValue(undefined),
+        update: jest.fn(realUpdate),
         getAll: jest.fn().mockResolvedValue({ data: [], totalItems: 0 }),
         addMany: jest.fn().mockResolvedValue(undefined),
     };
@@ -224,7 +259,9 @@ describe('Product route access by role (e2e)', () => {
     });
 
     it('denies a Seller price edits and product creation', async () => {
-        const patch = ROUTES.find((r) => r.label === 'PATCH /products')!;
+        const patch = ROUTES.find(
+            (r) => r.label === 'PATCH /products (with price)',
+        )!;
         const create = ROUTES.find((r) => r.label === 'POST /products/bulk')!;
         service.update.mockClear();
         service.addMany.mockClear();
@@ -233,6 +270,49 @@ describe('Product route access by role (e2e)', () => {
         expect((await call(create, [Role.Seller])).status).toBe(403);
         expect(service.update).not.toHaveBeenCalled();
         expect(service.addMany).not.toHaveBeenCalled();
+    });
+
+    describe('price changes are Admin only (issue #13)', () => {
+        const withPrice = ROUTES.find(
+            (r) => r.label === 'PATCH /products (with price)',
+        )!;
+        const withoutPrice = ROUTES.find(
+            (r) => r.label === 'PATCH /products (no price)',
+        )!;
+
+        beforeEach(() => updateOne.mockClear());
+
+        it.each([Role.Restocker, Role.Adjuster])(
+            'refuses a %s batch that sets a price, writing nothing',
+            async (role) => {
+                const res = await call(withPrice, [role]);
+
+                expect(res.status).toBe(403);
+                expect(await res.json()).toMatchObject({
+                    error: ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN,
+                });
+                // The name edit in the same batch is not applied either.
+                expect(updateOne).not.toHaveBeenCalled();
+            },
+        );
+
+        it('lets a Restocker edit non-price fields', async () => {
+            const res = await call(withoutPrice, [Role.Restocker]);
+
+            expect(res.status).toBe(200);
+            expect(updateOne).toHaveBeenCalledTimes(1);
+        });
+
+        it('lets an Admin change prices', async () => {
+            const res = await call(withPrice, [Role.Admin]);
+
+            expect(res.status).toBe(200);
+            expect(updateOne).toHaveBeenCalledWith(
+                expect.anything(),
+                { $set: { price: 1999 } },
+                expect.anything(),
+            );
+        });
     });
 
     it('answers an over-long search with 400, not a 500', async () => {

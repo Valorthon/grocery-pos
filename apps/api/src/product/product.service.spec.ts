@@ -1,7 +1,14 @@
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import mongoose, { ClientSession } from 'mongoose';
-import { escapeRegex, MAX_MATCHES, ProductService } from './product.service';
+import {
+    assertMayChangePrices,
+    escapeRegex,
+    MAX_MATCHES,
+    ProductService,
+} from './product.service';
+import { Role, type AuthUser } from '../auth/types';
+import { ErrorCode, ForbiddenError } from '../common/errors';
 import { Product, ProductSchema } from './product.schema';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
 import { EanCounterService } from '../ean-counter/ean-counter.service';
@@ -39,9 +46,20 @@ describe('ProductService.update', () => {
         service = moduleRef.get(ProductService);
     });
 
+    const ADMIN: AuthUser = {
+        userId: '507f1f77bcf86cd799439011',
+        username: 'admin',
+        roles: [Role.Admin],
+    };
+    const RESTOCKER: AuthUser = {
+        userId: '507f1f77bcf86cd799439012',
+        username: 'restocker',
+        roles: [Role.Restocker, Role.Adjuster],
+    };
+
     it('runs schema validators on every price update', async () => {
         // bulkWrite would skip them, letting a fractional price through.
-        await service.update({
+        await service.update(ADMIN, {
             updates: [
                 { product: 'p1', update: { price: 1999 } },
                 { product: 'p2', update: { name: 'milk' } },
@@ -57,6 +75,42 @@ describe('ProductService.update', () => {
                 session: expect.anything(),
             }),
         );
+    });
+
+    describe('price changes (issue #13)', () => {
+        it('lets a non-admin edit non-price fields', async () => {
+            await service.update(RESTOCKER, {
+                updates: [{ product: 'p2', update: { name: 'milk' } }],
+            } as UpdateBulkDto);
+
+            expect(updateOne).toHaveBeenCalledTimes(1);
+        });
+
+        it('refuses the whole batch when a non-admin sets any price', async () => {
+            const attempt = service.update(RESTOCKER, {
+                updates: [
+                    { product: 'p2', update: { name: 'milk' } },
+                    { product: 'p1', update: { price: 1999 } },
+                ],
+            } as UpdateBulkDto);
+
+            await expect(attempt).rejects.toBeInstanceOf(ForbiddenError);
+            await expect(attempt).rejects.toMatchObject({
+                code: ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN,
+                statusCode: 403,
+                details: { products: ['p1'] },
+            });
+            // Not even the name edit is written.
+            expect(updateOne).not.toHaveBeenCalled();
+        });
+
+        it('lets an admin change prices', () => {
+            expect(() =>
+                assertMayChangePrices(ADMIN, {
+                    updates: [{ product: 'p1', update: { price: 1 } }],
+                } as UpdateBulkDto),
+            ).not.toThrow();
+        });
     });
 });
 

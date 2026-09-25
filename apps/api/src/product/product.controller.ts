@@ -27,9 +27,12 @@ import {
  *   GET   /products/matches      Restocker, Adjuster, Seller
  *   GET   /products/ensureValid  Restocker, Adjuster
  *   GET   /products/:EAN         Restocker, Adjuster, Seller
- *   PATCH /products              Restocker, Adjuster
+ *   PATCH /products              Restocker, Adjuster; a batch that sets
+ *                                `price` is Admin only (403
+ *                                PRODUCT_PRICE_CHANGE_FORBIDDEN, issue #13)
  *   GET   /products              Restocker, Adjuster
- *   POST  /products/bulk         Restocker, Adjuster
+ *   POST  /products/bulk         Restocker, Adjuster (a new product's first
+ *                                price is not a price change)
  *
  * product.access.e2e.spec.ts pins this table.
  */
@@ -59,9 +62,11 @@ export class ProductController {
         return data;
     }
 
+    // Non-price fields: Restocker, Adjuster. `price`: Admin only; the whole
+    // batch is a 403 otherwise (see assertMayChangePrices).
     @Patch()
-    async update(@Body() dto: UpdateBulkDto) {
-        await this.service.update(dto);
+    async update(@CurrentUser() user: AuthUser, @Body() dto: UpdateBulkDto) {
+        await this.service.update(user, dto);
     }
 
     @Get()
