@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { createPinia, setActivePinia } from 'pinia';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createPinia, getActivePinia, setActivePinia } from 'pinia';
 import { DiscountType } from '@grocery-pos/contracts';
 import {
     CART_STORAGE_VERSION,
+    TICKET_AMOUNT_MAX,
     cartStorageKey,
     parseStoredCart,
     useCartStore,
@@ -35,6 +36,11 @@ function stored(userId: string): unknown {
 beforeEach(() => {
     localStorage.clear();
     setActivePinia(createPinia());
+});
+
+// Each store listens for other tabs' storage events: stop them between tests.
+afterEach(() => {
+    useCartStore(getActivePinia()).$dispose();
 });
 
 describe('cart subtotal', () => {
@@ -142,6 +148,7 @@ describe('the saved basket (#23, decision 2026-09-25)', () => {
                 value: 1500,
                 reason: 'loyalty',
             },
+            attempt: null,
         });
 
         // A refresh: a new app, the same cashier.
@@ -330,5 +337,158 @@ describe('the saved basket (#23, decision 2026-09-25)', () => {
         it('parses nothing from null', () => {
             expect(parseStoredCart(null)).toBeNull();
         });
+    });
+});
+
+describe('the saved checkout attempt (#23 review)', () => {
+    const ATTEMPT = { idempotencyKey: 'key-1', ticketSignature: '{"x":1}' };
+
+    it('is saved with the basket and comes back with it', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        cart.setAttempt(ATTEMPT);
+        expect(stored('ana')).toMatchObject({ attempt: ATTEMPT });
+
+        setActivePinia(createPinia());
+        const again = useCartStore();
+        again.setOwner('ana');
+        expect(again.attempt).toEqual(ATTEMPT);
+    });
+
+    it('is cleared on a sale or a void (clear) and on logout (reset)', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        cart.setAttempt(ATTEMPT);
+        cart.clear();
+        expect(cart.attempt).toBeNull();
+        expect(stored('ana')).toBeNull();
+
+        cart.add(MILK);
+        cart.setAttempt(ATTEMPT);
+        cart.reset();
+        expect(cart.attempt).toBeNull();
+        expect(stored('ana')).toBeNull();
+    });
+
+    it('drops a malformed attempt', () => {
+        localStorage.setItem(
+            cartStorageKey('ana'),
+            JSON.stringify({
+                version: 1,
+                items: [{ ...MILK, quantity: 1 }],
+                discount: null,
+                attempt: { idempotencyKey: 42, ticketSignature: '' },
+            }),
+        );
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        expect(cart.items).toHaveLength(1);
+        expect(cart.attempt).toBeNull();
+    });
+});
+
+describe('ticket amount cap (#23 review)', () => {
+    it('refuses an add or a quantity that would take the ticket past AMOUNT_MAX', () => {
+        const cart = useCartStore();
+        expect(cart.add(MILK, 1)).toBe(true);
+        const max = cart.maxQuantity('p1', MILK.unitPrice);
+        expect(max).toBe(Math.floor(TICKET_AMOUNT_MAX / MILK.unitPrice));
+
+        expect(cart.add(MILK, max)).toBe(false);
+        expect(cart.add(MILK, max - 1)).toBe(true);
+        expect(cart.items[0].quantity).toBe(max);
+        expect(cart.subtotal).toBeLessThanOrEqual(TICKET_AMOUNT_MAX);
+
+        expect(cart.add(MINTS, 1)).toBe(false);
+        expect(cart.setQuantity('p1', max + 1)).toBe(false);
+        expect(cart.setQuantity('p1', 2)).toBe(true);
+    });
+
+    it('refuses an unsafe multiplier outright', () => {
+        const cart = useCartStore();
+        expect(cart.add(MILK, 1e20)).toBe(false);
+        expect(cart.items).toEqual([]);
+    });
+});
+
+describe('another tab (#23 review)', () => {
+    function storageEvent(key: string | null, newValue: string | null) {
+        return new StorageEvent('storage', { key, newValue });
+    }
+
+    it('follows another tab signing a different cashier in', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+
+        localStorage.setItem(
+            'user',
+            JSON.stringify({ userId: 'ben', username: 'ben', roles: [] }),
+        );
+        window.dispatchEvent(
+            storageEvent('user', localStorage.getItem('user')),
+        );
+
+        expect(cart.owner).toBe('ben');
+        expect(cart.items).toEqual([]);
+        // Ana's basket is not touched, and nothing of hers goes under Ben.
+        expect(stored('ana')).not.toBeNull();
+        cart.add(MINTS);
+        expect(stored('ben')).toMatchObject({ items: [{ product: 'p2' }] });
+        expect(stored('ana')).toMatchObject({ items: [{ product: 'p1' }] });
+    });
+
+    it('stops saving when another tab signs out', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        // The other tab's logout removed the user and the basket.
+        localStorage.clear();
+        window.dispatchEvent(storageEvent('user', null));
+
+        expect(cart.owner).toBeNull();
+        expect(cart.items).toEqual([]);
+        cart.add(MINTS);
+        expect(localStorage.length).toBe(0);
+    });
+
+    it('takes a sale or void in another tab without writing the old basket back', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        localStorage.removeItem(cartStorageKey('ana'));
+
+        window.dispatchEvent(storageEvent(cartStorageKey('ana'), null));
+
+        expect(cart.items).toEqual([]);
+        expect(stored('ana')).toBeNull();
+    });
+
+    it('shows the basket another tab of the same cashier saved', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        const json = JSON.stringify({
+            version: 1,
+            items: [{ ...MINTS, quantity: 3 }],
+            discount: null,
+            attempt: null,
+        });
+        localStorage.setItem(cartStorageKey('ana'), json);
+        window.dispatchEvent(storageEvent(cartStorageKey('ana'), json));
+        expect(cart.items).toEqual([{ ...MINTS, quantity: 3 }]);
+    });
+
+    it('ignores other keys, and leaves a ticket being charged alone', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        window.dispatchEvent(storageEvent(cartStorageKey('ben'), null));
+        expect(cart.items).toHaveLength(1);
+
+        cart.lock();
+        window.dispatchEvent(storageEvent(cartStorageKey('ana'), null));
+        expect(cart.items).toHaveLength(1);
     });
 });

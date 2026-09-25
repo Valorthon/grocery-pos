@@ -1,4 +1,4 @@
-import { computed, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
     DISCOUNT_LIMITS,
@@ -31,9 +31,11 @@ export interface CartDiscount {
 /**
  * The basket is kept in this browser per cashier (product decision
  * 2026-09-25, #23), so a refresh or a crash does not lose it. It is removed
- * on a completed sale, a void and any logout. Only the lines and the
- * discount are stored; bump the version when the shape changes, and
- * anything that does not match it is ignored.
+ * on a completed sale, a void and any logout. Only the lines, the
+ * discount and the checkout attempt (the idempotency key a sale of this
+ * ticket was sent with, so a retry after a reload cannot charge twice) are
+ * stored; bump the version when the shape changes, and anything that does
+ * not match it is ignored.
  */
 export const CART_STORAGE_VERSION = 1;
 export const CART_STORAGE_PREFIX = 'grocery_pos_cart_v1:';
@@ -42,11 +44,30 @@ export function cartStorageKey(userId: string): string {
     return `${CART_STORAGE_PREFIX}${userId}`;
 }
 
+/** The localStorage key the auth store caches the signed-in user under. */
+export const USER_STORAGE_KEY = 'user';
+
+/** The checkout attempt of this ticket (see `createCheckoutAttempt`). */
+export interface StoredAttempt {
+    idempotencyKey: string;
+    ticketSignature: string;
+}
+
 interface StoredCart {
     version: typeof CART_STORAGE_VERSION;
     items: CartItem[];
     discount: CartDiscount | null;
+    attempt: StoredAttempt | null;
 }
+
+/**
+ * The most a ticket may come to, in centavos. The API has no per-line
+ * quantity cap (`SellDto` quantity is only `@Min(1)`), but no tender may
+ * exceed AMOUNT_MAX (`TenderFields.amount @Max`), so a ticket above it could
+ * never be paid. Bounding the subtotal also keeps every line total and sum
+ * well inside safe integers.
+ */
+export const TICKET_AMOUNT_MAX = NUMERIC_LIMITS.AMOUNT_MAX;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
     typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -102,14 +123,26 @@ function parseDiscount(raw: unknown): CartDiscount | null {
     return { type, value, reason };
 }
 
+function parseAttempt(raw: unknown): StoredAttempt | null {
+    if (!isObject(raw)) return null;
+    const { idempotencyKey, ticketSignature } = raw;
+    if (!isText(idempotencyKey, 100) || !isText(ticketSignature, 100_000)) {
+        return null;
+    }
+    return { idempotencyKey, ticketSignature };
+}
+
 /**
  * Reads a stored basket, or null when there is none or it is not one this
  * version wrote. A malformed line is dropped (the rest is kept); a
- * malformed discount is dropped on its own.
+ * malformed discount or attempt is dropped on its own. A dropped line
+ * changes the ticket, so its old attempt no longer matches anyway.
  */
-export function parseStoredCart(
-    json: string | null,
-): { items: CartItem[]; discount: CartDiscount | null } | null {
+export function parseStoredCart(json: string | null): {
+    items: CartItem[];
+    discount: CartDiscount | null;
+    attempt: StoredAttempt | null;
+} | null {
     if (!json) return null;
     let raw: unknown;
     try {
@@ -121,13 +154,21 @@ export function parseStoredCart(
     if (!Array.isArray(raw.items)) return null;
 
     const items: CartItem[] = [];
+    let total = 0;
     for (const entry of raw.items.slice(0, BATCH_LIMITS.SALE_LINES)) {
         const item = parseItem(entry);
-        if (item && !items.some((i) => i.product === item.product)) {
-            items.push(item);
+        if (!item || items.some((i) => i.product === item.product)) continue;
+        if (item.quantity > (TICKET_AMOUNT_MAX - total) / item.unitPrice) {
+            continue;
         }
+        total += item.unitPrice * item.quantity;
+        items.push(item);
     }
-    return { items, discount: parseDiscount(raw.discount) };
+    return {
+        items,
+        discount: parseDiscount(raw.discount),
+        attempt: parseAttempt(raw.attempt),
+    };
 }
 
 function readStorage(key: string): string | null {
@@ -152,6 +193,10 @@ export const useCartStore = defineStore('cart', () => {
     const discount = ref<CartDiscount | null>(null);
     /** Whose basket this is: the key it is saved under. Null: not saved. */
     const owner = ref<string | null>(null);
+    /** The idempotency key this ticket was sent with, saved with it. */
+    const attempt = ref<StoredAttempt | null>(null);
+    /** True while applying another tab's write: not written back. */
+    let applyingRemote = false;
     /**
      * True while `POST /sales` is in flight. The ticket being charged must
      * not change under the request: every edit below is ignored until the
@@ -171,9 +216,13 @@ export const useCartStore = defineStore('cart', () => {
     );
 
     function persist() {
-        if (!owner.value) return;
+        if (!owner.value || applyingRemote) return;
         const key = cartStorageKey(owner.value);
-        if (items.value.length === 0 && discount.value === null) {
+        if (
+            items.value.length === 0 &&
+            discount.value === null &&
+            attempt.value === null
+        ) {
             writeStorage(key, null);
             return;
         }
@@ -189,13 +238,65 @@ export const useCartStore = defineStore('cart', () => {
                 }),
             ),
             discount: discount.value && { ...discount.value },
+            attempt: attempt.value && { ...attempt.value },
         };
         writeStorage(key, JSON.stringify(stored));
     }
 
     // Saved on every change, synchronously, so a crash right after a scan
     // still has it.
-    watch([items, discount], persist, { deep: true, flush: 'sync' });
+    watch([items, discount, attempt], persist, {
+        deep: true,
+        flush: 'sync',
+    });
+
+    /** Replaces the in-memory basket with a stored one (or nothing). */
+    function load(saved: ReturnType<typeof parseStoredCart>) {
+        items.value = saved?.items ?? [];
+        discount.value = saved?.discount ?? null;
+        attempt.value = saved?.attempt ?? null;
+    }
+
+    /**
+     * Another tab of this browser wrote localStorage (#23 review). If it
+     * signed a different cashier in (or out), this tab follows, so it can
+     * never save one cashier's basket under another's session. If it
+     * changed this cashier's basket (a sale, a void, a logout there), this
+     * tab shows that basket instead of writing its stale copy back.
+     */
+    function onStorage(event: StorageEvent) {
+        if (event.key === null || event.key === USER_STORAGE_KEY) {
+            const json =
+                event.key === null
+                    ? readStorage(USER_STORAGE_KEY)
+                    : event.newValue;
+            let userId: string | null = null;
+            try {
+                const user: unknown = json ? JSON.parse(json) : null;
+                if (isObject(user) && typeof user.userId === 'string') {
+                    userId = user.userId;
+                }
+            } catch {
+                userId = null;
+            }
+            setOwner(userId);
+            return;
+        }
+        if (!owner.value || event.key !== cartStorageKey(owner.value)) return;
+        // Mid-checkout this tab's ticket is being sold: leave it be.
+        if (locked.value) return;
+        applyingRemote = true;
+        try {
+            load(parseStoredCart(event.newValue));
+        } finally {
+            applyingRemote = false;
+        }
+    }
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener('storage', onStorage);
+        onScopeDispose(() => window.removeEventListener('storage', onStorage));
+    }
 
     /**
      * Binds the basket to the signed-in cashier and restores what was saved
@@ -207,16 +308,35 @@ export const useCartStore = defineStore('cart', () => {
         if (next === owner.value) return;
         owner.value = null;
         locked.value = false;
-        const saved = next
-            ? parseStoredCart(readStorage(cartStorageKey(next)))
-            : null;
-        items.value = saved?.items ?? [];
-        discount.value = saved?.discount ?? null;
+        load(next ? parseStoredCart(readStorage(cartStorageKey(next))) : null);
         owner.value = next;
         // Rewrites a basket that lost malformed parts, or drops an empty one.
         persist();
     }
 
+    /**
+     * The most units of a line at `unitPrice` the ticket can hold, the
+     * other lines as they are: the ticket may not exceed TICKET_AMOUNT_MAX.
+     */
+    function maxQuantity(productId: string, unitPrice: number): number {
+        const others = items.value.reduce(
+            (sum, item) =>
+                item.product === productId
+                    ? sum
+                    : sum + item.unitPrice * item.quantity,
+            0,
+        );
+        return Math.max(
+            0,
+            Math.floor((TICKET_AMOUNT_MAX - others) / Math.max(unitPrice, 1)),
+        );
+    }
+
+    /**
+     * Adds `quantity` units of a product, merging with its line. Returns
+     * false, changing nothing, when locked, for an invalid quantity, or
+     * when the ticket would exceed TICKET_AMOUNT_MAX.
+     */
     function add(
         product: {
             product: string;
@@ -225,14 +345,20 @@ export const useCartStore = defineStore('cart', () => {
             unitPrice: number;
         },
         quantity = 1,
-    ) {
-        if (locked.value || !isValidQuantity(quantity)) return;
+    ): boolean {
+        if (locked.value || !isValidQuantity(quantity)) return false;
         const existing = items.value.find((c) => c.product === product.product);
+        const already = existing?.quantity ?? 0;
+        const unitPrice = existing?.unitPrice ?? product.unitPrice;
+        if (quantity > maxQuantity(product.product, unitPrice) - already) {
+            return false;
+        }
         if (existing) {
             existing.quantity += quantity;
         } else {
             items.value.push({ ...product, quantity });
         }
+        return true;
     }
 
     /**
@@ -240,13 +366,15 @@ export const useCartStore = defineStore('cart', () => {
      * @Min(QUANTITY_MIN)` on the API). Anything else is refused and the
      * line is left as it was; removing a line is `remove`. The client does
      * not know the stock on hand, so a quantity beyond it is refused by
-     * the server at checkout, which names the short products. Returns
-     * whether the quantity was set.
+     * the server at checkout, which names the short products. Nor may the
+     * ticket exceed TICKET_AMOUNT_MAX (see there). Returns whether the
+     * quantity was set.
      */
     function setQuantity(productId: string, quantity: number): boolean {
         if (locked.value || !isValidQuantity(quantity)) return false;
         const item = items.value.find((c) => c.product === productId);
         if (!item) return false;
+        if (quantity > maxQuantity(productId, item.unitPrice)) return false;
         item.quantity = quantity;
         return true;
     }
@@ -282,11 +410,19 @@ export const useCartStore = defineStore('cart', () => {
         discount.value = next && { ...next };
     }
 
-    /** Empties the ticket and its discount: a completed sale or a void. */
+    function setAttempt(next: StoredAttempt | null) {
+        attempt.value = next && { ...next };
+    }
+
+    /**
+     * Empties the ticket, its discount and its checkout attempt: a
+     * completed sale or a void.
+     */
     function clear() {
         if (locked.value) return;
         items.value = [];
         discount.value = null;
+        attempt.value = null;
     }
 
     /** Updates the unit price (centavos) of the lines in `prices`. */
@@ -308,6 +444,7 @@ export const useCartStore = defineStore('cart', () => {
         owner.value = null;
         items.value = [];
         discount.value = null;
+        attempt.value = null;
         locked.value = false;
     }
 
@@ -322,16 +459,20 @@ export const useCartStore = defineStore('cart', () => {
     return {
         items,
         discount,
+        attempt,
         owner,
         locked,
         totalUnits,
         subtotal,
         setOwner,
+        onStorage,
+        maxQuantity,
         add,
         setQuantity,
         remove,
         restore,
         setDiscount,
+        setAttempt,
         clear,
         setUnitPrices,
         reset,

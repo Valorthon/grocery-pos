@@ -47,23 +47,54 @@ export function newIdempotencyKey(): string {
  * different payment with a 409 instead of recording a second sale; if it
  * did not, the key is still unused and the new payment goes through.
  */
-export function createCheckoutAttempt(generate = newIdempotencyKey) {
-    let key: string | null = null;
-    let ticketSignature: string | null = null;
-
+export function createCheckoutAttempt(
+    generate = newIdempotencyKey,
+    store: AttemptStore = memoryAttemptStore(),
+) {
     return {
         keyFor(ticket: SaleTicket): string {
             const signature = JSON.stringify(ticket);
-            if (key === null || signature !== ticketSignature) {
-                key = generate();
-                ticketSignature = signature;
+            const current = store.get();
+            if (current && current.ticketSignature === signature) {
+                return current.idempotencyKey;
             }
-            return key;
+            const idempotencyKey = generate();
+            store.set({ idempotencyKey, ticketSignature: signature });
+            return idempotencyKey;
         },
         /** The sale went through: the next checkout gets a new key. */
         settle() {
-            key = null;
-            ticketSignature = null;
+            store.set(null);
+        },
+    };
+}
+
+/**
+ * The checkout attempt in progress: the key a ticket was (or is being)
+ * sent with, and that ticket's signature.
+ */
+export interface CheckoutAttempt {
+    idempotencyKey: string;
+    ticketSignature: string;
+}
+
+/**
+ * Where the attempt is kept. The register keeps it in the cart store, which
+ * saves it with the basket (#23 review): after a refresh or crash mid-sale
+ * the same ticket is retried with the same key, so the server replays the
+ * sale it already recorded instead of charging it again.
+ */
+export interface AttemptStore {
+    get(): CheckoutAttempt | null;
+    set(attempt: CheckoutAttempt | null): void;
+}
+
+function memoryAttemptStore(): AttemptStore {
+    let attempt: CheckoutAttempt | null = null;
+    return {
+        get: () => attempt,
+        set: (next) => {
+            attempt = next;
         },
     };
 }
@@ -99,8 +130,10 @@ export function useSaleCheckout(deps: {
     ticket: () => SaleTicket;
     post: (body: SaleRequest) => Promise<Receipt>;
     generateKey?: () => string;
+    /** Keeps the attempt across reloads; in memory when absent. */
+    attemptStore?: AttemptStore;
 }) {
-    const attempt = createCheckoutAttempt(deps.generateKey);
+    const attempt = createCheckoutAttempt(deps.generateKey, deps.attemptStore);
     const inFlight = ref(false);
 
     async function submit(payment: PaymentRequest): Promise<SaleOutcome> {
