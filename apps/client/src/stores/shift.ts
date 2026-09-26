@@ -5,10 +5,13 @@ import { apiErrorCode, apiErrorText } from '@/utils/api-error';
 import {
     type BillCounts,
     type CashierDrawerMovement,
+    type CloseShiftRequest,
     type CurrentShiftResponse,
     type CurrentShiftView,
+    type DrawerMovementRequest,
     ErrorCode,
     type LastClosedResponse,
+    type OpenShiftRequest,
     type ZReadReport,
 } from '@grocery-pos/contracts';
 
@@ -106,7 +109,7 @@ export const useShiftStore = defineStore('shift', () => {
         try {
             const res = await api.post<CurrentShiftView>('/shifts', {
                 counts,
-            });
+            } satisfies OpenShiftRequest);
             if (gen !== generation) throw new StaleResponseError();
             setShift(res.data);
         } catch (error) {
@@ -131,7 +134,7 @@ export const useShiftStore = defineStore('shift', () => {
         try {
             const res = await api.post<CurrentShiftView>(
                 '/shifts/current/drawer',
-                { type, amount, reason },
+                { type, amount, reason } satisfies DrawerMovementRequest,
             );
             if (gen !== generation) throw new StaleResponseError();
             setShift(res.data);
@@ -155,7 +158,7 @@ export const useShiftStore = defineStore('shift', () => {
             report = (
                 await api.post<ZReadReport>('/shifts/current/close', {
                     counts,
-                })
+                } satisfies CloseShiftRequest)
             ).data;
         } catch (error) {
             if (gen !== generation) throw new StaleResponseError();

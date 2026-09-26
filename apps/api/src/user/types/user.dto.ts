@@ -20,11 +20,19 @@ import {
     ArrayMaxSize,
     IsInt,
 } from 'class-validator';
-import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
+import {
+    ASSIGNABLE_ROLES,
+    type ChangePasswordRequest,
+    type CreateUserRequest,
+    type CreateUsersRequest,
+    type UpdateUsersRequest,
+    type UserUpdate,
+    type UserUpdateRequest,
+} from '@grocery-pos/contracts';
 import { Role } from '../../auth/types';
 import { STRING_LIMITS, PAGINATION, BATCH_LIMITS } from '../../constants';
 
-class CreateFields {
+class CreateFields implements CreateUserRequest {
     @IsString()
     @IsNotEmpty()
     @MaxLength(STRING_LIMITS.USERNAME)
@@ -51,7 +59,7 @@ class CreateFields {
     @IsArray()
     roles!: Role[];
 }
-export class CreateBulkDto {
+export class CreateBulkDto implements CreateUsersRequest {
     @ValidateNested({ each: true })
     @IsArray()
     @ArrayNotEmpty()
@@ -59,7 +67,7 @@ export class CreateBulkDto {
     @Type(() => CreateFields)
     users!: CreateFields[];
 }
-class UpdateFields {
+class UpdateFields implements UserUpdate {
     @IsOptional()
     @IsString()
     @IsNotEmpty()
@@ -94,7 +102,7 @@ class UpdateFields {
     @IsBoolean()
     isActive?: boolean;
 }
-class UpdateBulkFields {
+class UpdateBulkFields implements UserUpdateRequest {
     @IsNotEmpty()
     @IsMongoId()
     user!: string;
@@ -105,7 +113,7 @@ class UpdateBulkFields {
     @Type(() => UpdateFields)
     update!: UpdateFields;
 }
-export class UpdateBulkDto {
+export class UpdateBulkDto implements UpdateUsersRequest {
     @ValidateNested({ each: true })
     @Type(() => UpdateBulkFields)
     // One entry per user: the permission and last-admin checks reason about
@@ -120,7 +128,7 @@ export class UpdateBulkDto {
 }
 
 /** `PATCH /users/me/password`: any signed-in user changes their own password. */
-export class ChangePasswordDto {
+export class ChangePasswordDto implements ChangePasswordRequest {
     @IsString()
     @IsNotEmpty()
     @MaxLength(STRING_LIMITS.PASSWORD)

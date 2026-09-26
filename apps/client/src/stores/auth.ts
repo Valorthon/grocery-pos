@@ -8,6 +8,7 @@ import { Color, useUIStore } from './ui';
 import { hasSessionMarker } from '@/utils/session-cookie';
 
 import {
+    type LoginRequest,
     type LoginResponse,
     type ProfileView,
     Role,
@@ -50,7 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
         const response = await api.post<LoginResponse>('/auth/login', {
             username,
             password,
-        });
+        } satisfies LoginRequest);
         const data = response.data;
         // Immediately fetch full profile so roles are available
         await fetchMe();

@@ -39,7 +39,14 @@ import {
     PAGINATION,
     BATCH_LIMITS,
 } from '../../constants';
-import { normalizeReferenceNumber } from '@grocery-pos/contracts';
+import {
+    type DiscountInput,
+    normalizeReferenceNumber,
+    type ReverseSaleRequest,
+    type SaleLineRequest,
+    type SaleRequest,
+    type Tender,
+} from '@grocery-pos/contracts';
 import { IsCalendarDate, IsNotBefore } from '../../common/validators';
 
 export class GetDetailsDto {
@@ -47,7 +54,7 @@ export class GetDetailsDto {
     @IsMongoId()
     sales!: string;
 }
-class SellDetailsFields {
+class SellDetailsFields implements SaleLineRequest {
     @IsNotEmpty()
     @IsMongoId()
     product!: string;
@@ -82,7 +89,7 @@ function IsPercentInRange() {
     };
 }
 
-export class DiscountFields {
+export class DiscountFields implements DiscountInput {
     @IsNotEmpty()
     @IsEnum(DiscountType)
     type!: DiscountType;
@@ -105,7 +112,7 @@ export class DiscountFields {
     reason!: string;
 }
 
-export class TenderFields {
+export class TenderFields implements Tender {
     @IsNotEmpty()
     @IsEnum(TenderType)
     type!: TenderType;
@@ -143,7 +150,7 @@ function IsNotOnCashSale() {
     };
 }
 
-export class SellDto {
+export class SellDto implements SaleRequest {
     /**
      * Client-generated UUID, one per checkout attempt of a ticket and reused
      * on every retry of that attempt. A second request with a key that
@@ -298,7 +305,7 @@ export class ReverseSaleParamDto {
 }
 
 /** Body of `POST /sales/:id/void` and `POST /sales/:id/refund`. */
-export class ReverseSaleDto {
+export class ReverseSaleDto implements ReverseSaleRequest {
     @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.REASON)

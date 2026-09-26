@@ -409,8 +409,7 @@ import { AlertCircle, Banknote, QrCode, Split } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import KeyHint from '@/components/ui/KeyHint.vue';
-import { PaymentType } from '@grocery-pos/contracts';
-import type { PaymentRequest } from './types';
+import { type PaymentRequest, PaymentType } from '@grocery-pos/contracts';
 import {
     CENTAVOS_PER_PESO,
     centavosToPesoInput,

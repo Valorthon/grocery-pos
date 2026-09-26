@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
-import { ErrorCode, PaymentType, SaleStatus } from '@grocery-pos/contracts';
+import {
+    ErrorCode,
+    PaymentType,
+    type SaleRequest,
+    SaleStatus,
+} from '@grocery-pos/contracts';
 import { type StoredAttempt, useCartStore } from '@/stores/cart';
-import type { SaleRequest } from '@/components/User/Sales/sale-submission';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
 import { REGISTER_TOAST_IDLE, useUIStore } from '@/stores/ui';

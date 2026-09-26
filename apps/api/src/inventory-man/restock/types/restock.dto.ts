@@ -21,6 +21,7 @@ import {
     Trim,
     TrimLowercase,
 } from '../../../common/validators';
+import type { RestockLineFields, RestockRequest } from '@grocery-pos/contracts';
 import { NewProductFields } from '../../../product/types';
 import {
     NUMERIC_LIMITS,
@@ -71,7 +72,7 @@ export type GetDetailsDto = GetDetailsQueryDto & GetDetailsParamDto;
  * never both and never neither (issue #14).
  */
 @ExactlyOneOf(['newProduct', 'product'])
-export class RestockFields {
+export class RestockFields implements RestockLineFields {
     @IsOptional()
     @ValidateNested()
     @Type(() => NewProductFields)
@@ -96,7 +97,7 @@ export class RestockFields {
     @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     unitCost!: number;
 }
-export class RestockDto {
+export class RestockDto implements RestockRequest {
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
     @ArrayMaxSize(BATCH_LIMITS.RESTOCK_LINES)

@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, nextTick, ref } from 'vue';
-import { PaymentType } from '@grocery-pos/contracts';
+import { type PaymentRequest, PaymentType } from '@grocery-pos/contracts';
 import CheckoutModal from './CheckoutModal.vue';
-import type { PaymentRequest } from './types';
 
 const TOTAL = 45000;
 

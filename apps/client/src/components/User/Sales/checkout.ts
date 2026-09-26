@@ -5,13 +5,13 @@ import {
     isValidReferenceNumber,
     normalizeReferenceNumber,
     NUMERIC_LIMITS,
+    type PaymentRequest,
     PaymentType,
     REFERENCE_NUMBER_LIMITS,
     TenderType,
 } from '@grocery-pos/contracts';
 import { formatCurrency, parsePesos, pesosToCentavos } from '@/utils/currency';
 import { moneyError } from '@/utils/rules';
-import type { PaymentRequest } from './types';
 
 /**
  * The checkout preview of a discounted sale, in centavos, for tendering.

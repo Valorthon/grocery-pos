@@ -146,6 +146,7 @@ import { computed, ref, watch } from 'vue';
 import {
     billCountTotal,
     type BillCounts,
+    type CloseShiftRequest,
     type Paginated,
     type ShiftListItem,
     ShiftStatus,
@@ -276,7 +277,7 @@ async function forceClose() {
     try {
         const res = await api.post<ZReadReport>(`/shifts/${shift._id}/close`, {
             counts: closeCounts.value,
-        });
+        } satisfies CloseShiftRequest);
         selected.value = {
             ...shift,
             status: ShiftStatus.CLOSED,
