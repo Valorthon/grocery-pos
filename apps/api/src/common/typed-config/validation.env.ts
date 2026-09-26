@@ -176,6 +176,19 @@ export const envSchema = zod
 export type EnvTypes = zod.infer<typeof envSchema>;
 
 /**
+ * Keys the schema lets be absent after validation: `undefined` parses and
+ * stays `undefined` (not replaced by a default). Today that is DOMAIN, which
+ * only prod and stage require (#91). TypedConfigService.get returns
+ * `undefined` for these instead of throwing.
+ */
+export const OPTIONAL_ENV_KEYS: ReadonlySet<keyof EnvTypes> = new Set(
+    (Object.keys(envSchema.shape) as (keyof EnvTypes)[]).filter((key) => {
+        const result = envSchema.shape[key].safeParse(undefined);
+        return result.success && result.data === undefined;
+    }),
+);
+
+/**
  * What ConfigModule validates: resolves APP_ENV (with the NODE_ENV
  * transition in app-env.ts), then parses. Throws on any problem; `warn`
  * receives deprecation notices.
