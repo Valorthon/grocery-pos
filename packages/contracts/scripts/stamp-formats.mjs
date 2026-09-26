@@ -20,9 +20,14 @@ const jsFiles = (dir) =>
               ? [join(dir, entry.name)]
               : [],
     );
+// Every way a module names another: `import … from`, `export … from`,
+// a side-effect `import './x'` and a dynamic `import('./x')`, in either
+// quote style.
+const SPECIFIER =
+    /(?:\bfrom\s*|\bimport\s*(?:\(\s*)?)(['"])(\.{1,2}\/[^'"]*)\1/g;
 const bare = jsFiles(esm).flatMap((file) =>
-    [...readFileSync(file, 'utf8').matchAll(/from '(\.{1,2}\/[^']*)'/g)]
-        .map((match) => match[1])
+    [...readFileSync(file, 'utf8').matchAll(SPECIFIER)]
+        .map((match) => match[2])
         .filter((spec) => !spec.endsWith('.js'))
         .map((spec) => `${relative(esm, file)}: ${spec}`),
 );
