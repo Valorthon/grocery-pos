@@ -356,28 +356,35 @@ describe('api refresh state machine across requests (issue #30)', () => {
     it('replays every queued request once the single refresh succeeds, POST /sales with its same key', async () => {
         // The replay of a checkout must be the same request: its
         // idempotency key makes a resend return the sale already recorded,
-        // never ring up a second one.
+        // never ring up a second one. /products starts the refresh; the
+        // checkout's 401 lands 1ms later, while the refresh (5ms) is in
+        // flight, so it is replayed from the queue, not by the request
+        // that refreshed.
         const bodies: Record<string, string[]> = {};
         api.defaults.adapter = ((config) => {
             const url = config.url ?? '';
             (bodies[url] ??= []).push(String(config.data ?? ''));
-            return bodies[url].length === 1
-                ? expired(config)
-                : Promise.resolve(respond(config, 200, { url }));
+            if (bodies[url].length > 1) {
+                return Promise.resolve(respond(config, 200, { url }));
+            }
+            if (url !== '/sales') return expired(config);
+            return new Promise((resolve) => setTimeout(resolve, 1)).then(() =>
+                expired(config),
+            );
         }) as AxiosAdapter;
         refreshAnswers(201);
 
         const sale = { idempotencyKey: 'k-1', sellDetails: [] };
         const results = await Promise.all([
-            api.post('/sales', sale),
             api.get('/products'),
+            api.post('/sales', sale),
             api.get('/shifts/current'),
         ]);
 
         expect(refresh).toHaveBeenCalledTimes(1);
         expect(results.map((r) => (r.data as { url: string }).url)).toEqual([
-            '/sales',
             '/products',
+            '/sales',
             '/shifts/current',
         ]);
         expect(bodies['/sales']).toEqual([
