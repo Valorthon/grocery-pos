@@ -92,7 +92,7 @@ export class NewProductFields implements NewProductRequest {
     @IsEnum(Category, {
         message: `Category must be a valid enum value: ${Object.values(Category).join(', ')}`,
     })
-    category!: Category;
+    category?: Category;
 
     /** Centavos. */
     @IsNotEmpty()

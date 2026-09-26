@@ -1,4 +1,4 @@
-export interface AddForm {
+interface AddFormFields {
     autoGenerateEAN: boolean;
     EAN: string;
     quantity: number;
@@ -6,13 +6,23 @@ export interface AddForm {
     unitCost: number;
     /** Centavos. */
     totalCost?: number;
-    product?: string;
-
-    isNewProduct: boolean;
     name: string;
-    /** Centavos. */
-    price?: number;
 }
+
+/**
+ * A restock line as the add dialog emits it: a new product with its price,
+ * or an existing product with its id, never both.
+ */
+export type AddForm = AddFormFields &
+    (
+        | {
+              isNewProduct: true;
+              /** Centavos. */
+              price: number;
+              product?: undefined;
+          }
+        | { isNewProduct: false; product: string; price?: undefined }
+    );
 
 /**
  * The add dialog's form state: unitCost and price hold the pesos as typed
@@ -20,9 +30,11 @@ export interface AddForm {
  * '' while blank (`v-model.number`). Validated by `restockLineErrors`.
  */
 export interface AddFormInput extends Omit<
-    AddForm,
-    'quantity' | 'unitCost' | 'totalCost' | 'price'
+    AddFormFields,
+    'quantity' | 'unitCost' | 'totalCost'
 > {
+    isNewProduct: boolean;
+    product?: string;
     quantity: number | string;
     unitCost: string;
     price: string;

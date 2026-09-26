@@ -197,9 +197,10 @@ requestId}`. A 5xx never carries details or internals.
   (`SaleRequest`, `RestockRequest`, `LoginRequest`, …; `Tender` and
   `DiscountInput` stay where they were). Each body DTO and nested DTO
   `implements` its type, and `common/request-contracts.spec.ts` fails
-  `tsc` on a key on one side only. The client's `payloads.ts` mappers
-  return them and other bodies use `satisfies`; the client defines no
-  request types of its own.
+  `tsc` on a key, or a required key, on one side only. The client's
+  `payloads.ts` mappers return them and other bodies use `satisfies`; the
+  client defines no request types of its own. The product `UpdateBulkDto`
+  (`PATCH /products`) has none yet: the client doesn't send it (#38).
 - Contracts' relative imports end in `.js`; the build fails otherwise, so
   plain Node can load the ESM build.
 

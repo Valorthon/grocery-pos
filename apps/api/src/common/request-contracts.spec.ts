@@ -39,20 +39,33 @@ import type {
 
 /*
  * Request contracts (issue #90). Each body DTO `implements` its contracts
- * type, so the compiler already refuses a DTO that lacks a required
- * contract field or types one differently. `implements` lets a class skip
- * an optional field and add fields of its own; `keysMatch` closes both
- * gaps: a key on one side only fails `tsc` (`pnpm typecheck`), naming it.
+ * type, so the compiler refuses a DTO that lacks a required contract field
+ * or declares a field whose type the contract's does not accept.
+ * `implements` still lets a class skip an optional field, add fields of
+ * its own, and make required what the contract leaves optional (the client
+ * would omit it and get a 400, as in #33). `keysMatch` closes those gaps:
+ * the two sides must have the same keys and the same required keys, or
+ * `tsc` (`pnpm typecheck`) fails naming the key. Field types are checked
+ * only one way (by `implements`), and validation rules not at all.
  */
-type KeysMatch<Dto, Contract> = [
-    Exclude<keyof Dto, keyof Contract>,
-    Exclude<keyof Contract, keyof Dto>,
-] extends [never, never]
+type RequiredKeys<T> = {
+    [K in keyof T]-?: object extends Pick<T, K> ? never : K;
+}[keyof T];
+
+type Drift<Dto, Contract> = {
+    onlyInDto: Exclude<keyof Dto, keyof Contract>;
+    onlyInContract: Exclude<keyof Contract, keyof Dto>;
+    requiredOnlyInDto: Exclude<RequiredKeys<Dto>, RequiredKeys<Contract>>;
+    requiredOnlyInContract: Exclude<RequiredKeys<Contract>, RequiredKeys<Dto>>;
+};
+
+type KeysMatch<Dto, Contract> = Drift<Dto, Contract>[keyof Drift<
+    Dto,
+    Contract
+>] extends never
     ? true
-    : {
-          onlyInDto: Exclude<keyof Dto, keyof Contract>;
-          onlyInContract: Exclude<keyof Contract, keyof Dto>;
-      };
+    : // Spelled out, so the error names the keys.
+      { [K in keyof Drift<Dto, Contract>]: Drift<Dto, Contract>[K] };
 
 function keysMatch<Dto, Contract>(ok: KeysMatch<Dto, Contract>) {
     return ok;

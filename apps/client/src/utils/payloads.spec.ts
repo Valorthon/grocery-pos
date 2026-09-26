@@ -177,14 +177,14 @@ describe('draft row ids (issue #19)', () => {
         const product = { ...typed, draftId };
         const restock = {
             ...autoWithStaleEAN,
-            isNewProduct: true,
+            isNewProduct: true as const,
             quantity: 2,
             unitCost: 3500,
             draftId,
         };
         const existing = {
             ...typed,
-            isNewProduct: false,
+            isNewProduct: false as const,
             product: PRODUCT,
             quantity: 1,
             unitCost: 100,

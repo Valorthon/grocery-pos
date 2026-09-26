@@ -29,7 +29,7 @@ import type {
 export interface ProductDraft {
     EAN: string;
     name: string;
-    price?: number;
+    price: number;
     autoGenerateEAN: boolean;
 }
 
@@ -67,9 +67,7 @@ export function toNewProduct(draft: ProductDraft): NewProductRequest {
     return {
         ...typedEAN(draft),
         name: draft.name,
-        // The dialogs always set it on submit; a blank would pass through
-        // as it is for the server to refuse.
-        price: draft.price as number,
+        price: draft.price,
     };
 }
 
@@ -78,30 +76,32 @@ export function toNewProductsBody(drafts: ProductDraft[]): NewProductsRequest {
     return { newProducts: drafts.map(toNewProduct) };
 }
 
-/** A restock draft line. Money in centavos. */
-export interface RestockDraft extends ProductDraft {
-    isNewProduct: boolean;
-    product?: string;
+/**
+ * A restock draft line: a new product with its price, or an existing
+ * product with its id (as the restock dialog emits it). Money in centavos.
+ */
+export type RestockDraft = Omit<ProductDraft, 'price'> & {
     quantity: number;
     unitCost: number;
-}
+} & (
+        | { isNewProduct: true; price: number; product?: string }
+        | { isNewProduct: false; product: string; price?: number }
+    );
 
 /**
  * `POST /restocks` body (`RestockDto`). Each line (`RestockFields`) is
  * built as a `RestockLineRequest`: exactly one of `newProduct` and
- * `product`.
+ * `product`, and the return type keeps it so.
  */
 export function toRestockBody(
     drafts: RestockDraft[],
     description: string,
-): RestockRequest {
+): RestockRequest & { restockDetails: RestockLineRequest[] } {
     return {
         restockDetails: drafts.map((d): RestockLineRequest => ({
             ...(d.isNewProduct
                 ? { newProduct: toNewProduct(d) }
-                : // Always set on an existing product's line (as `price`
-                  // on a new one); a blank would pass through as it is.
-                  { product: d.product as string }),
+                : { product: d.product }),
             quantity: d.quantity,
             unitCost: d.unitCost,
         })),
