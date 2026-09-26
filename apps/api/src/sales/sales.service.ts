@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { SaleDoc, SaleRowDoc, Sales } from './sales.schema';
+import {
+    INTERNAL_SALE_FIELDS,
+    SaleDoc,
+    SaleRowDoc,
+    Sales,
+} from './sales.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { SaleLineDoc, SalesDetails } from './sales-details.schema';
 import {
@@ -144,8 +149,8 @@ export class SalesService {
         if (!filter) return { data: [], totalItems: 0 };
 
         const projection = user.roles.includes(Role.Admin)
-            ? undefined
-            : CASHIER_HIDDEN_SALE_FIELDS;
+            ? INTERNAL_SALE_FIELDS
+            : { ...INTERNAL_SALE_FIELDS, ...CASHIER_HIDDEN_SALE_FIELDS };
 
         const [data, totalItems] = await Promise.all([
             this.model
@@ -534,7 +539,13 @@ export class SalesService {
                                 },
                             },
                         },
-                        { session, new: true, runValidators: true },
+                        {
+                            session,
+                            new: true,
+                            runValidators: true,
+                            // The response is the sale, less its internals.
+                            projection: INTERNAL_SALE_FIELDS,
+                        },
                     )
                     .lean<SaleDoc>();
 

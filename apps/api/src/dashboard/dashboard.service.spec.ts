@@ -5,7 +5,7 @@ import {
     RESTOCK_ACTIVITY_FIELDS,
     stockAlertPipeline,
 } from './dashboard.service';
-import { Sales } from '../sales/sales.schema';
+import { INTERNAL_SALE_FIELDS, Sales } from '../sales/sales.schema';
 import { Inventory } from '../inventory-man/inventory/inventory.schema';
 import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
@@ -177,6 +177,8 @@ describe('DashboardService.getDashboard', () => {
 
             expect(result.todayRevenue).toBe(500);
             expect(result.recentSales).toEqual([{ _id: 's1', amount: 500 }]);
+            // Never the checkout internals (#27).
+            expect(salesFind).toHaveBeenCalledWith({}, INTERNAL_SALE_FIELDS);
             expect(groupStage()).toHaveProperty('revenue');
             expect(restockQuery.select).not.toHaveBeenCalled();
         });

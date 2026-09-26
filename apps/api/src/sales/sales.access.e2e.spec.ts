@@ -30,6 +30,8 @@ interface SaleRow {
     shift: Types.ObjectId;
     amount: number;
     createdAt: Date;
+    idempotencyKey: string;
+    requestHash: string;
     reversal?: {
         type: string;
         payoutShift?: Types.ObjectId;
@@ -61,6 +63,9 @@ function sale(
         shift,
         amount,
         createdAt: new Date(createdAt),
+        // Stored for replays of POST /sales; never listed (#27).
+        idempotencyKey: `key-${createdAt}`,
+        requestHash: `hash-${createdAt}`,
     };
 }
 
@@ -279,6 +284,22 @@ describe('Sales history scoping (e2e)', () => {
         expect(body.totalItems).toBe(SALES.length);
         expect(body.data).toHaveLength(SALES.length);
     });
+
+    it.each([
+        ['an admin', ADMIN],
+        ['a seller', SELLER_A],
+    ])(
+        'never lists the idempotency key or request hash to %s (#27)',
+        async (_label, who) => {
+            const body = await list(who);
+
+            expect(body.data.length).toBeGreaterThan(0);
+            for (const row of body.data) {
+                expect(row).not.toHaveProperty('idempotencyKey');
+                expect(row).not.toHaveProperty('requestHash');
+            }
+        },
+    );
 
     it('shows a seller the details of their own sale', async () => {
         const res = await harness.call(

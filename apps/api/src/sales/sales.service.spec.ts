@@ -7,7 +7,7 @@ import {
     salesListFilter,
     SalesService,
 } from './sales.service';
-import { Sales } from './sales.schema';
+import { INTERNAL_SALE_FIELDS, Sales } from './sales.schema';
 import { SalesDetails } from './sales-details.schema';
 import { ProductService } from '../product/product.service';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
@@ -1114,6 +1114,10 @@ describe('SalesService.reverse', () => {
             status: { $nin: [SaleStatus.VOIDED, SaleStatus.REFUNDED] },
         });
         expect(update.$set.status).toBe(SaleStatus.VOIDED);
+        // The returned sale never carries the checkout internals (#27).
+        expect(findOneAndUpdate.mock.calls[0][2]).toMatchObject({
+            projection: INTERNAL_SALE_FIELDS,
+        });
         expect(update.$set.reversal).toMatchObject({
             type: ReversalType.VOID,
             reason: 'rang up twice',
@@ -1340,6 +1344,12 @@ describe('SalesService.reverse', () => {
     });
 });
 
+/** What a non-admin's `GET /sales` projects out. */
+const CASHIER_PROJECTION = {
+    ...INTERNAL_SALE_FIELDS,
+    ...CASHIER_HIDDEN_SALE_FIELDS,
+};
+
 describe('Sales history scoping (issues #13, #2)', () => {
     const SELLER: AuthUser = {
         userId: '507f1f77bcf86cd799439011',
@@ -1424,10 +1434,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
         await service.getAll(SELLER, { page: 1, limit: 10 });
 
         expect(openShiftIdOf).toHaveBeenCalledWith(SELLER.userId);
-        expect(find).toHaveBeenCalledWith(
-            OWN_SCOPE,
-            CASHIER_HIDDEN_SALE_FIELDS,
-        );
+        expect(find).toHaveBeenCalledWith(OWN_SCOPE, CASHIER_PROJECTION);
         expect(countDocuments).toHaveBeenCalledWith(OWN_SCOPE);
         expect(estimatedDocumentCount).not.toHaveBeenCalled();
     });
@@ -1437,6 +1444,14 @@ describe('Sales history scoping (issues #13, #2)', () => {
             'reversal.payoutShift': 0,
             'reversal.payoutAmount': 0,
         });
+    });
+
+    it('never lists the idempotency key or request hash, to anyone (#27)', () => {
+        expect(INTERNAL_SALE_FIELDS).toEqual({
+            idempotencyKey: 0,
+            requestHash: 0,
+        });
+        expect(CASHIER_PROJECTION).toMatchObject(INTERNAL_SALE_FIELDS);
     });
 
     it('lists nothing for a cashier with no open shift, without querying sales', async () => {
@@ -1452,7 +1467,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
     it('lists every sale for an admin, with an exact count (#16)', async () => {
         await service.getAll(ADMIN, { page: 1, limit: 10 });
 
-        expect(find).toHaveBeenCalledWith({}, undefined);
+        expect(find).toHaveBeenCalledWith({}, INTERNAL_SALE_FIELDS);
         expect(countDocuments).toHaveBeenCalledWith({});
         expect(estimatedDocumentCount).not.toHaveBeenCalled();
         expect(openShiftIdOf).not.toHaveBeenCalled();
@@ -1476,7 +1491,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
             });
 
             const filter = { cashier: OTHER, createdAt: SEP_25 };
-            expect(find).toHaveBeenCalledWith(filter, undefined);
+            expect(find).toHaveBeenCalledWith(filter, INTERNAL_SALE_FIELDS);
             expect(countDocuments).toHaveBeenCalledWith(filter);
         });
 
@@ -1489,7 +1504,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
 
             expect(find).toHaveBeenCalledWith(
                 { ...OWN_SCOPE, createdAt: { $gte: SEP_25.$gte } },
-                CASHIER_HIDDEN_SALE_FIELDS,
+                CASHIER_PROJECTION,
             );
         });
 

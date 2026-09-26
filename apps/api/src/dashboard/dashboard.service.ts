@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
 import {
     COUNTED_SALES_FILTER,
+    INTERNAL_SALE_FIELDS,
     Sales,
     type SaleRowDoc,
 } from '../sales/sales.schema';
@@ -170,7 +171,7 @@ export class DashboardService {
             ]),
             includeMoney
                 ? this.salesModel
-                      .find()
+                      .find({}, INTERNAL_SALE_FIELDS)
                       .sort({ createdAt: -1 })
                       .limit(5)
                       .populate<{ cashier: NameRef | null }>({

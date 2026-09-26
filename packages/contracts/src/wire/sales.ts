@@ -121,6 +121,8 @@ export const SALE_REVERSAL_VIEW_SHAPE: WireShape<SaleReversalView> = {
 /**
  * A stored sale, as `POST /sales/:id/void` and `/refund` return it (the
  * cashier as an id). Fields added over time are absent on older sales.
+ * Never the checkout's `idempotencyKey` or `requestHash`: the server keeps
+ * those for replays and no response carries them (#27).
  */
 export interface SaleView {
     _id: string;
@@ -141,8 +143,6 @@ export interface SaleView {
     /** Absent on sales from before statuses: those are COMPLETED. */
     status?: SaleStatus;
     reversal?: SaleReversalView;
-    idempotencyKey?: string;
-    requestHash?: string;
     /** ISO timestamps. */
     createdAt: string;
     updatedAt: string;
@@ -161,8 +161,6 @@ export const SALE_VIEW_SHAPE: WireShape<SaleView> = {
     changeGiven: 'optional',
     status: 'optional',
     reversal: 'optional',
-    idempotencyKey: 'optional',
-    requestHash: 'optional',
     createdAt: 'required',
     updatedAt: 'required',
 };

@@ -232,8 +232,14 @@ export class Sales {
 
 export const SalesSchema = SchemaFactory.createForClass(Sales);
 
-/** A sale as a `.lean()` read returns it, unpopulated: the cashier is an id. */
-export type SaleDoc = Omit<Sales, 'cashier'> & {
+/**
+ * A sale as a response reads it (`.lean()`, `INTERNAL_SALE_FIELDS`
+ * projected out), unpopulated: the cashier is an id.
+ */
+export type SaleDoc = Omit<
+    Sales,
+    'cashier' | keyof typeof INTERNAL_SALE_FIELDS
+> & {
     _id: Types.ObjectId;
     cashier: Types.ObjectId;
 };
@@ -288,3 +294,13 @@ SalesSchema.index({ shift: 1, createdAt: -1 });
 export const COUNTED_SALES_FILTER = {
     status: { $nin: [...REVERSED_SALE_STATUSES] },
 };
+
+/**
+ * Sale fields no response carries (product owner, #27): the checkout's
+ * idempotency key and request hash. The server keeps them for replays of
+ * `POST /sales`; the client never reads them back from a stored sale.
+ */
+export const INTERNAL_SALE_FIELDS = {
+    idempotencyKey: 0,
+    requestHash: 0,
+} as const;
