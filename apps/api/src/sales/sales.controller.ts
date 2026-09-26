@@ -10,7 +10,7 @@ import {
 } from './types';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
-import { Roles } from '../auth/auth.decorator';
+import { RequireOwnRole, Roles } from '../auth/auth.decorator';
 import type {
     Paginated,
     Receipt,
@@ -23,7 +23,8 @@ import { asJson } from '../common/wire';
 /**
  * Access decisions (issue #13, product owner 2026-09-24; narrowed to the
  * current shift by #2). Handler @Roles replaces the class's; Admin passes
- * every check.
+ * every check except POST /sales, which is @RequireOwnRole(Seller): an
+ * admin account also needs SELLER to sell (issue #84).
  *
  *   GET  /sales               Seller   own sales in the caller's current
  *                                      open shift only (none without one);
@@ -35,7 +36,8 @@ import { asJson } from '../common/wire';
  *                                      Admin: any
  *   POST /sales               Seller   records the sale as the caller, into
  *                                      their open shift (409 SHIFT_NOT_OPEN
- *                                      without one)
+ *                                      without one); SELLER itself, ADMIN
+ *                                      alone is 403
  *   POST /sales/:id/void      Admin    pays the net cash back out of a
  *   POST /sales/:id/refund    Admin    shift's drawer (`payoutShiftId`)
  *
@@ -66,6 +68,7 @@ export class SalesController {
         return asJson(await this.service.getDetails(user, dto));
     }
 
+    @RequireOwnRole(Role.Seller)
     @Post()
     async sell(
         @CurrentUser() user: AuthUser,

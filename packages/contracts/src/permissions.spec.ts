@@ -3,8 +3,40 @@ import { PERMISSIONS, appPermissionsOf, permissionsOf } from './permissions.js';
 import { ASSIGNABLE_ROLES, Role } from './roles.js';
 
 describe('permissionsOf', () => {
-    it('gives ADMIN every permission, in table order', () => {
-        expect(permissionsOf(Role.Admin)).toEqual([...PERMISSIONS]);
+    it('gives ADMIN every permission but the own-role ones, in table order', () => {
+        expect(permissionsOf(Role.Admin)).toEqual(
+            PERMISSIONS.filter((p) => !p.ownRoleOnly),
+        );
+    });
+
+    it('does not let ADMIN alone sell or run a cash shift (#84)', () => {
+        const own = PERMISSIONS.filter((p) => p.ownRoleOnly).map(
+            (p) => p.label,
+        );
+        expect(own.sort()).toEqual(
+            ['Run own cash shift', 'Sell at the register'].sort(),
+        );
+        const admin = permissionsOf(Role.Admin).map((p) => p.label);
+        const seller = permissionsOf(Role.Seller).map((p) => p.label);
+        for (const label of own) {
+            expect(admin).not.toContain(label);
+            expect(seller).toContain(label);
+        }
+        // ADMIN still voids, refunds and force-closes on its own.
+        expect(admin).toEqual(
+            expect.arrayContaining([
+                'Void and refund sales',
+                'View and force-close shifts',
+                'View all sales',
+            ]),
+        );
+    });
+
+    it('names ADMIN in no own-role row, so ADMIN alone never passes one', () => {
+        for (const p of PERMISSIONS.filter((q) => q.ownRoleOnly)) {
+            expect(p.roles).not.toContain(Role.Admin);
+            expect(p.routes.length).toBeGreaterThan(0);
+        }
     });
 
     it('gives other roles only rows that name them', () => {

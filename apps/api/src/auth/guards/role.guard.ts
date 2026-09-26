@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { Role } from '../types';
-import { IS_PUBLIC_KEY, ROLES_KEY } from '../auth.decorator';
+import { ADMIN_BYPASS_KEY, IS_PUBLIC_KEY, ROLES_KEY } from '../auth.decorator';
 
 interface RequestWithUser {
     user?: {
@@ -37,9 +37,16 @@ export class RoleGuard implements CanActivate {
         // signed-in user. "Anyone signed in" is @Roles(...ASSIGNABLE_ROLES).
         if (requiredRoles.length === 0) return false;
 
-        return (
-            user.roles.includes(Role.Admin) ||
-            requiredRoles.some((role: Role) => user.roles.includes(role))
-        );
+        if (requiredRoles.some((role: Role) => user.roles.includes(role)))
+            return true;
+
+        // ADMIN holds every role, except on a @RequireOwnRole route
+        // (issue #84): there only the listed roles themselves count.
+        const adminBypass =
+            this.reflector.getAllAndOverride<boolean | undefined>(
+                ADMIN_BYPASS_KEY,
+                targets,
+            ) !== false;
+        return adminBypass && user.roles.includes(Role.Admin);
     }
 }

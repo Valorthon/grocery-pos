@@ -4,7 +4,8 @@ import { RoleGuard } from './role.guard';
 import { Role } from '../types';
 import { SalesController } from '../../sales/sales.controller';
 import { AuthController } from '../auth.controller';
-import { Public, Roles } from '../auth.decorator';
+import { Public, RequireOwnRole, Roles } from '../auth.decorator';
+import { ShiftController } from '../../shift/shift.controller';
 
 type Handler = keyof SalesController;
 
@@ -41,6 +42,23 @@ describe('RoleGuard on the sales routes', () => {
     it('still lets a seller ring up a sale', () => {
         expect(guard.canActivate(contextFor('sell', [Role.Seller]))).toBe(true);
     });
+
+    // Issue #84: an admin account also needs SELLER to sell.
+    it('refuses an ADMIN-only account at the register, not an admin who sells', () => {
+        expect(guard.canActivate(contextFor('sell', [Role.Admin]))).toBe(false);
+        expect(
+            guard.canActivate(contextFor('sell', [Role.Admin, Role.Seller])),
+        ).toBe(true);
+    });
+
+    it.each<Handler>(['getAll', 'getDetails'])(
+        'still lets an ADMIN-only account read sales through %s',
+        (handler) => {
+            expect(guard.canActivate(contextFor(handler, [Role.Admin]))).toBe(
+                true,
+            );
+        },
+    );
 });
 
 describe('RoleGuard on the public auth routes', () => {
@@ -239,5 +257,144 @@ describe('RoleGuard fails closed without roles (issue #61)', () => {
                 probe(ProbeController, handler, { roles: [Role.Restocker] }),
             ),
         ).toBe(false);
+    });
+});
+
+describe('RoleGuard on the shift routes (issue #84)', () => {
+    const guard = new RoleGuard(new Reflector());
+
+    function shiftContext(
+        handler: keyof ShiftController,
+        roles: Role[],
+    ): ExecutionContext {
+        return {
+            switchToHttp: () => ({ getRequest: () => ({ user: { roles } }) }),
+            getHandler: () => ShiftController.prototype[handler],
+            getClass: () => ShiftController,
+        } as unknown as ExecutionContext;
+    }
+
+    it.each<keyof ShiftController>([
+        'open',
+        'current',
+        'drawer',
+        'closeOwn',
+        'lastClosed',
+    ])('%s needs the SELLER role itself', (handler) => {
+        expect(guard.canActivate(shiftContext(handler, [Role.Admin]))).toBe(
+            false,
+        );
+        expect(guard.canActivate(shiftContext(handler, [Role.Seller]))).toBe(
+            true,
+        );
+        expect(
+            guard.canActivate(shiftContext(handler, [Role.Admin, Role.Seller])),
+        ).toBe(true);
+    });
+
+    it.each<keyof ShiftController>(['list', 'getById', 'forceClose'])(
+        '%s stays ADMIN-only, ADMIN alone enough',
+        (handler) => {
+            expect(guard.canActivate(shiftContext(handler, [Role.Admin]))).toBe(
+                true,
+            );
+            expect(
+                guard.canActivate(shiftContext(handler, [Role.Seller])),
+            ).toBe(false);
+        },
+    );
+});
+
+describe('RoleGuard with @RequireOwnRole (issue #84)', () => {
+    const guard = new RoleGuard(new Reflector());
+
+    @RequireOwnRole(Role.Seller)
+    @Controller('own')
+    class OwnController {
+        @Get('inherits')
+        inherits(): void {}
+
+        @Roles(Role.Admin)
+        @Get('admin')
+        adminOnly(): void {}
+
+        @Roles(Role.Seller)
+        @Get('bypass')
+        bypass(): void {}
+
+        @RequireOwnRole()
+        @Get('empty')
+        empty(): void {}
+    }
+
+    @Roles(Role.Seller)
+    @Controller('mixed')
+    class MixedController {
+        @RequireOwnRole(Role.Seller, Role.Restocker)
+        @Get('own')
+        own(): void {}
+
+        @Get('plain')
+        plain(): void {}
+    }
+
+    function probe(
+        controller: object,
+        handler: () => void,
+        roles: Role[],
+    ): ExecutionContext {
+        return {
+            switchToHttp: () => ({ getRequest: () => ({ user: { roles } }) }),
+            getHandler: () => handler,
+            getClass: () => controller,
+        } as unknown as ExecutionContext;
+    }
+
+    const can = (controller: object, handler: () => void, ...roles: Role[]) =>
+        guard.canActivate(probe(controller, handler, roles));
+
+    it('refuses ADMIN alone on a class-level @RequireOwnRole', () => {
+        const h = OwnController.prototype.inherits;
+        expect(can(OwnController, h, Role.Admin)).toBe(false);
+        expect(can(OwnController, h, Role.Admin, Role.UserManager)).toBe(false);
+        expect(can(OwnController, h, Role.Seller)).toBe(true);
+        expect(can(OwnController, h, Role.Admin, Role.Seller)).toBe(true);
+        expect(can(OwnController, h, Role.Restocker)).toBe(false);
+    });
+
+    it('lets a handler @Roles replace it, bypass and all', () => {
+        expect(
+            can(OwnController, OwnController.prototype.adminOnly, Role.Admin),
+        ).toBe(true);
+        expect(
+            can(OwnController, OwnController.prototype.adminOnly, Role.Seller),
+        ).toBe(false);
+        expect(
+            can(OwnController, OwnController.prototype.bypass, Role.Admin),
+        ).toBe(true);
+    });
+
+    it('lets a handler @RequireOwnRole replace a class @Roles', () => {
+        const own = MixedController.prototype.own;
+        expect(can(MixedController, own, Role.Admin)).toBe(false);
+        expect(can(MixedController, own, Role.Restocker)).toBe(true);
+        expect(can(MixedController, own, Role.Seller)).toBe(true);
+        expect(
+            can(MixedController, MixedController.prototype.plain, Role.Admin),
+        ).toBe(true);
+    });
+
+    it('fails closed on an empty @RequireOwnRole(), ADMIN included', () => {
+        const h = OwnController.prototype.empty;
+        const everyRole = [
+            Role.Seller,
+            Role.Adjuster,
+            Role.Restocker,
+            Role.UserManager,
+            Role.Admin,
+        ];
+        for (const roles of [[Role.Admin], [Role.Seller], everyRole]) {
+            expect(can(OwnController, h, ...roles)).toBe(false);
+        }
     });
 });

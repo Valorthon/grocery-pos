@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { Roles } from '../auth/auth.decorator';
+import { RequireOwnRole, Roles } from '../auth/auth.decorator';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { ShiftService } from './shift.service';
@@ -21,9 +21,11 @@ import {
 
 /**
  * Cash shifts (issue #2, product owner 2026-09-25). Handler @Roles replaces
- * the class's; Admin passes every check (and so needs a shift of its own
- * to sell, like any cashier).
+ * the class's. The cashier routes are @RequireOwnRole(Seller): ADMIN alone
+ * does not pass them, so an admin account also needs SELLER to run a
+ * shift and sell (issue #84). The Admin routes are plain @Roles(Admin).
  *
+ *   (Seller: the SELLER role itself; ADMIN alone is 403)
  *   POST /shifts                  Seller  open own shift (counted float)
  *   GET  /shifts/current          Seller  own open shift, blind: no
  *                                         expected cash, sales or variance
@@ -38,7 +40,7 @@ import {
  * it up by the caller, and every route taking an id is Admin-only.
  * shift.access.e2e.spec.ts pins this.
  */
-@Roles(Role.Seller)
+@RequireOwnRole(Role.Seller)
 @Controller('shifts')
 export class ShiftController {
     constructor(private service: ShiftService) {}

@@ -37,6 +37,13 @@
                                 >{{ perm }}</Badge
                             >
                         </div>
+                        <p
+                            v-if="role.note"
+                            class="mt-3 text-xs text-slate-500"
+                            :data-testid="`note-${role.key}`"
+                        >
+                            {{ role.note }}
+                        </p>
                     </div>
                 </div>
             </div>
@@ -72,12 +79,14 @@ type AssignableRole = Exclude<Role, Role.Unauthenticated>;
 
 const LOOK: Record<
     AssignableRole,
-    { label: string; icon: Component; avatarClass: string }
+    { label: string; icon: Component; avatarClass: string; note?: string }
 > = {
     [Role.Admin]: {
         label: 'Admin',
         icon: Crown,
         avatarClass: 'bg-primary-50 text-primary-600',
+        // Selling and cash shifts are `ownRoleOnly` in PERMISSIONS (#84).
+        note: 'To sell, an admin also needs the Seller role.',
     },
     [Role.Seller]: {
         label: 'Seller',
