@@ -223,6 +223,13 @@ describe('POST /sales idempotency under concurrency', () => {
         expect(shift?.saleCount).toBe(1);
 
         // A retry afterwards replays the stored receipt.
+        //
+        // Which path each loser above took (the committed-sale replay after
+        // its own attempt failed, or 409 SALE_004 while the winner was not
+        // visible yet) depends on timing, so the burst accepts both and
+        // asserting either would flake. The committed-replay branch is
+        // pinned by sales.service.spec.ts; this suite pins the invariant:
+        // one sale, one decrement, the same receipt for everyone.
         const replay = await read(
             await db.call(seller, 'POST', '/sales', body),
         );
@@ -306,45 +313,54 @@ describe('void/refund under concurrency', () => {
         ]);
     });
 
-    it('rolls the whole reversal back when returning the stock fails mid-transaction', async () => {
-        const kept = await seedProduct(db, PRICE, 10);
-        const gone = await seedProduct(db, PRICE, 10);
+    it('rolls the whole reversal back when returning the stock fails after writing part of it', async () => {
+        const first = await seedProduct(db, PRICE, 10);
+        const broken = await seedProduct(db, PRICE, 10);
         const sale = await read(
             await db.call(seller, 'POST', '/sales', {
-                ...cashSale(kept, 1, 3 * PRICE),
+                ...cashSale(first, 1, 3 * PRICE),
                 sellDetails: [
-                    { product: kept, quantity: 1 },
-                    { product: gone, quantity: 2 },
+                    { product: first, quantity: 1 },
+                    { product: broken, quantity: 2 },
                 ],
             }),
         );
         expect(sale.status).toBe(201);
         const saleId = sale.body._id as string;
+        expect(await stockOf(db, first)).toBe(9);
 
         // The stock return is the last step of the reversal, after the
         // sale was marked voided and the payout pushed onto the shift.
-        // With one inventory row missing it throws there.
-        await db
-            .model('Inventory')
-            .deleteOne({ product: new Types.ObjectId(gone) });
+        // Its ordered bulkWrite gives `first` its unit back, then fails on
+        // `broken`, whose stock (written past the schema) is not a number:
+        // `$inc` refuses it. So by the time it throws, the transaction has
+        // written to the sale, the shift and `first`'s stock.
+        await db.connection
+            .db!.collection('inventories')
+            .updateOne(
+                { product: new Types.ObjectId(broken) },
+                { $set: { stock: 'corrupt' } },
+            );
 
         const res = await read(
             await db.call(admin, 'POST', `/sales/${saleId}/void`, {
                 reason: 'mis-ring',
             }),
         );
-        expect(res.status).toBe(404);
-        expect(res.body.error).toBe(ErrorCode.PRODUCT_NOT_FOUND);
+        // An unexpected driver error: a generic 500, nothing leaked.
+        expect(res.status).toBe(500);
+        expect(res.body.error).toBe(ErrorCode.INTERNAL_ERROR);
 
-        // Nothing of it was written: still a completed sale with no
-        // reversal, no payout on the drawer, the other stock untouched.
+        // All of it was rolled back: still a completed sale with no
+        // reversal, no payout on the drawer, and `first`'s returned unit
+        // is gone again.
         const stored = await db
             .model<{ status: string; reversal?: unknown }>('Sales')
             .findById(saleId)
             .lean();
         expect(stored?.status).toBe('COMPLETED');
         expect(stored?.reversal).toBeUndefined();
-        expect(await stockOf(db, kept)).toBe(9);
+        expect(await stockOf(db, first)).toBe(9);
         const shift = await db
             .model<{ movements: { type: DrawerMovementType }[] }>('Shift')
             .findOne({ cashier: new Types.ObjectId(seller.userId) })

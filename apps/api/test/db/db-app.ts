@@ -147,12 +147,14 @@ export async function bootDbApp(): Promise<DbApp> {
             return app.get<Model<T>>(getModelToken(name));
         },
         async close() {
+            // App first, database second: dropped while the app was still
+            // up, a late write (e.g. Mongoose finishing a background index
+            // build) could recreate a collection and leave the database
+            // behind. `withRawDb` only ever opens this file's database.
             try {
-                if (connection.db?.databaseName === name) {
-                    await connection.db.dropDatabase();
-                }
-            } finally {
                 await app.close();
+            } finally {
+                await withRawDb((raw) => raw.dropDatabase());
             }
         },
     };
