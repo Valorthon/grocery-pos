@@ -5,6 +5,10 @@ set -e
 mongod --replSet rs0 --bind_ip_all &
 MONGO_PID=$!
 
+# Forward shutdown signals to mongod for a graceful exit. Installed before
+# the init loop, so a stop during startup is forwarded too.
+trap 'kill -TERM $MONGO_PID; wait $MONGO_PID; exit' SIGTERM SIGINT
+
 # Wait for mongod to be ready (max 60s)
 for i in {1..60}; do
     if ! kill -0 "$MONGO_PID" 2>/dev/null; then
@@ -39,6 +43,4 @@ else
     echo "Replica set already initialized."
 fi
 
-# Trap shutdown signals and pass them to mongod for a graceful exit
-trap 'kill -TERM $MONGO_PID; wait $MONGO_PID' SIGTERM SIGINT
 wait "$MONGO_PID"

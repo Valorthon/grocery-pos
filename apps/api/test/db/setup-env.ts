@@ -20,7 +20,7 @@ const dbName =
 
 Object.assign(process.env, {
     DB_SUITE_DB_NAME: dbName,
-    NODE_ENV: 'test',
+    APP_ENV: 'test',
     FRONTEND_URL: 'http://localhost:5173',
     DATABASE_URL: uriWithDb(uri, dbName),
     DOMAIN: '',

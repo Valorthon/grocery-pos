@@ -30,7 +30,9 @@ RUN pnpm --filter grocery-pos-api build
 FROM base AS runtime
 WORKDIR /app
 
-ENV NODE_ENV=prod
+# Node's own convention, which Express and libraries key off. The app's
+# deployment stage is APP_ENV (dev|stage|prod), set per Railway service.
+ENV NODE_ENV=production
 ENV HUSKY=0
 
 COPY --from=build /app/package.json ./package.json
@@ -46,5 +48,14 @@ COPY --from=build /app/packages/contracts/dist ./packages/contracts/dist
 RUN printf '#!/bin/sh\nexit 0\n' > /usr/local/bin/husky && chmod +x /usr/local/bin/husky
 RUN pnpm install --prod --frozen-lockfile
 
+# Files stay root-owned and read-only to the app; it writes nothing to disk.
+USER node
+
 EXPOSE 3000
+
+# Local and docker compose use only: Railway ignores HEALTHCHECK and probes
+# railway.json's healthcheckPath (/v1/health/live) instead.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/v1/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+
 CMD ["node", "apps/api/dist/main.js"]

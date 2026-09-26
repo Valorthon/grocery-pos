@@ -1,5 +1,10 @@
 import * as zod from 'zod';
 
+// No `new Function` probe: zod's JIT check trips the nginx CSP (script-src
+// 'self', no 'unsafe-eval') on every load, even though it catches the error
+// (#29). The env schema is parsed once, so the JIT gains nothing here.
+zod.config({ jitless: true });
+
 export const envSchema = zod
     .object({
         VITE_NODE_ENV: zod.enum(['dev', 'prod', 'stage', 'test']),

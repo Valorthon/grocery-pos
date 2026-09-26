@@ -23,7 +23,8 @@ The build emits CommonJS and ES modules; relative imports in `src` end in
 
 ## Setup
 
-Requires Node `>=22.12` and pnpm 10.
+Requires Node `^20.19.0 || >=22.12.0` (the `engines` range; CI and the
+Docker images use Node 22) and pnpm 10.
 
 ```bash
 pnpm install
@@ -35,7 +36,7 @@ cp apps/client/.env.example apps/client/.env
 Inspect both `.env` files for values you need to set.
 
 `JWT_SECRET` and `COOKIE_SECRET` must be at least 32 characters. The
-placeholders in `.env.example` work in dev (`NODE_ENV=dev`) but are rejected at
+placeholders in `.env.example` work in dev (`APP_ENV=dev`) but are rejected at
 startup in `prod`/`stage`, as is using the same value for both. Generate a
 distinct value for each deployed secret with:
 
@@ -47,8 +48,7 @@ openssl rand -base64 48
 
 The login page's photo is served from
 `apps/client/public/images/login-hero.jpg` and is not in the repo (no binaries,
-and no third-party hosts at runtime). Fetch it once per checkout, and on every
-deploy build:
+and no third-party hosts at runtime). Fetch it once per checkout:
 
 ```bash
 curl -L --create-dirs -o apps/client/public/images/login-hero.jpg "https://images.unsplash.com/photo-1542838132-92c53300491e?w=1600&q=70&fm=jpg"
@@ -57,7 +57,8 @@ curl -L --create-dirs -o apps/client/public/images/login-hero.jpg "https://image
 The photo is from Unsplash, under the
 [Unsplash License](https://unsplash.com/license) (free to use, no attribution
 required). Without the file the page shows its dark teal gradient instead, and
-the build still passes.
+the build still passes. The client Docker build fetches it itself, best
+effort ([docs/DEPLOY.md](docs/DEPLOY.md#login-photo)).
 
 ## Database
 
@@ -65,6 +66,9 @@ the build still passes.
 docker compose up -d      # MongoDB 7 as a single-node replica set (needed for transactions)
 pnpm seed                 # sample users, products, inventory, restocks, adjustments
 ```
+
+Run both from the repo root, where `docker-compose.yml` lives. It is for
+development only: MongoDB runs without authentication, bound to `127.0.0.1`.
 
 ## Run
 
@@ -85,12 +89,20 @@ inactive copy of each (`ADMIN1`, `SELLER1`, ...). Development only.
 
 `pnpm seed` drops every collection of the database in `DATABASE_URL` and
 prints which host and database that is first. It runs freely only when
-`NODE_ENV` is `dev` or `test`; anything else (including `prod`, `stage` or
+`APP_ENV` is `dev` or `test`; anything else (including `prod`, `stage` or
 unset) needs `--force-destroy-data` (`pnpm seed --force-destroy-data`).
+
+## Deployment
+
+[docs/DEPLOY.md](docs/DEPLOY.md) covers Railway: the custom domain both
+services need (Railway's own domains cannot share the session cookies), every
+variable of each service, which client variables are build arguments, `APP_ENV`
+versus `NODE_ENV`, the security headers, healthchecks and running the images
+locally.
 
 ## Deploy notes (operator)
 
-Every client build: fetch the login photo first (see
+The client Docker build fetches the login photo itself, best effort (see
 [Login hero photo](#login-hero-photo)).
 
 One-off steps to run by hand at a specific deploy. Each runs from a checkout
@@ -262,7 +274,8 @@ each other.
   `apps/client/nginx.conf.template`, `apps/client/docker-entrypoint.sh`,
   either `railway.json`, any `package.json`, `pnpm-workspace.yaml` or
   `pnpm-lock.yaml`), a separate job builds both
-  images, without pushing them.
+  images, without pushing them, and smoke-tests the client image (non-root,
+  security headers, `/health`).
 
 Railway rebuilds a service only when its `build.watchPatterns` match: the
 app's own folder, `packages/contracts`, the lockfile, the root

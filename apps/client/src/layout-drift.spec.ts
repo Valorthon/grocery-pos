@@ -92,4 +92,20 @@ describe('layout drift (#26)', () => {
             expect(indexHtml).not.toContain(host);
         }
     });
+
+    it('has no static style="" attribute or inline script/style (CSP, #29)', () => {
+        // nginx sends style-src 'self' and script-src 'self' with no
+        // 'unsafe-inline'. A static style="" works until Vue happens to
+        // stringify its block into innerHTML, then the browser drops it;
+        // use a class or a <style> block (:style bindings are fine).
+        const vue = Object.fromEntries(
+            Object.entries(sources).filter(([file]) => file.endsWith('.vue')),
+        );
+        const staticStyle = Object.entries(vue)
+            .filter(([, text]) => /\sstyle="/.test(text))
+            .map(([file]) => file);
+        expect(staticStyle).toEqual([]);
+        expect(indexHtml).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
+        expect(indexHtml).not.toMatch(/<style\b|\sstyle="/);
+    });
 });

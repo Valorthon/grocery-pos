@@ -2,27 +2,31 @@
 .git
 .gitignore
 
-# environment files
-.env
-.env.*
-!.env.example
+# Patterns are root-anchored unless they start with **/ (so a bare `dist`
+# would miss apps/*/dist). Railway builds from a git checkout, so this
+# matters for local `docker build`.
+
+# environment files (the .env.example files are harmless and kept)
+**/.env
+**/.env.*
+!**/.env.example
 
 # dependencies
-node_modules
-.pnpm-store
+**/node_modules
+**/.pnpm-store
 
 # build outputs
-dist
-build
-*.tsbuildinfo
+**/dist
+**/build
+**/*.tsbuildinfo
 
 # logs
-*.log
+**/*.log
 npm-debug.log*
 pnpm-debug.log*
 
 # testing
-coverage
+**/coverage
 
 # editors
 .vscode

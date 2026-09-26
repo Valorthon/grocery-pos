@@ -370,8 +370,9 @@ requestId}`. A 5xx never carries details or internals.
   classes and CSS `font-size`.
 - No third-party runtime assets: Poppins (400–900) comes from
   `@fontsource/poppins`, and the login photo is
-  `public/images/login-hero.jpg`, fetched at deploy (README) over a
-  gradient, gitignored, never committed.
+  `public/images/login-hero.jpg`, fetched by the client Docker build (best
+  effort, `LOGIN_HERO_URL`) or the README curl, over a gradient, gitignored,
+  never committed.
 
 **CI** (#28)
 
@@ -389,6 +390,8 @@ requestId}`. A 5xx never carries details or internals.
   `.dockerignore`, `nginx.conf.template`, `docker-entrypoint.sh`, a
   `railway.json`, a `package.json`, `pnpm-workspace.yaml` or
   `pnpm-lock.yaml` changes.
+  The docker job also smoke-tests the client image (non-root, headers,
+  `/health`).
 - `.husky/pre-push` runs the contracts build, lint and typecheck.
 - The client lints type-aware; the `no-unsafe-*` family and
   `no-redundant-type-constituents` are on since #27 (see Wire contracts).
@@ -396,6 +399,36 @@ requestId}`. A 5xx never carries details or internals.
   whole workspace and denies any GPL/AGPL (not LGPL), failing closed on an
   unparseable expression (`scripts/license-policy.mjs`, with a `node --test`
   spec).
+
+**Deploy** (#29, `docs/DEPLOY.md`)
+
+- Prod and stage need a custom domain with a shared parent (client
+  `pos.example.com` + API `api.example.com`, `DOMAIN=example.com`, the same as `VITE_DOMAIN`).
+  `*.up.railway.app` is a public suffix, so cookies can't be shared there. No
+  cookie redesign.
+- `APP_ENV` (dev|test|stage|prod) is the API's stage; prod and stage are
+  "deployed" (`isDeployedEnv` in `typed-config/app-env.ts`): strict secrets,
+  `DOMAIN` required, trust proxy, and `Secure` cookies on stage too. The API
+  image sets `NODE_ENV=production`; no app rule keys off `NODE_ENV`. For
+  one release an unset `APP_ENV` is taken from a legacy `NODE_ENV`
+  (dev|test|stage|prod) with a warning; a legacy `NODE_ENV` that disagrees
+  with `APP_ENV` fails startup. The client keeps `VITE_NODE_ENV`.
+- nginx sends a strict CSP (`script-src 'self'`, `style-src 'self'` with no
+  `'unsafe-inline'`, `img-src 'self' data:`, `connect-src 'self'` + the API
+  origin, `frame-ancestors 'none'`, …), nosniff, `X-Frame-Options`,
+  `Referrer-Policy`, HSTS one year without `includeSubDomains`. The API
+  origin defaults to the built `VITE_API_URL`'s (runtime `API_ORIGIN`
+  overrides). All `add_header` lines stay at server level; per-path values go
+  through a `map`. No static `style="…"` in templates (`layout-drift.spec.ts`)
+  and zod runs `jitless`, so the app raises no CSP violation.
+- Hashed `/assets/` are cached immutable for a year, everything else
+  `no-cache`; `/health` is 503 without `index.html`.
+- Both images run non-root (API as `node`, nginx as `nginx` with pid/temp in
+  `/tmp`, listening on `$PORT`) and have a `HEALTHCHECK` for local use;
+  Railway uses `railway.json`'s `healthcheckPath`. `VITE_*` are build args,
+  inlined; a missing `VITE_API_URL`/`VITE_DOMAIN` fails the build clearly.
+- `.dockerignore` patterns are `**/`-prefixed. docker compose is dev-only
+  MongoDB without auth.
 
 **Scope**
 
@@ -407,6 +440,7 @@ requestId}`. A 5xx never carries details or internals.
 
 ## Status
 
-Phases 1–6 of #31 are complete. Phase 6 (#25, #22, #23, #24, #26) made the
-register usable: shortcuts and dialogs, checkout UX, on-screen receipt, shift
-modals and touch layout. Next is Phase 7, foundations, starting with #28.
+Phases 1–7 of #31 are complete. Phase 7 (#28, #30, #27, #29) laid
+foundations: CI that gates, coverage and a real-DB suite, wire contracts, and
+deploy hardening. Next is the feature roadmap in #31 (#34–#48), in an order
+the product owner picks.

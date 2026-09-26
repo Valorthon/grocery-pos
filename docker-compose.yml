@@ -1,3 +1,6 @@
+# Development only: MongoDB 7 as a single-node replica set (transactions
+# need one), bound to 127.0.0.1 and WITHOUT authentication. Never use it for a
+# deployed database; see docs/DEPLOY.md.
 services:
     mongodb:
         image: mongo:7.0

@@ -13,41 +13,19 @@
                 backgroundImage: `url('${LOGIN_HERO_URL}'), linear-gradient(160deg, #11606f 0%, #0a303c 100%)`,
             }"
         >
-            <div
-                class="absolute inset-0"
-                style="
-                    background: linear-gradient(
-                        160deg,
-                        rgba(10, 48, 60, 0.55) 0%,
-                        rgba(10, 48, 60, 0.3) 100%
-                    );
-                "
-            />
+            <div class="absolute inset-0 hero-overlay" />
             <div class="relative z-10 p-10 pb-14 text-white text-start">
-                <div
-                    class="font-bold mb-3"
-                    style="
-                        line-height: 1.5;
-                        font-size: clamp(1.8rem, 3.5vw, 2.8rem);
-                        text-shadow: 2px 4px 12px rgba(0, 0, 0, 0.5);
-                    "
-                >
+                <div class="font-bold mb-3 hero-title">
                     Smart Grocery<br />Management
                 </div>
-                <p
-                    class="font-medium"
-                    style="text-shadow: 1px 2px 8px rgba(0, 0, 0, 0.4)"
-                >
+                <p class="font-medium hero-tagline">
                     Efficient POS solutions for your store.
                 </p>
             </div>
         </div>
 
         <!-- Right: form panel -->
-        <div
-            class="flex items-center justify-center p-6 relative"
-            style="background-color: #f3f7ff"
-        >
+        <div class="flex items-center justify-center p-6 relative bg-[#f3f7ff]">
             <router-link to="/" class="absolute top-6 right-6">
                 <img
                     :src="logo"
@@ -195,3 +173,28 @@ const handleLogin = async () => {
     }
 };
 </script>
+
+<!--
+    Static styles live here, not in inline style attributes: the nginx CSP has no
+    style-src 'unsafe-inline' (#29). :style bindings are fine (Vue sets them
+    through the CSSOM).
+-->
+<style scoped>
+.hero-overlay {
+    background: linear-gradient(
+        160deg,
+        rgba(10, 48, 60, 0.55) 0%,
+        rgba(10, 48, 60, 0.3) 100%
+    );
+}
+
+.hero-title {
+    line-height: 1.5;
+    font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+    text-shadow: 2px 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.hero-tagline {
+    text-shadow: 1px 2px 8px rgba(0, 0, 0, 0.4);
+}
+</style>
