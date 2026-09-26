@@ -331,6 +331,83 @@ describe('Users (e2e)', () => {
         expect(res.status).toBe(200);
     });
 
+    describe('self-edits (issue #61)', () => {
+        it('USER_MANAGER renaming themselves -> 200', async () => {
+            const res = await patchUsers(manager, [
+                {
+                    user: id(manager),
+                    update: {
+                        name: 'boss',
+                        roles: [Role.UserManager],
+                        isActive: true,
+                    },
+                },
+            ]);
+
+            expect(res.status).toBe(200);
+            expect(model.byId(manager._id)).toMatchObject({
+                name: 'boss',
+                isActive: true,
+            });
+        });
+
+        it('USER_MANAGER deactivating themselves -> 403, nothing applied', async () => {
+            const res = await patchUsers(manager, [
+                {
+                    user: id(manager),
+                    update: { name: 'gone', isActive: false },
+                },
+            ]);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toMatchObject({
+                statusCode: 403,
+                error: ErrorCode.USER_SELF_DEACTIVATE,
+            });
+            expect(model.byId(manager._id)).toMatchObject({
+                name: 'manager',
+                isActive: true,
+            });
+        });
+
+        it('a bulk update that also deactivates the manager -> 403, nothing applied', async () => {
+            const res = await patchUsers(manager, [
+                { user: id(cashier), update: { isActive: false } },
+                { user: id(manager), update: { isActive: false } },
+            ]);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toMatchObject({
+                error: ErrorCode.USER_SELF_DEACTIVATE,
+            });
+            expect(model.byId(cashier._id)?.isActive).toBe(true);
+            expect(model.byId(manager._id)?.isActive).toBe(true);
+        });
+
+        it('the only ADMIN deactivating themselves -> 403 last admin', async () => {
+            const res = await patchUsers(admin, [
+                { user: id(admin), update: { isActive: false } },
+            ]);
+
+            expect(res.status).toBe(403);
+            expect(res.body).toMatchObject({
+                error: ErrorCode.USER_LAST_ADMIN,
+            });
+            expect(model.byId(admin._id)?.isActive).toBe(true);
+        });
+
+        it('an ADMIN deactivating themselves with another admin left -> 200', async () => {
+            model.seed({ name: 'admin2', roles: [Role.Admin] });
+
+            const res = await patchUsers(admin, [
+                { user: id(admin), update: { isActive: false } },
+            ]);
+
+            expect(res.status).toBe(200);
+            expect(model.byId(admin._id)?.isActive).toBe(false);
+        });
+    });
+
     describe('last active ADMIN', () => {
         let admin2: FakeUserRow;
 

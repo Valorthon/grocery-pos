@@ -11,7 +11,8 @@ import { ErrorCode, ForbiddenError } from '../common/errors';
  * An ADMIN may grant any role and modify anyone. A USER_MANAGER without
  * ADMIN may grant only MANAGEABLE_ROLES (SELLER, ADJUSTER, RESTOCKER) and
  * modify only users whose roles all fall in that set, so ADMIN and
- * USER_MANAGER holders (other managers included) are ADMIN-only.
+ * USER_MANAGER holders (other managers included) are ADMIN-only. A
+ * USER_MANAGER may rename themselves but never deactivate themselves (#61).
  */
 export interface PolicyUser {
     id: string;
@@ -82,6 +83,17 @@ export function assertCanUpdate(
             );
         }
         assertCanGrant(actor.roles, change.roles);
+    }
+
+    // Rule 6 (issue #61): a USER_MANAGER may rename themselves but not
+    // deactivate themselves. An ADMIN deactivating themselves is left to
+    // the last-active-admin check in the service (USER_LAST_ADMIN).
+    // Resending `isActive: true` on your own active account is not a change.
+    if (self && change.isActive === false && !isAdmin(actor.roles)) {
+        throw new ForbiddenError(
+            ErrorCode.USER_SELF_DEACTIVATE,
+            'You cannot deactivate your own account',
+        );
     }
 
     // Rule 4: resetting someone else's password is ADMIN-only; your own

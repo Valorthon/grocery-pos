@@ -32,7 +32,10 @@ export class RoleGuard implements CanActivate {
         const requiredRoles: Role[] =
             this.reflector.getAllAndOverride(ROLES_KEY, targets) ?? [];
 
-        if (requiredRoles.length === 0) return true;
+        // Fail closed (issue #61): a non-public route that states no roles
+        // (a forgotten or empty @Roles()) is refused, not opened to every
+        // signed-in user. "Anyone signed in" is @Roles(...ASSIGNABLE_ROLES).
+        if (requiredRoles.length === 0) return false;
 
         return (
             user.roles.includes(Role.Admin) ||

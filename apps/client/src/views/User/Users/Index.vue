@@ -184,7 +184,20 @@
                     />
                 </div>
             </div>
-            <BaseCheckbox v-model="editForm.isActive" label="Active" />
+            <div>
+                <BaseCheckbox
+                    v-model="editForm.isActive"
+                    label="Active"
+                    :disabled="!canToggleActive"
+                />
+                <p
+                    v-if="!canToggleActive"
+                    class="mt-1 text-xs text-slate-500"
+                    data-testid="self-active-hint"
+                >
+                    You can't deactivate your own account.
+                </p>
+            </div>
         </div>
         <template #footer>
             <BaseButton
@@ -265,10 +278,7 @@ const grantableRoles = computed(() =>
 );
 
 function canEdit(item: UserView): boolean {
-    return (
-        item.name === authStore.user?.username ||
-        canManageUser(myRoles.value, item.roles)
-    );
+    return isSelf(item) || canManageUser(myRoles.value, item.roles);
 }
 
 const headers = [
@@ -306,8 +316,20 @@ const editForm = ref({
     isActive: true,
 });
 
-const isEditingSelf = computed(
-    () => editForm.value.name === authStore.user?.username,
+// Your own row: by id when the session knows it (a rename would leave the
+// stored username stale), else by username (a user cached before the
+// id was sent).
+function isSelf(row: { _id: string; name: string }): boolean {
+    const me = authStore.user;
+    if (!me) return false;
+    return me.userId ? row._id === me.userId : row.name === me.username;
+}
+const isEditingSelf = computed(() => isSelf(editForm.value));
+// A user manager may rename themselves but not deactivate themselves
+// (issue #61). An admin may, unless they are the last active one, which
+// the server checks.
+const canToggleActive = computed(
+    () => authStore.isAdmin || !isEditingSelf.value,
 );
 const canResetPassword = computed(
     () => authStore.isAdmin && !isEditingSelf.value,

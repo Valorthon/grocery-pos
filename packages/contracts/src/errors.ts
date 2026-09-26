@@ -84,6 +84,11 @@ export enum ErrorCode {
     USER_LAST_ADMIN = 'USER_005',
     /** `currentPassword` did not match on a self-service password change. */
     USER_WRONG_PASSWORD = 'USER_006',
+    /**
+     * A USER_MANAGER (without ADMIN) may rename themselves but not set their
+     * own `isActive` to false (issue #61).
+     */
+    USER_SELF_DEACTIVATE = 'USER_007',
 
     /**
      * Too many attempts on a rate-limited route (login, refresh, password

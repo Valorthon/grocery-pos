@@ -342,3 +342,129 @@ describe('users search and create errors (issue #20 review)', () => {
         expect(api.post).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('own account (issue #61)', () => {
+    const ROWS = {
+        data: [
+            {
+                _id: 'm1',
+                name: 'boss',
+                roles: [Role.UserManager],
+                isActive: true,
+            },
+            { _id: 'u1', name: 'ana', roles: [Role.Seller], isActive: true },
+        ],
+        totalItems: 2,
+    };
+
+    async function editRow(name: string) {
+        const row = [...document.querySelectorAll('tbody tr')].find((tr) =>
+            tr.textContent?.includes(name),
+        )!;
+        row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
+        await flush();
+    }
+
+    const activeBox = () =>
+        [...document.querySelectorAll('label')]
+            .find((l) => l.textContent?.trim() === 'Active')!
+            .querySelector('input')!;
+    const hint = () =>
+        document.querySelector('[data-testid="self-active-hint"]');
+
+    it("disables a manager's own Active toggle", async () => {
+        useAuthStore().user = { username: 'boss', roles: [Role.UserManager] };
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockResolvedValueOnce({ data: {} });
+        await mount();
+
+        await editRow('boss');
+
+        expect(activeBox().disabled).toBe(true);
+        expect(activeBox().checked).toBe(true);
+        expect(hint()?.textContent).toContain(
+            "You can't deactivate your own account.",
+        );
+
+        await click('Save');
+        expect(api.patch).toHaveBeenCalledWith('/users', {
+            updates: [{ user: 'm1', update: { isActive: true } }],
+        });
+    });
+
+    it('finds the own row by id when the username is stale', async () => {
+        // Renamed since the profile was cached: the id still matches.
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'old-boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+
+        await editRow('boss');
+        expect(activeBox().disabled).toBe(true);
+        expect(hint()).not.toBeNull();
+    });
+
+    it('does not take a same-named row with another id for the own row', async () => {
+        // A cashier now holds the name the manager's cached profile has.
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({
+            data: {
+                data: [
+                    {
+                        _id: 'u2',
+                        name: 'boss',
+                        roles: [Role.Seller],
+                        isActive: true,
+                    },
+                ],
+                totalItems: 1,
+            },
+        });
+        await mount();
+
+        await editRow('boss');
+        expect(activeBox().disabled).toBe(false);
+        expect(hint()).toBeNull();
+    });
+
+    it("leaves a manager's toggle on a cashier's row enabled", async () => {
+        useAuthStore().user = { username: 'boss', roles: [Role.UserManager] };
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+
+        await editRow('ana');
+
+        expect(activeBox().disabled).toBe(false);
+        expect(hint()).toBeNull();
+    });
+
+    it('leaves an admin their own toggle (the server keeps one admin)', async () => {
+        useAuthStore().user = { username: 'root', roles: [Role.Admin] };
+        api.get.mockResolvedValue({
+            data: {
+                data: [
+                    {
+                        _id: 'a1',
+                        name: 'root',
+                        roles: [Role.Admin],
+                        isActive: true,
+                    },
+                ],
+                totalItems: 1,
+            },
+        });
+        await mount();
+
+        await editRow('root');
+
+        expect(activeBox().disabled).toBe(false);
+        expect(hint()).toBeNull();
+    });
+});
