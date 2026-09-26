@@ -298,6 +298,9 @@ requestId}`. A 5xx never carries details or internals.
   writes.
 - Error toasts stay until dismissed (`role=alert`); success/info close by
   themselves. The stack is capped at 5 and cleared when the session changes.
+- The one exception: `queueMessage(color, text, { sticky: true })` keeps a
+  success/info toast until dismissed, only for a notice that asks for a
+  later action (the change-password "Stay" notice, #88).
 - Save dialogs (including the Users dialogs) stay open until the save
   resolves.
 

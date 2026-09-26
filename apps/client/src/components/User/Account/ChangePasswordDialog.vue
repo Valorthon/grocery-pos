@@ -175,6 +175,8 @@ async function save() {
     model.value = false;
     const loggedOut = await authStore.requestLogout(PASSWORD_CHANGED);
     if (!loggedOut)
-        uiStore.queueMessage(Color.SUCCESS, PASSWORD_CHANGED_STAYED);
+        uiStore.queueMessage(Color.INFO, PASSWORD_CHANGED_STAYED, {
+            sticky: true,
+        });
 }
 </script>

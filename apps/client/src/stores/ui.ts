@@ -15,6 +15,21 @@ export interface ToastMessage {
     lines: string[];
     /** How many times the identical message was queued while shown. */
     count: number;
+    /**
+     * Stays until closed although it is not an error (`queueMessage`'s
+     * `sticky`): a notice asking for a later action (#88).
+     */
+    sticky?: boolean;
+}
+
+/** Options of `queueMessage`. */
+export interface QueueOptions {
+    /**
+     * Keep a success or info toast until the user closes it, as errors
+     * are. Only for a notice that asks for something later; the default
+     * (closing after TOAST_DURATION_MS) is right for everything else.
+     */
+    sticky?: boolean;
 }
 
 /** How long a success or info toast stays up. Errors stay until closed. */
@@ -96,7 +111,7 @@ export const useUIStore = defineStore('ui', () => {
     }
 
     function scheduleExpiry(toast: ToastMessage) {
-        if (toast.color === Color.ERROR) return;
+        if (toast.color === Color.ERROR || toast.sticky) return;
         const old = timers.get(toast.id);
         if (old !== undefined) clearTimeout(old);
         timers.set(
@@ -109,8 +124,12 @@ export const useUIStore = defineStore('ui', () => {
     function enforceCap(added: number) {
         while (toasts.value.length > MAX_TOASTS) {
             const others = toasts.value.filter((t) => t.id !== added);
+            // Timed ones first (they would close anyway), then sticky
+            // notices, and errors last.
             const victim =
-                others.find((t) => t.color !== Color.ERROR) ?? others[0];
+                others.find((t) => t.color !== Color.ERROR && !t.sticky) ??
+                others.find((t) => t.color !== Color.ERROR) ??
+                others[0];
             dismiss(victim.id);
         }
     }
@@ -118,14 +137,19 @@ export const useUIStore = defineStore('ui', () => {
     /**
      * Shows a toast. `text` may be a list (e.g. `apiErrorMessages`), shown
      * as one toast for the one failed action. Errors stay until the user
-     * closes them; success and info close after TOAST_DURATION_MS.
+     * closes them; success and info close after TOAST_DURATION_MS, unless
+     * `options.sticky` keeps them too.
      *
      * An identical message already on screen is not repeated. Queued
      * again within TOAST_DEDUPE_MS it is the same event and is dropped;
      * later, it is a genuine repeat: its count goes up (and a timed one
      * restarts its clock).
      */
-    function queueMessage(color: Color, text: string | string[]) {
+    function queueMessage(
+        color: Color,
+        text: string | string[],
+        options: QueueOptions = {},
+    ) {
         const lines = (Array.isArray(text) ? text : [text]).filter(
             (line) => line.trim() !== '',
         );
@@ -143,7 +167,13 @@ export const useUIStore = defineStore('ui', () => {
             return;
         }
 
-        const toast: ToastMessage = { id: ++nextId, color, lines, count: 1 };
+        const toast: ToastMessage = {
+            id: ++nextId,
+            color,
+            lines,
+            count: 1,
+            ...(options.sticky && { sticky: true }),
+        };
         toasts.value.push(toast);
         lastQueued.set(toast.id, now);
         scheduleExpiry(toast);

@@ -67,6 +67,35 @@ describe('ui store toasts', () => {
         expect(ui.toasts).toEqual([]);
     });
 
+    it('keeps a sticky info or success until it is dismissed (#88)', () => {
+        const ui = useUIStore();
+
+        ui.queueMessage(Color.INFO, 'Log out when you are done', {
+            sticky: true,
+        });
+        ui.queueMessage(Color.SUCCESS, 'Saved');
+        vi.advanceTimersByTime(TOAST_DURATION_MS * 10);
+
+        expect(texts(ui)).toEqual(['Log out when you are done']);
+        expect(ui.toasts[0].sticky).toBe(true);
+
+        ui.dismiss(ui.toasts[0].id);
+        expect(ui.toasts).toEqual([]);
+    });
+
+    it('keeps a sticky toast sticky when it repeats (#88)', () => {
+        const ui = useUIStore();
+
+        ui.queueMessage(Color.INFO, 'Later', { sticky: true });
+        vi.advanceTimersByTime(TOAST_DEDUPE_MS);
+        ui.queueMessage(Color.INFO, 'Later', { sticky: true });
+        vi.advanceTimersByTime(TOAST_DURATION_MS * 10);
+
+        expect(ui.toasts.map((t) => [t.lines, t.count])).toEqual([
+            [['Later'], 2],
+        ]);
+    });
+
     it('reads one event reported twice as one message, without a count', () => {
         const ui = useUIStore();
 
@@ -214,6 +243,35 @@ describe('ui store toasts', () => {
             'error 3',
             'error 4',
             'info 1',
+        ]);
+    });
+
+    it('drops a timed toast before a sticky one, and a sticky one before an error (#88)', () => {
+        const ui = useUIStore();
+
+        ui.queueMessage(Color.INFO, 'sticky', { sticky: true });
+        ui.queueMessage(Color.ERROR, 'error 1');
+        ui.queueMessage(Color.SUCCESS, 'ok 1');
+        ui.queueMessage(Color.ERROR, 'error 2');
+        ui.queueMessage(Color.ERROR, 'error 3');
+        ui.queueMessage(Color.ERROR, 'error 4');
+
+        expect(texts(ui)).toEqual([
+            'sticky',
+            'error 1',
+            'error 2',
+            'error 3',
+            'error 4',
+        ]);
+
+        ui.queueMessage(Color.ERROR, 'error 5');
+
+        expect(texts(ui)).toEqual([
+            'error 1',
+            'error 2',
+            'error 3',
+            'error 4',
+            'error 5',
         ]);
     });
 });
