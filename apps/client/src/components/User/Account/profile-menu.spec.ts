@@ -94,6 +94,53 @@ async function openChangePassword() {
     await flush();
 }
 
+/**
+ * From each account menu on the page: opens the dialog through the menu
+ * item, cancels it, and reports whether the focus came back to that
+ * menu's account button (the item itself is gone with the menu).
+ */
+async function focusAfterCancel(): Promise<boolean[]> {
+    const triggers = [
+        ...document.querySelectorAll<HTMLButtonElement>(
+            '[data-dropdown-trigger]',
+        ),
+    ];
+    const results: boolean[] = [];
+    for (const trigger of triggers) {
+        trigger.focus();
+        trigger.click();
+        await flush();
+        const menu = document.getElementById(
+            trigger.getAttribute('aria-controls') ?? '',
+        );
+        menu?.querySelector<HTMLButtonElement>(
+            '[data-testid="change-password"]',
+        )?.click();
+        await flush();
+        expect(dialogTitle()).toBe('Change password');
+
+        const cancel = [
+            ...document.querySelectorAll<HTMLButtonElement>(
+                '[role="dialog"] button',
+            ),
+        ].find((b) => b.textContent?.trim() === 'Cancel');
+        cancel!.click();
+        await flush();
+        // The dialog leaves after its transition (a frame in jsdom).
+        for (
+            let i = 0;
+            i < 20 && document.querySelector('[role="dialog"]');
+            i++
+        ) {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+
+        results.push(document.activeElement === trigger);
+    }
+    return results;
+}
+
 function dialogTitle(): string {
     return (
         document.body
@@ -144,6 +191,15 @@ describe('profile menu: Change password (#88)', () => {
 
             expect(dialogTitle()).toBe('Change password');
         });
+
+        it('gives the focus back to the account button on Cancel, from every menu', async () => {
+            await mountAt(UserLayout, ['Dashboard'], 'Dashboard');
+
+            const results = await focusAfterCancel();
+
+            expect(results.length).toBeGreaterThan(0);
+            expect(results.every(Boolean)).toBe(true);
+        });
     });
 
     describe('seller layout', () => {
@@ -183,5 +239,17 @@ describe('profile menu: Change password (#88)', () => {
 
             expect(dialogTitle()).toBe('Change password');
         });
+
+        it.each(['SellerDashboard', 'Sales'])(
+            'gives the focus back to the account button on Cancel, on %s',
+            async (at) => {
+                await mountAt(SellerLayout, ['SellerDashboard', 'Sales'], at);
+
+                const results = await focusAfterCancel();
+
+                expect(results.length).toBeGreaterThan(0);
+                expect(results.every(Boolean)).toBe(true);
+            },
+        );
     });
 });
