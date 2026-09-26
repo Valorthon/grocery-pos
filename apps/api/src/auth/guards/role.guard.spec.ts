@@ -101,3 +101,30 @@ describe('RoleGuard with the anonymous user of a public route', () => {
         expect(guard.canActivate(ctx)).toBe(false);
     });
 });
+
+describe('RoleGuard without a user on the request', () => {
+    const guard = new RoleGuard(new Reflector());
+
+    it('refuses a role-checked route instead of throwing', () => {
+        // JWTAuthGuard runs first and normally sets `user`; if it ever
+        // did not, the role check must fail closed, not crash into a 500
+        // or let the request through.
+        const ctx = {
+            switchToHttp: () => ({ getRequest: () => ({}) }),
+            getHandler: () => SalesController.prototype.sell,
+            getClass: () => SalesController,
+        } as unknown as ExecutionContext;
+
+        expect(guard.canActivate(ctx)).toBe(false);
+    });
+
+    it('still lets a public route through', () => {
+        const ctx = {
+            switchToHttp: () => ({ getRequest: () => ({}) }),
+            getHandler: () => AuthController.prototype.login,
+            getClass: () => AuthController,
+        } as unknown as ExecutionContext;
+
+        expect(guard.canActivate(ctx)).toBe(true);
+    });
+});

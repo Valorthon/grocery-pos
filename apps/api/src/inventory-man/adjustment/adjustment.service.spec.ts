@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
-import { ClientSession } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { AdjustmentService } from './adjustment.service';
 import { Adjustment } from './adjustment.schema';
 import { AdjustmentDetails } from './adjustment-details.schema';
@@ -232,5 +232,70 @@ describe('AdjustmentService.getAll date filter', () => {
         await service.getAll(dto);
 
         expect(dto).toEqual(snapshot);
+    });
+});
+
+describe('AdjustmentService.getDetails (issue #30)', () => {
+    const ADJUSTMENT = '507f1f77bcf86cd799439011';
+    let service: AdjustmentService;
+    let aggregate: jest.Mock;
+
+    beforeEach(async () => {
+        aggregate = jest.fn().mockResolvedValue([]);
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                AdjustmentService,
+                { provide: getConnectionToken(), useValue: {} },
+                { provide: getModelToken(Adjustment.name), useValue: {} },
+                {
+                    provide: getModelToken(AdjustmentDetails.name),
+                    useValue: { aggregate },
+                },
+                { provide: InventoryService, useValue: {} },
+                { provide: TypedConfigService, useValue: { get: () => '' } },
+            ],
+        }).compile();
+        service = moduleRef.get(AdjustmentService);
+    });
+
+    it('matches the adjustment by ObjectId and searches the joined product', async () => {
+        await service.getDetails({
+            adjustment: ADJUSTMENT,
+            page: 2,
+            limit: 10,
+            name: 'milk',
+        } as never);
+        const pipeline = aggregate.mock.calls[0][0] as [
+            { $match: { adjustment: unknown } },
+            unknown,
+            unknown,
+            { $match: Record<string, unknown> },
+            { $facet: { paginatedData: unknown[] } },
+        ];
+        // An ObjectId, not the string: a string never matches the stored id.
+        expect(pipeline[0].$match.adjustment).toBeInstanceOf(Types.ObjectId);
+        expect(String(pipeline[0].$match.adjustment)).toBe(ADJUSTMENT);
+        expect(pipeline[3].$match).toHaveProperty(['product.name']);
+        expect(pipeline[4].$facet.paginatedData).toContainEqual({ $skip: 10 });
+    });
+
+    it('answers an empty page with totalItems 0, and reads the facet otherwise', async () => {
+        await expect(
+            service.getDetails({
+                adjustment: ADJUSTMENT,
+                page: 1,
+                limit: 10,
+            } as never),
+        ).resolves.toEqual({ data: [], totalItems: 0 });
+        aggregate.mockResolvedValue([
+            { paginatedData: [{ _id: 'd' }], metadata: [{ total: 3 }] },
+        ]);
+        await expect(
+            service.getDetails({
+                adjustment: ADJUSTMENT,
+                page: 1,
+                limit: 10,
+            } as never),
+        ).resolves.toEqual({ data: [{ _id: 'd' }], totalItems: 3 });
     });
 });
