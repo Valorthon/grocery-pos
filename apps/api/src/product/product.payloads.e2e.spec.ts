@@ -54,8 +54,14 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
         model: { findOne },
     } as unknown as ProductService);
 
+    // The real barcode lookup over the same faked model (issue #87).
+    const realGetByBarcode = ProductService.prototype.getByBarcode.bind({
+        model: { findOne },
+    } as unknown as ProductService);
+
     const service = {
         ensureValid: jest.fn(realEnsureValid),
+        getByBarcode: jest.fn(realGetByBarcode),
         addMany: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -170,6 +176,41 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
                 );
             });
         });
+    });
+
+    describe('GET /products/:EAN (issue #87)', () => {
+        const seller = () => caller(Role.Seller);
+
+        it.each([
+            ['EAN-13', '4006381333931'],
+            ['UPC-A', '036000291452'],
+            ['EAN-8', '96385074'],
+        ])('looks a %s up exactly, as scanned', async (_label, EAN) => {
+            const product = { _id: 'p1', EAN, name: 'bread', price: 1999 };
+            findOne.mockReturnValue({ lean: () => Promise.resolve(product) });
+
+            const res = await harness.call(seller(), 'GET', `/products/${EAN}`);
+
+            expect(res.status).toBe(200);
+            expect(await res.json()).toEqual(product);
+            expect(findOne).toHaveBeenCalledWith({ EAN });
+        });
+
+        it.each(['012345678905', '40170725'])(
+            'answers 404 PRODUCT_NOT_FOUND for an unknown %s',
+            async (EAN) => {
+                const res = await harness.call(
+                    seller(),
+                    'GET',
+                    `/products/${EAN}`,
+                );
+                const body = (await res.json()) as { error: string };
+
+                expect(res.status).toBe(404);
+                expect(body.error).toBe(ErrorCode.PRODUCT_NOT_FOUND);
+                expect(findOne).toHaveBeenCalledWith({ EAN });
+            },
+        );
     });
 
     describe('POST /products/bulk', () => {

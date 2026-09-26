@@ -1,17 +1,24 @@
 import { computed, ref } from 'vue';
 import { isAxiosError, isCancel } from 'axios';
-import { type ProductMatch, STRING_LIMITS } from '@grocery-pos/contracts';
+import {
+    isCompleteBarcode,
+    type ProductMatch,
+    STRING_LIMITS,
+} from '@grocery-pos/contracts';
 import { apiErrorText } from '@/utils/api-error';
 
 /** One row of `GET /products/matches`. */
 export type Match = ProductMatch;
 
-/** Every EAN in the system is exactly 13 digits (see EanCounterService). */
-const BARCODE = /^\d{13}$/;
-
-/** True for a full barcode, the only thing sent to `GET /products/:EAN`. */
+/**
+ * True for a complete barcode, the only thing sent to `GET /products/:EAN`:
+ * an EAN-13, UPC-A (12 digits) or EAN-8 with a valid check digit, the codes
+ * a product can carry (issue #14), including the store's generated 200…
+ * EAN-13s. Anything else, a wrong check digit included, is searched
+ * instead (issue #87).
+ */
 export function isBarcode(query: string): boolean {
-    return BARCODE.test(query);
+    return isCompleteBarcode(query);
 }
 
 /**

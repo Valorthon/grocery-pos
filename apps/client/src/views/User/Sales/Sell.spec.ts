@@ -1008,6 +1008,149 @@ describe('Sell barcode lookup errors (#27)', () => {
     });
 });
 
+describe('Sell UPC-A and EAN-8 scans (#87)', () => {
+    const UPC_A = '036000291452';
+    const EAN_8 = '96385074';
+    const SHORT: Record<
+        string,
+        { _id: string; EAN: string; name: string; price: number }
+    > = {
+        [UPC_A]: { _id: 'p3', EAN: UPC_A, name: 'tissue', price: 4500 },
+        [EAN_8]: { _id: 'p4', EAN: EAN_8, name: 'gum', price: 1000 },
+    };
+
+    function notFound() {
+        const config = { headers: new AxiosHeaders() };
+        return new AxiosError(
+            'Request failed',
+            'ERR_BAD_REQUEST',
+            config,
+            null,
+            {
+                status: 404,
+                statusText: '',
+                data: {
+                    statusCode: 404,
+                    error: ErrorCode.PRODUCT_NOT_FOUND,
+                    message: 'No Product found',
+                },
+                headers: {},
+                config,
+            },
+        );
+    }
+
+    /**
+     * Prefix search would find several products for any digits, so only
+     * an exact lookup can add the scanned one straight away.
+     */
+    function serveShort(
+        matches: (name: string) => Promise<unknown> = () =>
+            Promise.resolve([
+                { product: 'p3', EAN: UPC_A, name: 'tissue' },
+                { product: 'p4', EAN: EAN_8, name: 'gum' },
+            ]),
+    ) {
+        serve(matches, (EAN) =>
+            SHORT[EAN]
+                ? Promise.resolve(SHORT[EAN])
+                : Promise.reject(notFound()),
+        );
+    }
+
+    async function scan(code: string) {
+        input().value = code;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+    }
+
+    function searched() {
+        return get.mock.calls.some(([url]) => url === '/products/matches');
+    }
+
+    it.each([
+        ['a 12-digit UPC-A', UPC_A, 'tissue'],
+        ['an 8-digit EAN-8', EAN_8, 'gum'],
+    ])('looks %s up exactly and adds it', async (_label, code, name) => {
+        serveShort();
+        mount();
+
+        await scan(code);
+
+        expect(get).toHaveBeenCalledWith(`/products/${code}`);
+        expect(searched()).toBe(false);
+        expect(cartNames()).toEqual([`1x ${name}`]);
+        expect(text('scan-status')).toContain(`Scanned: ${name}`);
+    });
+
+    it('adds a scanned UPC-A even while the typed text shows several matches', async () => {
+        serveShort();
+        mount();
+
+        await type(UPC_A);
+        await pressEnter();
+
+        expect(get).toHaveBeenCalledWith(`/products/${UPC_A}`);
+        expect(cartNames()).toEqual(['1x tissue']);
+        expect(text('scan-alert')).not.toContain('match');
+    });
+
+    it('applies the quantity shorthand to an EAN-8', async () => {
+        serveShort();
+        mount();
+
+        await scan(`3*${EAN_8}`);
+
+        expect(cartNames()).toEqual(['3x gum']);
+    });
+
+    it.each([
+        ['12-digit', '012345678905'],
+        ['8-digit', '40170725'],
+    ])('says an unknown %s barcode is not found', async (_label, code) => {
+        serveShort();
+        mount();
+
+        await scan(code);
+
+        expect(get).toHaveBeenCalledWith(`/products/${code}`);
+        expect(searched()).toBe(false);
+        expect(cartNames()).toEqual([]);
+        expect(text('scan-alert')).toContain(`Barcode "${code}" not found`);
+    });
+
+    it.each([
+        ['13', '4006381333932'],
+        ['12', '036000291453'],
+        ['8', '96385075'],
+    ])(
+        'searches a %s-digit number with a wrong check digit instead of looking it up',
+        async (_label, code) => {
+            serveShort(() => Promise.resolve([]));
+            mount();
+
+            await scan(code);
+
+            expect(get).not.toHaveBeenCalledWith(`/products/${code}`);
+            expect(searched()).toBe(true);
+            expect(cartNames()).toEqual([]);
+            expect(text('scan-alert')).toContain(`No item matching "${code}"`);
+        },
+    );
+
+    it('never auto-adds the single match of a wrong-check-digit number', async () => {
+        serveShort(() =>
+            Promise.resolve([{ product: 'p3', EAN: UPC_A, name: 'tissue' }]),
+        );
+        mount();
+
+        await scan('036000291453');
+
+        expect(cartNames()).toEqual([]);
+        expect(text('scan-alert')).toContain('1 item matches "036000291453"');
+    });
+});
+
 describe('Sell match list (#22 follow-up)', () => {
     it('scrolls the highlighted match into view', async () => {
         const scroll = vi.fn();

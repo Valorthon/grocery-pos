@@ -1461,7 +1461,8 @@ watch(
 /**
  * Enter / the Scan button. In order:
  * 1. a highlighted match (picked with the arrow keys) is added;
- * 2. a full 13-digit barcode is looked up exactly, as a scanner expects;
+ * 2. a complete barcode (EAN-13, UPC-A or EAN-8 with a valid check
+ *    digit, `isBarcode`) is looked up exactly, as a scanner expects;
  * 3. otherwise the input is searched now, and a single match of a *name*
  *    is added straight away. A digits-only fragment is never auto-added,
  *    even with one match: it may be the tail of a scan that lost its first

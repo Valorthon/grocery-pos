@@ -5,6 +5,7 @@ import {
     barcodeError,
     gtinCheckDigit,
     hasValidCheckDigit,
+    isCompleteBarcode,
     isReservedBarcode,
 } from './barcode.js';
 
@@ -46,6 +47,33 @@ describe('isReservedBarcode', () => {
         expect(isReservedBarcode(EAN_13)).toBe(false);
         // A UPC-A that happens to start with 200 is not in the range.
         expect(isReservedBarcode('200000000015')).toBe(false);
+    });
+});
+
+describe('isCompleteBarcode (issue #87)', () => {
+    it('accepts EAN-13, UPC-A and EAN-8 with valid check digits', () => {
+        expect(isCompleteBarcode(EAN_13)).toBe(true);
+        expect(isCompleteBarcode(UPC_A)).toBe(true);
+        expect(isCompleteBarcode(EAN_8)).toBe(true);
+    });
+
+    it('accepts a generated code in the reserved range', () => {
+        expect(isCompleteBarcode('2000000000015')).toBe(true);
+    });
+
+    it('rejects a wrong check digit at every length', () => {
+        expect(isCompleteBarcode('4006381333932')).toBe(false);
+        expect(isCompleteBarcode('036000291453')).toBe(false);
+        expect(isCompleteBarcode('96385075')).toBe(false);
+    });
+
+    it('rejects other lengths and non-digits', () => {
+        // Valid GS1 check digits, but not a barcode length.
+        expect(isCompleteBarcode('1234565')).toBe(false);
+        expect(isCompleteBarcode('00000000000000')).toBe(false);
+        expect(isCompleteBarcode('9638507a')).toBe(false);
+        expect(isCompleteBarcode('')).toBe(false);
+        expect(isCompleteBarcode('milk')).toBe(false);
     });
 });
 
