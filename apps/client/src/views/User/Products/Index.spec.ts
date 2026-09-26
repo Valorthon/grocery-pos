@@ -4,10 +4,28 @@ import { createPinia, setActivePinia } from 'pinia';
 import { click, field, flush, type } from '@/testing/form-dom';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
+import type { Router } from 'vue-router';
+import { Role } from '@grocery-pos/contracts';
+import { useAuthStore } from '@/stores/auth';
 
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
 vi.mock('@/axios', () => ({ default: api }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// The app's own route table answers `resolve`, so the Add button follows
+// the real Products/Add meta.
+const routes = vi.hoisted(() => ({
+    resolve: null as null | Router['resolve'],
+}));
+vi.mock('vue-router', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('vue-router')>()),
+    useRouter: () => ({
+        push: vi.fn(),
+        resolve: (...args: Parameters<Router['resolve']>) =>
+            routes.resolve!(...args),
+    }),
+}));
+
+const { default: appRouter } = await import('@/router');
+routes.resolve = appRouter.resolve.bind(appRouter);
 
 let app: App | null = null;
 
@@ -118,5 +136,37 @@ describe('product list search (issue #20)', () => {
         expect(params()).toEqual([
             expect.objectContaining({ page: 1, limit: 25 }),
         ]);
+    });
+});
+
+describe('Add Products button (issue #83)', () => {
+    function addButton(): HTMLButtonElement | undefined {
+        return [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Add Products'),
+        );
+    }
+
+    async function mountAs(roles: Role[]) {
+        useAuthStore().user = { userId: 'u1', username: 'someone', roles };
+        await mount();
+    }
+
+    it('is hidden from an Adjuster, who cannot open Products/Add', async () => {
+        await mountAs([Role.Adjuster]);
+        expect(addButton()).toBeUndefined();
+    });
+
+    it.each([
+        [[Role.Restocker]],
+        [[Role.Admin]],
+        [[Role.Adjuster, Role.Restocker]],
+    ])('is shown to %j', async (roles) => {
+        await mountAs(roles);
+        expect(addButton()).toBeDefined();
+    });
+
+    it('is hidden with no signed-in user', async () => {
+        await mount();
+        expect(addButton()).toBeUndefined();
     });
 });

@@ -59,8 +59,8 @@ describe('Roles page (issue #24)', () => {
             expect(shown).not.toContain('Edit product details (not price)');
             expect(shown).not.toContain('Change own password');
         }
-        // Products/Add is Restocker and Admin only (#61), though the API
-        // also lets an Adjuster add products.
+        // Adding products is Restocker and Admin only, on the page and the
+        // API (#83).
         expect(permissionsShown(Role.Adjuster)).not.toContain('Add products');
         expect(permissionsShown(Role.Restocker)).toContain('Add products');
         expect(permissionsShown(Role.Admin)).toContain('Add products');

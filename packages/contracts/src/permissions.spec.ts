@@ -15,6 +15,17 @@ describe('permissionsOf', () => {
         }
     });
 
+    it('leaves an ADJUSTER stock adjustments, not adding or editing products (#83)', () => {
+        const labels = permissionsOf(Role.Adjuster).map((p) => p.label);
+        expect(labels).toContain('Create and view adjustments');
+        expect(labels).toContain('Look up products');
+        expect(labels).not.toContain('Add products');
+        expect(labels).not.toContain('Edit product details (not price)');
+        const restocker = permissionsOf(Role.Restocker).map((p) => p.label);
+        expect(restocker).toContain('Add products');
+        expect(restocker).toContain('Edit product details (not price)');
+    });
+
     it('gives the anonymous placeholder nothing', () => {
         expect(permissionsOf(Role.Unauthenticated)).toEqual([]);
     });
