@@ -9,16 +9,25 @@ import { ASSIGNABLE_ROLES, holdsRole, Role } from './roles.js';
  *
  * - every route listed under a permission has exactly `roles` as its
  *   effective `@Roles(...)` (the handler's, else the controller's);
- * - every route that is not `@Public()` is listed under some permission.
+ * - every route that is not `@Public()` is listed under some permission;
+ * - a permission is `ownRoleOnly` exactly when its routes are
+ *   `@RequireOwnRole(...)` rather than `@Roles(...)`.
  *
  * ADMIN holds every role (`holdsRole`, as in RoleGuard), so a permission
- * whose `roles` do not name ADMIN is still the ADMIN's too.
+ * whose `roles` do not name ADMIN is still the ADMIN's too, unless it is
+ * `ownRoleOnly`: selling and running a cash shift need the SELLER role
+ * itself, so an admin account also needs SELLER to sell (issue #84).
  */
 export interface Permission {
     /** Shown on the Roles page. */
     label: string;
     /** The roles the server lets through, before ADMIN's implied access. */
     roles: readonly Role[];
+    /**
+     * ADMIN alone does not grant it: the caller must hold one of `roles`
+     * itself (the routes are `@RequireOwnRole(...)` on the API, #84).
+     */
+    ownRoleOnly?: boolean;
     /** `METHOD /path` of the routes, without the global `/v1` prefix. */
     routes: readonly string[];
     /**
@@ -71,6 +80,8 @@ export const PERMISSIONS: readonly Permission[] = [
     {
         label: 'Run own cash shift',
         roles: [Role.Seller],
+        // An admin account also needs SELLER (#84).
+        ownRoleOnly: true,
         routes: [
             'POST /shifts',
             'GET /shifts/current',
@@ -79,16 +90,14 @@ export const PERMISSIONS: readonly Permission[] = [
             'GET /shifts/last-closed',
         ],
         pages: ['SellerDashboard'],
-        // The /seller pages need the SELLER role itself (router sellerOnly).
-        appRoles: [Role.Seller],
     },
     {
         label: 'Sell at the register',
         roles: [Role.Seller],
+        // An admin account also needs SELLER (#84).
+        ownRoleOnly: true,
         routes: ['POST /sales'],
         pages: ['Sell'],
-        // The /seller pages need the SELLER role itself (router sellerOnly).
-        appRoles: [Role.Seller],
     },
     {
         label: 'View own sales in the open shift',
@@ -192,7 +201,11 @@ export const PERMISSIONS: readonly Permission[] = [
 
 /** What the server lets someone holding only `role` do, in table order. */
 export function permissionsOf(role: Role): Permission[] {
-    return PERMISSIONS.filter((p) => p.roles.some((r) => holdsRole([role], r)));
+    return PERMISSIONS.filter((p) =>
+        p.ownRoleOnly
+            ? p.roles.includes(role)
+            : p.roles.some((r) => holdsRole([role], r)),
+    );
 }
 
 /**

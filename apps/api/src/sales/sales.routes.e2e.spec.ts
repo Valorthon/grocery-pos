@@ -155,6 +155,35 @@ describe('POST /sales (e2e)', () => {
         },
     );
 
+    // Issue #84: ADMIN alone does not sell; an admin account also needs
+    // SELLER.
+    it('is 403 for an ADMIN-only account, before the service', async () => {
+        const res = await harness.call(
+            caller(Role.Admin),
+            'POST',
+            '/sales',
+            cashBody(),
+        );
+        expect(res.status).toBe(403);
+        expect(await errorOf(res)).toBe(ErrorCode.FORBIDDEN);
+        expect(service.sell).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['SELLER', [Role.Seller]],
+        ['ADMIN with SELLER', [Role.Admin, Role.Seller]],
+    ])('records a sale for %s', async (_label, roles) => {
+        const who = caller(...roles);
+
+        const res = await harness.call(who, 'POST', '/sales', cashBody());
+
+        expect(res.status).toBe(201);
+        expect(service.sell).toHaveBeenCalledWith(
+            expect.objectContaining({ userId: who.userId }),
+            expect.anything(),
+        );
+    });
+
     it('answers no open shift with 409 SHIFT_NOT_OPEN (#2)', async () => {
         service.sell.mockRejectedValue(
             new ConflictError(ErrorCode.SHIFT_NOT_OPEN, 'Open a shift first.'),

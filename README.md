@@ -86,6 +86,8 @@ pnpm --filter grocery-pos-client dev
 Seeded users are named after their role (`ADMIN`, `SELLER`, `RESTOCKER`,
 `ADJUSTER`, `USER_MANAGER`), all with the password `password123`, plus an
 inactive copy of each (`ADMIN1`, `SELLER1`, ...). Development only.
+Each holds only its own role, so ring up sales as `SELLER`: an admin
+account also needs the Seller role to sell (#84).
 
 `pnpm seed` drops every collection of the database in `DATABASE_URL` and
 prints which host and database that is first. It runs freely only when

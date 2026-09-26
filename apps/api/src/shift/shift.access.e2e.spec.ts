@@ -102,7 +102,8 @@ describe('Shift routes (e2e)', () => {
                             method,
                             path,
                             body,
-                            role === Role.Seller || role === Role.Admin,
+                            // ADMIN alone is refused: it needs SELLER too (#84).
+                            role === Role.Seller,
                         ] as const,
                 ),
             ),
@@ -371,8 +372,39 @@ describe('Shift routes (e2e)', () => {
             });
         });
 
-        it('opens a shift of its own to sell, like any cashier', async () => {
+        it('refuses an ADMIN-only account every cashier route, writing nothing (#84)', async () => {
             const admin = caller(Role.Admin);
+
+            const opened = await harness.call(admin, 'POST', '/shifts', {
+                counts: FLOAT_COUNTS,
+            });
+            const drawer = await harness.call(
+                admin,
+                'POST',
+                '/shifts/current/drawer',
+                { type: DrawerMovementType.CASH_IN, amount: 100, reason: 'x' },
+            );
+            const close = await harness.call(
+                admin,
+                'POST',
+                '/shifts/current/close',
+                { counts: FLOAT_COUNTS },
+            );
+            const current = await harness.call(admin, 'GET', '/shifts/current');
+            const last = await harness.call(
+                admin,
+                'GET',
+                '/shifts/last-closed',
+            );
+
+            for (const res of [opened, drawer, close, current, last]) {
+                expect(res.status).toBe(403);
+            }
+            expect(shifts.rows).toHaveLength(0);
+        });
+
+        it('opens a shift of its own to sell when it also holds SELLER, like any cashier', async () => {
+            const admin = caller(Role.Admin, Role.Seller);
 
             await open(admin);
 
@@ -381,6 +413,23 @@ describe('Shift routes (e2e)', () => {
                 ((await res.json()) as { shift: CurrentShiftView | null })
                     .shift,
             ).not.toBeNull();
+        });
+
+        it('force-closes as ADMIN alone, and so does an admin who also sells', async () => {
+            for (const admin of [
+                caller(Role.Admin),
+                caller(Role.Admin, Role.Seller),
+            ]) {
+                const shift = await open(caller(Role.Seller));
+                const close = await harness.call(
+                    admin,
+                    'POST',
+                    `/shifts/${shift._id}/close`,
+                    { counts: FLOAT_COUNTS },
+                );
+                expect(close.status).toBe(201);
+                expect(shifts.byId(shift._id)!.status).toBe(ShiftStatus.CLOSED);
+            }
         });
 
         it('rejects a malformed shift id with 400', async () => {
