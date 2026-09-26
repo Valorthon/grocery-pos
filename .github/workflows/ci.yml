@@ -19,6 +19,7 @@ jobs:
     changes:
         name: Detect changed paths
         runs-on: ubuntu-latest
+        timeout-minutes: 5
         permissions:
             contents: read
             # paths-filter lists a PR's files through the API.
@@ -66,6 +67,7 @@ jobs:
         name: Verify
         needs: changes
         runs-on: ubuntu-latest
+        timeout-minutes: 30
 
         steps:
             - name: Checkout Code
@@ -132,6 +134,8 @@ jobs:
     db:
         name: DB tests (MongoDB replica set)
         runs-on: ubuntu-latest
+        # Jest has no forceExit here: a hung handle must not burn 6 hours.
+        timeout-minutes: 15
         env:
             MONGO_URI_TEST: mongodb://127.0.0.1:27017/?directConnection=true
         steps:
@@ -185,6 +189,7 @@ jobs:
         needs: changes
         if: needs.changes.outputs.docker == 'true'
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         env:
             DOCKER_BUILDKIT: 1
         steps:
