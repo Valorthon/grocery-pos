@@ -1,6 +1,7 @@
 /**
  * The profile menu's change-password dialog (#88), over the real router
  * and auth store, so a successful change is followed to the login page.
+ * On a draft page, "Stay" is covered in views/User/draft-pages.spec.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, defineComponent, h, ref } from 'vue';
@@ -13,11 +14,7 @@ import { useAuthStore } from '@/stores/auth';
 import { Color, useUIStore } from '@/stores/ui';
 import { PASSWORD_HINT, PASSWORDS_DIFFER } from '@/utils/rules';
 import ChangePasswordDialog from './ChangePasswordDialog.vue';
-import {
-    PASSWORD_CHANGED,
-    PASSWORD_CHANGED_STAYED,
-    WRONG_CURRENT_PASSWORD,
-} from './change-password';
+import { PASSWORD_CHANGED, WRONG_CURRENT_PASSWORD } from './change-password';
 
 const api = vi.hoisted(() => ({
     get: vi.fn<ApiGet>(),
@@ -241,22 +238,6 @@ describe('ChangePasswordDialog (#88)', () => {
         expect(router.currentRoute.value.name).toBe('Login');
         expect(useUIStore().toasts.map((t) => [t.color, t.lines])).toEqual([
             [Color.SUCCESS, [PASSWORD_CHANGED]],
-        ]);
-    });
-
-    it('keeps the session when a draft page is told "Stay", and says what to do', async () => {
-        await mount();
-        await fill('secret', 'new-secret');
-        const auth = useAuthStore();
-        const requestLogout = vi
-            .spyOn(auth, 'requestLogout')
-            .mockResolvedValue(false);
-
-        await submit();
-
-        expect(requestLogout).toHaveBeenCalledWith(PASSWORD_CHANGED);
-        expect(useUIStore().toasts.map((t) => [t.color, t.lines])).toEqual([
-            [Color.SUCCESS, [PASSWORD_CHANGED_STAYED]],
         ]);
     });
 
