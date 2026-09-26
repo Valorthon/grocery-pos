@@ -38,7 +38,6 @@ beforeAll(async () => {
             db.model(m).init(),
         ),
     );
-    await openShift(db, admin);
 });
 
 afterAll(async () => {
@@ -370,5 +369,58 @@ describe('void/refund under concurrency', () => {
                 (m) => m.type === DrawerMovementType.REVERSAL_PAYOUT,
             ),
         ).toEqual([]);
+    });
+});
+
+describe('An ADMIN-only account at the register (issue #84)', () => {
+    it('is refused a shift and a sale, and nothing is written', async () => {
+        const adminOnly = caller(
+            `admin-${randomUUID().slice(0, 8)}`,
+            Role.Admin,
+        );
+        const product = await seedProduct(db, PRICE, 5);
+
+        const opened = await read(
+            await db.call(adminOnly, 'POST', '/shifts', {
+                counts: { '1000': 1 },
+            }),
+        );
+        const sold = await read(
+            await db.call(
+                adminOnly,
+                'POST',
+                '/sales',
+                cashSale(product, 1, PRICE),
+            ),
+        );
+
+        expect(opened.status).toBe(403);
+        expect(sold.status).toBe(403);
+        const cashier = new Types.ObjectId(adminOnly.userId);
+        expect(await db.model('Shift').countDocuments({ cashier })).toBe(0);
+        expect(await db.model('Sales').countDocuments({ cashier })).toBe(0);
+        expect(await stockOf(db, product)).toBe(5);
+    });
+
+    it('sells once the admin also holds SELLER', async () => {
+        const adminSeller = caller(
+            `admin-${randomUUID().slice(0, 8)}`,
+            Role.Admin,
+            Role.Seller,
+        );
+        const product = await seedProduct(db, PRICE, 5);
+        await openShift(db, adminSeller);
+
+        const sold = await read(
+            await db.call(
+                adminSeller,
+                'POST',
+                '/sales',
+                cashSale(product, 1, PRICE),
+            ),
+        );
+
+        expect(sold.status).toBe(201);
+        expect(await stockOf(db, product)).toBe(4);
     });
 });

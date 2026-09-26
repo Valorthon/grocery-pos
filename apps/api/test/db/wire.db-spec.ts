@@ -298,7 +298,6 @@ beforeAll(async () => {
     );
     const product = await seedProduct(db, PRICE, 1_000);
     seed.product = product;
-    await openShift(db, admin);
 
     // The seller: open, cash in, a discounted split sale, two cash sales
     // (one voided, one refunded). The shift stays open.

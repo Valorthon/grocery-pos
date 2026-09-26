@@ -64,16 +64,31 @@ describe('Roles page (issue #24)', () => {
         expect(permissionsShown(Role.Adjuster)).not.toContain('Add products');
         expect(permissionsShown(Role.Restocker)).toContain('Add products');
         expect(permissionsShown(Role.Admin)).toContain('Add products');
-        // The register needs the SELLER role itself.
+        // The register needs the SELLER role itself, on the page and the
+        // API (#84).
         expect(permissionsShown(Role.Admin)).not.toContain(
             'Sell at the register',
+        );
+        expect(permissionsShown(Role.Admin)).not.toContain(
+            'Run own cash shift',
         );
         expect(permissionsShown(Role.Admin)).toContain('Void and refund sales');
     });
 
+    it('tells on the Admin card only that an admin needs SELLER to sell (#84)', async () => {
+        await mount();
+        const notes = [...document.querySelectorAll('[data-testid^="note-"]')];
+        expect(notes.map((n) => n.getAttribute('data-testid'))).toEqual([
+            `note-${Role.Admin}`,
+        ]);
+        expect(notes[0].textContent?.trim()).toBe(
+            'To sell, an admin also needs the Seller role.',
+        );
+    });
+
     it('matches the route roles: sellers sell but get no stock dashboard; only admins void', async () => {
         await mount();
-        // POST /sales is @Roles(Role.Seller); GET /dashboard is Adjuster,
+        // POST /sales is @RequireOwnRole(Role.Seller); GET /dashboard is Adjuster,
         // Restocker and UserManager; void/refund are @Roles(Role.Admin).
         expect(permissionsShown(Role.Seller)).toContain('Sell at the register');
         expect(permissionsShown(Role.Seller)).not.toContain('Stock dashboard');

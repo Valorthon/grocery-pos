@@ -6,7 +6,8 @@
  * This spec loads every controller and checks the table both ways: each
  * route a permission names has exactly that permission's roles as its
  * effective `@Roles(...)`, and every route that is not `@Public()` is named
- * by some permission. Changing a route's roles, or adding a route, fails
+ * by some permission. A permission is `ownRoleOnly` exactly when its routes
+ * are `@RequireOwnRole(...)` (ADMIN alone does not pass them, #84). Changing a route's roles, or adding a route, fails
  * here until the table (and so the page) says the same.
  */
 import { readdirSync } from 'node:fs';
@@ -15,7 +16,11 @@ import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS, permissionsOf } from '@grocery-pos/contracts';
-import { IS_PUBLIC_KEY, ROLES_KEY } from '../auth/auth.decorator';
+import {
+    ADMIN_BYPASS_KEY,
+    IS_PUBLIC_KEY,
+    ROLES_KEY,
+} from '../auth/auth.decorator';
 import { Role } from '../auth/types';
 
 type Constructor = abstract new (...args: never[]) => unknown;
@@ -53,6 +58,8 @@ interface Route {
     key: string;
     isPublic: boolean;
     roles: Role[];
+    /** Whether ADMIN passes on its own (false on `@RequireOwnRole`). */
+    adminBypass: boolean;
 }
 
 const routes: Route[] = controllerFiles(SRC).flatMap((file) =>
@@ -87,6 +94,11 @@ const routes: Route[] = controllerFiles(SRC).flatMap((file) =>
                             ROLES_KEY,
                             targets,
                         ) ?? [],
+                    adminBypass:
+                        reflector.getAllAndOverride<boolean | undefined>(
+                            ADMIN_BYPASS_KEY,
+                            targets,
+                        ) !== false,
                 };
             });
     }),
@@ -108,13 +120,39 @@ describe('Roles page permissions (PERMISSIONS in contracts)', () => {
 
     it.each(
         PERMISSIONS.flatMap((p) =>
-            p.routes.map((route) => [p.label, route, p.roles] as const),
+            p.routes.map(
+                (route) =>
+                    [p.label, route, p.roles, p.ownRoleOnly === true] as const,
+            ),
         ),
-    )('"%s": %s lets exactly its roles through', (_label, key, roles) => {
-        const route = byKey.get(key);
-        expect(route).toBeDefined();
-        expect(route!.isPublic).toBe(false);
-        expect([...route!.roles].sort()).toEqual([...roles].sort());
+    )(
+        '"%s": %s lets exactly its roles through',
+        (_label, key, roles, ownRoleOnly) => {
+            const route = byKey.get(key);
+            expect(route).toBeDefined();
+            expect(route!.isPublic).toBe(false);
+            expect([...route!.roles].sort()).toEqual([...roles].sort());
+            // ADMIN passes on its own exactly when the table says so.
+            expect(route!.adminBypass).toBe(!ownRoleOnly);
+        },
+    );
+
+    it('finds the own-role routes (#84)', () => {
+        expect(
+            routes
+                .filter((r) => !r.isPublic && !r.adminBypass)
+                .map((r) => r.key)
+                .sort(),
+        ).toEqual(
+            [
+                'POST /sales',
+                'POST /shifts',
+                'GET /shifts/current',
+                'POST /shifts/current/drawer',
+                'POST /shifts/current/close',
+                'GET /shifts/last-closed',
+            ].sort(),
+        );
     });
 
     it('names every signed-in route under some permission', () => {
@@ -131,8 +169,14 @@ describe('Roles page permissions (PERMISSIONS in contracts)', () => {
         }
     });
 
-    it('gives ADMIN everything and a SELLER no stock or user pages', () => {
-        expect(permissionsOf(Role.Admin)).toHaveLength(PERMISSIONS.length);
+    it('gives ADMIN everything but selling, and a SELLER no stock or user pages', () => {
+        const admin = permissionsOf(Role.Admin).map((p) => p.label);
+        expect(admin).toHaveLength(
+            PERMISSIONS.filter((p) => !p.ownRoleOnly).length,
+        );
+        expect(admin).not.toContain('Sell at the register');
+        expect(admin).not.toContain('Run own cash shift');
+        expect(admin).toContain('Void and refund sales');
         const seller = permissionsOf(Role.Seller).map((p) => p.label);
         expect(seller).toContain('Sell at the register');
         expect(seller).not.toContain('Stock dashboard');

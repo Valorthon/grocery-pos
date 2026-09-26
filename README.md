@@ -86,6 +86,8 @@ pnpm --filter grocery-pos-client dev
 Seeded users are named after their role (`ADMIN`, `SELLER`, `RESTOCKER`,
 `ADJUSTER`, `USER_MANAGER`), all with the password `password123`, plus an
 inactive copy of each (`ADMIN1`, `SELLER1`, ...). Development only.
+Each holds only its own role, so ring up sales as `SELLER`: an admin
+account also needs the Seller role to sell (#84).
 
 `pnpm seed` drops every collection of the database in `DATABASE_URL` and
 prints which host and database that is first. It runs freely only when
@@ -97,13 +99,19 @@ unset) needs `--force-destroy-data` (`pnpm seed --force-destroy-data`).
 [docs/DEPLOY.md](docs/DEPLOY.md) covers Railway: the custom domain both
 services need (Railway's own domains cannot share the session cookies), every
 variable of each service, which client variables are build arguments, `APP_ENV`
-versus `NODE_ENV`, the security headers, healthchecks and running the images
-locally.
+versus `NODE_ENV` (and the client's `VITE_APP_ENV`), the security headers,
+healthchecks and running the images locally.
 
 ## Deploy notes (operator)
 
 The client Docker build fetches the login photo itself, best effort (see
 [Login hero photo](#login-hero-photo)).
+
+The client's stage variable is now `VITE_APP_ENV` (#86). Set it on each
+client service before or with this deploy; the old `VITE_NODE_ENV` is still
+accepted for one release (see
+[docs/DEPLOY.md](docs/DEPLOY.md#vite_app_env-and-vite_node_env)). Rename it in
+a local `apps/client/.env` too.
 
 One-off steps to run by hand at a specific deploy. Each runs from a checkout
 of the deployed commit (with `pnpm install` and the contracts built), pointed

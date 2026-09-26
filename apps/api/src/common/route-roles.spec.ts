@@ -8,13 +8,19 @@
  * metadata (`common/testing/app-routes.ts`), checks inherited handlers
  * too, and fails if any handler that is not `@Public()` ends up with no
  * explicit role list. "Any signed-in user" is written
- * `@Roles(...ASSIGNABLE_ROLES)`.
+ * `@Roles(...ASSIGNABLE_ROLES)`. `@RequireOwnRole(...)` (#84) counts as a
+ * role list too; it only stops ADMIN passing on its own.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Controller, Get, Module } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY, ROLES_KEY, Roles } from '../auth/auth.decorator';
+import {
+    ADMIN_BYPASS_KEY,
+    IS_PUBLIC_KEY,
+    ROLES_KEY,
+    Roles,
+} from '../auth/auth.decorator';
 import { Role } from '../auth/types';
 import {
     appControllers,
@@ -49,6 +55,13 @@ const routes = appControllers().flatMap((controller) =>
                 Role[] | undefined,
             classRoles: Reflect.getMetadata(ROLES_KEY, controller) as
                 Role[] | undefined,
+            // Set wherever the roles are, so a handler's @Roles or
+            // @RequireOwnRole replaces the class's for both (#84).
+            bypassWithRoles:
+                Reflect.hasMetadata(ADMIN_BYPASS_KEY, handler) ===
+                    Reflect.hasMetadata(ROLES_KEY, handler) &&
+                Reflect.hasMetadata(ADMIN_BYPASS_KEY, controller) ===
+                    Reflect.hasMetadata(ROLES_KEY, controller),
         };
     }),
 );
@@ -105,6 +118,9 @@ describe('Route role declarations', () => {
             // decision; it means "anyone signed in" by accident.
             expect(route.ownRoles ?? ['unset']).not.toHaveLength(0);
             expect(route.classRoles ?? ['unset']).not.toHaveLength(0);
+            // Roles come from @Roles or @RequireOwnRole, never a bare
+            // SetMetadata that leaves ADMIN's bypass to the class.
+            expect(route.bypassWithRoles).toBe(true);
 
             if (route.isPublic) return;
             expect(route.roles?.length ?? 0).toBeGreaterThan(0);

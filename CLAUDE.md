@@ -26,7 +26,7 @@ pnpm format:check
 pnpm -r lint
 pnpm -r typecheck
 pnpm -r test
-VITE_NODE_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com VITE_API_TIMEOUT=5000 pnpm -r build
+VITE_APP_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com VITE_API_TIMEOUT=5000 pnpm -r build
 ```
 
 CI runs the same steps (plus audit, depcheck and `pnpm licenses:check`) and
@@ -127,7 +127,8 @@ Rules:
   nothing in localStorage. At most one OPEN shift per cashier (unique
   partial index), opened with a positive counted float. Logout leaves it
   open and the same cashier resumes it; nobody else inherits it. ADMIN
-  holds every role, so an admin who sells needs a shift too.
+  alone can't sell or run a shift: an admin account also needs SELLER
+  (#84), and then needs a shift of its own like any cashier.
 - `POST /sales` needs the caller's open shift (409 `SHIFT_NOT_OPEN`),
   writes it with a `status: OPEN` filter in the sale's transaction and
   sets `sale.shift`. Close flips the status in a transaction with the same
@@ -248,6 +249,13 @@ requestId}`. A 5xx never carries details or internals.
   controllers by walking `AppModule`'s module metadata
   (`common/testing/app-routes.ts`, inherited handlers included) and fails
   on such a route (#61).
+- ADMIN passes every `@Roles(...)` check except on `@RequireOwnRole(...)`
+  routes, where only the listed roles themselves count (#84): `POST /sales`
+  and the cashier's own shift routes (open, current, drawer, close,
+  last-closed) need SELLER itself, matching the client's `sellerOnly`.
+  Void/refund, force-close, the admin sales/shift views and the dashboard
+  stay ADMIN-only. Contracts `PERMISSIONS` marks those rows `ownRoleOnly`,
+  and `role-permissions.spec.ts` checks it against the metadata.
 - Dashboard money is ADMIN-only and stripped on the server. A cashier sees only
   their own sales. Price changes are ADMIN-only.
 - Only RESTOCKER (and ADMIN) add or edit products (`POST /products/bulk`,
@@ -437,7 +445,9 @@ requestId}`. A 5xx never carries details or internals.
   image sets `NODE_ENV=production`; no app rule keys off `NODE_ENV`. For
   one release an unset `APP_ENV` is taken from a legacy `NODE_ENV`
   (dev|test|stage|prod) with a warning; a legacy `NODE_ENV` that disagrees
-  with `APP_ENV` fails startup. The client keeps `VITE_NODE_ENV`.
+  with `APP_ENV` fails startup. The client's stage is `VITE_APP_ENV`
+  (#86); for one release an unset one is taken from the old
+  `VITE_NODE_ENV` with a warning, and the two disagreeing fail the build.
 - nginx sends a strict CSP (`script-src 'self'`, `style-src 'self'` with no
   `'unsafe-inline'`, `img-src 'self' data:`, `connect-src 'self'` + the API
   origin, `frame-ancestors 'none'`, …), nosniff, `X-Frame-Options`,
