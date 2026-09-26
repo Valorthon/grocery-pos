@@ -61,10 +61,14 @@ export const useAuthStore = defineStore('auth', () => {
     };
 
     /**
-     * Ends the session. `reason`, when given, is shown as an error on the
-     * login page: it is queued after resetRegister clears the toasts.
+     * Ends the session. `reason`, when given, is shown on the login page,
+     * as an error unless `color` says otherwise: it is queued after
+     * resetRegister clears the toasts.
      */
-    const logout = async (reason?: string): Promise<void> => {
+    const logout = async (
+        reason?: string,
+        color: Color = Color.ERROR,
+    ): Promise<void> => {
         try {
             await api.post('/auth/logout');
         } catch {
@@ -72,7 +76,7 @@ export const useAuthStore = defineStore('auth', () => {
         } finally {
             clearUser();
             resetRegister();
-            if (reason) useUIStore().queueMessage(Color.ERROR, reason);
+            if (reason) useUIStore().queueMessage(color, reason);
             const { default: router } = await import('@/router');
             await router.push({ name: 'Login' });
         }
@@ -95,8 +99,11 @@ export const useAuthStore = defineStore('auth', () => {
      * A forced end (the refresh failed, or the session is gone) calls
      * `logout` directly: the user is cleared before it navigates, so no
      * page asks and nothing can hold it up.
+     *
+     * `notice`, when given, is shown on the login page as a success (e.g.
+     * "Password changed", #88), never as an error.
      */
-    const requestLogout = async (): Promise<boolean> => {
+    const requestLogout = async (notice?: string): Promise<boolean> => {
         if (userLogoutPending.value) return false;
         const { default: router } = await import('@/router');
         userLogoutPending.value = true;
@@ -106,7 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
             userLogoutPending.value = false;
         }
         if (router.currentRoute.value.name !== 'Login') return false;
-        await logout();
+        await logout(notice, Color.SUCCESS);
         return true;
     };
 

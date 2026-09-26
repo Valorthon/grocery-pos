@@ -277,6 +277,11 @@ requestId}`. A 5xx never carries details or internals.
   generic message, 429 "try again in…", network/5xx "can't reach the
   server". The login page has no Remember me, Privacy or Terms; a forgotten
   password is "ask an admin to reset it".
+- Change password (#88) is in the profile menu of both layouts
+  (`UserProfileMenu`, `ChangePasswordDialog`). A wrong current password
+  (`USER_WRONG_PASSWORD`, a 403) is inline; a success logs out through
+  `requestLogout(notice)`, so a draft page may ask, and Login shows a
+  success toast, never "Please log in to continue".
 - The UI says "Log in" and "Log out", never "Sign in/out"
   (`layout-drift.spec.ts`). The login fields have visible "Username" and
   "Password" labels tied by `for`/`id`; the placeholders stay as hints

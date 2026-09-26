@@ -6,6 +6,8 @@ import {
 } from '@grocery-pos/contracts';
 import {
     barcodeFieldError,
+    confirmPasswordError,
+    currentPasswordError,
     DATE_RANGE_REVERSED,
     dateRangeError,
     fieldErrors,
@@ -13,6 +15,7 @@ import {
     moneyError,
     PASSWORD_HINT,
     passwordError,
+    PASSWORDS_DIFFER,
     productPickError,
     REQUIRED,
     textError,
@@ -40,6 +43,39 @@ describe('passwordError (the API password policy, #12)', () => {
         expect(passwordError('')).not.toBe('');
         expect(passwordError('', true)).toBe('');
         expect(passwordError('short', true)).toBe(PASSWORD_HINT);
+    });
+});
+
+describe('change-password fields (ChangePasswordDto, #88)', () => {
+    it('requires the current password, with no minimum and no trim', () => {
+        expect(currentPasswordError('')).not.toBe('');
+        // @IsNotEmpty only refuses '': an old short password still counts.
+        expect(currentPasswordError('a')).toBe('');
+        expect(currentPasswordError('   ')).toBe('');
+        expect(currentPasswordError('x'.repeat(STRING_LIMITS.PASSWORD))).toBe(
+            '',
+        );
+        expect(
+            currentPasswordError('x'.repeat(STRING_LIMITS.PASSWORD + 1)),
+        ).not.toBe('');
+    });
+
+    it('applies the password policy to the new password', () => {
+        const min = STRING_LIMITS.PASSWORD_MIN;
+        expect(passwordError('x'.repeat(min - 1))).toBe(PASSWORD_HINT);
+        // Not trimmed: spaces count, as on the API.
+        expect(passwordError(' '.repeat(min))).toBe('');
+    });
+
+    it('needs the confirmation to repeat the new password exactly', () => {
+        expect(confirmPasswordError('new-secret', '')).not.toBe('');
+        expect(confirmPasswordError('new-secret', 'new-secret')).toBe('');
+        expect(confirmPasswordError('new-secret', 'new-secret ')).toBe(
+            PASSWORDS_DIFFER,
+        );
+        expect(confirmPasswordError('new-secret', 'New-secret')).toBe(
+            PASSWORDS_DIFFER,
+        );
     });
 });
 

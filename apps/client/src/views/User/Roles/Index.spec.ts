@@ -57,7 +57,8 @@ describe('Roles page (issue #24)', () => {
             // No screen until #38.
             expect(shown).not.toContain('Change prices');
             expect(shown).not.toContain('Edit product details (not price)');
-            expect(shown).not.toContain('Change own password');
+            // Every role has the profile menu's Change password (#88).
+            expect(shown).toContain('Change own password');
         }
         // Adding products is Restocker and Admin only, on the page and the
         // API (#83).

@@ -177,3 +177,29 @@ export function toSaleTicket(
         }),
     };
 }
+
+/** The change-password dialog's fields (#88); `confirmPassword` stays here. */
+export interface ChangePasswordDraft {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+}
+
+/** `PATCH /users/me/password` (`ChangePasswordDto`). */
+export interface ChangePasswordBody {
+    currentPassword: string;
+    newPassword: string;
+}
+
+/**
+ * The body of `PATCH /users/me/password`: both passwords exactly as typed
+ * (password fields are never trimmed), and never the confirmation.
+ */
+export function toChangePasswordBody(
+    draft: ChangePasswordDraft,
+): ChangePasswordBody {
+    return {
+        currentPassword: draft.currentPassword,
+        newPassword: draft.newPassword,
+    };
+}

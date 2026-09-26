@@ -234,6 +234,21 @@ describe('auth store', () => {
             expect(ui.toasts[0].color).toBe(Color.ERROR);
         });
 
+        it('shows a notice in the colour given, e.g. a password change (#88)', async () => {
+            const api = (await import('@/axios')).default;
+            vi.mocked(api.post).mockResolvedValue({});
+            const store = await loadStore();
+            const { Color, useUIStore } = await import('./ui');
+            const ui = useUIStore();
+            ui.queueMessage(Color.ERROR, 'Sale failed');
+
+            await store.logout('Password changed', Color.SUCCESS);
+
+            expect(ui.toasts.map((t) => [t.color, t.lines])).toEqual([
+                [Color.SUCCESS, ['Password changed']],
+            ]);
+        });
+
         it('leaves nothing after a plain logout', async () => {
             const api = (await import('@/axios')).default;
             vi.mocked(api.post).mockResolvedValue({});
