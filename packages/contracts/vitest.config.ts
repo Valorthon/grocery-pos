@@ -10,10 +10,10 @@ export default defineConfig({
             reporter: ['text-summary', 'lcov'],
             // Ratchet (#28): just below the measured level.
             thresholds: {
-                statements: 76,
-                branches: 94,
-                functions: 95,
-                lines: 74,
+                statements: 99,
+                branches: 99,
+                functions: 99,
+                lines: 99,
             },
         },
     },
