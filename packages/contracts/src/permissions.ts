@@ -125,15 +125,15 @@ export const PERMISSIONS: readonly Permission[] = [
     },
     {
         label: 'Add products',
-        roles: [Role.Restocker, Role.Adjuster],
+        // Restocker and Admin only (#83).
+        roles: [Role.Restocker],
         routes: ['POST /products/bulk', 'GET /products/ensureValid'],
         pages: ['Products/Add'],
-        // The Products/Add page is Restocker and Admin only (#61).
-        appRoles: [Role.Restocker, Role.Admin],
     },
     {
         label: 'Edit product details (not price)',
-        roles: [Role.Restocker, Role.Adjuster],
+        // Restocker and Admin only (#83).
+        roles: [Role.Restocker],
         routes: ['PATCH /products'],
         // No screen until #38.
         appRoles: [],

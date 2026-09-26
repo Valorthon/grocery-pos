@@ -250,6 +250,9 @@ requestId}`. A 5xx never carries details or internals.
   on such a route (#61).
 - Dashboard money is ADMIN-only and stripped on the server. A cashier sees only
   their own sales. Price changes are ADMIN-only.
+- Only RESTOCKER (and ADMIN) add or edit products (`POST /products/bulk`,
+  `GET /products/ensureValid`, `PATCH /products`); ADJUSTER keeps stock
+  adjustments and product lookup (#83).
 - Deactivating a user, changing their roles, or resetting or changing a password
   revokes that user's sessions. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.

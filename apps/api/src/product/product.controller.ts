@@ -30,14 +30,17 @@ import { asJson } from '../common/wire';
  * passes every check):
  *
  *   GET   /products/matches      Restocker, Adjuster, Seller
- *   GET   /products/ensureValid  Restocker, Adjuster
+ *   GET   /products/ensureValid  Restocker
  *   GET   /products/:EAN         Restocker, Adjuster, Seller
- *   PATCH /products              Restocker, Adjuster; a batch that sets
- *                                `price` is Admin only (403
+ *   PATCH /products              Restocker; a batch that sets `price` is
+ *                                Admin only (403
  *                                PRODUCT_PRICE_CHANGE_FORBIDDEN, issue #13)
  *   GET   /products              Restocker, Adjuster
- *   POST  /products/bulk         Restocker, Adjuster (a new product's first
- *                                price is not a price change)
+ *   POST  /products/bulk         Restocker (a new product's first price is
+ *                                not a price change)
+ *
+ * Adding and editing products is Restocker and Admin only (#83); an
+ * Adjuster only looks products up, to pick them for an adjustment.
  *
  * product.access.e2e.spec.ts pins this table.
  */
@@ -53,6 +56,7 @@ export class ProductController {
         return await this.service.getMatches(dto);
     }
 
+    @Roles(Role.Restocker)
     @Get('ensureValid')
     async ensureValid(@Query() dto: EnsureValidDto): Promise<void> {
         await this.service.ensureValid(dto);
@@ -64,8 +68,9 @@ export class ProductController {
         return asJson(await this.service.getByBarcode(dto));
     }
 
-    // Non-price fields: Restocker, Adjuster. `price`: Admin only; the whole
-    // batch is a 403 otherwise (see assertMayChangePrices).
+    // Non-price fields: Restocker. `price`: Admin only; the whole batch is a
+    // 403 otherwise (see assertMayChangePrices).
+    @Roles(Role.Restocker)
     @Patch()
     async update(
         @CurrentUser() user: AuthUser,
@@ -79,6 +84,7 @@ export class ProductController {
         return asJson(await this.service.getAll(dto));
     }
 
+    @Roles(Role.Restocker)
     @Post('bulk')
     async addMany(
         @CurrentUser() user: AuthUser,

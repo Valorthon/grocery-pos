@@ -45,7 +45,7 @@ const ROUTES: Route[] = [
         label: 'GET /products/ensureValid',
         method: 'GET',
         path: `/products/ensureValid?EAN=${EAN}&name=milk`,
-        allowed: [Role.Restocker, Role.Adjuster],
+        allowed: [Role.Restocker],
     },
     {
         label: 'GET /products/:EAN',
@@ -65,7 +65,7 @@ const ROUTES: Route[] = [
                 },
             ],
         },
-        allowed: [Role.Restocker, Role.Adjuster],
+        allowed: [Role.Restocker],
     },
     {
         // Price changes are Admin only (issue #13).
@@ -97,7 +97,7 @@ const ROUTES: Route[] = [
         method: 'POST',
         path: '/products/bulk',
         body: { newProducts: [{ name: 'milk', price: 1999 }] },
-        allowed: [Role.Restocker, Role.Adjuster],
+        allowed: [Role.Restocker],
     },
 ];
 
@@ -189,6 +189,54 @@ describe('Product route access by role (e2e)', () => {
         expect(service.addMany).not.toHaveBeenCalled();
     });
 
+    describe('an Adjuster only looks products up (issue #83)', () => {
+        const route = (label: string) => ROUTES.find((r) => r.label === label)!;
+
+        it.each([
+            'GET /products/ensureValid',
+            'PATCH /products (no price)',
+            'POST /products/bulk',
+        ])(
+            'refuses %s to an Adjuster before the service runs',
+            async (label) => {
+                service.ensureValid.mockClear();
+                service.update.mockClear();
+                service.addMany.mockClear();
+                updateOne.mockClear();
+
+                const res = await call(route(label), [Role.Adjuster]);
+
+                expect(res.status).toBe(403);
+                expect(service.ensureValid).not.toHaveBeenCalled();
+                expect(service.update).not.toHaveBeenCalled();
+                expect(service.addMany).not.toHaveBeenCalled();
+                expect(updateOne).not.toHaveBeenCalled();
+            },
+        );
+
+        it.each([
+            'GET /products/matches',
+            'GET /products/:EAN',
+            'GET /products',
+        ])(
+            'still lets an Adjuster call %s, to pick products for an adjustment',
+            async (label) => {
+                const res = await call(route(label), [Role.Adjuster]);
+
+                expect(res.status).toBe(200);
+            },
+        );
+
+        it('lets a Restocker and an Adjuster together add products', async () => {
+            const res = await call(route('POST /products/bulk'), [
+                Role.Adjuster,
+                Role.Restocker,
+            ]);
+
+            expect(res.status).toBe(201);
+        });
+    });
+
     describe('price changes are Admin only (issue #13)', () => {
         const withPrice = ROUTES.find(
             (r) => r.label === 'PATCH /products (with price)',
@@ -199,19 +247,16 @@ describe('Product route access by role (e2e)', () => {
 
         beforeEach(() => updateOne.mockClear());
 
-        it.each([Role.Restocker, Role.Adjuster])(
-            'refuses a %s batch that sets a price, writing nothing',
-            async (role) => {
-                const res = await call(withPrice, [role]);
+        it('refuses a Restocker batch that sets a price, writing nothing', async () => {
+            const res = await call(withPrice, [Role.Restocker]);
 
-                expect(res.status).toBe(403);
-                expect(await res.json()).toMatchObject({
-                    error: ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN,
-                });
-                // The name edit in the same batch is not applied either.
-                expect(updateOne).not.toHaveBeenCalled();
-            },
-        );
+            expect(res.status).toBe(403);
+            expect(await res.json()).toMatchObject({
+                error: ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN,
+            });
+            // The name edit in the same batch is not applied either.
+            expect(updateOne).not.toHaveBeenCalled();
+        });
 
         it('lets a Restocker edit non-price fields', async () => {
             const res = await call(withoutPrice, [Role.Restocker]);
