@@ -20,10 +20,13 @@ ARG VITE_DOMAIN
 RUN if [ -z "$VITE_API_URL" ]; then \
         echo "Build arg VITE_API_URL is required, e.g. --build-arg VITE_API_URL=https://api.example.com/v1" >&2; exit 1; \
     fi; \
-    if [ -n "$VITE_APP_ENV" ] && [ -n "$VITE_NODE_ENV" ] && [ "$VITE_APP_ENV" != "$VITE_NODE_ENV" ]; then \
-        echo "Build args VITE_APP_ENV=$VITE_APP_ENV and VITE_NODE_ENV=$VITE_NODE_ENV disagree: VITE_APP_ENV is the stage; remove the deprecated VITE_NODE_ENV" >&2; exit 1; \
+    trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }; \
+    app_env=$(trim "$VITE_APP_ENV"); \
+    node_env=$(trim "$VITE_NODE_ENV"); \
+    if [ -n "$app_env" ] && [ -n "$node_env" ] && [ "$app_env" != "$node_env" ]; then \
+        echo "Build args VITE_APP_ENV=$app_env and VITE_NODE_ENV=$node_env disagree: VITE_APP_ENV is the stage; remove the deprecated VITE_NODE_ENV" >&2; exit 1; \
     fi; \
-    stage="${VITE_APP_ENV:-${VITE_NODE_ENV:-prod}}"; \
+    stage="${app_env:-${node_env:-prod}}"; \
     if [ "$stage" = prod ] || [ "$stage" = stage ]; then \
         if [ -z "$VITE_DOMAIN" ]; then \
             echo "Build arg VITE_DOMAIN is required when VITE_APP_ENV=$stage: the shared parent domain, e.g. --build-arg VITE_DOMAIN=example.com" >&2; exit 1; \
@@ -77,8 +80,8 @@ RUN if [ -n "$LOGIN_HERO_URL" ] && [ ! -f apps/client/public/images/login-hero.j
     fi
 
 # The ARGs above reach this RUN as env vars. With neither stage arg set, the
-# stage is prod; otherwise vite.config.ts resolves the pair.
-RUN if [ -z "$VITE_APP_ENV" ] && [ -z "$VITE_NODE_ENV" ]; then \
+# stage is prod; otherwise vite.config.ts resolves (and trims) the pair.
+RUN if [ -z "$(printf '%s' "$VITE_APP_ENV$VITE_NODE_ENV" | tr -d '[:space:]')" ]; then \
         export VITE_APP_ENV=prod; \
     fi; \
     pnpm --filter grocery-pos-client build

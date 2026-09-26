@@ -139,9 +139,36 @@ describe('client env: VITE_APP_ENV and the legacy VITE_NODE_ENV (#86)', () => {
                 expect(result.error).toContain(
                     `VITE_APP_ENV='${app}' and VITE_NODE_ENV='${node}' disagree`,
                 );
+                expect(result.error).toContain(
+                    'local apps/client/.env that still sets VITE_NODE_ENV',
+                );
             }
         },
     );
+
+    it.each([
+        ['VITE_APP_ENV only', { VITE_APP_ENV: ' prod ' }],
+        ['VITE_NODE_ENV only', { VITE_NODE_ENV: ' prod ' }],
+        [
+            'both, padded differently',
+            { VITE_APP_ENV: 'prod', VITE_NODE_ENV: 'prod ' },
+        ],
+        ['both, padded', { VITE_APP_ENV: '\tprod', VITE_NODE_ENV: ' prod' }],
+    ])('trims the stage the same way (%s)', (_case, stage) => {
+        const result = parseClientEnv({ ...NO_STAGE, ...stage });
+        if (!result.success) throw new Error(result.error);
+        expect(result.data.VITE_APP_ENV).toBe('prod');
+    });
+
+    it('compares trimmed values, so padding alone is no disagreement', () => {
+        const resolved = resolveAppEnv({
+            ...BASE,
+            VITE_APP_ENV: ' stage',
+            VITE_NODE_ENV: 'stage ',
+        });
+        expect(resolved).toMatchObject({ input: { VITE_APP_ENV: 'stage' } });
+        expect(resolved).toHaveProperty('warning');
+    });
 
     it('fails without either name', () => {
         const result = parseClientEnv(NO_STAGE);

@@ -76,10 +76,12 @@ function text(value: unknown): string | undefined {
  * - Both set and equal: VITE_APP_ENV is used, with a warning to drop the old.
  * - Both set and different: an error. One of them is stale, and guessing
  *   could build prod with dev rules.
- * - Only VITE_APP_ENV, or neither: passed on unchanged (the schema requires
+ * - Only VITE_APP_ENV, or neither: no warning (the schema requires
  *   VITE_APP_ENV).
  *
- * An empty string counts as unset (Docker passes unset build args as '').
+ * Both values are trimmed before they are compared, and the trimmed stage is
+ * what the schema sees, whichever name it came from. An empty string counts
+ * as unset (Docker passes unset build args as '').
  */
 export function resolveAppEnv(
     raw: RawEnv,
@@ -87,16 +89,18 @@ export function resolveAppEnv(
     const appEnv = text(raw.VITE_APP_ENV);
     const legacy = text(raw.VITE_NODE_ENV);
 
-    if (legacy === undefined) return { input: raw };
+    if (legacy === undefined) {
+        return { input: { ...raw, VITE_APP_ENV: appEnv } };
+    }
 
     if (appEnv !== undefined) {
         if (appEnv !== legacy) {
             return {
-                error: `VITE_APP_ENV='${appEnv}' and VITE_NODE_ENV='${legacy}' disagree. VITE_APP_ENV is the client's stage; remove the deprecated VITE_NODE_ENV.`,
+                error: `VITE_APP_ENV='${appEnv}' and VITE_NODE_ENV='${legacy}' disagree. VITE_APP_ENV is the client's stage; remove the deprecated VITE_NODE_ENV. A likely source is a local apps/client/.env that still sets VITE_NODE_ENV: rename it to VITE_APP_ENV there.`,
             };
         }
         return {
-            input: raw,
+            input: { ...raw, VITE_APP_ENV: appEnv },
             warning: `VITE_NODE_ENV is deprecated and ignored beside VITE_APP_ENV='${appEnv}': remove it.`,
         };
     }
