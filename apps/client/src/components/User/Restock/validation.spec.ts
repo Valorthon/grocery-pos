@@ -42,12 +42,22 @@ describe('restockLineErrors (#17)', () => {
         ).toEqual({ EAN: 'Pick a product from the matches' });
     });
 
-    it('rejects a blank or zero unit cost (the API needs one centavo)', () => {
+    it('rejects a blank or negative unit cost, as the API does', () => {
         expect(restockLineErrors({ ...EXISTING, unitCost: '' }).unitCost).toBe(
             'This field is required',
         );
-        expect(restockLineErrors({ ...EXISTING, unitCost: '0' }).unitCost).toBe(
-            'Enter at least ₱0.01',
+        expect(
+            restockLineErrors({ ...EXISTING, unitCost: '-1' }).unitCost,
+        ).toBe('Enter at least ₱0.00');
+        expect(
+            restockLineErrors({ ...EXISTING, unitCost: '-0.01' }).unitCost,
+        ).toBe('Enter at least ₱0.00');
+    });
+
+    it('accepts a ₱0 unit cost (confirmed on save, #85)', () => {
+        expect(restockLineErrors({ ...EXISTING, unitCost: '0' })).toEqual({});
+        expect(restockLineErrors({ ...EXISTING, unitCost: '0.00' })).toEqual(
+            {},
         );
     });
 

@@ -34,10 +34,20 @@ export const MAX_TOASTS = 5;
  */
 export const TOAST_DEDUPE_MS = 1000;
 
+/**
+ * Where the toast stack sits (#85). `top-right` everywhere but the seller
+ * layout, which sets `bottom-center`, or `register` on the register:
+ * bottom-center above its sticky Tender footer below lg, and centred
+ * under the ticket (left of the tender panel) from lg.
+ */
+export type ToastPlacement = 'top-right' | 'bottom-center' | 'register';
+
 const keyOf = (color: Color, lines: string[]) => `${color}|${lines.join('\n')}`;
 
 export const useUIStore = defineStore('ui', () => {
     const toasts = ref<ToastMessage[]>([]);
+    /** Set by SellerLayout while it is mounted (#85). */
+    const toastPlacement = ref<ToastPlacement>('top-right');
     const timers = new Map<number, ReturnType<typeof setTimeout>>();
     /** When each on-screen toast was last queued (for TOAST_DEDUPE_MS). */
     const lastQueued = new Map<number, number>();
@@ -117,5 +127,5 @@ export const useUIStore = defineStore('ui', () => {
         enforceCap(toast.id);
     }
 
-    return { toasts, queueMessage, dismiss, clear };
+    return { toasts, toastPlacement, queueMessage, dismiss, clear };
 });

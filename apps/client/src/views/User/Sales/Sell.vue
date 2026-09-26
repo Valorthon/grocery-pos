@@ -962,6 +962,7 @@ import {
     paymentLabel,
     previewSale,
 } from '@/components/User/Sales/checkout';
+import { voidTicketMessage } from '@/components/User/Sales/ticket';
 import {
     isRejectedSale,
     saleErrorMessage,
@@ -981,6 +982,7 @@ import {
 import { integerError } from '@/utils/rules';
 import { toSaleTicket } from '@/utils/payloads';
 import {
+    isTextEntry,
     REGISTER_KEYS,
     useRegisterShortcuts,
 } from '@/composables/useRegisterShortcuts';
@@ -1315,14 +1317,32 @@ function removeLine(product: string) {
 }
 
 /**
- * Delete: only with the focus on a ticket line or one of its buttons, so
- * it never removes a line from the discount, the Qty picker or nowhere.
+ * What Delete removes (#23, #85): the line the focus is on (the line or
+ * one of its buttons, not its quantity field), or the last line added
+ * when the focus is in the empty scan box. Nothing from the discount, the
+ * Qty picker, nowhere, a scan box with text (Delete edits it) or the
+ * tender sheet.
  */
-function removeSelected() {
-    const line =
-        document.activeElement?.closest<HTMLElement>('[data-ticket-line]');
+function deleteTarget(): string | null {
+    // The sheet's focus trap keeps the focus out of the ticket anyway.
+    if (cartStore.locked || tender.isTop()) return null;
+    const active = document.activeElement;
+    if (active && active === scanInput.value) {
+        if (searchQuery.value !== '') return null;
+        // New lines are appended, so the last one is the latest added.
+        const items = cartStore.items;
+        return items[items.length - 1]?.product ?? null;
+    }
+    if (isTextEntry(active)) return null;
     // The line the focus is on, which focusing it also selected.
-    const product = line?.dataset.product;
+    return (
+        active?.closest<HTMLElement>('[data-ticket-line]')?.dataset.product ??
+        null
+    );
+}
+
+function removeSelected() {
+    const product = deleteTarget();
     if (product) removeLine(product);
 }
 
@@ -1655,10 +1675,12 @@ const {
 
 async function voidTicket() {
     if (cartStore.locked || !cartStore.items.length) return;
-    const units = cartStore.totalUnits;
     const ok = await confirm({
         title: 'Void Ticket',
-        message: `Void this ticket of ${units} ${units === 1 ? 'item' : 'items'}?`,
+        message: voidTicketMessage(
+            cartStore.items.length,
+            cartStore.totalUnits,
+        ),
         confirmLabel: 'Void Ticket',
         cancelLabel: 'Keep Ticket',
         danger: true,
@@ -1793,9 +1815,9 @@ async function backToTicket() {
 
 /**
  * The register's keys (issues #22, #23). Off while a modal is open; the
- * checkout answers Enter and Escape itself. Delete never fires in a text
- * field (it deletes text there): it removes the selected line when the
- * focus is on the line or one of its buttons.
+ * checkout answers Enter and Escape itself. Delete removes the line the
+ * focus is on (the line or one of its buttons), or the last line from the
+ * empty scan box (#85); in any field with text it edits the text.
  *
  * Below lg (#26) they also work while the tender sheet is on top (not
  * under a dialog): F2 and F4 close it and go to the ticket; F8 and F9
@@ -1838,7 +1860,9 @@ useRegisterShortcuts(
         },
         [REGISTER_KEYS.REMOVE_LINE]: {
             run: removeSelected,
-            whileTyping: false,
+            // The scan box is a text field; deleteTarget decides.
+            whileTyping: true,
+            when: () => deleteTarget() !== null,
         },
     },
     { activeWhile: tender.isTop },

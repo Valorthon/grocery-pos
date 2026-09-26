@@ -25,7 +25,8 @@ export class Restock {
     @Prop({
         type: Number,
         required: true,
-        min: NUMERIC_LIMITS.PRICE_MIN,
+        // A restock of ₱0-cost lines only totals ₱0 (#85).
+        min: NUMERIC_LIMITS.UNIT_COST_MIN,
         validate: {
             validator: Number.isInteger,
             message: 'totalCost must be an integer number of centavos',

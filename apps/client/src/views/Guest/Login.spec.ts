@@ -141,6 +141,39 @@ describe('Login page (#21)', () => {
         expect(password.type).toBe('password');
     });
 
+    it('shows a visible label above each field, tied to it by for/id (#85)', async () => {
+        const host = await mount();
+
+        for (const [name, text] of [
+            ['username', 'Username'],
+            ['password', 'Password'],
+        ]) {
+            const field = input(host, name);
+            expect(field.id).not.toBe('');
+            const label = host.querySelector<HTMLLabelElement>(
+                `label[for="${field.id}"]`,
+            );
+            expect(label?.textContent?.trim()).toBe(text);
+            // The label names the field (no aria-label overriding it).
+            expect(label?.control).toBe(field);
+            expect(field.labels?.[0]).toBe(label);
+            expect(field.hasAttribute('aria-label')).toBe(false);
+            // Above the field, and the placeholder stays as a hint.
+            expect(
+                label!.compareDocumentPosition(field) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+            ).toBeTruthy();
+            expect(field.placeholder).not.toBe('');
+        }
+    });
+
+    it('says "Log in", matching "Log out" (#85)', async () => {
+        const host = await mount();
+        const submit = host.querySelector('button[type="submit"]');
+        expect(submit?.textContent?.trim()).toBe('Log in');
+        expect(host.textContent).not.toMatch(/sign in|login\b/i);
+    });
+
     describe('error messages', () => {
         it.each([
             [

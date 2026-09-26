@@ -343,7 +343,7 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         expect(router.currentRoute.value.name).toBe('Other');
     });
 
-    it('asks before Sign out: Stay keeps the session and the drafts', async () => {
+    it('asks before Log out: Stay keeps the session and the drafts', async () => {
         await mountPage(c.page);
         const auth = useAuthStore();
         await addDraft(c, 'First');
@@ -381,7 +381,7 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         expect(useUIStore().toasts).toEqual([]);
     });
 
-    it('signs out without asking when there are no drafts', async () => {
+    it('logs out without asking when there are no drafts', async () => {
         api.post.mockResolvedValue({});
         await mountPage(c.page);
         const auth = useAuthStore();
@@ -452,7 +452,7 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
             [Color.INFO, ['Saving… please wait']],
         ]);
 
-        // Sign out waits too.
+        // Log out waits too.
         expect(await useAuthStore().requestLogout()).toBe(false);
         expect(router.currentRoute.value.name).toBe('Draft');
         expect(api.post).toHaveBeenCalledTimes(1);
@@ -652,5 +652,80 @@ describe('a confirmation over the save dialog (issue #19)', () => {
                 ?.value,
         ).toBe('weekly delivery');
         expect(document.body.style.overflow).toBe('hidden');
+    });
+});
+
+describe('restock at a ₱0 unit cost (#85)', () => {
+    const restockCase = cases[1][1];
+
+    async function addRestockLine(name: string, unitCost: number) {
+        nextDraft.value = { ...restockCase.draft(name), unitCost };
+        buttons()[0].click();
+        await flush();
+        await press('Stub submit');
+    }
+
+    const dialogTitles = () =>
+        [...document.querySelectorAll('h2')].map((t) => t.textContent?.trim());
+    const question = () =>
+        [...document.body.querySelectorAll('p')]
+            .map((p) => p.textContent?.trim())
+            .find((t) => t?.includes('₱0 unit cost'));
+
+    it('asks first, naming the ₱0 lines; Go back keeps the drafts and sends nothing', async () => {
+        await mountPage(restockCase.page);
+        await addRestockLine('Paid', 500);
+        await addRestockLine('Sample', 0);
+        useUIStore().clear();
+
+        await press('Save');
+
+        expect(dialogTitles()).toContain('Record at ₱0 cost?');
+        expect(question()).toBe(
+            '1 line has a ₱0 unit cost: Sample. Record it at ₱0 cost?',
+        );
+        expect(dialogTitles()).not.toContain(restockCase.dialogTitle);
+
+        await press('Go back');
+
+        expect(dialogTitles()).not.toContain(restockCase.dialogTitle);
+        expect(rows()).toHaveLength(2);
+        expect(api.post).not.toHaveBeenCalled();
+        expect(router.currentRoute.value.name).toBe('Draft');
+    });
+
+    it('sends a unit cost of 0 once confirmed', async () => {
+        api.post.mockResolvedValueOnce({ data: {} });
+        await mountPage(restockCase.page);
+        await addRestockLine('Paid', 500);
+        await addRestockLine('Sample', 0);
+        useUIStore().clear();
+
+        await press('Save');
+        await press('Record at ₱0');
+        expect(dialogTitles()).toContain(restockCase.dialogTitle);
+        await type('Description', 'free samples');
+        const saves = buttons().filter((b) => b.textContent?.trim() === 'Save');
+        saves[saves.length - 1].click();
+        await flush();
+
+        expect(api.post).toHaveBeenCalledTimes(1);
+        const [url, body] = api.post.mock.calls[0] as [
+            string,
+            { restockDetails: { unitCost: number }[] },
+        ];
+        expect(url).toBe('/restocks');
+        expect(body.restockDetails.map((d) => d.unitCost)).toEqual([500, 0]);
+        expect(router.currentRoute.value.name).toBe('Restocks');
+    });
+
+    it('does not ask when every line has a cost', async () => {
+        await mountPage(restockCase.page);
+        await addRestockLine('Paid', 500);
+
+        await press('Save');
+
+        expect(question()).toBeUndefined();
+        expect(dialogTitles()).toContain(restockCase.dialogTitle);
     });
 });

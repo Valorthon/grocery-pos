@@ -831,14 +831,108 @@ describe('Sell line removal with Undo (decision 2026-09-25)', () => {
         expect(cartNames()).toEqual(['1x mints']);
     });
 
-    it('Delete never fires while typing in the scan box', async () => {
+    it('Delete never fires while there is text in the scan box', async () => {
         withTicket();
         mount();
         await clickLine(0);
         input().focus();
+        await type('mil');
 
         const event = await press('Delete');
         expect(event.defaultPrevented).toBe(false);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+        expect(undoBar()).toBeNull();
+    });
+});
+
+describe('Sell Delete from the empty scan box (#85)', () => {
+    function undoBar() {
+        return document.querySelector('[data-testid="undo-bar"]');
+    }
+
+    it('removes the most recently added line, and Undo puts it back', async () => {
+        withTicket();
+        mount();
+        input().focus();
+        expect(input().value).toBe('');
+
+        const event = await press('Delete');
+        expect(event.defaultPrevented).toBe(true);
+        expect(cartNames()).toEqual(['2x milk']);
+        expect(undoBar()?.textContent).toContain('Removed 1× mints');
+        // The scan box keeps the focus, so the next scan (or Delete) works.
+        expect(document.activeElement).toBe(input());
+
+        await clickButton(buttonNamed('Undo'));
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('goes on removing from the bottom, one line per press', async () => {
+        withTicket();
+        mount();
+        input().focus();
+
+        await press('Delete');
+        await press('Delete');
+        expect(cartNames()).toEqual([]);
+        expect(undoBar()?.textContent).toContain('Removed 2× milk');
+        expect((await press('Delete')).defaultPrevented).toBe(false);
+    });
+
+    it('removes a line added by a scan', async () => {
+        withTicket();
+        serve(() => Promise.resolve([]));
+        mount();
+        useCartStore().add(
+            {
+                product: 'p3',
+                EAN: '2000000000039',
+                name: 'bread',
+                unitPrice: 6000,
+            },
+            1,
+        );
+        await flush();
+        input().focus();
+
+        await press('Delete');
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('edits the text instead while the box has any', async () => {
+        withTicket();
+        mount();
+        input().focus();
+        input().value = '4800';
+        input().dispatchEvent(new Event('input'));
+        await flush();
+
+        const event = await press('Delete');
+        expect(event.defaultPrevented).toBe(false);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('does nothing while a modal is open', async () => {
+        withTicket();
+        mount();
+        await clickButton(buttonNamed('Void Ticket'));
+        expect(dialog('Void this ticket')).not.toBeNull();
+        // Even with the scan box focused under the dialog.
+        input().focus();
+
+        const event = await press('Delete');
+        expect(event.defaultPrevented).toBe(false);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('does nothing while the ticket is locked for checkout', async () => {
+        withTicket();
+        mount();
+        useCartStore().lock();
+        await flush();
+        input().focus();
+
+        expect((await press('Delete')).defaultPrevented).toBe(false);
         expect(cartNames()).toEqual(['2x milk', '1x mints']);
     });
 });
@@ -849,7 +943,7 @@ describe('Sell Void Ticket (decision 2026-09-25)', () => {
         mount();
 
         await clickButton(buttonNamed('Void Ticket'));
-        const asked = dialog('Void this ticket of 3 items?');
+        const asked = dialog('Void this ticket (2 lines, 3 items)?');
         expect(asked).not.toBeNull();
 
         await clickButton(buttonNamed('Keep Ticket'));
@@ -880,6 +974,25 @@ describe('Sell Void Ticket (decision 2026-09-25)', () => {
         expect(cart.discount).toBeNull();
         expect(localStorage.getItem('grocery_pos_cart_v1:u-ana')).toBeNull();
         expect(document.body.textContent).toContain('+ Apply Discount');
+    });
+});
+
+describe('Sell Void Ticket counts (#85)', () => {
+    it('says "1 line, 1 item" for a single unit', async () => {
+        withMilkOnTicket();
+        mount();
+        await clickButton(buttonNamed('Void Ticket'));
+        expect(dialog('Void this ticket (1 line, 1 item)?')).not.toBeNull();
+    });
+
+    it('says "1 line, N items" for one line of several units', async () => {
+        useCartStore().add(
+            { product: 'p1', EAN: MILK.EAN, name: 'milk', unitPrice: 9500 },
+            4,
+        );
+        mount();
+        await clickButton(buttonNamed('Void Ticket'));
+        expect(dialog('Void this ticket (1 line, 4 items)?')).not.toBeNull();
     });
 });
 
@@ -1861,6 +1974,28 @@ describe('Sell below lg: sticky footer and tender sheet (#26)', () => {
         await press('F2');
         expect(sheetOpen()).toBe(false);
         expect(document.activeElement).toBe(input());
+    });
+
+    it('Delete does nothing while the sheet is on top (#85)', async () => {
+        withTicket();
+        mount();
+        await flush();
+        await clickButton(openButton());
+        expect(sheetOpen()).toBe(true);
+
+        expect((await press('Delete')).defaultPrevented).toBe(false);
+        // Nor after trying to focus the empty scan box behind it (the
+        // sheet's trap keeps the focus; deleteTarget refuses anyway).
+        input().focus();
+        expect((await press('Delete')).defaultPrevented).toBe(false);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+        expect(sheetOpen()).toBe(true);
+
+        // Closed again, the empty scan box removes the last line.
+        await press('F2');
+        expect(sheetOpen()).toBe(false);
+        expect((await press('Delete')).defaultPrevented).toBe(true);
+        expect(cartNames()).toEqual(['2x milk']);
     });
 
     it('F4 from the sheet goes back to the line quantity', async () => {

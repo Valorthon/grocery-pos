@@ -122,6 +122,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import RestockAddDialog from '@/components/User/Restock/AddDialog.vue';
 import RestockSaveDialog from '@/components/User/Restock/SaveDialog.vue';
 import { AddForm, SaveForm } from '@/components/User/Restock/dto';
+import { zeroCostRequest } from '@/components/User/Restock/validation';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
@@ -178,12 +179,18 @@ const filteredItems = computed(() => {
     );
 });
 
-/** An empty restock is never sent: say so instead of asking for details. */
-const openSaveDialog = () => {
+/**
+ * An empty restock is never sent: say so instead of asking for details.
+ * Lines at a ₱0 unit cost are named and confirmed first (#85); "Go back"
+ * keeps every draft as it is.
+ */
+const openSaveDialog = async () => {
     if (items.value.length === 0) {
         uiStore.queueMessage(Color.ERROR, NOTHING_TO_SAVE);
         return;
     }
+    const zeroCost = zeroCostRequest(items.value);
+    if (zeroCost && !(await confirm(zeroCost))) return;
     isSaveDialogOpen.value = true;
 };
 

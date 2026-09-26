@@ -91,7 +91,7 @@
                 @click="logout"
             >
                 <LogOut class="w-4 h-4 text-red-500" />
-                <span class="text-xs font-semibold">Sign out</span>
+                <span class="text-xs font-semibold">Log out</span>
             </button>
         </template>
     </BaseDropdown>

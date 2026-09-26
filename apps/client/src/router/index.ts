@@ -172,7 +172,7 @@ function homeFor(authStore: ReturnType<typeof useAuthStore>) {
         authStore.user = null;
         localStorage.removeItem('user');
         void authStore.logout(
-            'Your account has no access. Please sign in again.',
+            'Your account has no access. Please log in again.',
         );
     }
 
@@ -202,7 +202,7 @@ router.beforeEach(async (to) => {
         return { name: 'Login' };
     }
 
-    // Signing out goes to Login before the session ends (requestLogout).
+    // Logging out goes to Login before the session ends (requestLogout).
     if (
         to.name === 'Login' &&
         isAuthenticated &&

@@ -101,7 +101,7 @@ describe('router guard and the start-up profile fetch', () => {
         expect(router.currentRoute.value.name).toBe('Login');
     });
 
-    it('lets Sign out through to Login, and only then ends the session (#19)', async () => {
+    it('lets Log out through to Login, and only then ends the session (#19)', async () => {
         const { api, router } = await boot(async () => ({
             data: { username: 'boss', roles: [Role.Admin] },
         }));

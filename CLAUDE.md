@@ -289,6 +289,9 @@ requestId}`. A 5xx never carries details or internals.
 - Field rules in `utils/rules.ts` mirror the API DTOs exactly, neither
   stricter nor looser. Forms validate on submit and show errors inline.
 - Money is typed as text and parsed by `parsePesos`.
+- A restock unit cost may be ₱0 (`NUMERIC_LIMITS.UNIT_COST_MIN`, DTO and
+  schemas alike), never negative; saving asks "Record at ₱0 cost?" naming
+  the ₱0 lines, and "Go back" keeps the drafts (#85).
 - `BaseInput` has `inheritAttrs: false`: attrs go on the `<input>`, class and
   style on the wrapper.
 - The product combobox binds a snapshot taken at pick time; toggling "new
@@ -336,14 +339,19 @@ requestId}`. A 5xx never carries details or internals.
 **Register (Phase 6)** (#22–#26)
 
 - Keys (`useRegisterShortcuts`): F2 scan box, F4 selected line's quantity,
-  F8 discount, F9 Tender & Charge, Delete removes the focused line. F5 is
-  never bound. Keys are off while a modal is open (except the tender sheet).
+  F8 discount, F9 Tender & Charge. F5 is never bound. Keys are off while a
+  modal is open (except the tender sheet).
+- Delete (#85) removes the focused ticket line, or the last line added from
+  the scan box while the box is empty (with text in it, Delete edits the
+  text). Both have the 5s Undo. Never while the tender sheet or a modal is
+  on top, or from the discount, the Qty picker or a quantity field.
 - `BaseModal` is a labelled `role=dialog`; `modal-stack.ts` owns Escape
   (topmost only), the focus trap, `inert` background, scroll lock and focus
   return. The scan box takes the focus back after clicks and modals.
 - While a receipt shows, a stray Enter does nothing and a scan starts the
   next sale with that item.
-- Void Ticket asks first. A removed line has a 5s Undo. Quantities are
+- Void Ticket asks first, with lines and units ("Void this ticket (2
+  lines, 5 items)?", singular for 1). A removed line has a 5s Undo. Quantities are
   editable. The Qty multiplier (or `12*`) applies to the next scan only and
   shows a badge.
 - Basket, discount and checkout attempt (`idempotencyKey`) are kept per
@@ -362,6 +370,11 @@ requestId}`. A 5xx never carries details or internals.
 - Denominations are unchanged. Shift In refuses a ₱0/empty float with an
   inline reason. `BillCountInput` counts on input, flags bad entries inline
   and reports them via `v-model:invalid`.
+- Toasts (#85): top-right in the admin layout; bottom-center in the seller
+  layout (`uiStore.toastPlacement`, set by `SellerLayout`). On the register
+  they sit above the sticky Tender footer below `lg`, and from `lg`
+  centred on the space left of the tender panel, so they never cover the
+  scan box or Tender & Charge.
 - Touch layout (#26): below `lg` (64rem, `useIsLarge`) the register has a
   sticky footer (total + Tender) that opens the tender panel as a sheet on
   the modal stack (`useTenderSheet`); the basket scrolls on its own. From

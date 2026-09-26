@@ -22,6 +22,7 @@ import {
 } from '@grocery-pos/contracts';
 import { Role } from '@grocery-pos/contracts';
 import { useShiftStore } from '@/stores/shift';
+import { useUIStore } from '@/stores/ui';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
 import { useRegisterShortcuts } from '@/composables/useRegisterShortcuts';
@@ -132,6 +133,30 @@ describe('SellerLayout (shift from the server, issue #2)', () => {
         await flush();
 
         expect(useShiftStore().shiftInOpen).toBe(false);
+    });
+});
+
+describe('SellerLayout toast placement (#85)', () => {
+    it('puts the toasts above the Tender footer on the register, bottom-center elsewhere, and back top-right on leaving', async () => {
+        api.get.mockResolvedValue({ data: { shift: SHIFT } });
+        const ui = useUIStore();
+        expect(ui.toastPlacement).toBe('top-right');
+
+        await mountAt('/seller/register');
+        expect(ui.toastPlacement).toBe('register');
+
+        await router.push('/seller/orders');
+        await flush();
+        expect(ui.toastPlacement).toBe('bottom-center');
+
+        await router.push('/seller');
+        await flush();
+        expect(ui.toastPlacement).toBe('bottom-center');
+
+        // Leaving the seller layout (e.g. for the admin pages).
+        app?.unmount();
+        app = null;
+        expect(ui.toastPlacement).toBe('top-right');
     });
 });
 

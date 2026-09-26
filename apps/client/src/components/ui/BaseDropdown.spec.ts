@@ -41,8 +41,8 @@ function mount() {
                         ),
                         h(
                             'button',
-                            { role: 'menuitem', id: 'signout' },
-                            'Sign out',
+                            { role: 'menuitem', id: 'logout' },
+                            'Log out',
                         ),
                     ],
                 },
@@ -99,16 +99,16 @@ describe('BaseDropdown (issue #22)', () => {
         mount();
         el('trigger').focus();
         await key(el('trigger'), 'ArrowUp');
-        expect(document.activeElement).toBe(el('signout'));
+        expect(document.activeElement).toBe(el('logout'));
 
-        await key(el('signout'), 'ArrowDown');
+        await key(el('logout'), 'ArrowDown');
         expect(document.activeElement).toBe(el('profile'));
         await key(el('profile'), 'ArrowUp');
-        expect(document.activeElement).toBe(el('signout'));
-        await key(el('signout'), 'Home');
+        expect(document.activeElement).toBe(el('logout'));
+        await key(el('logout'), 'Home');
         expect(document.activeElement).toBe(el('profile'));
         await key(el('profile'), 'End');
-        expect(document.activeElement).toBe(el('signout'));
+        expect(document.activeElement).toBe(el('logout'));
     });
 
     it('closes on Escape, gives the focus back to the trigger, and keeps Escape to itself', async () => {

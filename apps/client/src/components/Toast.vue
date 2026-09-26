@@ -7,13 +7,17 @@
     <Teleport to="body">
         <div
             data-inert-exempt
-            class="fixed top-4 right-4 z-[60] flex flex-col gap-2 items-end max-w-[calc(100vw-2rem)] sm:max-w-md max-h-[calc(100vh-2rem)] overflow-y-auto"
+            :class="[
+                'fixed z-[60] flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-md overflow-y-auto',
+                placement.stack,
+            ]"
+            :data-placement="uiStore.toastPlacement"
             data-testid="toast-stack"
         >
             <!-- Errors: each one is an alert, announced as it appears. -->
             <TransitionGroup
                 tag="div"
-                class="flex flex-col gap-2 items-end"
+                :class="['flex flex-col gap-2', placement.items]"
                 v-bind="transition"
             >
                 <ToastItem
@@ -30,7 +34,7 @@
         -->
             <TransitionGroup
                 tag="div"
-                class="flex flex-col gap-2 items-end"
+                :class="['flex flex-col gap-2', placement.items]"
                 role="status"
                 aria-live="polite"
                 data-testid="toast-status"
@@ -49,7 +53,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Color, useUIStore } from '@/stores/ui';
+import { Color, type ToastPlacement, useUIStore } from '@/stores/ui';
 import ToastItem from './ToastItem.vue';
 
 /**
@@ -57,6 +61,10 @@ import ToastItem from './ToastItem.vue';
  * Errors stay until closed and are announced (`role="alert"`); success
  * and info close by themselves (the store times them) and are announced
  * politely. A long stack scrolls instead of covering the page.
+ *
+ * Where it sits is the layout's choice (`uiStore.toastPlacement`, #85):
+ * top-right in the admin layout; bottom-center in the seller layout, so
+ * it never covers the register's scan box or the top of the ticket.
  */
 const uiStore = useUIStore();
 
@@ -67,12 +75,37 @@ const notices = computed(() =>
     uiStore.toasts.filter((t) => t.color !== Color.ERROR),
 );
 
-const transition = {
+/** The stack's position and its toasts' alignment, per placement. */
+const PLACEMENTS: Record<ToastPlacement, { stack: string; items: string }> = {
+    'top-right': {
+        stack: 'top-4 right-4 items-end max-h-[calc(100vh-2rem)]',
+        items: 'items-end',
+    },
+    'bottom-center': {
+        stack: 'bottom-4 left-1/2 -translate-x-1/2 items-center max-h-[calc(100vh-2rem)]',
+        items: 'items-center',
+    },
+    // Below lg: above the sticky Tender footer (about 4.5rem tall). From
+    // lg there is no footer; the stack is centred on the space left of
+    // the 400px tender panel, so it never covers Tender & Charge.
+    register: {
+        stack: 'bottom-24 left-1/2 -translate-x-1/2 items-center max-h-[calc(100vh-7rem)] lg:bottom-4 lg:left-[calc(50%-200px)] lg:max-h-[calc(100vh-2rem)]',
+        items: 'items-center',
+    },
+};
+
+const placement = computed(() => PLACEMENTS[uiStore.toastPlacement]);
+
+/** A toast slides in from the edge it sits at. */
+const transition = computed(() => ({
     enterActiveClass: 'transition duration-200 ease-out',
-    enterFromClass: 'opacity-0 -translate-y-2',
+    enterFromClass:
+        uiStore.toastPlacement === 'top-right'
+            ? 'opacity-0 -translate-y-2'
+            : 'opacity-0 translate-y-2',
     enterToClass: 'opacity-100 translate-y-0',
     leaveActiveClass: 'transition duration-200 ease-in',
     leaveFromClass: 'opacity-100',
     leaveToClass: 'opacity-0',
-};
+}));
 </script>

@@ -109,3 +109,11 @@ describe('layout drift (#26)', () => {
         expect(indexHtml).not.toMatch(/<style\b|\sstyle="/);
     });
 });
+
+describe('wording drift (#85)', () => {
+    it('says "Log out" and "Log in", never "Sign out" or "Sign in"', () => {
+        expect(offending(/sign[\s-]?(out|in)\b/i)).toEqual([]);
+        expect(offending(/signout/i)).toEqual([]);
+        expect(indexHtml).not.toMatch(/sign[\s-]?(out|in)\b/i);
+    });
+});

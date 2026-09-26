@@ -145,3 +145,61 @@ describe('Toast (issue #18)', () => {
         ).toEqual(['Item 1: bad', 'Item 2: bad']);
     });
 });
+
+describe('Toast placement (#85)', () => {
+    const stack = () =>
+        document.querySelector<HTMLElement>('[data-testid="toast-stack"]')!;
+    const classes = () => stack().className.split(/\s+/);
+
+    it('sits top-right by default (the admin layout)', () => {
+        expect(useUIStore().toastPlacement).toBe('top-right');
+        expect(classes()).toEqual(
+            expect.arrayContaining(['fixed', 'top-4', 'right-4']),
+        );
+        expect(classes()).not.toContain('bottom-4');
+    });
+
+    it('sits bottom-center in the seller layout', async () => {
+        useUIStore().toastPlacement = 'bottom-center';
+        await nextTick();
+        expect(classes()).toEqual(
+            expect.arrayContaining([
+                'bottom-4',
+                'left-1/2',
+                '-translate-x-1/2',
+                'items-center',
+            ]),
+        );
+        expect(classes()).not.toContain('top-4');
+        expect(classes()).not.toContain('right-4');
+    });
+
+    it('clears the Tender footer below lg on the register, and the tender panel from lg', async () => {
+        useUIStore().toastPlacement = 'register';
+        await nextTick();
+        expect(classes()).toEqual(
+            expect.arrayContaining([
+                'bottom-24',
+                'left-1/2',
+                '-translate-x-1/2',
+                'lg:bottom-4',
+                'lg:left-[calc(50%-200px)]',
+            ]),
+        );
+        expect(classes()).not.toContain('top-4');
+    });
+
+    it('keeps errors as alerts, above the rest, wherever it sits', async () => {
+        const ui = useUIStore();
+        ui.toastPlacement = 'register';
+        ui.queueMessage(Color.SUCCESS, 'Saved');
+        ui.queueMessage(Color.ERROR, 'Sale failed');
+        await nextTick();
+
+        const [error, success] = toasts();
+        expect(error.textContent?.trim()).toBe('Sale failed');
+        expect(error.getAttribute('role')).toBe('alert');
+        expect(success.textContent?.trim()).toBe('Saved');
+        expect(stack().contains(error)).toBe(true);
+    });
+});

@@ -12,7 +12,7 @@
                 class="hidden sm:inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors"
             >
                 <LogIn class="w-4 h-4" />
-                Login
+                Log in
             </router-link>
         </div>
     </header>

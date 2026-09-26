@@ -86,7 +86,7 @@ export const useAuthStore = defineStore('auth', () => {
     const userLogoutPending = ref(false);
 
     /**
-     * The Sign out button. Leaves the page first, so a page's leave guard
+     * The Log out button. Leaves the page first, so a page's leave guard
      * can ask (a draft page with unsaved drafts does); only once the
      * navigation to Login has gone through does the session end. "Stay"
      * cancels it: nothing is sent and the session goes on. Resolves true
