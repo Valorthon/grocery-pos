@@ -130,7 +130,15 @@
                                     ? undefined
                                     : `product-match-${search.highlighted.value}`
                             "
-                            class="w-full min-h-14 pl-11 pr-48 py-3 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
+                            :class="
+                                /*
+                                 * Room for the buttons on the right (#89).
+                                 * Below sm (no F2 hint) it is just what they
+                                 * take: Enter / Scan, plus Clear with text.
+                                 */
+                                searchQuery ? 'pr-43' : 'pr-32'
+                            "
+                            class="w-full min-h-14 pl-11 sm:pr-48 py-3 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
                             @input="onSearchChange"
                             @keydown.down.prevent="search.move(1)"
                             @keydown.up.prevent="search.move(-1)"
@@ -148,7 +156,13 @@
                             >
                                 <X class="w-4 h-4" aria-hidden="true" />
                             </button>
-                            <KeyHint>{{ REGISTER_KEYS.SCAN }}</KeyHint>
+                            <!-- Hidden on phones, for the text's room (#89). -->
+                            <span
+                                class="hidden sm:inline-flex"
+                                data-testid="scan-key-hint"
+                            >
+                                <KeyHint>{{ REGISTER_KEYS.SCAN }}</KeyHint>
+                            </span>
                             <button
                                 type="submit"
                                 :disabled="isTicketLocked"

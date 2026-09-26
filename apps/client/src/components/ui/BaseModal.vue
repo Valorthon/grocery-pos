@@ -66,12 +66,16 @@
                                     {{ subtitle }}
                                 </p>
                             </div>
+                            <!--
+                                A 44px target (#89); the negative margins
+                                keep the header as tall as its title.
+                            -->
                             <button
                                 v-if="closable"
                                 type="button"
                                 aria-label="Close"
                                 data-modal-close
-                                class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors shrink-0 focus-ring"
+                                class="w-11 h-11 -my-2 -mr-2 ml-2 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors shrink-0 focus-ring"
                                 @click="dismiss"
                             >
                                 <X :size="16" aria-hidden="true" />

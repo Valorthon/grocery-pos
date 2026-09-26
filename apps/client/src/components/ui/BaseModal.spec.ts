@@ -135,6 +135,21 @@ const tab = async (shiftKey = false) => {
     return event;
 };
 
+describe('BaseModal close button (#89)', () => {
+    it('is a 44px target, pulled into the header so it stays as tall', async () => {
+        await mountOne();
+        const close =
+            document.body.querySelector<HTMLElement>('[data-modal-close]')!;
+        const classes = close.className.split(/\s+/);
+
+        expect(classes).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+        expect(classes).not.toContain('w-8');
+        expect(classes).not.toContain('h-8');
+        // Negative margins: the header keeps its height and edge.
+        expect(classes).toEqual(expect.arrayContaining(['-my-2', '-mr-2']));
+    });
+});
+
 describe('BaseModal dialog semantics (issue #22)', () => {
     it('is a modal dialog labelled by its title and described by its subtitle', async () => {
         await mountOne();

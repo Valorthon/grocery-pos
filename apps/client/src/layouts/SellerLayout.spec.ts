@@ -442,3 +442,193 @@ describe('SellerLayout sidebar (issue #26)', () => {
         });
     });
 });
+
+describe('SellerLayout dashboard menu below md (#89)', () => {
+    let media: ReturnType<typeof stubMatchMedia> | null = null;
+
+    function menuButton() {
+        return document.querySelector<HTMLButtonElement>(
+            '[data-testid="seller-nav-menu"]',
+        )!;
+    }
+
+    function drawer() {
+        return document.querySelector<HTMLElement>(
+            '[data-testid="seller-nav-drawer"]',
+        );
+    }
+
+    /** The app root: RouterView's host, the first child of `<body>`. */
+    function appRoot() {
+        return document.body.firstElementChild as HTMLElement;
+    }
+
+    async function open() {
+        menuButton().click();
+        await flush();
+    }
+
+    function isClosed() {
+        return (
+            drawer() === null &&
+            menuButton().getAttribute('aria-expanded') === 'false' &&
+            !anyModalOpen.value &&
+            !appRoot().hasAttribute('inert')
+        );
+    }
+
+    beforeEach(() => {
+        api.get.mockResolvedValue({ data: { shift: SHIFT } });
+    });
+
+    afterEach(() => {
+        media?.restore();
+        media = null;
+    });
+
+    describe('from md up', () => {
+        it('shows the tabs and hides the menu button', async () => {
+            media = stubMatchMedia(true);
+            await mountAt('/seller');
+
+            expect(menuButton().className.split(/\s+/)).toContain('md:hidden');
+            const tabs = document.querySelector('header nav')!;
+            expect(tabs.className.split(/\s+/)).toEqual(
+                expect.arrayContaining(['hidden', 'md:flex']),
+            );
+            expect(tabs.textContent).toContain('Orders & Sales');
+        });
+    });
+
+    describe('below md: a drawer', () => {
+        beforeEach(() => {
+            media = stubMatchMedia(false);
+        });
+
+        it('has a 44px menu button that opens a modal drawer with the tabs', async () => {
+            await mountAt('/seller');
+            const button = menuButton();
+
+            expect(button.className.split(/\s+/)).toEqual(
+                expect.arrayContaining(['min-h-11', 'min-w-11']),
+            );
+            expect(button.getAttribute('aria-controls')).toBe(
+                'seller-nav-drawer',
+            );
+            expect(button.getAttribute('aria-expanded')).toBe('false');
+            expect(drawer()).toBeNull();
+
+            await open();
+
+            const panel = drawer()!;
+            expect(panel.getAttribute('role')).toBe('dialog');
+            expect(panel.getAttribute('aria-modal')).toBe('true');
+            expect(panel.id).toBe('seller-nav-drawer');
+            expect(button.getAttribute('aria-expanded')).toBe('true');
+            expect(anyModalOpen.value).toBe(true);
+            // Under <body>, beside the page, which is inert behind it.
+            expect(appRoot().contains(panel)).toBe(false);
+            expect(appRoot().hasAttribute('inert')).toBe(true);
+            expect(panel.closest('[inert]')).toBeNull();
+            // The focus moves to its first item.
+            expect(document.activeElement?.textContent?.trim()).toBe(
+                'Dashboard',
+            );
+
+            const items = [...panel.querySelectorAll('button')];
+            expect(items.map((b) => b.textContent?.trim())).toEqual([
+                '',
+                'Dashboard',
+                'Orders & Sales',
+            ]);
+            for (const item of items) {
+                expect(item.className).toMatch(/\bmin-h-11\b/);
+            }
+            // The current page is marked.
+            expect(items[1].getAttribute('aria-current')).toBe('page');
+        });
+
+        it('closes on Escape and gives the focus back to the menu button', async () => {
+            await mountAt('/seller');
+            menuButton().focus();
+            await open();
+
+            document.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+            );
+            await flush();
+
+            expect(isClosed()).toBe(true);
+            expect(document.activeElement).toBe(menuButton());
+        });
+
+        it('gives the focus back to the menu button even when a click did not focus it', async () => {
+            await mountAt('/seller');
+            (document.activeElement as HTMLElement | null)?.blur();
+            await open();
+
+            document
+                .querySelector<HTMLButtonElement>(
+                    '[data-testid="seller-nav-close"]',
+                )!
+                .click();
+            await flush();
+
+            expect(isClosed()).toBe(true);
+            expect(document.activeElement).toBe(menuButton());
+        });
+
+        it('closes on the backdrop', async () => {
+            await mountAt('/seller');
+            await open();
+
+            document
+                .querySelector<HTMLElement>(
+                    '[data-testid="seller-nav-backdrop"]',
+                )!
+                .click();
+            await flush();
+
+            expect(isClosed()).toBe(true);
+        });
+
+        it('closes on navigation', async () => {
+            await mountAt('/seller');
+            await open();
+
+            const orders = [...drawer()!.querySelectorAll('button')].find((b) =>
+                b.textContent?.includes('Orders & Sales'),
+            )!;
+            orders.click();
+            await flush();
+
+            expect(router.currentRoute.value.name).toBe('Sales');
+            expect(drawer()).toBeNull();
+            expect(anyModalOpen.value).toBe(false);
+            expect(appRoot().hasAttribute('inert')).toBe(false);
+        });
+
+        it('closes when the window grows to md', async () => {
+            await mountAt('/seller');
+            await open();
+
+            media!.set(true);
+            await flush();
+
+            expect(isClosed()).toBe(true);
+        });
+
+        it('leaves nothing behind when unmounted open', async () => {
+            await mountAt('/seller');
+            await open();
+            expect(anyModalOpen.value).toBe(true);
+
+            app!.unmount();
+            app = null;
+
+            expect(anyModalOpen.value).toBe(false);
+            expect(document.querySelector('[inert]')).toBeNull();
+            expect(document.body.style.overflow).toBe('');
+        });
+    });
+});

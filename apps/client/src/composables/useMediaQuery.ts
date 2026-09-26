@@ -2,6 +2,8 @@ import { getCurrentInstance, onBeforeUnmount, type Ref, ref } from 'vue';
 
 /** Tailwind's `lg` breakpoint (64rem): the register's side-by-side layout. */
 export const LG_QUERY = '(min-width: 64rem)';
+/** Tailwind's `md` breakpoint (48rem): the seller dashboard's header tabs. */
+export const MD_QUERY = '(min-width: 48rem)';
 
 /**
  * Whether `query` matches now, kept up to date while the calling

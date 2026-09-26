@@ -167,8 +167,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, useTemplateRef, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { computed, useTemplateRef, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import {
     LayoutDashboard,
     PanelLeft,
@@ -184,11 +184,7 @@ import { useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import { useIsLarge } from '@/composables/useMediaQuery';
 import { useSidebarPreference } from '@/composables/useSidebarPreference';
-import {
-    type ModalEntry,
-    pushModal,
-    removeModal,
-} from '@/components/ui/modal-stack';
+import { useModalDrawer } from '@/composables/useModalDrawer';
 import UserProfileMenu from './UserProfileMenu.vue';
 
 /** `modelValue`: whether the drawer is open (below lg only). */
@@ -196,7 +192,6 @@ const props = defineProps<{ modelValue: boolean }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
 const router = useRouter();
-const route = useRoute();
 const authStore = useAuthStore();
 const cartStore = useCartStore();
 const shiftStore = useShiftStore();
@@ -223,40 +218,18 @@ function closeDrawer() {
     if (props.modelValue) emit('update:modelValue', false);
 }
 
-/** The open drawer on the shared modal stack: Escape, trap, inert page. */
-const entry: ModalEntry = {
+// The open drawer on the shared modal stack: Escape, trap, inert page;
+// any navigation closes it, and so does growing to lg.
+useModalDrawer({
+    open: drawerOpen,
+    close: closeDrawer,
     root: () => drawerRoot.value,
     panel: () => aside.value,
-    closable: () => true,
-    close: closeDrawer,
-    opener: null,
-};
-
-watch(
-    drawerOpen,
-    (open) => {
-        if (!open) {
-            removeModal(entry);
-            return;
-        }
-        const active = document.activeElement;
-        entry.opener =
-            active instanceof HTMLElement && active !== document.body
-                ? active
-                : null;
-        pushModal(entry);
-        aside.value?.querySelector<HTMLElement>('nav button')?.focus();
-    },
-    { flush: 'post' },
-);
-
-// Any navigation closes the drawer; so does growing to lg.
-watch(() => route.fullPath, closeDrawer);
+    id: 'seller-sidebar',
+});
 watch(isLarge, (large) => {
     if (large) closeDrawer();
 });
-
-onBeforeUnmount(() => removeModal(entry));
 
 const navItems = [
     {

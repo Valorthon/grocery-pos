@@ -2249,3 +2249,51 @@ describe('Sell at lg (#26)', () => {
         expect(panel.hasAttribute('role')).toBe(false);
     });
 });
+
+describe('Sell scan box on phones (#89)', () => {
+    function classes(el: Element) {
+        return el.className.split(/\s+/);
+    }
+
+    it('hides the F2 hint below sm and keeps it from sm up', async () => {
+        mount();
+        await flush();
+
+        const hint = document.querySelector('[data-testid="scan-key-hint"]')!;
+        expect(classes(hint)).toEqual(
+            expect.arrayContaining(['hidden', 'sm:inline-flex']),
+        );
+        expect(hint.querySelector('[data-key-hint]')?.textContent).toBe('F2');
+    });
+
+    it('gives the text the room the buttons leave below sm, and keeps sm:pr-48', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await flush();
+
+        // Empty: only Enter / Scan sits on the right.
+        expect(classes(input())).toEqual(
+            expect.arrayContaining(['pr-32', 'sm:pr-48']),
+        );
+        expect(classes(input())).not.toContain('pr-48');
+
+        // With text, Clear shows too, and the padding makes room for it.
+        await type('milk');
+        expect(classes(input())).toEqual(
+            expect.arrayContaining(['pr-43', 'sm:pr-48']),
+        );
+        expect(classes(input())).not.toContain('pr-32');
+        const clear = document.querySelector(
+            'button[aria-label="Clear search"]',
+        )!;
+        const scan = [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Enter / Scan'),
+        )!;
+        const qty = document.querySelector('select[aria-label^="Quantity"]')!;
+        for (const control of [clear, scan, qty]) {
+            expect(classes(control)).toEqual(
+                expect.arrayContaining(['min-h-11', 'min-w-11']),
+            );
+        }
+    });
+});
