@@ -1,3 +1,5 @@
+import type { WireShape } from './wire-shape.js';
+
 export enum ErrorCode {
     AUTH_INVALID_CREDENTIALS = 'AUTH_001',
     AUTH_TOKEN_EXPIRED = 'AUTH_002',
@@ -115,7 +117,8 @@ export const REQUEST_ID_HEADER = 'X-Request-Id';
 /** Body returned by the API's GlobalFilter for every error response. */
 export interface AppErrorResponse {
     statusCode: number;
-    error: string;
+    /** What went wrong, for the client to branch on. */
+    error: ErrorCode;
     message: string;
     timestamp: string;
     path: string;
@@ -128,8 +131,25 @@ export interface AppErrorResponse {
     requestId: string;
 }
 
+export const APP_ERROR_RESPONSE_SHAPE: WireShape<AppErrorResponse> = {
+    statusCode: 'required',
+    error: 'required',
+    message: 'required',
+    timestamp: 'required',
+    path: 'required',
+    details: 'required',
+    requestId: 'required',
+};
+
 /** Shape of every paginated list endpoint. */
 export interface Paginated<T> {
+    /** One page of rows. */
     data: T[];
+    /** Rows matching the filters across every page (`countDocuments`). */
     totalItems: number;
 }
+
+export const PAGINATED_SHAPE: WireShape<Paginated<unknown>> = {
+    data: 'required',
+    totalItems: 'required',
+};

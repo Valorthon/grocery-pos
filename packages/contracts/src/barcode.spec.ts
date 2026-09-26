@@ -6,7 +6,7 @@ import {
     gtinCheckDigit,
     hasValidCheckDigit,
     isReservedBarcode,
-} from './barcode';
+} from './barcode.js';
 
 const EAN_13 = '4006381333931';
 const UPC_A = '036000291452';

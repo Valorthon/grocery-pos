@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PERMISSIONS, appPermissionsOf, permissionsOf } from './permissions';
-import { ASSIGNABLE_ROLES, Role } from './roles';
+import { PERMISSIONS, appPermissionsOf, permissionsOf } from './permissions.js';
+import { ASSIGNABLE_ROLES, Role } from './roles.js';
 
 describe('permissionsOf', () => {
     it('gives ADMIN every permission, in table order', () => {

@@ -1,6 +1,6 @@
-import { PaymentType } from './enums';
-import { TenderType } from './sales';
-import { NUMERIC_LIMITS } from './limits';
+import { PaymentType } from './enums.js';
+import { TenderType } from './sales.js';
+import { NUMERIC_LIMITS } from './limits.js';
 
 /**
  * Server-side cash shifts (issue #2). A cashier opens a shift with a counted
@@ -167,6 +167,41 @@ export interface CountedAmount {
     amount: number;
 }
 
+/** The sales section of a Z-read. Centavos. */
+export interface ZReadSales {
+    /** Every sale rung in the shift, reversed or not. */
+    count: number;
+    /** Their charged totals (after discounts). */
+    gross: number;
+    /** Discounts given on those sales. */
+    discounts: CountedAmount;
+    /** Sales of this shift voided / refunded before it closed. */
+    voids: CountedAmount;
+    refunds: CountedAmount;
+    /** `gross - voids - refunds`. */
+    net: number;
+}
+
+/** The tenders section of a Z-read. Centavos. */
+export interface ZReadTenders {
+    /** Cash kept from sales: cash tendered less change. */
+    cash: number;
+    gcash: number;
+}
+
+/** The drawer section of a Z-read. Centavos. */
+export interface ZReadDrawer {
+    openingFloat: number;
+    cashIn: number;
+    cashDrops: number;
+    /** Cash paid out of this drawer for voids and refunds. */
+    reversalPayouts: CountedAmount;
+    expectedCash: number;
+    countedCash: number;
+    /** Positive: over. Negative: short. */
+    overShort: number;
+}
+
 /**
  * The shift close report (Z-read), computed by the server when the shift
  * closes and stored on it. Every figure is centavos. It reconciles:
@@ -188,35 +223,9 @@ export interface ZReadReport {
     closedByName: string;
     /** True when an ADMIN closed someone else's shift. */
     closedByAdmin: boolean;
-    sales: {
-        /** Every sale rung in the shift, reversed or not. */
-        count: number;
-        /** Their charged totals (after discounts). */
-        gross: number;
-        /** Discounts given on those sales. */
-        discounts: CountedAmount;
-        /** Sales of this shift voided / refunded before it closed. */
-        voids: CountedAmount;
-        refunds: CountedAmount;
-        /** `gross - voids - refunds`. */
-        net: number;
-    };
-    tenders: {
-        /** Cash kept from sales: cash tendered less change. */
-        cash: number;
-        gcash: number;
-    };
-    drawer: {
-        openingFloat: number;
-        cashIn: number;
-        cashDrops: number;
-        /** Cash paid out of this drawer for voids and refunds. */
-        reversalPayouts: CountedAmount;
-        expectedCash: number;
-        countedCash: number;
-        /** Positive: over. Negative: short. */
-        overShort: number;
-    };
+    sales: ZReadSales;
+    tenders: ZReadTenders;
+    drawer: ZReadDrawer;
     /** Every drawer movement of the shift, oldest first. */
     movements: DrawerMovementView[];
 }

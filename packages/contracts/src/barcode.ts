@@ -1,4 +1,4 @@
-import { EAN_COUNTER } from './limits';
+import { EAN_COUNTER } from './limits.js';
 
 /**
  * Product barcodes (issue #14). A product may carry an EAN-13, a UPC-A

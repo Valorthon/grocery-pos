@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DiscountType, discountAmount } from './discount';
+import { DiscountType, discountAmount } from './discount.js';
 
 describe('discountAmount', () => {
     it('takes a whole percent of the subtotal', () => {

@@ -1,4 +1,4 @@
-import { REFERENCE_NUMBER_LIMITS } from './limits';
+import { REFERENCE_NUMBER_LIMITS } from './limits.js';
 
 /**
  * Lifecycle of a sale. Only COMPLETED sales count toward revenue; a sale

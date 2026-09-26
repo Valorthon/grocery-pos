@@ -1,4 +1,4 @@
-import { ASSIGNABLE_ROLES, holdsRole, Role } from './roles';
+import { ASSIGNABLE_ROLES, holdsRole, Role } from './roles.js';
 
 /**
  * What each role may do (issue #24). `roles` is what the API enforces
