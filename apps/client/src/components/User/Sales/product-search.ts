@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { isAxiosError, isCancel } from 'axios';
 import {
-    isCompleteBarcode,
+    BARCODE_LENGTHS,
     type ProductMatch,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
@@ -10,15 +10,17 @@ import { apiErrorText } from '@/utils/api-error';
 /** One row of `GET /products/matches`. */
 export type Match = ProductMatch;
 
+const BARCODE_LENGTH_VALUES: readonly number[] = Object.values(BARCODE_LENGTHS);
+
 /**
- * True for a complete barcode, the only thing sent to `GET /products/:EAN`:
- * an EAN-13, UPC-A (12 digits) or EAN-8 with a valid check digit, the codes
- * a product can carry (issue #14), including the store's generated 200…
- * EAN-13s. Anything else, a wrong check digit included, is searched
- * instead (issue #87).
+ * True for input shaped like a whole barcode: digits only, as long as an
+ * EAN-13, UPC-A or EAN-8 (issue #14). The register tries it as an exact
+ * `GET /products/:EAN` first. The check digit is not checked: a legacy code
+ * saved before #14 may carry a wrong one and must still scan, and a typed
+ * fragment of a longer code that misses falls back to the search (#87).
  */
 export function isBarcode(query: string): boolean {
-    return isCompleteBarcode(query);
+    return /^\d+$/.test(query) && BARCODE_LENGTH_VALUES.includes(query.length);
 }
 
 /**

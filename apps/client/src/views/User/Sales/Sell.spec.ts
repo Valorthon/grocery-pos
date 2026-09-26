@@ -1008,16 +1008,27 @@ describe('Sell barcode lookup errors (#27)', () => {
     });
 });
 
-describe('Sell UPC-A and EAN-8 scans (#87)', () => {
+describe('Sell barcode-length scans (#87)', () => {
     const UPC_A = '036000291452';
     const EAN_8 = '96385074';
-    const SHORT: Record<
-        string,
-        { _id: string; EAN: string; name: string; price: number }
-    > = {
+    /** Saved before #14 with a wrong check digit (should end in 1). */
+    const LEGACY = '4006381333932';
+    /** Longer codes whose 12- and 8-digit prefixes have valid check digits. */
+    const LONG_12 = '4801234567088';
+    const LONG_8 = '4801243067005';
+    type Product = { _id: string; EAN: string; name: string; price: number };
+    const STORED: Record<string, Product> = {
         [UPC_A]: { _id: 'p3', EAN: UPC_A, name: 'tissue', price: 4500 },
         [EAN_8]: { _id: 'p4', EAN: EAN_8, name: 'gum', price: 1000 },
+        [LEGACY]: { _id: 'p5', EAN: LEGACY, name: 'bread', price: 1999 },
+        [LONG_12]: { _id: 'p6', EAN: LONG_12, name: 'soap', price: 3000 },
+        [LONG_8]: { _id: 'p7', EAN: LONG_8, name: 'rice', price: 5000 },
     };
+    const asMatch = (p: Product) => ({
+        product: p._id,
+        EAN: p.EAN,
+        name: p.name,
+    });
 
     function notFound() {
         const config = { headers: new AxiosHeaders() };
@@ -1041,20 +1052,21 @@ describe('Sell UPC-A and EAN-8 scans (#87)', () => {
     }
 
     /**
-     * Prefix search would find several products for any digits, so only
-     * an exact lookup can add the scanned one straight away.
+     * Exact lookups answer from STORED; matches are every stored code that
+     * starts with the digits, as the API's barcode prefix search would.
      */
-    function serveShort(
-        matches: (name: string) => Promise<unknown> = () =>
-            Promise.resolve([
-                { product: 'p3', EAN: UPC_A, name: 'tissue' },
-                { product: 'p4', EAN: EAN_8, name: 'gum' },
-            ]),
-    ) {
-        serve(matches, (EAN) =>
-            SHORT[EAN]
-                ? Promise.resolve(SHORT[EAN])
-                : Promise.reject(notFound()),
+    function serveStored() {
+        serve(
+            (name) =>
+                Promise.resolve(
+                    Object.values(STORED)
+                        .filter((p) => p.EAN.startsWith(name))
+                        .map(asMatch),
+                ),
+            (EAN) =>
+                STORED[EAN]
+                    ? Promise.resolve(STORED[EAN])
+                    : Promise.reject(notFound()),
         );
     }
 
@@ -1064,39 +1076,30 @@ describe('Sell UPC-A and EAN-8 scans (#87)', () => {
         await pressEnter();
     }
 
-    function searched() {
-        return get.mock.calls.some(([url]) => url === '/products/matches');
+    function urls() {
+        return get.mock.calls.map(([url]) => url as string);
     }
 
     it.each([
         ['a 12-digit UPC-A', UPC_A, 'tissue'],
         ['an 8-digit EAN-8', EAN_8, 'gum'],
-    ])('looks %s up exactly and adds it', async (_label, code, name) => {
-        serveShort();
-        mount();
+        ['a 13-digit legacy code with a wrong check digit', LEGACY, 'bread'],
+    ])(
+        'looks %s up exactly and adds it, in one request',
+        async (_label, code, name) => {
+            serveStored();
+            mount();
 
-        await scan(code);
+            await scan(code);
 
-        expect(get).toHaveBeenCalledWith(`/products/${code}`);
-        expect(searched()).toBe(false);
-        expect(cartNames()).toEqual([`1x ${name}`]);
-        expect(text('scan-status')).toContain(`Scanned: ${name}`);
-    });
-
-    it('adds a scanned UPC-A even while the typed text shows several matches', async () => {
-        serveShort();
-        mount();
-
-        await type(UPC_A);
-        await pressEnter();
-
-        expect(get).toHaveBeenCalledWith(`/products/${UPC_A}`);
-        expect(cartNames()).toEqual(['1x tissue']);
-        expect(text('scan-alert')).not.toContain('match');
-    });
+            expect(urls()).toEqual([`/products/${code}`]);
+            expect(cartNames()).toEqual([`1x ${name}`]);
+            expect(text('scan-status')).toContain(`Scanned: ${name}`);
+        },
+    );
 
     it('applies the quantity shorthand to an EAN-8', async () => {
-        serveShort();
+        serveStored();
         mount();
 
         await scan(`3*${EAN_8}`);
@@ -1105,49 +1108,79 @@ describe('Sell UPC-A and EAN-8 scans (#87)', () => {
     });
 
     it.each([
-        ['12-digit', '012345678905'],
-        ['8-digit', '40170725'],
-    ])('says an unknown %s barcode is not found', async (_label, code) => {
-        serveShort();
+        ['12', LONG_12.slice(0, 12), 'soap'],
+        ['8', LONG_8.slice(0, 8), 'rice'],
+    ])(
+        'falls back to the matches for a typed %s-digit prefix that is not a stored code',
+        async (_label, prefix) => {
+            serveStored();
+            mount();
+
+            await scan(prefix);
+
+            // The miss costs exactly one search, nothing more.
+            expect(urls()).toEqual([
+                `/products/${prefix}`,
+                '/products/matches',
+            ]);
+            expect(cartNames()).toEqual([]);
+            expect(text('scan-alert')).not.toContain('not found');
+            // Digits are never auto-added, even with one match.
+            expect(text('scan-alert')).toContain(
+                `1 item matches "${prefix}": pick it`,
+            );
+            expect(document.getElementById('product-match-0')).not.toBeNull();
+        },
+    );
+
+    it('lists every match of a prefix that hits several codes', async () => {
+        serveStored();
         mount();
 
-        await scan(code);
+        await scan('48012');
 
-        expect(get).toHaveBeenCalledWith(`/products/${code}`);
-        expect(searched()).toBe(false);
-        expect(cartNames()).toEqual([]);
-        expect(text('scan-alert')).toContain(`Barcode "${code}" not found`);
+        // Not barcode-length: searched only, as before.
+        expect(urls()).toEqual(['/products/matches']);
+        expect(text('scan-alert')).toContain('2 items match "48012"');
     });
 
     it.each([
-        ['13', '4006381333932'],
-        ['12', '036000291453'],
-        ['8', '96385075'],
+        ['12-digit', '012345678905'],
+        ['8-digit', '40170725'],
+        ['13-digit wrong-check-digit', '4006381333930'],
     ])(
-        'searches a %s-digit number with a wrong check digit instead of looking it up',
+        'says an unknown %s code is not found when nothing matches either',
         async (_label, code) => {
-            serveShort(() => Promise.resolve([]));
+            serveStored();
             mount();
 
             await scan(code);
 
-            expect(get).not.toHaveBeenCalledWith(`/products/${code}`);
-            expect(searched()).toBe(true);
+            expect(urls()).toEqual([`/products/${code}`, '/products/matches']);
             expect(cartNames()).toEqual([]);
-            expect(text('scan-alert')).toContain(`No item matching "${code}"`);
+            expect(text('scan-alert')).toContain(`Barcode "${code}" not found`);
         },
     );
 
-    it('never auto-adds the single match of a wrong-check-digit number', async () => {
-        serveShort(() =>
-            Promise.resolve([{ product: 'p3', EAN: UPC_A, name: 'tissue' }]),
+    it('keeps the live search of text retyped while a lookup was missing', async () => {
+        let answer!: (value: unknown) => void;
+        serve(
+            () => Promise.resolve([]),
+            () =>
+                new Promise((_resolve, reject) => {
+                    answer = () => reject(notFound());
+                }),
         );
         mount();
 
-        await scan('036000291453');
+        await scan(UPC_A);
+        input().value = 'milk';
+        input().dispatchEvent(new Event('input'));
+        answer(undefined);
+        await flush();
 
-        expect(cartNames()).toEqual([]);
-        expect(text('scan-alert')).toContain('1 item matches "036000291453"');
+        expect(urls()).toEqual([`/products/${UPC_A}`]);
+        expect(text('scan-alert')).not.toContain('not found');
     });
 });
 

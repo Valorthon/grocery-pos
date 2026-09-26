@@ -55,28 +55,26 @@ describe('parseScan', () => {
 });
 
 describe('isBarcode', () => {
-    it('is true for an EAN-13, UPC-A or EAN-8 with a valid check digit (#87)', () => {
+    it('is true for 13, 12 or 8 digits (#87)', () => {
         expect(isBarcode('4006381333931')).toBe(true);
         expect(isBarcode('036000291452')).toBe(true);
         expect(isBarcode('96385074')).toBe(true);
-    });
-
-    it('is true for a generated code in the 200… range', () => {
         expect(isBarcode('2000000000015')).toBe(true);
     });
 
-    it('is false for a wrong check digit at 8, 12 or 13 digits', () => {
-        expect(isBarcode('4006381333932')).toBe(false);
-        expect(isBarcode('036000291453')).toBe(false);
-        expect(isBarcode('96385075')).toBe(false);
-        // A 12-digit prefix of a generated code: its last digit is data.
-        expect(isBarcode('200000000001')).toBe(false);
+    it('ignores the check digit: a legacy code may carry a wrong one', () => {
+        expect(isBarcode('4006381333932')).toBe(true);
+        expect(isBarcode('036000291453')).toBe(true);
+        expect(isBarcode('96385075')).toBe(true);
     });
 
     it('is false for other lengths and text', () => {
         expect(isBarcode('20000000000150')).toBe(false);
-        expect(isBarcode('1234565')).toBe(false);
+        expect(isBarcode('200000000')).toBe(false);
+        expect(isBarcode('1234567')).toBe(false);
+        expect(isBarcode('9638507a')).toBe(false);
         expect(isBarcode('milk')).toBe(false);
+        expect(isBarcode('')).toBe(false);
     });
 });
 

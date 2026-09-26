@@ -60,21 +60,6 @@ export function isReservedBarcode(code: string): boolean {
 }
 
 /**
- * True if `code` is a complete barcode as a scanner reads one: digits only,
- * 8, 12 or 13 long, with a valid check digit. Unlike `barcodeError`, the
- * store's own generated codes count too: they are refused as *new* barcodes,
- * but they are on products and on their labels, so a scan of one is a
- * complete code to look up (issue #87).
- */
-export function isCompleteBarcode(code: string): boolean {
-    return (
-        /^\d+$/.test(code) &&
-        VALID_LENGTHS.includes(code.length) &&
-        hasValidCheckDigit(code)
-    );
-}
-
-/**
  * Why a typed or scanned barcode is refused, or `null` if it is accepted.
  * Checks, in order: format (digits only, 8, 12 or 13 long), check digit,
  * then the reserved generated range. Codes the server generates are not
