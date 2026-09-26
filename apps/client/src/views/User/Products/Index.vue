@@ -5,6 +5,7 @@
         </template>
         <template #actions>
             <BaseButton
+                v-if="canAddProducts"
                 size="sm"
                 @click="router.push({ name: 'Products/Add' })"
             >
@@ -63,7 +64,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Plus, Search, X } from '@lucide/vue';
 import api from '@/axios';
@@ -73,6 +74,8 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
 import type { Paginated, ProductView } from '@grocery-pos/contracts';
+import { useAuthStore } from '@/stores/auth';
+import { canOpenRoute, type RouteAccessMeta } from '@/router/access';
 import {
     useAppliedFilters,
     useListFetch,
@@ -80,6 +83,15 @@ import {
 } from '@/composables/useListFetch';
 
 const router = useRouter();
+const authStore = useAuthStore();
+// Offered only to whoever the router lets onto Products/Add (#83): an
+// Adjuster can list products but not add them.
+const canAddProducts = computed(() =>
+    canOpenRoute(
+        router.resolve({ name: 'Products/Add' }).meta as RouteAccessMeta,
+        authStore.user?.roles ?? [],
+    ),
+);
 const { page, limit, search } = useListPaging(() => fetchProducts());
 const totalItems = ref(0);
 const searchName = ref('');
