@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import type { Types } from 'mongoose';
 import { Category } from './types';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
@@ -42,3 +43,10 @@ export class Product {
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);
+
+/** A product as a `.lean()` read returns it, with its timestamps. */
+export type ProductDoc = Product & {
+    _id: Types.ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
+};

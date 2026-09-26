@@ -1,6 +1,7 @@
 import { Body, Controller, Logger, Post, Req, Res } from '@nestjs/common';
 import { LoginDto } from './types';
 import type { Request, Response } from 'express';
+import type { LoginResponse } from '@grocery-pos/contracts';
 import { Types } from 'mongoose';
 import { AuthService } from './auth.service';
 import { CookieService } from '../common/utils/cookie/cookie.service';
@@ -47,7 +48,7 @@ export class AuthController {
         @Body() dto: LoginDto,
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
-    ) {
+    ): Promise<LoginResponse> {
         // Keyed on the username as it will be checked, after the pipes.
         await this.loginLimiter.hit(res, clientIp(req), dto.username);
 

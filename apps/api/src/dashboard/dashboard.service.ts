@@ -1,14 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
-import { COUNTED_SALES_FILTER, Sales } from '../sales/sales.schema';
+import {
+    COUNTED_SALES_FILTER,
+    Sales,
+    type SaleRowDoc,
+} from '../sales/sales.schema';
 import { Inventory } from '../inventory-man/inventory/inventory.schema';
 import { Product } from '../product/product.schema';
-import { Restock } from '../inventory-man/restock/restock.schema';
-import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
+import {
+    Restock,
+    type RestockRowDoc,
+} from '../inventory-man/restock/restock.schema';
+import {
+    Adjustment,
+    type AdjustmentRowDoc,
+} from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { calendarDateInZone, dayRangeInZone } from '../common/utils/timezone';
 import { LOW_STOCK_THRESHOLD } from '../constants';
+import type { NameRef } from '../common/wire';
+
+/**
+ * A restock in the activity feed: for a non-admin only
+ * `RESTOCK_ACTIVITY_FIELDS`, for an ADMIN the whole row.
+ */
+export type RestockActivityDoc = Pick<
+    RestockRowDoc,
+    '_id' | 'description' | 'restockedBy' | 'createdAt'
+> &
+    Partial<Pick<RestockRowDoc, 'totalCost' | 'updatedAt'>>;
 
 /** What every dashboard role sees: stock and activity, no money. */
 export interface DashboardStats {
@@ -20,8 +41,8 @@ export interface DashboardStats {
     /** Store-wide count of today's sales that were not reversed. */
     todaySalesCount: number;
     /** Newest restocks; without `totalCost` unless the caller is ADMIN. */
-    recentRestocks: Array<Record<string, unknown>>;
-    recentAdjustments: Array<Record<string, unknown>>;
+    recentRestocks: RestockActivityDoc[];
+    recentAdjustments: AdjustmentRowDoc[];
 }
 
 /** The money figures only ADMIN receives (issue #13). */
@@ -29,7 +50,7 @@ export interface DashboardMoney {
     /** Centavos. */
     todayRevenue: number;
     /** The newest sales store-wide, with their amounts and cashiers. */
-    recentSales: Array<Record<string, unknown>>;
+    recentSales: SaleRowDoc[];
 }
 
 export type DashboardResponse = DashboardStats & Partial<DashboardMoney>;
@@ -152,16 +173,27 @@ export class DashboardService {
                       .find()
                       .sort({ createdAt: -1 })
                       .limit(5)
-                      .populate({ path: 'cashier', select: 'name' })
-                      .lean()
+                      .populate<{ cashier: NameRef | null }>({
+                          path: 'cashier',
+                          select: 'name',
+                      })
+                      .lean<SaleRowDoc[]>()
                 : Promise.resolve(null),
-            restocks.populate({ path: 'restockedBy', select: 'name' }).lean(),
+            restocks
+                .populate<{ restockedBy: NameRef | null }>({
+                    path: 'restockedBy',
+                    select: 'name',
+                })
+                .lean<RestockActivityDoc[]>(),
             this.adjustmentModel
                 .find()
                 .sort({ createdAt: -1 })
                 .limit(5)
-                .populate({ path: 'adjustedBy', select: 'name' })
-                .lean(),
+                .populate<{ adjustedBy: NameRef | null }>({
+                    path: 'adjustedBy',
+                    select: 'name',
+                })
+                .lean<AdjustmentRowDoc[]>(),
         ]);
 
         const todaySales = todaySalesAgg[0];

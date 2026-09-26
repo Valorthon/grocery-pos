@@ -26,7 +26,13 @@ import {
     TenderType,
 } from './types';
 import { AuthUser } from '../auth/types';
-import { Role } from '@grocery-pos/contracts';
+import {
+    RECEIPT_DISCOUNT_SHAPE,
+    RECEIPT_ITEM_SHAPE,
+    RECEIPT_SHAPE,
+    Role,
+    wireShapeDiff,
+} from '@grocery-pos/contracts';
 import { ShiftService } from '../shift/shift.service';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 
@@ -193,6 +199,30 @@ describe('SalesService.sell', () => {
         expect(create).toHaveBeenCalledWith(
             [expect.objectContaining({ amount: 1792, cashier: 'u1' })],
             expect.anything(),
+        );
+    });
+
+    it('returns exactly the keys of the contracts Receipt (#27)', async () => {
+        getMany.mockResolvedValue(
+            new Map([['p1', { name: 'bread', price: 1999 }]]),
+        );
+
+        const receipt = await service.sell(
+            CASHIER,
+            sellDto([{ product: 'p1', quantity: 2 }], {
+                type: DiscountType.PERCENT,
+                value: 10,
+                reason: 'loyal customer',
+            }),
+        );
+
+        const none = { missing: [], unexpected: [] };
+        expect(wireShapeDiff(receipt, RECEIPT_SHAPE)).toEqual(none);
+        expect(wireShapeDiff(receipt.items[0], RECEIPT_ITEM_SHAPE)).toEqual(
+            none,
+        );
+        expect(wireShapeDiff(receipt.discount, RECEIPT_DISCOUNT_SHAPE)).toEqual(
+            none,
         );
     });
 

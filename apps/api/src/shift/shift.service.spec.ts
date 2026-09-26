@@ -12,6 +12,11 @@ import {
     SaleStatus,
     ShiftStatus,
     TenderType,
+    wireShapeDiff,
+    Z_READ_DRAWER_SHAPE,
+    Z_READ_REPORT_SHAPE,
+    Z_READ_SALES_SHAPE,
+    Z_READ_TENDERS_SHAPE,
 } from '@grocery-pos/contracts';
 import { AuthUser } from '../auth/types';
 import { runInTransaction } from '../common/utils/db';
@@ -325,6 +330,20 @@ describe('ShiftService.chargeSale', () => {
 });
 
 describe('ShiftService.closeOwn (Z-read)', () => {
+    it('returns exactly the keys of the contracts ZReadReport, section by section (#27)', async () => {
+        await service.open(ANA, FLOAT_COUNTS);
+        await ring(ANA, cashSale(45_000, 50_000));
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+
+        const none = { missing: [], unexpected: [] };
+        expect(wireShapeDiff(report, Z_READ_REPORT_SHAPE)).toEqual(none);
+        expect(wireShapeDiff(report.sales, Z_READ_SALES_SHAPE)).toEqual(none);
+        expect(wireShapeDiff(report.tenders, Z_READ_TENDERS_SHAPE)).toEqual(
+            none,
+        );
+        expect(wireShapeDiff(report.drawer, Z_READ_DRAWER_SHAPE)).toEqual(none);
+    });
+
     it('computes expected cash from float, movements, sales and payouts, and the variance', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         const shiftId = new Types.ObjectId(_id);

@@ -132,7 +132,11 @@ export class ChangePasswordDto {
     newPassword!: string;
 }
 
-export class GetAllDto {
+/**
+ * Query of `GET /users`: its own DTO (not the product list's), so `name`
+ * is bounded like a username and there is no `EAN` (issue #27).
+ */
+export class GetUsersDto {
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.USERNAME)

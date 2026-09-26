@@ -11,7 +11,13 @@ import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
 import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
-import { LOW_STOCK_THRESHOLD, SaleStatus } from '@grocery-pos/contracts';
+import {
+    DASHBOARD_MONEY_KEYS,
+    DASHBOARD_VIEW_SHAPE,
+    LOW_STOCK_THRESHOLD,
+    SaleStatus,
+    wireShapeDiff,
+} from '@grocery-pos/contracts';
 
 interface RecentQuery {
     sort: () => RecentQuery;
@@ -186,6 +192,19 @@ describe('DashboardService.getDashboard', () => {
                 recentRestocks: [],
                 recentAdjustments: [],
             });
+        });
+
+        it('sends the contracts DashboardView keys, money keys to an admin only (#27)', async () => {
+            const admin = await service.getDashboard({ includeMoney: true });
+            const other = await service.getDashboard({ includeMoney: false });
+
+            const none = { missing: [], unexpected: [] };
+            expect(wireShapeDiff(admin, DASHBOARD_VIEW_SHAPE)).toEqual(none);
+            expect(wireShapeDiff(other, DASHBOARD_VIEW_SHAPE)).toEqual(none);
+            for (const key of DASHBOARD_MONEY_KEYS) {
+                expect(admin).toHaveProperty(key);
+                expect(other).not.toHaveProperty(key);
+            }
         });
 
         it('does not even read money for other roles', async () => {

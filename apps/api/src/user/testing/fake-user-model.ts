@@ -53,8 +53,13 @@ const clone = (row: FakeUserRow): FakeUserRow => ({
     roles: [...row.roles],
 });
 
-/** Chainable, awaitable query: `.select().session().lean()` or `await`. */
+/**
+ * Chainable, awaitable query: `.select().session().lean()` or `await`.
+ * `skip`/`limit` page an array result; `sort` keeps insertion order.
+ */
 class FakeQuery<T> implements PromiseLike<T> {
+    private from = 0;
+    private count = Infinity;
     constructor(private readonly run: () => T) {}
     select(): this {
         return this;
@@ -62,8 +67,24 @@ class FakeQuery<T> implements PromiseLike<T> {
     session(): this {
         return this;
     }
+    sort(): this {
+        return this;
+    }
+    skip(n: number): this {
+        this.from = n;
+        return this;
+    }
+    limit(n: number): this {
+        this.count = n;
+        return this;
+    }
     lean(): Promise<T> {
-        return Promise.resolve().then(this.run);
+        return Promise.resolve().then(() => {
+            const value = this.run();
+            return Array.isArray(value)
+                ? (value.slice(this.from, this.from + this.count) as T)
+                : value;
+        });
     }
     then<A = T, B = never>(
         onFulfilled?: ((value: T) => A | PromiseLike<A>) | null,

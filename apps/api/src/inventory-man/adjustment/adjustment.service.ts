@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Adjustment } from './adjustment.schema';
+import { Adjustment, type AdjustmentRowDoc } from './adjustment.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { AdjustmentDetails } from './adjustment-details.schema';
+import {
+    AdjustmentDetails,
+    type AdjustmentLineDoc,
+} from './adjustment-details.schema';
+import type { Paginated } from '@grocery-pos/contracts';
+import type { NameRef } from '../../common/wire';
 import { AdjustDto, GetAllDto, GetDetailsDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
@@ -11,10 +16,7 @@ import { dateRangeFilter } from '../../common/utils/timezone';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
 /** One entry of the `GET .../users` filter list: nothing beyond the name. */
-export interface UserOption {
-    _id: Types.ObjectId;
-    name: string;
-}
+export type UserOption = NameRef;
 
 @Injectable()
 export class AdjustmentService {
@@ -27,9 +29,7 @@ export class AdjustmentService {
         private config: TypedConfigService,
     ) {}
 
-    async getAll(
-        dto: GetAllDto,
-    ): Promise<{ data: Adjustment[]; totalItems: number }> {
+    async getAll(dto: GetAllDto): Promise<Paginated<AdjustmentRowDoc>> {
         const { page, limit, dateFrom, dateTo, adjustedBy } = dto;
 
         const skip = (page - 1) * limit;
@@ -53,11 +53,11 @@ export class AdjustmentService {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate({
+                .populate<{ adjustedBy: NameRef | null }>({
                     path: 'adjustedBy',
                     select: 'name',
                 })
-                .lean(),
+                .lean<AdjustmentRowDoc[]>(),
 
             // Exact: the total is shown to the user (issue #16).
             this.model.countDocuments(query),
@@ -111,7 +111,7 @@ export class AdjustmentService {
 
     async getDetails(
         dto: GetDetailsDto,
-    ): Promise<{ data: Adjustment[]; totalItems: number }> {
+    ): Promise<Paginated<AdjustmentLineDoc>> {
         const { page, limit, EAN, name, adjustment } = dto;
 
         const skip = (page - 1) * limit;
@@ -123,7 +123,7 @@ export class AdjustmentService {
         const productQuery = productSearchFilter({ name, EAN }, 'product.');
 
         const result = await this.modelDetails.aggregate<{
-            paginatedData: Adjustment[];
+            paginatedData: AdjustmentLineDoc[];
             metadata: Array<{ total: number }>;
         }>([
             { $match: adjustmentQuery },

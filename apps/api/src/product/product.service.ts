@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Product } from './product.schema';
+import { Product, type ProductDoc } from './product.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
     GetAllDto,
@@ -14,7 +14,11 @@ import {
 import { runInTransaction } from '../common/utils/db';
 import { containsRegex, prefixRegex } from '../common/utils/regex';
 import { productSearchFilter } from './product-search';
-import { barcodeError } from '@grocery-pos/contracts';
+import {
+    barcodeError,
+    type Paginated,
+    type ProductMatch,
+} from '@grocery-pos/contracts';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
 import { AuthUser, Role } from '../auth/types';
 import { EanCounterService } from '../ean-counter/ean-counter.service';
@@ -60,10 +64,10 @@ export class ProductService {
         private EANCounterService: EanCounterService,
     ) {}
 
-    async getByBarcode(dto: GetDto): Promise<Product> {
+    async getByBarcode(dto: GetDto): Promise<ProductDoc> {
         const { EAN } = dto;
 
-        const product = await this.model.findOne({ EAN }).lean();
+        const product = await this.model.findOne({ EAN }).lean<ProductDoc>();
 
         if (!product) {
             throw new NotFoundError(
@@ -124,9 +128,7 @@ export class ProductService {
         return new Map(found.map((item) => [item._id.toString(), item]));
     }
 
-    async getAll(
-        dto: GetAllDto,
-    ): Promise<{ data: Product[]; totalItems: number }> {
+    async getAll(dto: GetAllDto): Promise<Paginated<ProductDoc>> {
         const { page, limit, name, EAN } = dto;
 
         const skip = (page - 1) * limit;
@@ -139,7 +141,7 @@ export class ProductService {
                 .sort({ name: 1 })
                 .skip(skip)
                 .limit(limit)
-                .lean(),
+                .lean<ProductDoc[]>(),
 
             // Exact: the total is shown to the user (issue #16).
             this.model.countDocuments(query),
@@ -285,9 +287,7 @@ export class ProductService {
         }
     }
 
-    async getMatches(
-        dto: MatchesDto,
-    ): Promise<{ EAN: string; name: string; product: string }[]> {
+    async getMatches(dto: MatchesDto): Promise<ProductMatch[]> {
         const { EAN, name } = dto;
 
         let query: Record<string, unknown>;

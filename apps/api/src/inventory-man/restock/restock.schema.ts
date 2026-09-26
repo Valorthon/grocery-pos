@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Types } from 'mongoose';
 import { User } from '../../user/user.schema';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../../constants';
+import type { NameRef } from '../../common/wire';
 
 @Schema({ timestamps: true })
 export class Restock {
@@ -35,3 +36,11 @@ export class Restock {
 }
 
 export const RestockSchema = SchemaFactory.createForClass(Restock);
+
+/** A restock read with `restockedBy` populated by name (null once deleted). */
+export type RestockRowDoc = Omit<Restock, 'restockedBy'> & {
+    _id: Types.ObjectId;
+    restockedBy: NameRef | null;
+    createdAt: Date;
+    updatedAt: Date;
+};

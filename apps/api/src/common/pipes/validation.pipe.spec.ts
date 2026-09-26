@@ -33,6 +33,7 @@ import {
     DrawerMovementDto,
     OpenShiftDto,
 } from '../../shift/types/shift.dto';
+import { Role } from '../../auth/types';
 import { createValidationPipe } from './validation.pipe';
 import { routeDtos } from '../testing/route-dtos';
 
@@ -188,7 +189,11 @@ describe('createValidationPipe: passwords pass through verbatim (#15)', () => {
     it('new users', async () => {
         const dto = await body(CreateBulkDto, {
             users: [
-                { name: ' Tom&Jerry ', password: PASSWORD, roles: ['SELLER'] },
+                {
+                    name: ' Tom&Jerry ',
+                    password: PASSWORD,
+                    roles: [Role.Seller],
+                },
             ],
         });
 

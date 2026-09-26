@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Restock } from './restock.schema';
+import { Restock, type RestockRowDoc } from './restock.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { RestockDetails } from './restock-details.schema';
+import { RestockDetails, type RestockLineDoc } from './restock-details.schema';
+import type { Paginated } from '@grocery-pos/contracts';
+import type { NameRef } from '../../common/wire';
 import { GetAllDto, GetDetailsDto, RestockDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
@@ -12,10 +14,7 @@ import { TypedConfigService } from '../../common/typed-config/typed-config.servi
 import { AuthUser } from '../../auth/types';
 import { ProductService } from '../../product/product.service';
 /** One entry of the `GET .../users` filter list: nothing beyond the name. */
-export interface UserOption {
-    _id: Types.ObjectId;
-    name: string;
-}
+export type UserOption = NameRef;
 
 @Injectable()
 export class RestockService {
@@ -73,9 +72,7 @@ export class RestockService {
         );
     }
 
-    async getAll(
-        dto: GetAllDto,
-    ): Promise<{ data: Restock[]; totalItems: number }> {
+    async getAll(dto: GetAllDto): Promise<Paginated<RestockRowDoc>> {
         const { page, limit, dateFrom, dateTo, restockedBy } = dto;
 
         const skip = (page - 1) * limit;
@@ -99,11 +96,11 @@ export class RestockService {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate({
+                .populate<{ restockedBy: NameRef | null }>({
                     path: 'restockedBy',
                     select: 'name',
                 })
-                .lean(),
+                .lean<RestockRowDoc[]>(),
 
             this.model.countDocuments(query),
         ]);
@@ -114,9 +111,7 @@ export class RestockService {
         };
     }
 
-    async getDetails(
-        dto: GetDetailsDto,
-    ): Promise<{ data: RestockDetails[]; totalItems: number }> {
+    async getDetails(dto: GetDetailsDto): Promise<Paginated<RestockLineDoc>> {
         const { page, limit, EAN, name, restock } = dto;
 
         const skip = (page - 1) * limit;
@@ -128,7 +123,7 @@ export class RestockService {
         const productQuery = productSearchFilter({ name, EAN }, 'product.');
 
         const result = await this.modelDetails.aggregate<{
-            paginatedData: RestockDetails[];
+            paginatedData: RestockLineDoc[];
             metadata: Array<{ total: number }>;
         }>([
             { $match: restockQuery },

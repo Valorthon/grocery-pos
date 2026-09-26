@@ -3,6 +3,7 @@ import mongoose, { Types } from 'mongoose';
 import { Product } from '../../product/product.schema';
 import { User } from '../../user/user.schema';
 import { NUMERIC_LIMITS } from '../../constants';
+import type { ProductDoc } from '../../product/product.schema';
 
 @Schema({ timestamps: true })
 export class Inventory {
@@ -41,3 +42,12 @@ export const InventorySchema = SchemaFactory.createForClass(Inventory);
 // Serves the dashboard's stock tiles (`stock <= LOW_STOCK_THRESHOLD`) and
 // the inventory list's `maxStock` filter without a collection scan.
 InventorySchema.index({ stock: 1 });
+
+/** An inventory row joined to its product (`GET /inventories`). */
+export type InventoryRowDoc = Omit<Inventory, 'product' | 'updatedBy'> & {
+    _id: Types.ObjectId;
+    product: ProductDoc;
+    updatedBy: Types.ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
+};

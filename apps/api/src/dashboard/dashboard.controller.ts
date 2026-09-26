@@ -3,6 +3,8 @@ import { DashboardService } from './dashboard.service';
 import { Roles } from '../auth/auth.decorator';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
+import type { DashboardView } from '@grocery-pos/contracts';
+import { asJson } from '../common/wire';
 
 /**
  * Access decision (issue #13, product owner 2026-09-24):
@@ -27,9 +29,11 @@ export class DashboardController {
     constructor(private service: DashboardService) {}
 
     @Get()
-    async getDashboard(@CurrentUser() user: AuthUser) {
-        return await this.service.getDashboard({
-            includeMoney: user.roles.includes(Role.Admin),
-        });
+    async getDashboard(@CurrentUser() user: AuthUser): Promise<DashboardView> {
+        return asJson(
+            await this.service.getDashboard({
+                includeMoney: user.roles.includes(Role.Admin),
+            }),
+        );
     }
 }

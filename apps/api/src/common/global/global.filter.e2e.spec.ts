@@ -18,6 +18,10 @@ import { Product } from '../../product/product.schema';
 import { InventoryService } from '../../inventory-man/inventory/inventory.service';
 import { EanCounterService } from '../../ean-counter/ean-counter.service';
 import { INTERNAL_MESSAGE } from './global.filter';
+import {
+    APP_ERROR_RESPONSE_SHAPE,
+    wireShapeDiff,
+} from '@grocery-pos/contracts';
 
 const DUP_MSG =
     'E11000 duplicate key error collection: pos.products index: name_1 dup key: { name: "milk" }';
@@ -291,5 +295,31 @@ describe('Error responses (e2e, issue #8)', () => {
         expect(body.error).toBe(ErrorCode.VALIDATION_INVALID_INPUT);
         expect(body.details.messages.length).toBeGreaterThan(0);
         expect(body.message).toBe(body.details.messages.join(', '));
+    });
+
+    it('sends every error body with exactly the keys of AppErrorResponse and a known ErrorCode (#27)', async () => {
+        // The client types error bodies as contracts AppErrorResponse and
+        // branches on its `error`: a renamed or extra key is drift.
+        const responses = await Promise.all([
+            harness.call(
+                caller(Role.Seller),
+                'POST',
+                '/products/bulk',
+                newProducts,
+            ),
+            harness.call(restocker, 'GET', '/nope'),
+            harness.call(restocker, 'POST', '/products/bulk', {
+                newProducts: [{ name: 'Milk', price: -1 }],
+            }),
+        ]);
+
+        for (const res of responses) {
+            const body = (await res.json()) as { error: unknown };
+            expect(wireShapeDiff(body, APP_ERROR_RESPONSE_SHAPE)).toEqual({
+                missing: [],
+                unexpected: [],
+            });
+            expect(Object.values(ErrorCode)).toContain(body.error);
+        }
     });
 });

@@ -1,14 +1,15 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { User } from './user.schema';
+import { User, type UserViewDoc } from './user.schema';
+import type { Paginated } from '@grocery-pos/contracts';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import * as argon from 'argon2';
 import { Role } from '../auth/types/auth.types';
 import {
     ChangePasswordDto,
     CreateBulkDto,
-    GetAllDto,
+    GetUsersDto,
     UpdateBulkDto,
 } from './types';
 import { holdsRole } from '@grocery-pos/contracts';
@@ -73,9 +74,7 @@ export class UserService implements OnModuleInit {
         return this.dummyHash;
     }
 
-    async getAll(
-        dto: GetAllDto,
-    ): Promise<{ data: User[]; totalItems: number }> {
+    async getAll(dto: GetUsersDto): Promise<Paginated<UserViewDoc>> {
         const { page, limit, name } = dto;
 
         const skip = (page - 1) * limit;
@@ -92,7 +91,7 @@ export class UserService implements OnModuleInit {
                 .skip(skip)
                 .limit(limit)
                 .select('-passwordHash -__v')
-                .lean(),
+                .lean<UserViewDoc[]>(),
 
             // Exact: the total is shown to the user (issue #16).
             this.model.countDocuments(query),

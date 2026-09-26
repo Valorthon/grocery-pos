@@ -20,7 +20,7 @@ import { routeDtos } from '../testing/route-dtos';
 import {
     CreateBulkDto,
     UpdateBulkDto as UpdateUsersDto,
-    GetAllDto as UsersQuery,
+    GetUsersDto as UsersQuery,
 } from '../../user/types/user.dto';
 import {
     NewProductsDto,
