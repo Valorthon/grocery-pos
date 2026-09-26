@@ -17,6 +17,11 @@ cp apps/client/.env.example apps/client/.env
 build when one is missing or malformed; the console shows which. The
 `VITE_*` values are inlined into the bundle at build time.
 
+`VITE_APP_ENV` (`dev`, `test`, `stage`, `prod`) is the client's stage. It
+was `VITE_NODE_ENV` before #86: for one release an unset `VITE_APP_ENV` is
+taken from `VITE_NODE_ENV` with a warning, and the two set to different
+values fail. Rename it in an existing `.env`.
+
 ## Run
 
 ```bash

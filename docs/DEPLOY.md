@@ -74,7 +74,7 @@ service variables to the Dockerfile's `ARG`s at build time.
 
 | Build argument     | Value                                                                                                                                    |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `VITE_NODE_ENV`    | `prod` or `stage` (default `prod`).                                                                                                      |
+| `VITE_APP_ENV`     | `prod` or `stage` (default `prod`). Replaces `VITE_NODE_ENV`; see [VITE_APP_ENV and VITE_NODE_ENV](#vite_app_env-and-vite_node_env).     |
 | `VITE_API_URL`     | The API base URL including `/v1`, no trailing slash, e.g. `https://api.example.com/v1`. Required.                                        |
 | `VITE_DOMAIN`      | The same shared parent as the API's `DOMAIN`, e.g. `example.com`. Required in prod/stage (the client clears the session marker with it). |
 | `VITE_API_TIMEOUT` | Milliseconds, default `10000`.                                                                                                           |
@@ -134,8 +134,30 @@ any value outside that list) never conflicts.
 
 `pnpm seed` follows the same resolution.
 
-The client keeps `VITE_NODE_ENV` for its stage (a rename to `VITE_APP_ENV` is
-a possible follow-up).
+## VITE_APP_ENV and VITE_NODE_ENV
+
+The client's stage is `VITE_APP_ENV`, with the same values as `APP_ENV`
+(#86). It was called `VITE_NODE_ENV` before. Transition (this release only):
+
+- `VITE_APP_ENV` unset and `VITE_NODE_ENV` set: the build uses
+  `VITE_NODE_ENV` and `vite.config.ts` prints a deprecation warning in the
+  build log.
+- Both set to the same value: the build uses it and warns to remove
+  `VITE_NODE_ENV`.
+- Both set to different values: the build fails, since one of them is stale.
+- Neither set: the Docker build uses `prod`; a local `vite` run fails.
+
+Deploy checklist for each client service (prod and stage):
+
+1. Add the variable `VITE_APP_ENV` with the service's current
+   `VITE_NODE_ENV` value (`prod` or `stage`).
+2. Remove `VITE_NODE_ENV` (or leave it with the same value until the next
+   release; a different value fails the build).
+3. Redeploy: the stage is inlined at build time, so it takes a rebuild.
+4. Once `VITE_NODE_ENV` is removed, the build log shows no `[env]`
+   deprecation warning.
+
+A later release (#86) drops the `VITE_NODE_ENV` fallback.
 
 ## Healthchecks
 
