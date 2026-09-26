@@ -403,7 +403,7 @@ requestId}`. A 5xx never carries details or internals.
 **Deploy** (#29, `docs/DEPLOY.md`)
 
 - Prod and stage need a custom domain with a shared parent (client
-  `pos.example.com` + API `api.example.com`, `DOMAIN=.example.com`).
+  `pos.example.com` + API `api.example.com`, `DOMAIN=example.com`, the same as `VITE_DOMAIN`).
   `*.up.railway.app` is a public suffix, so cookies can't be shared there. No
   cookie redesign.
 - `APP_ENV` (dev|test|stage|prod) is the API's stage; prod and stage are

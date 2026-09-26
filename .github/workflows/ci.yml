@@ -212,11 +212,19 @@ jobs:
             # headers and a /health that needs index.html (#29).
             - name: Smoke-test client image
               run: |
+                  # Print the container's logs on failure and always remove it.
+                  cleanup() {
+                      status=$?
+                      if [ "$status" -ne 0 ]; then docker logs client || true; fi
+                      docker rm -f client >/dev/null 2>&1 || true
+                  }
+                  trap cleanup EXIT
                   docker run -d --name client -p 127.0.0.1:8080:8080 grocery-pos-client:ci
                   for _ in $(seq 1 30); do
                       curl -fsS -o /dev/null http://127.0.0.1:8080/health && break
                       sleep 1
                   done
+                  curl -fsS http://127.0.0.1:8080/health
                   test "$(docker exec client id -u)" != 0
                   headers=$(curl -fsS -D - -o /dev/null http://127.0.0.1:8080/)
                   echo "$headers"
@@ -224,4 +232,3 @@ jobs:
                   echo "$headers" | grep -qi '^x-content-type-options: nosniff'
                   echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000'
                   echo "$headers" | grep -qi '^cache-control: no-cache'
-                  docker rm -f client

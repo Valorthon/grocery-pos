@@ -18,8 +18,16 @@ esac
 BUILT_API_ORIGIN=$(cat /etc/nginx/api-origin 2>/dev/null || true)
 API_ORIGIN=${API_ORIGIN:-$BUILT_API_ORIGIN}
 
-# scheme://host[:port] only: the value goes into a response header.
-if ! printf '%s' "$API_ORIGIN" | grep -Eq '^https?://[A-Za-z0-9.-]+(:[0-9]+)?$'; then
+# scheme://host[:port] only: the value goes into the nginx config and a
+# response header. grep matches line by line, so a value with a newline is
+# refused first (it could otherwise smuggle in nginx directives).
+nl='
+'
+case "$API_ORIGIN" in
+    *"$nl"*) bad_origin=1 ;;
+    *) bad_origin=0 ;;
+esac
+if [ "$bad_origin" = 1 ] || ! printf '%s' "$API_ORIGIN" | grep -Eq '^https?://[A-Za-z0-9.-]+(:[0-9]+)?$'; then
     echo "API_ORIGIN must be an origin like https://api.example.com (no path), got '$API_ORIGIN'" >&2
     exit 1
 fi

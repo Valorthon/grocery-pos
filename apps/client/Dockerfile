@@ -5,9 +5,28 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN npm install -g pnpm@10.33.0
 
+# --- build-arg check ---
+# Fails in seconds, before the install, with a clear message (vite.config.ts
+# would only fail after it). A stage of its own so these ARGs don't bust the
+# install's cache; the build stage waits for its marker file.
+FROM base AS build-args
+ARG VITE_NODE_ENV=prod
+ARG VITE_API_URL
+ARG VITE_DOMAIN
+RUN if [ -z "$VITE_API_URL" ]; then \
+        echo "Build arg VITE_API_URL is required, e.g. --build-arg VITE_API_URL=https://api.example.com/v1" >&2; exit 1; \
+    fi; \
+    if [ "$VITE_NODE_ENV" = prod ] || [ "$VITE_NODE_ENV" = stage ]; then \
+        if [ -z "$VITE_DOMAIN" ]; then \
+            echo "Build arg VITE_DOMAIN is required when VITE_NODE_ENV=$VITE_NODE_ENV: the shared parent domain, e.g. --build-arg VITE_DOMAIN=example.com" >&2; exit 1; \
+        fi; \
+    fi \
+    && touch /build-args-ok
+
 # --- build stage ---
 FROM base AS build
 WORKDIR /app
+COPY --from=build-args /build-args-ok /tmp/build-args-ok
 
 # prevent husky from installing git hooks during install
 ENV HUSKY=0
@@ -37,16 +56,6 @@ ENV VITE_NODE_ENV=$VITE_NODE_ENV
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_API_TIMEOUT=$VITE_API_TIMEOUT
 ENV VITE_DOMAIN=$VITE_DOMAIN
-
-# Fail with a clear message before vite.config.ts's schema check does.
-RUN if [ -z "$VITE_API_URL" ]; then \
-        echo "Build arg VITE_API_URL is required, e.g. --build-arg VITE_API_URL=https://api.example.com/v1" >&2; exit 1; \
-    fi; \
-    if [ "$VITE_NODE_ENV" = prod ] || [ "$VITE_NODE_ENV" = stage ]; then \
-        if [ -z "$VITE_DOMAIN" ]; then \
-            echo "Build arg VITE_DOMAIN is required when VITE_NODE_ENV=$VITE_NODE_ENV: the shared parent domain, e.g. --build-arg VITE_DOMAIN=example.com" >&2; exit 1; \
-        fi; \
-    fi
 
 # Optional login photo (gitignored, see README). Best effort: when the fetch
 # fails the build goes on and the login page shows its gradient.

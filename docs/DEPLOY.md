@@ -17,7 +17,7 @@ browser, like two unrelated domains. Sign-in depends on sharing cookies
 between the two services:
 
 - the API sets its cookies for `DOMAIN` (the shared parent, e.g.
-  `.example.com`) with `SameSite=Lax`, which the browser only sends on
+  `example.com`) with `SameSite=Lax`, which the browser only sends on
   same-site requests;
 - the client reads the `dummy` session marker through `document.cookie`,
   which only works when that cookie belongs to the client's domain too.
@@ -46,20 +46,20 @@ Runtime variables, validated at startup (`apps/api/src/common/typed-config`);
 the API refuses to start when one is wrong. `apps/api/.env.example` describes
 each.
 
-| Variable                                            | Value                                                                                           |
-| --------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `APP_ENV`                                           | `prod` or `stage` (see [APP_ENV and NODE_ENV](#app_env-and-node_env))                           |
-| `NODE_ENV`                                          | **Do not set.** The image sets `production`.                                                    |
-| `PORT`                                              | Set by Railway.                                                                                 |
-| `FRONTEND_URL`                                      | The client's origin, e.g. `https://pos.example.com` (CORS).                                     |
-| `DOMAIN`                                            | The shared parent, e.g. `.example.com`. Required.                                               |
-| `DATABASE_URL`                                      | `mongodb+srv://…` of a replica set.                                                             |
-| `JWT_SECRET`, `COOKIE_SECRET`                       | Two different values from `openssl rand -base64 48`. Placeholders and equal values are refused. |
-| `JWT_EXPIRY_S`, `REFRESH_EXPIRY_S`                  | Seconds, e.g. `900` and `604800`. The refresh expiry must be longer.                            |
-| `EAN_COUNTER_ID`, `EAN_COUNTER_DIGITS`              | As in `.env.example` (`EAN_COUNTER_DIGITS` must be `9`).                                        |
-| `HEALTH_HEAP_THRESHOLD`, `HEALTH_RSS_THRESHOLD`     | Bytes. `/v1/health/live` fails above them.                                                      |
-| `HEALTH_DISK_THRESHOLD_PERCENT`, `HEALTH_DISK_PATH` | e.g. `0.9` and `/`.                                                                             |
-| `STORE_TIMEZONE`                                    | Optional, default `Asia/Manila`.                                                                |
+| Variable                                            | Value                                                                                                           |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `APP_ENV`                                           | `prod` or `stage` (see [APP_ENV and NODE_ENV](#app_env-and-node_env))                                           |
+| `NODE_ENV`                                          | **Do not set.** The image sets `production`.                                                                    |
+| `PORT`                                              | Set by Railway.                                                                                                 |
+| `FRONTEND_URL`                                      | The client's origin, e.g. `https://pos.example.com` (CORS).                                                     |
+| `DOMAIN`                                            | The shared parent, e.g. `example.com` (no leading dot; the same value as the client's `VITE_DOMAIN`). Required. |
+| `DATABASE_URL`                                      | `mongodb+srv://…` of a replica set.                                                                             |
+| `JWT_SECRET`, `COOKIE_SECRET`                       | Two different values from `openssl rand -base64 48`. Placeholders and equal values are refused.                 |
+| `JWT_EXPIRY_S`, `REFRESH_EXPIRY_S`                  | Seconds, e.g. `900` and `604800`. The refresh expiry must be longer.                                            |
+| `EAN_COUNTER_ID`, `EAN_COUNTER_DIGITS`              | As in `.env.example` (`EAN_COUNTER_DIGITS` must be `9`).                                                        |
+| `HEALTH_HEAP_THRESHOLD`, `HEALTH_RSS_THRESHOLD`     | Bytes. `/v1/health/live` fails above them.                                                                      |
+| `HEALTH_DISK_THRESHOLD_PERCENT`, `HEALTH_DISK_PATH` | e.g. `0.9` and `/`.                                                                                             |
+| `STORE_TIMEZONE`                                    | Optional, default `Asia/Manila`.                                                                                |
 
 Deployed (`prod`/`stage`), the API trusts one proxy hop (Railway's) for the
 client IP, and its cookies are `Secure`, `SameSite=Lax` and scoped to
@@ -171,7 +171,9 @@ docker run --rm -p 8080:8080 grocery-pos-client     # http://localhost:8080
 
 For a local run keep `APP_ENV=dev` in `apps/api/.env` (with
 `FRONTEND_URL=http://localhost:8080`). The image's `NODE_ENV=production` does
-not conflict with it.
+not conflict with it. `--env-file` passes values verbatim, so keep that file
+as `.env.example` has it: comments on their own lines, no quotes (`DOMAIN=`,
+not `DOMAIN=''`).
 
 ## Login photo
 

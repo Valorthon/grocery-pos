@@ -1,6 +1,7 @@
-# Rendered by docker-entrypoint.sh (envsubst of ${PORT} and ${API_ORIGIN}
-# only) and run by the unprivileged nginx user: the pid file and every temp
-# path live under /tmp, and nginx listens on $PORT (above 1024).
+# Rendered by docker-entrypoint.sh (envsubst of the PORT and API_ORIGIN
+# variables only, so comments must not name them with a dollar sign) and run
+# by the unprivileged nginx user: the pid file and every temp path live under
+# /tmp, and nginx listens on PORT (above 1024).
 worker_processes auto;
 error_log stderr notice;
 pid /tmp/nginx.pid;

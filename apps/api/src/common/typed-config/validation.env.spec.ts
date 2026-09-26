@@ -236,6 +236,29 @@ describe('apps/api/.env.example', () => {
         expect(result.success).toBe(true);
     });
 
+    it.each([
+        ['apps/api', '../../../.env.example'],
+        ['apps/client', '../../../../client/.env.example'],
+    ])(
+        '%s/.env.example also works with docker run --env-file (#29)',
+        (_app, path) => {
+            // Docker passes everything after `=` verbatim: an inline comment
+            // or quotes would end up in the value.
+            const lines = readFileSync(join(__dirname, path), 'utf8')
+                .split('\n')
+                .filter((line) => line.trim() && !line.startsWith('#'));
+            expect(lines.length).toBeGreaterThan(3);
+            for (const line of lines) {
+                expect(line).toMatch(/^[A-Z][A-Z0-9_]*=[^\s#'"]*$/);
+            }
+        },
+    );
+
+    it("reads DOMAIN= as blank, as the old DOMAIN='' was", () => {
+        expect(example.DOMAIN).toBe('');
+        expect(parseDotenv("DOMAIN=''").DOMAIN).toBe('');
+    });
+
     it('ships the placeholders the schema knows about', () => {
         expect(example.JWT_SECRET).toBe(EXAMPLE_JWT_SECRET);
         expect(example.COOKIE_SECRET).toBe(EXAMPLE_COOKIE_SECRET);
