@@ -563,7 +563,7 @@ describe('the ticket being charged is locked (#23, #7)', () => {
         const cart = useCartStore();
         cart.add(MILK, 2);
         cart.setDiscount({
-            type: DiscountType.PERCENTAGE,
+            type: DiscountType.PERCENT,
             value: 10,
             reason: 'loyalty',
         });
