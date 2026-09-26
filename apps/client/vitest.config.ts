@@ -25,9 +25,9 @@ export default defineConfig({
             // Ratchet (#28): just below the measured level. Raise it when
             // coverage rises; never lower it to make a change pass.
             thresholds: {
-                statements: 91,
+                statements: 92,
                 branches: 87,
-                functions: 87,
+                functions: 88,
                 lines: 92,
             },
         },
