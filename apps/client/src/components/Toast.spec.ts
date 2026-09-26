@@ -3,6 +3,7 @@ import { type App, createApp, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import {
     Color,
+    REGISTER_TOAST_IDLE,
     TOAST_DEDUPE_MS,
     TOAST_DURATION_MS,
     useUIStore,
@@ -174,19 +175,62 @@ describe('Toast placement (#85)', () => {
         expect(classes()).not.toContain('right-4');
     });
 
-    it('clears the Tender footer below lg on the register, and the tender panel from lg', async () => {
+    it('clears the Tender footer on the register, centred on the viewport until the column is measured', async () => {
         useUIStore().toastPlacement = 'register';
         await nextTick();
         expect(classes()).toEqual(
             expect.arrayContaining([
                 'bottom-24',
+                'lg:bottom-4',
                 'left-1/2',
                 '-translate-x-1/2',
-                'lg:bottom-4',
-                'lg:left-[calc(50%-200px)]',
             ]),
         );
         expect(classes()).not.toContain('top-4');
+        expect(stack().style.left).toBe('');
+    });
+
+    it('goes to the top while the tender sheet is open (#85 review)', async () => {
+        const ui = useUIStore();
+        ui.toastPlacement = 'register';
+        ui.registerToast = { ...REGISTER_TOAST_IDLE, sheetOpen: true };
+        await nextTick();
+        expect(classes()).toEqual(
+            expect.arrayContaining(['top-4', 'left-1/2', '-translate-x-1/2']),
+        );
+        expect(stack().className).not.toMatch(/\bbottom-/);
+
+        ui.registerToast = { ...REGISTER_TOAST_IDLE };
+        await nextTick();
+        expect(classes()).toContain('bottom-24');
+        expect(classes()).not.toContain('top-4');
+    });
+
+    it('rises above the Undo bar while it shows (#85 review)', async () => {
+        const ui = useUIStore();
+        ui.toastPlacement = 'register';
+        ui.registerToast = { ...REGISTER_TOAST_IDLE, undoShown: true };
+        await nextTick();
+        expect(classes()).toEqual(
+            expect.arrayContaining(['bottom-44', 'lg:bottom-24']),
+        );
+        expect(classes()).not.toContain('bottom-24');
+        expect(classes()).not.toContain('lg:bottom-4');
+    });
+
+    it('centres on the measured ticket column, sidebar included (#85 review)', async () => {
+        const ui = useUIStore();
+        ui.toastPlacement = 'register';
+        // lg, sidebar expanded (256px) and a 400px tender panel at 1024px.
+        ui.registerToast = {
+            ...REGISTER_TOAST_IDLE,
+            column: { center: 440, width: 368 },
+        };
+        await nextTick();
+        expect(stack().style.left).toBe('440px');
+        expect(stack().style.maxWidth).toBe('min(28rem, 336px)');
+        expect(classes()).toContain('-translate-x-1/2');
+        expect(classes()).not.toContain('left-1/2');
     });
 
     it('keeps errors as alerts, above the rest, wherever it sits', async () => {

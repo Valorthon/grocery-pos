@@ -11,6 +11,7 @@
                 'fixed z-[60] flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-md overflow-y-auto',
                 placement.stack,
             ]"
+            :style="placement.style"
             :data-placement="uiStore.toastPlacement"
             data-testid="toast-stack"
         >
@@ -53,8 +54,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Color, type ToastPlacement, useUIStore } from '@/stores/ui';
+import { Color, useUIStore } from '@/stores/ui';
 import ToastItem from './ToastItem.vue';
+import { toastPlacement } from './toast-placement';
 
 /**
  * Every queued message, stacked (issue #18), errors above the rest.
@@ -64,7 +66,9 @@ import ToastItem from './ToastItem.vue';
  *
  * Where it sits is the layout's choice (`uiStore.toastPlacement`, #85):
  * top-right in the admin layout; bottom-center in the seller layout, so
- * it never covers the register's scan box or the top of the ticket.
+ * it never covers the register's scan box or the top of the ticket. On
+ * the register it also keeps clear of the tender sheet's Tender & Charge
+ * and the Undo bar (`uiStore.registerToast`, see toast-placement.ts).
  */
 const uiStore = useUIStore();
 
@@ -75,34 +79,16 @@ const notices = computed(() =>
     uiStore.toasts.filter((t) => t.color !== Color.ERROR),
 );
 
-/** The stack's position and its toasts' alignment, per placement. */
-const PLACEMENTS: Record<ToastPlacement, { stack: string; items: string }> = {
-    'top-right': {
-        stack: 'top-4 right-4 items-end max-h-[calc(100vh-2rem)]',
-        items: 'items-end',
-    },
-    'bottom-center': {
-        stack: 'bottom-4 left-1/2 -translate-x-1/2 items-center max-h-[calc(100vh-2rem)]',
-        items: 'items-center',
-    },
-    // Below lg: above the sticky Tender footer (about 4.5rem tall). From
-    // lg there is no footer; the stack is centred on the space left of
-    // the 400px tender panel, so it never covers Tender & Charge.
-    register: {
-        stack: 'bottom-24 left-1/2 -translate-x-1/2 items-center max-h-[calc(100vh-7rem)] lg:bottom-4 lg:left-[calc(50%-200px)] lg:max-h-[calc(100vh-2rem)]',
-        items: 'items-center',
-    },
-};
-
-const placement = computed(() => PLACEMENTS[uiStore.toastPlacement]);
+const placement = computed(() =>
+    toastPlacement(uiStore.toastPlacement, uiStore.registerToast),
+);
 
 /** A toast slides in from the edge it sits at. */
 const transition = computed(() => ({
     enterActiveClass: 'transition duration-200 ease-out',
-    enterFromClass:
-        uiStore.toastPlacement === 'top-right'
-            ? 'opacity-0 -translate-y-2'
-            : 'opacity-0 translate-y-2',
+    enterFromClass: placement.value.stack.startsWith('top-')
+        ? 'opacity-0 -translate-y-2'
+        : 'opacity-0 translate-y-2',
     enterToClass: 'opacity-100 translate-y-0',
     leaveActiveClass: 'transition duration-200 ease-in',
     leaveFromClass: 'opacity-100',

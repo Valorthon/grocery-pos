@@ -111,9 +111,34 @@ describe('layout drift (#26)', () => {
 });
 
 describe('wording drift (#85)', () => {
+    // Whole words only: "design in" is fine, "signed out" is not.
+    const SIGN = /\bsign(?:ed|ing)?[\s-]?(out|in)\b/i;
+
     it('says "Log out" and "Log in", never "Sign out" or "Sign in"', () => {
-        expect(offending(/sign[\s-]?(out|in)\b/i)).toEqual([]);
-        expect(offending(/signout/i)).toEqual([]);
-        expect(indexHtml).not.toMatch(/sign[\s-]?(out|in)\b/i);
+        expect(offending(SIGN)).toEqual([]);
+        expect(indexHtml).not.toMatch(SIGN);
+    });
+
+    it('matches the wording it bans, and nothing inside other words', () => {
+        for (const text of [
+            'Sign out',
+            'sign-in',
+            'Signout',
+            'SignIn',
+            'signed out',
+            'Signing in…',
+        ]) {
+            expect(text).toMatch(SIGN);
+        }
+        for (const text of [
+            'design in',
+            'design-out',
+            'assign in',
+            'signal out',
+            'signing inventory',
+            'Log out',
+        ]) {
+            expect(text).not.toMatch(SIGN);
+        }
     });
 });

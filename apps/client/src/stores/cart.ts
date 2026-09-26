@@ -46,7 +46,7 @@ export function cartStorageKey(userId: string): string {
     return `${CART_STORAGE_PREFIX}${userId}`;
 }
 
-/** The localStorage key the auth store caches the signed-in user under. */
+/** The localStorage key the auth store caches the logged-in user under. */
 export const USER_STORAGE_KEY = 'user';
 
 /** The checkout attempt of this ticket (see `createCheckoutAttempt`). */
@@ -329,7 +329,7 @@ export const useCartStore = defineStore('cart', () => {
     }
 
     /**
-     * Binds the basket to the signed-in cashier and restores what was saved
+     * Binds the basket to the logged-in cashier and restores what was saved
      * for them. Another cashier's basket is never shown: switching owners
      * starts from what the new one saved, or empty.
      */

@@ -135,7 +135,7 @@ api.interceptors.response.use(
 
                 // Only a 401 means the session is over. A 5xx or a network
                 // error is transient: the server kept the cookies, so keep
-                // the user signed in and let this request fail on its own.
+                // the user logged in and let this request fail on its own.
                 const sessionOver =
                     isAxiosError(refreshError) &&
                     refreshError.response?.status === 401;

@@ -19,7 +19,7 @@ export type HomeRoute =
     { name: 'SellerDashboard' } | { name: 'Dashboard' } | { name: 'Login' };
 
 /**
- * Where a signed-in user lands: after login, on `/`, and whenever the
+ * Where a logged-in user lands: after login, on `/`, and whenever the
  * router turns them away from a page.
  *
  * - A cashier (SELLER without ADMIN) lands on the register, even if they
@@ -28,7 +28,7 @@ export type HomeRoute =
  * - Anyone else (a stale session with no roles, or only legacy ones) has no
  *   page at all and goes to Login. The router ends such a session as it
  *   sends them there (see `homeFor` in ./index.ts); otherwise Login, seeing
- *   a signed-in user, would send them straight back here in a loop.
+ *   a logged-in user, would send them straight back here in a loop.
  */
 export function homeRouteFor(roles: readonly Role[]): HomeRoute {
     if (roles.includes(Role.Seller) && !roles.includes(Role.Admin)) {

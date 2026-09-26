@@ -36,11 +36,32 @@ export const TOAST_DEDUPE_MS = 1000;
 
 /**
  * Where the toast stack sits (#85). `top-right` everywhere but the seller
- * layout, which sets `bottom-center`, or `register` on the register:
- * bottom-center above its sticky Tender footer below lg, and centred
- * under the ticket (left of the tender panel) from lg.
+ * layout, which sets `bottom-center`, or `register` on the register (see
+ * RegisterToastState).
  */
 export type ToastPlacement = 'top-right' | 'bottom-center' | 'register';
+
+/**
+ * What the register's toasts must keep clear of (#85), set by Sell.vue
+ * while it is mounted. Toast.vue reads it for the `register` placement.
+ */
+export interface RegisterToastState {
+    /** The tender sheet is open (below lg): the stack goes to the top. */
+    sheetOpen: boolean;
+    /** The Undo bar is showing: the stack sits above it. */
+    undoShown: boolean;
+    /**
+     * The ticket column, in viewport px, to centre the stack on (it moves
+     * with the sidebar); null centres on the viewport.
+     */
+    column: { center: number; width: number } | null;
+}
+
+export const REGISTER_TOAST_IDLE: RegisterToastState = {
+    sheetOpen: false,
+    undoShown: false,
+    column: null,
+};
 
 const keyOf = (color: Color, lines: string[]) => `${color}|${lines.join('\n')}`;
 
@@ -48,6 +69,8 @@ export const useUIStore = defineStore('ui', () => {
     const toasts = ref<ToastMessage[]>([]);
     /** Set by SellerLayout while it is mounted (#85). */
     const toastPlacement = ref<ToastPlacement>('top-right');
+    /** Set by the register while it is mounted (#85). */
+    const registerToast = ref<RegisterToastState>({ ...REGISTER_TOAST_IDLE });
     const timers = new Map<number, ReturnType<typeof setTimeout>>();
     /** When each on-screen toast was last queued (for TOAST_DEDUPE_MS). */
     const lastQueued = new Map<number, number>();
@@ -127,5 +150,12 @@ export const useUIStore = defineStore('ui', () => {
         enforceCap(toast.id);
     }
 
-    return { toasts, toastPlacement, queueMessage, dismiss, clear };
+    return {
+        toasts,
+        toastPlacement,
+        registerToast,
+        queueMessage,
+        dismiss,
+        clear,
+    };
 });

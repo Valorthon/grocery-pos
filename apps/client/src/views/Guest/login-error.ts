@@ -19,7 +19,7 @@ function waitPhrase(seconds: number): string {
 }
 
 /**
- * What the login form says when signing in fails (#21). Decided by the
+ * What the login form says when logging in fails (#21). Decided by the
  * status, never by the API's error code or text, so users never see a raw
  * code like `AUTH_001`:
  * - 400/401: the one generic credentials message. A 400 is input the API

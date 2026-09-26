@@ -42,7 +42,7 @@ export function writeSidebarCollapsed(
 
 /**
  * `collapsed` starts expanded unless this user collapsed it before, and
- * follows the signed-in user. Changing it saves it for that user.
+ * follows the logged-in user. Changing it saves it for that user.
  */
 export function useSidebarPreference(userId: () => string | undefined): {
     collapsed: Ref<boolean>;

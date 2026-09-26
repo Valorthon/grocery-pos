@@ -16,7 +16,7 @@ import {
 export { Role };
 
 /**
- * The signed-in user: `GET /v1/users/profile` (contracts `ProfileView`),
+ * The logged-in user: `GET /v1/users/profile` (contracts `ProfileView`),
  * cached in localStorage.
  */
 export interface User extends Omit<ProfileView, 'userId'> {

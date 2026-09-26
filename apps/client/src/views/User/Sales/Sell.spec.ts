@@ -7,6 +7,7 @@ import { type StoredAttempt, useCartStore } from '@/stores/cart';
 import type { SaleRequest } from '@/components/User/Sales/sale-submission';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
+import { REGISTER_TOAST_IDLE, useUIStore } from '@/stores/ui';
 import Sell from './Sell.vue';
 
 const get = vi.hoisted(() => vi.fn());
@@ -879,23 +880,65 @@ describe('Sell Delete from the empty scan box (#85)', () => {
         expect((await press('Delete')).defaultPrevented).toBe(false);
     });
 
-    it('removes a line added by a scan', async () => {
-        withTicket();
+    async function scan(EAN: string) {
+        input().focus();
+        input().value = EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+    }
+
+    it('removes the highlighted line: scan A, scan B, scan A removes A', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        useCartStore().add(
-            {
-                product: 'p3',
-                EAN: '2000000000039',
-                name: 'bread',
-                unitPrice: 6000,
-            },
-            1,
-        );
-        await flush();
+        await scan(MILK.EAN);
+        await scan(MINTS.EAN);
+        await scan(MILK.EAN);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+        // The repeat scan merged into milk in place and highlighted it.
+        expect(line(0).getAttribute('aria-current')).toBe('true');
+        expect(input().value).toBe('');
+        expect(document.activeElement).toBe(input());
+
+        expect((await press('Delete')).defaultPrevented).toBe(true);
+        expect(cartNames()).toEqual(['1x mints']);
+        expect(undoBar()?.textContent).toContain('Removed 2× milk');
+
+        await clickButton(buttonNamed('Undo'));
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+
+    it('falls back to the last line when nothing is highlighted', async () => {
+        withTicket();
+        mount();
         input().focus();
 
         await press('Delete');
+        expect(cartNames()).toEqual(['2x milk']);
+    });
+
+    it('ignores an auto-repeated Delete (a held or stuck key)', async () => {
+        withTicket();
+        mount();
+        input().focus();
+
+        const held = await press('Delete', { repeat: true });
+        expect(held.defaultPrevented).toBe(false);
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
+
+        // One press, then the repeats while it is held: one line goes.
+        await press('Delete');
+        await press('Delete', { repeat: true });
+        await press('Delete', { repeat: true });
+        expect(cartNames()).toEqual(['2x milk']);
+    });
+
+    it('ignores Delete during IME composition (the box reads empty)', async () => {
+        withTicket();
+        mount();
+        input().focus();
+
+        const event = await press('Delete', { isComposing: true });
+        expect(event.defaultPrevented).toBe(false);
         expect(cartNames()).toEqual(['2x milk', '1x mints']);
     });
 
@@ -934,6 +977,30 @@ describe('Sell Delete from the empty scan box (#85)', () => {
 
         expect((await press('Delete')).defaultPrevented).toBe(false);
         expect(cartNames()).toEqual(['2x milk', '1x mints']);
+    });
+});
+
+describe('Sell toasts keep clear of the Undo bar (#85)', () => {
+    it('raises the toasts while the Undo bar shows, and resets on leaving', async () => {
+        withTicket();
+        mount();
+        const ui = useUIStore();
+        expect(ui.registerToast.undoShown).toBe(false);
+
+        await clickButton(buttonNamed('Remove milk'));
+        expect(
+            document.querySelector('[data-testid="undo-bar"]'),
+        ).not.toBeNull();
+        expect(ui.registerToast.undoShown).toBe(true);
+
+        await clickButton(buttonNamed('Undo'));
+        expect(ui.registerToast.undoShown).toBe(false);
+
+        await clickButton(buttonNamed('Remove milk'));
+        expect(ui.registerToast.undoShown).toBe(true);
+        app!.unmount();
+        app = null;
+        expect(ui.registerToast).toEqual(REGISTER_TOAST_IDLE);
     });
 });
 
@@ -1996,6 +2063,20 @@ describe('Sell below lg: sticky footer and tender sheet (#26)', () => {
         expect(sheetOpen()).toBe(false);
         expect((await press('Delete')).defaultPrevented).toBe(true);
         expect(cartNames()).toEqual(['2x milk']);
+    });
+
+    it('tells the toasts to go to the top while the sheet is open (#85)', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        const ui = useUIStore();
+        expect(ui.registerToast.sheetOpen).toBe(false);
+
+        await clickButton(openButton());
+        expect(ui.registerToast.sheetOpen).toBe(true);
+
+        await press('F2');
+        expect(ui.registerToast.sheetOpen).toBe(false);
     });
 
     it('F4 from the sheet goes back to the line quantity', async () => {

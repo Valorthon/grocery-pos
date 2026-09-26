@@ -168,7 +168,7 @@ const handleLogin = async () => {
         await authStore.login(form.username, form.password);
         const home = homeRouteFor(authStore.user?.roles ?? []);
         if (home.name === 'Login') {
-            // No role opens any page: do not stay half signed in.
+            // No role opens any page: do not stay half logged in.
             await authStore.logout();
             errorMsg.value = 'This account has no access to the app.';
             return;

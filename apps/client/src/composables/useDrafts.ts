@@ -83,7 +83,7 @@ export interface DraftGuardOptions {
  * A page empties its list once the drafts are saved or cleared, so its
  * own navigation after a save is never stopped. A forced end of the
  * session is never stopped either: the refresh that failed and the
- * router's "no session" redirect both leave the user signed out before
+ * router's "no session" redirect both leave the user logged out before
  * they navigate, the server session is already gone, and the drafts
  * could not be saved anyway.
  */

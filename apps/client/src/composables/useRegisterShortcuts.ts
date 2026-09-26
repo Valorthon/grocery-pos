@@ -16,8 +16,8 @@ export const REGISTER_KEYS = {
     /** Edit the quantity of the selected (else the last) ticket line. */
     LINE_QUANTITY: 'F4',
     /**
-     * Remove the focused ticket line, or the last line from an empty scan
-     * box (#85), with Undo. Never while typing text.
+     * Remove the focused ticket line, or the highlighted line from an
+     * empty scan box (#85), with Undo. Never while typing text.
      */
     REMOVE_LINE: 'Delete',
 } as const;
@@ -35,7 +35,12 @@ export interface Shortcut {
      * Checked last: when it answers false the key is left alone (its
      * default is not prevented), e.g. Delete in a scan box with text.
      */
-    when?: () => boolean;
+    when?: (event: KeyboardEvent) => boolean;
+    /**
+     * Acts on the first press only: an auto-repeat (a held or stuck key)
+     * is left alone. For keys that destroy, like Delete (#85).
+     */
+    once?: boolean;
 }
 
 /** `KeyboardEvent.key` → what it does. */
@@ -89,11 +94,13 @@ export function useRegisterShortcuts(
             run,
             whileTyping = isFunctionKey(event.key),
             when,
+            once = false,
         }: Shortcut = typeof binding === 'function'
             ? { run: binding }
             : binding;
         if (!whileTyping && isTextEntry(document.activeElement)) return;
-        if (when && !when()) return;
+        if (once && event.repeat) return;
+        if (when && !when(event)) return;
         event.preventDefault();
         void run(event);
     }
