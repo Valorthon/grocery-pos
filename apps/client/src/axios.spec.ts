@@ -303,3 +303,129 @@ describe('isAuthEndpoint', () => {
         expect(isAuthEndpoint(undefined)).toBe(false);
     });
 });
+
+describe('api refresh state machine across requests (issue #30)', () => {
+    let refresh: MockInstance<typeof axios.post>;
+    let cookieWrites: string[];
+
+    beforeEach(() => {
+        logout.mockReset();
+        refresh = vi.spyOn(axios, 'post');
+        cookieWrites = [];
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        Object.defineProperty(document, 'cookie', {
+            configurable: true,
+            get: () => 'dummy=true',
+            set: (value: string) => cookieWrites.push(value),
+        });
+    });
+
+    afterEach(() => {
+        api.defaults.adapter = undefined;
+    });
+
+    const expired = (config: InternalAxiosRequestConfig) =>
+        fail(config, 401, { error: 'AUTH_002' });
+
+    function refreshAnswers(status: number) {
+        refresh.mockImplementation(
+            () =>
+                new Promise((resolve, reject) =>
+                    setTimeout(() => {
+                        if (status < 300) {
+                            resolve({ status });
+                            return;
+                        }
+                        const config = {
+                            headers: new AxiosHeaders(),
+                        } as InternalAxiosRequestConfig;
+                        reject(
+                            new AxiosError(
+                                `Request failed with status code ${status}`,
+                                AxiosError.ERR_BAD_REQUEST,
+                                config,
+                                undefined,
+                                respond(config, status),
+                            ),
+                        );
+                    }, 5),
+                ),
+        );
+    }
+
+    it('replays every queued request once the single refresh succeeds, POST /sales with its same key', async () => {
+        // The replay of a checkout must be the same request: its
+        // idempotency key makes a resend return the sale already recorded,
+        // never ring up a second one.
+        const bodies: Record<string, string[]> = {};
+        api.defaults.adapter = ((config) => {
+            const url = config.url ?? '';
+            (bodies[url] ??= []).push(String(config.data ?? ''));
+            return bodies[url].length === 1
+                ? expired(config)
+                : Promise.resolve(respond(config, 200, { url }));
+        }) as AxiosAdapter;
+        refreshAnswers(201);
+
+        const sale = { idempotencyKey: 'k-1', sellDetails: [] };
+        const results = await Promise.all([
+            api.post('/sales', sale),
+            api.get('/products'),
+            api.get('/shifts/current'),
+        ]);
+
+        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(results.map((r) => (r.data as { url: string }).url)).toEqual([
+            '/sales',
+            '/products',
+            '/shifts/current',
+        ]);
+        expect(bodies['/sales']).toEqual([
+            JSON.stringify(sale),
+            JSON.stringify(sale),
+        ]);
+        expect(logout).not.toHaveBeenCalled();
+    });
+
+    it('starts a new refresh for a later expiry after a failed one (the lock is released)', async () => {
+        api.defaults.adapter = expired as AxiosAdapter;
+        refreshAnswers(503);
+        await expect(api.get('/products')).rejects.toBeInstanceOf(AxiosError);
+
+        // A stuck `isRefreshing` would queue this forever instead.
+        let calls = 0;
+        api.defaults.adapter = ((config) =>
+            ++calls === 1
+                ? expired(config)
+                : Promise.resolve(respond(config, 200))) as AxiosAdapter;
+        refreshAnswers(200);
+        await expect(api.get('/products')).resolves.toMatchObject({
+            status: 200,
+        });
+        expect(refresh).toHaveBeenCalledTimes(2);
+    });
+
+    it('logs out once per lost session, and again for a later one', async () => {
+        api.defaults.adapter = expired as AxiosAdapter;
+        refreshAnswers(401);
+        await Promise.allSettled([api.get('/a')]);
+        await Promise.allSettled([api.get('/b')]);
+        // Both rounds end the same session: one "please log in" only.
+        expect(logout).toHaveBeenCalledTimes(1);
+
+        // A successful refresh starts a new session...
+        let calls = 0;
+        api.defaults.adapter = ((config) =>
+            ++calls === 1
+                ? expired(config)
+                : Promise.resolve(respond(config, 200))) as AxiosAdapter;
+        refreshAnswers(200);
+        await api.get('/c');
+
+        // ...whose end is announced again.
+        api.defaults.adapter = expired as AxiosAdapter;
+        refreshAnswers(401);
+        await Promise.allSettled([api.get('/d')]);
+        expect(logout).toHaveBeenCalledTimes(2);
+    });
+});

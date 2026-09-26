@@ -11,6 +11,8 @@ import {
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('@/router', () => ({ default: router }));
 
 const SHIFT: CurrentShiftView = {
     _id: 'shift1',
@@ -291,6 +293,84 @@ describe('shift store (server-backed, issue #2)', () => {
 
             await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
             expect(store.loaded).toBe(false);
+        });
+    });
+
+    describe('errors that must not change the drawer state (issue #30)', () => {
+        it('keeps Shift In open on a refused count, so the cashier can fix it', async () => {
+            api.post.mockRejectedValue(
+                apiError(400, ErrorCode.VALIDATION_INVALID_INPUT),
+            );
+            const store = await loadStore();
+            store.shiftInOpen = true;
+
+            await expect(store.openShift({ '1000': 1 })).rejects.toThrow();
+            expect(store.shiftInOpen).toBe(true);
+            expect(store.activeShift).toBeNull();
+            // Never guessed from a second request.
+            expect(api.get).not.toHaveBeenCalled();
+        });
+
+        it('does not claim a shift when "already open" cannot be confirmed', async () => {
+            // The server says open, but the follow-up read finds none (it
+            // was force-closed meanwhile): report the error, show no shift.
+            api.post.mockRejectedValue(
+                apiError(409, ErrorCode.SHIFT_ALREADY_OPEN),
+            );
+            api.get.mockResolvedValue({ data: { shift: null } });
+            const store = await loadStore();
+            store.shiftInOpen = true;
+
+            await expect(store.openShift({ '1000': 1 })).rejects.toThrow();
+            expect(store.activeShift).toBeNull();
+            expect(store.shiftInOpen).toBe(true);
+        });
+
+        it('a close refused because an admin already closed the shift drops it, with no Z-read', async () => {
+            api.get.mockResolvedValue({ data: { shift: SHIFT } });
+            api.post.mockRejectedValue(apiError(409, ErrorCode.SHIFT_NOT_OPEN));
+            const store = await loadStore();
+            await store.fetchCurrent();
+            store.shiftOutOpen = true;
+
+            await expect(store.closeShift({ '1000': 1 })).rejects.toThrow();
+            expect(store.activeShift).toBeNull();
+            expect(store.shiftOutOpen).toBe(false);
+            // The cashier's count was not recorded: no report to show.
+            expect(store.zRead).toBeNull();
+        });
+
+        it('any other close failure keeps the shift and the dialog for a retry', async () => {
+            api.get.mockResolvedValue({ data: { shift: SHIFT } });
+            api.post.mockRejectedValue(new Error('Network Error'));
+            const store = await loadStore();
+            await store.fetchCurrent();
+            store.shiftOutOpen = true;
+
+            await expect(store.closeShift({ '1000': 1 })).rejects.toThrow();
+            expect(store.activeShift).toEqual(SHIFT);
+            expect(store.shiftOutOpen).toBe(true);
+        });
+    });
+
+    describe('goToRegister', () => {
+        it('goes to the register with an open shift', async () => {
+            api.get.mockResolvedValue({ data: { shift: SHIFT } });
+            const store = await loadStore();
+            await store.fetchCurrent();
+
+            await store.goToRegister();
+            expect(router.push).toHaveBeenCalledWith({ name: 'Sell' });
+            expect(store.shiftInOpen).toBe(false);
+        });
+
+        it('asks for the opening count instead without one (no selling outside a shift)', async () => {
+            router.push.mockClear();
+            const store = await loadStore();
+
+            await store.goToRegister();
+            expect(router.push).not.toHaveBeenCalled();
+            expect(store.shiftInOpen).toBe(true);
         });
     });
 });

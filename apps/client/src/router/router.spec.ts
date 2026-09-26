@@ -23,6 +23,7 @@ vi.mock('@/views/User/Sales/Index.vue', () => stub);
 vi.mock('@/views/User/Dashboard.vue', () => stub);
 vi.mock('@/views/User/Products/Index.vue', () => stub);
 vi.mock('@/views/User/Shifts/Index.vue', () => stub);
+vi.mock('@/views/User/Users/Index.vue', () => stub);
 
 function signIn(roles: Role[]) {
     localStorage.setItem('user', JSON.stringify({ username: 'u', roles }));
@@ -157,6 +158,31 @@ describe('dashboard access (issue #13)', () => {
         await router.push('/admin');
 
         expect(router.currentRoute.value.name).toBe('Dashboard');
+    });
+
+    it('sends a signed-in user who opens Login back to their home page', async () => {
+        // Not while signing out (guard.spec.ts): then Login must show.
+        signIn([Role.Seller]);
+        const router = await freshRouter();
+
+        await router.push({ name: 'Login' });
+
+        expect(router.currentRoute.value.name).toBe('SellerDashboard');
+    });
+
+    it('says why a page was refused', async () => {
+        signIn([Role.Restocker]);
+        const router = await freshRouter();
+        const { useUIStore } = await import('@/stores/ui');
+        const queue = vi.spyOn(useUIStore(), 'queueMessage');
+
+        await router.push('/admin/users');
+
+        expect(router.currentRoute.value.name).toBe('Dashboard');
+        expect(queue).toHaveBeenCalledWith(
+            expect.anything(),
+            'You do not have access to that page',
+        );
     });
 
     it('sends an admin from / to the dashboard', async () => {
