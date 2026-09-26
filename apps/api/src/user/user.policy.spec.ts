@@ -170,6 +170,7 @@ describe('assertCanUpdate', () => {
             expect(
                 check(MANAGER, MANAGER, { name: 'boss', isActive: true }),
             ).toBeNull();
+            // A rename sent on its own (no isActive) is allowed too.
             expect(check(MANAGER, MANAGER, { name: 'boss' })).toBeNull();
         });
 

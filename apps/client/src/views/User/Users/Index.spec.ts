@@ -392,6 +392,48 @@ describe('own account (issue #61)', () => {
         });
     });
 
+    it('finds the own row by id when the username is stale', async () => {
+        // Renamed since the profile was cached: the id still matches.
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'old-boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+
+        await editRow('boss');
+        expect(activeBox().disabled).toBe(true);
+        expect(hint()).not.toBeNull();
+    });
+
+    it('does not take a same-named row with another id for the own row', async () => {
+        // A cashier now holds the name the manager's cached profile has.
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({
+            data: {
+                data: [
+                    {
+                        _id: 'u2',
+                        name: 'boss',
+                        roles: [Role.Seller],
+                        isActive: true,
+                    },
+                ],
+                totalItems: 1,
+            },
+        });
+        await mount();
+
+        await editRow('boss');
+        expect(activeBox().disabled).toBe(false);
+        expect(hint()).toBeNull();
+    });
+
     it("leaves a manager's toggle on a cashier's row enabled", async () => {
         useAuthStore().user = { username: 'boss', roles: [Role.UserManager] };
         api.get.mockResolvedValue({ data: ROWS });
