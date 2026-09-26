@@ -26,7 +26,7 @@ pnpm format:check
 pnpm -r lint
 pnpm -r typecheck
 pnpm -r test
-VITE_NODE_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com VITE_API_TIMEOUT=5000 pnpm -r build
+VITE_APP_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com VITE_API_TIMEOUT=5000 pnpm -r build
 ```
 
 CI runs the same steps (plus audit, depcheck and `pnpm licenses:check`) and
@@ -424,7 +424,9 @@ requestId}`. A 5xx never carries details or internals.
   image sets `NODE_ENV=production`; no app rule keys off `NODE_ENV`. For
   one release an unset `APP_ENV` is taken from a legacy `NODE_ENV`
   (dev|test|stage|prod) with a warning; a legacy `NODE_ENV` that disagrees
-  with `APP_ENV` fails startup. The client keeps `VITE_NODE_ENV`.
+  with `APP_ENV` fails startup. The client's stage is `VITE_APP_ENV`
+  (#86); for one release an unset one is taken from the old
+  `VITE_NODE_ENV` with a warning, and the two disagreeing fail the build.
 - nginx sends a strict CSP (`script-src 'self'`, `style-src 'self'` with no
   `'unsafe-inline'`, `img-src 'self' data:`, `connect-src 'self'` + the API
   origin, `frame-ancestors 'none'`, …), nosniff, `X-Frame-Options`,

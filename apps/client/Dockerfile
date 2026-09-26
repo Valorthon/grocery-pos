@@ -10,15 +10,26 @@ RUN npm install -g pnpm@10.33.0
 # would only fail after it). A stage of its own so these ARGs don't bust the
 # install's cache; the build stage waits for its marker file.
 FROM base AS build-args
-ARG VITE_NODE_ENV=prod
+# VITE_APP_ENV is the stage (default prod). VITE_NODE_ENV is its old name,
+# still read for one release (#86): used when VITE_APP_ENV is unset (the
+# vite build warns); a different value from VITE_APP_ENV fails here.
+ARG VITE_APP_ENV
+ARG VITE_NODE_ENV
 ARG VITE_API_URL
 ARG VITE_DOMAIN
 RUN if [ -z "$VITE_API_URL" ]; then \
         echo "Build arg VITE_API_URL is required, e.g. --build-arg VITE_API_URL=https://api.example.com/v1" >&2; exit 1; \
     fi; \
-    if [ "$VITE_NODE_ENV" = prod ] || [ "$VITE_NODE_ENV" = stage ]; then \
+    trim() { printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }; \
+    app_env=$(trim "$VITE_APP_ENV"); \
+    node_env=$(trim "$VITE_NODE_ENV"); \
+    if [ -n "$app_env" ] && [ -n "$node_env" ] && [ "$app_env" != "$node_env" ]; then \
+        echo "Build args VITE_APP_ENV=$app_env and VITE_NODE_ENV=$node_env disagree: VITE_APP_ENV is the stage; remove the deprecated VITE_NODE_ENV" >&2; exit 1; \
+    fi; \
+    stage="${app_env:-${node_env:-prod}}"; \
+    if [ "$stage" = prod ] || [ "$stage" = stage ]; then \
         if [ -z "$VITE_DOMAIN" ]; then \
-            echo "Build arg VITE_DOMAIN is required when VITE_NODE_ENV=$VITE_NODE_ENV: the shared parent domain, e.g. --build-arg VITE_DOMAIN=example.com" >&2; exit 1; \
+            echo "Build arg VITE_DOMAIN is required when VITE_APP_ENV=$stage: the shared parent domain, e.g. --build-arg VITE_DOMAIN=example.com" >&2; exit 1; \
         fi; \
     fi \
     && touch /build-args-ok
@@ -47,12 +58,14 @@ RUN pnpm --filter @grocery-pos/contracts build
 # Build args (Railway passes service variables of the same name). They are
 # inlined into the bundle, so changing one needs a rebuild. See
 # docs/DEPLOY.md. VITE_API_URL and VITE_DOMAIN have no usable default.
-ARG VITE_NODE_ENV=prod
+# VITE_APP_ENV defaults to prod; the deprecated VITE_NODE_ENV is passed on so
+# vite.config.ts resolves the pair (and warns) as it does outside Docker.
+ARG VITE_APP_ENV
+ARG VITE_NODE_ENV
 ARG VITE_API_URL
 ARG VITE_API_TIMEOUT=10000
 ARG VITE_DOMAIN
 
-ENV VITE_NODE_ENV=$VITE_NODE_ENV
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_API_TIMEOUT=$VITE_API_TIMEOUT
 ENV VITE_DOMAIN=$VITE_DOMAIN
@@ -66,7 +79,12 @@ RUN if [ -n "$LOGIN_HERO_URL" ] && [ ! -f apps/client/public/images/login-hero.j
             "$LOGIN_HERO_URL" apps/client/public/images/login-hero.jpg; \
     fi
 
-RUN pnpm --filter grocery-pos-client build
+# The ARGs above reach this RUN as env vars. With neither stage arg set, the
+# stage is prod; otherwise vite.config.ts resolves (and trims) the pair.
+RUN if [ -z "$(printf '%s' "$VITE_APP_ENV$VITE_NODE_ENV" | tr -d '[:space:]')" ]; then \
+        export VITE_APP_ENV=prod; \
+    fi; \
+    pnpm --filter grocery-pos-client build
 
 # The CSP's connect-src default (docker-entrypoint.sh): the API's origin.
 RUN node -e "console.log(new URL(process.env.VITE_API_URL).origin)" > /app/api-origin

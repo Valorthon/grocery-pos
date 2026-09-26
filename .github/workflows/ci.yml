@@ -120,7 +120,7 @@ jobs:
             - name: Build
               run: pnpm -r build
               env:
-                  VITE_NODE_ENV: prod
+                  VITE_APP_ENV: prod
                   VITE_API_URL: https://api.ci-test.com
                   VITE_DOMAIN: ci-test.com
                   VITE_API_TIMEOUT: 5000
@@ -202,7 +202,7 @@ jobs:
             - name: Build client image
               run: >-
                   docker build --file apps/client/Dockerfile
-                  --build-arg VITE_NODE_ENV=prod
+                  --build-arg VITE_APP_ENV=prod
                   --build-arg VITE_API_URL=https://api.ci-test.com
                   --build-arg VITE_DOMAIN=ci-test.com
                   --build-arg VITE_API_TIMEOUT=5000
