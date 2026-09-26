@@ -2266,23 +2266,26 @@ describe('Sell scan box on phones (#89)', () => {
         expect(hint.querySelector('[data-key-hint]')?.textContent).toBe('F2');
     });
 
-    it('gives the text the room the buttons leave below sm, and keeps sm:pr-48', async () => {
+    it('gives the text the room the buttons leave, with and without Clear', async () => {
         serve(() => Promise.resolve([]));
         mount();
         await flush();
 
-        // Empty: only Enter / Scan sits on the right.
+        // Empty: Enter / Scan (and the F2 hint from sm) on the right.
         expect(classes(input())).toEqual(
             expect.arrayContaining(['pr-32', 'sm:pr-48']),
         );
         expect(classes(input())).not.toContain('pr-48');
+        expect(classes(input())).not.toContain('sm:pr-52');
 
-        // With text, Clear shows too, and the padding makes room for it.
+        // With text, Clear shows too, and the padding makes room for it
+        // at every width: the cluster is ~203px from sm up (> pr-48).
         await type('milk');
         expect(classes(input())).toEqual(
-            expect.arrayContaining(['pr-43', 'sm:pr-48']),
+            expect.arrayContaining(['pr-43', 'sm:pr-52']),
         );
         expect(classes(input())).not.toContain('pr-32');
+        expect(classes(input())).not.toContain('sm:pr-48');
         const clear = document.querySelector(
             'button[aria-label="Clear search"]',
         )!;

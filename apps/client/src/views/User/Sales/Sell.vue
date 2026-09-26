@@ -132,13 +132,15 @@
                             "
                             :class="
                                 /*
-                                 * Room for the buttons on the right (#89).
-                                 * Below sm (no F2 hint) it is just what they
-                                 * take: Enter / Scan, plus Clear with text.
+                                 * Room for the buttons on the right (#89):
+                                 * Enter / Scan, plus Clear with text, plus
+                                 * the F2 hint from sm up.
                                  */
-                                searchQuery ? 'pr-43' : 'pr-32'
+                                searchQuery
+                                    ? 'pr-43 sm:pr-52'
+                                    : 'pr-32 sm:pr-48'
                             "
-                            class="w-full min-h-14 pl-11 sm:pr-48 py-3 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
+                            class="w-full min-h-14 pl-11 py-3 bg-slate-50 text-slate-900 placeholder-slate-400 text-sm font-mono font-bold rounded-xl border border-slate-300 focus:border-slate-800 focus:bg-white focus:ring-2 focus:ring-slate-900/10 focus:outline-none transition-all"
                             @input="onSearchChange"
                             @keydown.down.prevent="search.move(1)"
                             @keydown.up.prevent="search.move(-1)"
