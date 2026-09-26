@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { text } from 'body-parser';
 import { RateLimitModule } from '../auth/rate-limit/rate-limit';
+import { withSafeErrors } from '../common/body-parsers';
 import { CSP_REPORT_CONTENT_TYPES, CSP_REPORT_MAX_BYTES } from './csp-report';
 import { CspReportController } from './csp-report.controller';
 
@@ -19,10 +20,12 @@ export class CspReportModule implements NestModule {
     configure(consumer: MiddlewareConsumer) {
         consumer
             .apply(
-                text({
-                    type: [...CSP_REPORT_CONTENT_TYPES],
-                    limit: CSP_REPORT_MAX_BYTES,
-                }),
+                withSafeErrors(
+                    text({
+                        type: [...CSP_REPORT_CONTENT_TYPES],
+                        limit: CSP_REPORT_MAX_BYTES,
+                    }),
+                ),
             )
             .forRoutes(CspReportController);
     }

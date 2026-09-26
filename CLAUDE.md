@@ -454,6 +454,11 @@ requestId}`. A 5xx never carries details or internals.
   is unchanged), and is rate-limited per IP (`RATE_LIMITS.cspReport`).
   Chromium's `report-to` upload is a CORS preflighted request without
   cookies, allowed by the API's `FRONTEND_URL` CORS; no third party.
+  Body-parser failures answer and log a fixed message per error `type`
+  (`BODY_ERROR_MESSAGES` in `global.filter.ts`), never the parser's own
+  message; the global parsers are installed by `useBodyParsers`
+  (`common/body-parsers.ts`, `bodyParser: false`) so Nest can't turn a
+  JSON SyntaxError into a message-quoting BadRequestException.
 - Hashed `/assets/` are cached immutable for a year, everything else
   `no-cache`; `/health` is 503 without `index.html`.
 - Both images run non-root (API as `node`, nginx as `nginx` with pid/temp in

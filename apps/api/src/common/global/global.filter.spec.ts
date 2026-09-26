@@ -16,6 +16,8 @@ import { Error as MongooseError, mongo } from 'mongoose';
 import { IsInt, IsString, Min } from 'class-validator';
 import {
     GlobalFilter,
+    BODY_ERROR_FALLBACK_MESSAGE,
+    BODY_ERROR_MESSAGES,
     INTERNAL_MESSAGE,
     stackWithCauses,
 } from './global.filter';
@@ -636,6 +638,8 @@ describe('GlobalFilter on AppErrors (issue #8)', () => {
 describe('GlobalFilter on body-parser (http-errors) client errors (issue #8)', () => {
     const filter = new GlobalFilter();
 
+    const typeOf = (err: Error) => String((err as { type?: unknown }).type);
+
     /** The shape `http-errors` gives body-parser's errors. */
     function httpError(
         status: number,
@@ -674,28 +678,102 @@ describe('GlobalFilter on body-parser (http-errors) client errors (issue #8)', (
             httpError(
                 415,
                 'UnsupportedMediaTypeError',
-                'unsupported charset "X"',
+                'unsupported charset "HUNTER2"',
+                { type: 'charset.unsupported', charset: 'hunter2' },
             ),
             415,
             ErrorCode.HTTP_ERROR,
         ],
-    ])('keeps the status of an exposed %#', (err, status, code) => {
-        const { host, res } = hostFor('/v1/products/bulk');
+        [
+            httpError(
+                415,
+                'UnsupportedMediaTypeError',
+                'unsupported content encoding "hunter2"',
+                { type: 'encoding.unsupported', encoding: 'hunter2' },
+            ),
+            415,
+            ErrorCode.HTTP_ERROR,
+        ],
+        [
+            httpError(403, 'ForbiddenError', 'verify said hunter2', {
+                type: 'entity.verify.failed',
+            }),
+            403,
+            ErrorCode.FORBIDDEN,
+        ],
+        [
+            httpError(400, 'BadRequestError', 'request aborted hunter2', {
+                type: 'request.aborted',
+            }),
+            400,
+            ErrorCode.VALIDATION_INVALID_INPUT,
+        ],
+        [
+            httpError(400, 'BadRequestError', 'size hunter2', {
+                type: 'request.size.invalid',
+            }),
+            400,
+            ErrorCode.VALIDATION_INVALID_INPUT,
+        ],
+        [
+            httpError(413, 'PayloadTooLargeError', 'too many hunter2', {
+                type: 'parameters.too.many',
+            }),
+            413,
+            ErrorCode.HTTP_ERROR,
+        ],
+        [
+            httpError(400, 'BadRequestError', 'depth hunter2', {
+                type: 'querystring.parse.rangeError',
+            }),
+            400,
+            ErrorCode.VALIDATION_INVALID_INPUT,
+        ],
+    ])(
+        'keeps the status of an exposed %#, with a fixed message',
+        (err, status, code) => {
+            const { host, res } = hostFor('/v1/products/bulk');
+
+            filter.catch(err, host);
+
+            expect(res.status).toHaveBeenCalledWith(status);
+            const body = bodyOf(res);
+            expect(body).toMatchObject({
+                statusCode: status,
+                error: code,
+                message: BODY_ERROR_MESSAGES[typeOf(err)],
+                details: null,
+            });
+            expect(JSON.stringify(body).toLowerCase()).not.toContain('hunter2');
+            expect(errorLog).not.toHaveBeenCalled();
+            expect(warnLog).toHaveBeenCalledTimes(1);
+            const line = String(warnLog.mock.calls[0][0]);
+            expect(line.toLowerCase()).not.toContain('hunter2');
+            expect(line).toContain(`body-parser ${typeOf(err)}`);
+        },
+    );
+
+    it.each([
+        httpError(400, 'BadRequestError', 'no type hunter2'),
+        httpError(400, 'BadRequestError', 'odd type hunter2', {
+            type: 'toString',
+        }),
+        httpError(418, 'ImATeapotError', 'teapot hunter2', {
+            type: 'hunter2',
+        }),
+    ])('answers an exposed http error of unknown type generically', (err) => {
+        const { host, res } = hostFor('/v1/x');
 
         filter.catch(err, host);
 
-        expect(res.status).toHaveBeenCalledWith(status);
-        const body = bodyOf(res);
-        expect(body).toMatchObject({
-            statusCode: status,
-            error: code,
-            message: err.message,
-            details: null,
+        expect(bodyOf(res)).toMatchObject({
+            statusCode: err.status,
+            message: BODY_ERROR_FALLBACK_MESSAGE,
         });
-        expect(JSON.stringify(body)).not.toContain('hunter2');
-        expect(errorLog).not.toHaveBeenCalled();
-        expect(warnLog).toHaveBeenCalledTimes(1);
-        expect(warnLog.mock.calls[0][0]).not.toContain('hunter2');
+        expect(String(warnLog.mock.calls[0][0])).toContain(
+            'body-parser unknown',
+        );
+        expect(JSON.stringify(warnLog.mock.calls)).not.toContain('hunter2');
     });
 
     it('keeps a non-exposed or 5xx http error a generic 500', () => {

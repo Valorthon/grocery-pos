@@ -24,6 +24,7 @@ import { JWTAuthGuard } from '../auth/guards/jwt.guard';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { JWTStrategy } from '../auth/jwt.strategy';
 import { RATE_LIMITS } from '../auth/rate-limit/rate-limit';
+import { useBodyParsers } from '../common/body-parsers';
 import { corsOptions } from '../common/cors';
 import { ErrorCode } from '../common/errors';
 import { GlobalFilter } from '../common/global/global.filter';
@@ -136,11 +137,16 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
             ],
         }).compile();
 
-        app = moduleRef.createNestApplication({ logger: false });
+        app = moduleRef.createNestApplication({
+            logger: false,
+            bodyParser: false,
+        });
         app.useGlobalPipes(createValidationPipe());
         app.use(cookieParser(String(CONFIG.COOKIE_SECRET)));
         app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
         app.enableCors(corsOptions(FRONTEND));
+        // After CORS, as in main.ts.
+        useBodyParsers(app);
         await app.listen(0, '127.0.0.1');
 
         const { port } = app.getHttpServer().address() as AddressInfo;
@@ -264,10 +270,13 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
                 }),
             ),
             'application/csp-report',
+            { origin: FRONTEND },
         );
         const body = (await res.json()) as Record<string, unknown>;
 
         expect(res.status).toBe(413);
+        // The parsers run after CORS, so the client can read the refusal.
+        expect(res.headers.get('access-control-allow-origin')).toBe(FRONTEND);
         expect(body).toMatchObject({
             statusCode: 413,
             error: ErrorCode.HTTP_ERROR,
@@ -397,5 +406,98 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
             body: report,
         });
         expect(await json.json()).toEqual({ parsed: true });
+    });
+
+    /**
+     * body-parser's own messages quote the Content-Encoding and charset it
+     * refuses; GlobalFilter answers and logs a fixed message per error
+     * type instead, on this route and on every JSON route.
+     */
+    describe('never echoes a refused Content-Encoding or charset', () => {
+        const MARK = 'echoed-header-value';
+        const longEncoding = `x-${MARK}-${'a'.repeat(4000)}`;
+        const report = JSON.stringify(legacyReport());
+
+        it.each([
+            [
+                'the CSP route, bogus Content-Encoding',
+                '/csp-report',
+                {
+                    'content-type': 'application/csp-report',
+                    'content-encoding': longEncoding,
+                },
+                'Unsupported content encoding',
+                'encoding.unsupported',
+            ],
+            [
+                'the CSP route, bogus charset',
+                '/csp-report',
+                { 'content-type': `application/reports+json; charset=${MARK}` },
+                'Unsupported charset',
+                'charset.unsupported',
+            ],
+            [
+                'a JSON route, bogus Content-Encoding',
+                '/probe',
+                {
+                    'content-type': 'application/json',
+                    'content-encoding': longEncoding,
+                },
+                'Unsupported content encoding',
+                'encoding.unsupported',
+            ],
+            [
+                'a JSON route, bogus charset',
+                '/probe',
+                { 'content-type': `application/json; charset=${MARK}` },
+                'Unsupported charset',
+                'charset.unsupported',
+            ],
+        ])(
+            '%s: 415, fixed message, type logged',
+            async (_label, path, headers, message, type) => {
+                const res = await fetch(`${base}${path}`, {
+                    method: 'POST',
+                    headers,
+                    body: report,
+                });
+                const text = await res.text();
+
+                expect(res.status).toBe(415);
+                expect(JSON.parse(text)).toMatchObject({
+                    statusCode: 415,
+                    error: ErrorCode.HTTP_ERROR,
+                    message,
+                    details: null,
+                });
+                expect(text.toLowerCase()).not.toContain(MARK);
+
+                const logged = warn.mock.calls.map((call) => String(call[0]));
+                expect(logged).toEqual([
+                    expect.stringContaining(
+                        `-> 415 ${ErrorCode.HTTP_ERROR}: body-parser ${type}`,
+                    ),
+                ]);
+                expect(logged.join('\n').toLowerCase()).not.toContain(MARK);
+                expect(reportLines()).toEqual([]);
+            },
+        );
+
+        it('answers malformed JSON on a JSON route without quoting the body', async () => {
+            const res = await fetch(`${base}/probe`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: `{"x": ${MARK}`,
+            });
+            const text = await res.text();
+
+            expect(res.status).toBe(400);
+            expect(JSON.parse(text)).toMatchObject({
+                error: ErrorCode.VALIDATION_INVALID_INPUT,
+                message: 'Malformed request body',
+            });
+            expect(text).not.toContain(MARK);
+            expect(JSON.stringify(warn.mock.calls)).not.toContain(MARK);
+        });
     });
 });

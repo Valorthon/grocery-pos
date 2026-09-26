@@ -13,6 +13,12 @@ describe('logSafe (#94)', () => {
         ['?only-a-query', '-'],
         ['line\nbreak\u001b[31m red', 'line_break_[31m_red'],
         ['café x', 'caf__x'],
+        // new URL() refuses these; the user info goes anyway.
+        ['https://u:p@a.example:99999/p?q', 'https://a.example:99999/p'],
+        ['https://u@x:p@w@a.example:99999/p', 'https://a.example:99999/p'],
+        ['//u:p@a.example/p', '//a.example/p'],
+        ['https://a.example:99999/p@x', 'https://a.example:99999/p@x'],
+        ['not a url but@has-an-at', 'not_a_url_but@has-an-at'],
     ])('%j logs as %j', (raw, logged) => {
         expect(logSafe(raw)).toBe(logged);
     });

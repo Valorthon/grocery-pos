@@ -28,9 +28,10 @@ export const CSP_REPORT_MAX_BYTES = 16 * 1024;
 /**
  * At most this many reports of one request are logged; the rest are
  * counted in one extra line. 16KB of minimal reports would otherwise be
- * hundreds of log lines per request.
+ * hundreds of log lines per request; a page load rarely has more distinct
+ * violations than this.
  */
-export const CSP_REPORTS_LOGGED_MAX = 20;
+export const CSP_REPORTS_LOGGED_MAX = 5;
 
 /** The longest logged value; longer ones are cut and marked with `…`. */
 const FIELD_MAX = 200;
@@ -68,7 +69,14 @@ export function logSafe(raw: string): string {
             value = url.href;
         }
     } catch {
-        // Not a URL (a keyword or garbage): kept as is, then escaped below.
+        // Not a URL (a keyword, garbage, or a URL `new URL` refuses, such
+        // as one with a bad port): any `userinfo@` after `//` is still
+        // dropped, up to the last `@` of the authority, then the rest is
+        // escaped below.
+        value = value.replace(
+            /^((?:[A-Za-z][A-Za-z0-9+.-]*:)?\/\/)[^/]*@/,
+            '$1',
+        );
     }
     value = value.replace(/[^\x21-\x7e]/g, '_');
     if (value.length > FIELD_MAX) value = `${value.slice(0, FIELD_MAX)}…`;

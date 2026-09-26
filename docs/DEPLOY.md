@@ -138,12 +138,15 @@ answers 204. No third party receives them.
   `[<request id>] CSP violation: directive=… blocked=… document=…`.
   Query strings, fragments and user info are stripped from the URIs; the
   rest of the report (samples, the policy), headers and cookies are never
-  logged. At most 20 reports of one request are logged,
-  the rest counted.
+  logged. At most 5 reports of one request are logged, the rest counted.
 - The route is public, rate-limited to 60 requests a minute per IP, and
   parses only those two media types, capped at 16KB (413 above), on that
   route alone. Malformed JSON or a body that is not a report is a 400 with
   a fixed message; nothing is echoed back. Any other media type is a 415.
+- On every route, a body the parsers refuse (too large, malformed, an
+  unsupported charset or `Content-Encoding`, ...) gets a fixed message per
+  error type, and only the type is logged: body-parser's own messages
+  quote the request's headers or body.
 - The path's `/v1` is the API's URI version; `<API origin>` is the same
   `API_ORIGIN` as `connect-src`. Reports are not subject to `connect-src`
   (their fetch destination is `report`), so it needs no extra source.
