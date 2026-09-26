@@ -443,6 +443,17 @@ requestId}`. A 5xx never carries details or internals.
   overrides). All `add_header` lines stay at server level; per-path values go
   through a `map`. No static `style="…"` in templates (`layout-drift.spec.ts`)
   and zod runs `jitless`, so the app raises no CSP violation.
+- CSP violations are reported to the API's public `POST /v1/csp-report`
+  (#94), which logs one warn line per report (request id, directive,
+  blocked and document URI without query strings; never the body or
+  cookies) and answers 204. nginx sends `report-to csp-endpoint` +
+  `report-uri`, with `Reporting-Endpoints`, both on `API_ORIGIN`, and
+  `Permissions-Policy` denying camera, microphone, geolocation, payment and
+  usb. The route parses only `application/csp-report` and
+  `application/reports+json`, 16KB max, on that route alone (global parsing
+  is unchanged), and is rate-limited per IP (`RATE_LIMITS.cspReport`).
+  Chromium's `report-to` upload is a CORS preflighted request without
+  cookies, allowed by the API's `FRONTEND_URL` CORS; no third party.
 - Hashed `/assets/` are cached immutable for a year, everything else
   `no-cache`; `/health` is 503 without `index.html`.
 - Both images run non-root (API as `node`, nginx as `nginx` with pid/temp in

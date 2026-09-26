@@ -60,6 +60,12 @@ export const RATE_LIMITS = {
         ip: { limit: 20, ttl: MINUTE_MS },
         account: { limit: 5, ttl: 15 * MINUTE_MS },
     },
+    cspReport: {
+        // Unauthenticated. A page load that trips the CSP sends one legacy
+        // report per violation (plus batched Reporting API posts), and a
+        // shop's terminals share one IP; beyond this, reports are dropped.
+        ip: { limit: 60, ttl: MINUTE_MS },
+    },
 } as const;
 
 interface RequestLike {
@@ -187,5 +193,16 @@ export const PasswordChangeRateLimit = () =>
                 getTracker: userTracker,
             },
         }),
+        UseGuards(RateLimitGuard),
+    );
+
+/**
+ * `POST /csp-report` (#94): per IP only. Browsers send reports without
+ * credentials, so there is no account to count.
+ */
+export const CspReportRateLimit = () =>
+    applyDecorators(
+        Throttle({ [THROTTLER_IP]: RATE_LIMITS.cspReport.ip }),
+        SkipThrottle({ [THROTTLER_ACCOUNT]: true }),
         UseGuards(RateLimitGuard),
     );
