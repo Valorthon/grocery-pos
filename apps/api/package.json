@@ -6,7 +6,7 @@
     "private": true,
     "license": "UNLICENSED",
     "scripts": {
-        "build": "nest build",
+        "build": "nest build && node scripts/check-dist.mjs",
         "seed": "ts-node seed.ts",
         "migrate:decode-entities": "ts-node migrate-decode-entities.ts",
         "start": "nest start",
