@@ -18,6 +18,7 @@
         "test:watch": "jest --watch",
         "test:cov": "jest --coverage",
         "test:debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
+        "test:db": "jest --config jest.db.config.ts --runInBand",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "dev": "nest start --watch",
         "lint:fix": "eslint . --fix"
