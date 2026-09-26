@@ -193,6 +193,13 @@ requestId}`. A 5xx never carries details or internals.
 - `GET /users` validates with the user module's `GetUsersDto` (renamed
   from its `GetAllDto` in #27, same rules: name ≤ `USERNAME`, no `EAN`);
   `user.e2e.spec.ts` pins it.
+- Request bodies (#90) are contract types too, in `src/wire/requests.ts`
+  (`SaleRequest`, `RestockRequest`, `LoginRequest`, …; `Tender` and
+  `DiscountInput` stay where they were). Each body DTO and nested DTO
+  `implements` its type, and `common/request-contracts.spec.ts` fails
+  `tsc` on a key on one side only. The client's `payloads.ts` mappers
+  return them and other bodies use `satisfies`; the client defines no
+  request types of its own.
 - Contracts' relative imports end in `.js`; the build fails otherwise, so
   plain Node can load the ESM build.
 

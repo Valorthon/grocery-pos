@@ -14,6 +14,10 @@ import {
     Max,
     ArrayMaxSize,
 } from 'class-validator';
+import type {
+    AdjustmentLineRequest,
+    AdjustmentRequest,
+} from '@grocery-pos/contracts';
 import {
     VALIDATION,
     STRING_LIMITS,
@@ -65,7 +69,7 @@ export class GetDetailsQueryDto {
 
 export type GetDetailsDto = GetDetailsQueryDto & GetDetailsParamDto;
 
-export class AdjustFields {
+export class AdjustFields implements AdjustmentLineRequest {
     @IsNotEmpty()
     @IsMongoId()
     product!: string;
@@ -84,7 +88,7 @@ export class AdjustFields {
     reason!: string;
 }
 
-export class AdjustDto {
+export class AdjustDto implements AdjustmentRequest {
     @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.DESCRIPTION)

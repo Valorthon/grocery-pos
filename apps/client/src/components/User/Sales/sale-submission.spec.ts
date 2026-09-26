@@ -16,11 +16,13 @@ import {
     isRejectedSale,
     saleErrorMessage,
     SaleNotCompletedError,
-    type SaleRequest,
     useSaleCheckout,
 } from './sale-submission';
-import type { Receipt } from '@grocery-pos/contracts';
-import type { PaymentRequest } from './types';
+import type {
+    PaymentRequest,
+    Receipt,
+    SaleRequest,
+} from '@grocery-pos/contracts';
 
 const UUID =
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

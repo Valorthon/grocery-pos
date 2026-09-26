@@ -974,7 +974,6 @@ import KeyHint from '@/components/ui/KeyHint.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
-import type { PaymentRequest } from '@/components/User/Sales/types';
 import {
     fixedDiscountError,
     paymentLabel,
@@ -1014,6 +1013,7 @@ import {
     type DiscountInput,
     DrawerMovementType,
     ErrorCode,
+    type PaymentRequest,
     PaymentType,
     type ProductView,
     type Receipt,

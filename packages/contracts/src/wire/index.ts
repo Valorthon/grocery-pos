@@ -3,3 +3,4 @@ export * from './sales.js';
 export * from './catalog.js';
 export * from './dashboard.js';
 export * from './shifts.js';
+export * from './requests.js';

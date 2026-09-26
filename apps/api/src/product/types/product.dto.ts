@@ -19,6 +19,10 @@ import {
     ValidateNested,
     ArrayMaxSize,
 } from 'class-validator';
+import type {
+    NewProductRequest,
+    NewProductsRequest,
+} from '@grocery-pos/contracts';
 import { Category } from './product.types';
 import {
     NUMERIC_LIMITS,
@@ -62,7 +66,7 @@ export class EnsureValidDto {
     autoGenerateEAN!: boolean;
 }
 
-export class NewProductFields {
+export class NewProductFields implements NewProductRequest {
     /**
      * The barcode as scanned: EAN-13, UPC-A or EAN-8 with a valid check
      * digit, outside the store's generated range (`IsBarcode`). Omitted or
@@ -99,7 +103,7 @@ export class NewProductFields {
     price!: number;
 }
 
-export class NewProductsDto {
+export class NewProductsDto implements NewProductsRequest {
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
     @ArrayMaxSize(BATCH_LIMITS.NEW_PRODUCTS)

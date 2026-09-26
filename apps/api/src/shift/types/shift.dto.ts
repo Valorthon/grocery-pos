@@ -16,7 +16,10 @@ import {
     type BillCounts,
     CASHIER_DRAWER_MOVEMENTS,
     type CashierDrawerMovement,
+    type CloseShiftRequest,
+    type DrawerMovementRequest,
     isDenomination,
+    type OpenShiftRequest,
     SHIFT_LIMITS,
     ShiftStatus,
 } from '@grocery-pos/contracts';
@@ -59,7 +62,7 @@ export function IsBillCounts() {
 }
 
 /** Body of `POST /shifts`: the opening float, counted. */
-export class OpenShiftDto {
+export class OpenShiftDto implements OpenShiftRequest {
     @IsNotEmpty()
     @IsBillCounts()
     counts!: BillCounts;
@@ -69,14 +72,14 @@ export class OpenShiftDto {
  * Body of `POST /shifts/current/close` and `POST /shifts/:id/close`: the
  * blind closing count.
  */
-export class CloseShiftDto {
+export class CloseShiftDto implements CloseShiftRequest {
     @IsNotEmpty()
     @IsBillCounts()
     counts!: BillCounts;
 }
 
 /** Body of `POST /shifts/current/drawer`. */
-export class DrawerMovementDto {
+export class DrawerMovementDto implements DrawerMovementRequest {
     @IsNotEmpty()
     @IsIn(CASHIER_DRAWER_MOVEMENTS)
     type!: CashierDrawerMovement;

@@ -1,8 +1,9 @@
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import type { LoginRequest } from '@grocery-pos/contracts';
 import { STRING_LIMITS } from '../../constants';
 
-export class LoginDto {
+export class LoginDto implements LoginRequest {
     @IsString()
     @IsNotEmpty()
     @MaxLength(STRING_LIMITS.USERNAME)

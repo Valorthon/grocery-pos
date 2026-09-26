@@ -1,4 +1,13 @@
-import type { DiscountType } from '@grocery-pos/contracts';
+import type {
+    AdjustmentRequest,
+    ChangePasswordRequest,
+    DiscountInput,
+    NewProductRequest,
+    NewProductsRequest,
+    RestockLineRequest,
+    RestockRequest,
+    SaleTicketRequest,
+} from '@grocery-pos/contracts';
 
 /**
  * Request bodies for the back-office write flows, built from the form
@@ -6,7 +15,8 @@ import type { DiscountType } from '@grocery-pos/contracts';
  * does not declare (`forbidNonWhitelisted`), so each mapper copies exactly
  * the DTO's fields and nothing else. The drafts keep UI-only fields (the
  * row's display name and EAN, `isNewProduct`, `autoGenerateEAN`) that must
- * never be sent.
+ * never be sent. Each returns its `@grocery-pos/contracts` request type,
+ * which the DTO `implements` (#90).
  *
  * The API's e2e specs post these exact shapes; keep them in step:
  * apps/api/src/product/product.payloads.e2e.spec.ts and
@@ -51,23 +61,20 @@ export function toEnsureValidQuery(
 
 /**
  * One new product (`NewProductFields`): `POST /products/bulk` and a
- * restock line's `newProduct`. No EAN: the server generates one.
+ * restock line's `newProduct`. Without an EAN the server generates one.
  */
-export interface NewProductBody {
-    EAN?: string;
-    name: string;
-    /** Centavos. */
-    price: number | undefined;
-}
-
-export function toNewProduct(draft: ProductDraft): NewProductBody {
-    return { ...typedEAN(draft), name: draft.name, price: draft.price };
+export function toNewProduct(draft: ProductDraft): NewProductRequest {
+    return {
+        ...typedEAN(draft),
+        name: draft.name,
+        // The dialogs always set it on submit; a blank would pass through
+        // as it is for the server to refuse.
+        price: draft.price as number,
+    };
 }
 
 /** `POST /products/bulk` body (`NewProductsDto`). */
-export function toNewProductsBody(drafts: ProductDraft[]): {
-    newProducts: NewProductBody[];
-} {
+export function toNewProductsBody(drafts: ProductDraft[]): NewProductsRequest {
     return { newProducts: drafts.map(toNewProduct) };
 }
 
@@ -79,21 +86,22 @@ export interface RestockDraft extends ProductDraft {
     unitCost: number;
 }
 
-/** One `restockDetails` line (`RestockFields`): exactly one of the two. */
-export type RestockLineBody = { quantity: number; unitCost: number } & (
-    { newProduct: NewProductBody } | { product: string | undefined }
-);
-
-/** `POST /restocks` body (`RestockDto`). */
+/**
+ * `POST /restocks` body (`RestockDto`). Each line (`RestockFields`) is
+ * built as a `RestockLineRequest`: exactly one of `newProduct` and
+ * `product`.
+ */
 export function toRestockBody(
     drafts: RestockDraft[],
     description: string,
-): { restockDetails: RestockLineBody[]; description: string } {
+): RestockRequest {
     return {
-        restockDetails: drafts.map((d) => ({
+        restockDetails: drafts.map((d): RestockLineRequest => ({
             ...(d.isNewProduct
                 ? { newProduct: toNewProduct(d) }
-                : { product: d.product }),
+                : // Always set on an existing product's line (as `price`
+                  // on a new one); a blank would pass through as it is.
+                  { product: d.product as string }),
             quantity: d.quantity,
             unitCost: d.unitCost,
         })),
@@ -119,18 +127,11 @@ export interface AdjustmentDraft {
     reason: string;
 }
 
-/** One `adjustDetails` line (`AdjustFields`). */
-export interface AdjustmentLineBody {
-    product: string;
-    change: number;
-    reason: string;
-}
-
 /** `POST /adjustments` body (`AdjustDto`). */
 export function toAdjustmentBody(
     drafts: AdjustmentDraft[],
     description: string,
-): { adjustDetails: AdjustmentLineBody[]; description: string } {
+): AdjustmentRequest {
     return {
         adjustDetails: drafts.map((d) => ({
             product: d.product,
@@ -147,12 +148,6 @@ export interface SaleLineDraft {
     quantity: number;
 }
 
-/** The ticket part of `POST /sales` (`SellDto`: `sellDetails`, `discount`). */
-export interface SaleTicketBody {
-    sellDetails: { product: string; quantity: number }[];
-    discount?: { type: DiscountType; value: number; reason: string };
-}
-
 /**
  * The ticket part of `POST /sales` from the register's cart (#23). Only
  * `product` and `quantity` go per line: the server prices the sale. The
@@ -161,8 +156,8 @@ export interface SaleTicketBody {
  */
 export function toSaleTicket(
     lines: SaleLineDraft[],
-    discount: { type: DiscountType; value: number; reason: string } | null,
-): SaleTicketBody {
+    discount: DiscountInput | null,
+): SaleTicketRequest {
     return {
         sellDetails: lines.map((l) => ({
             product: l.product,
@@ -185,19 +180,14 @@ export interface ChangePasswordDraft {
     confirmPassword: string;
 }
 
-/** `PATCH /users/me/password` (`ChangePasswordDto`). */
-export interface ChangePasswordBody {
-    currentPassword: string;
-    newPassword: string;
-}
-
 /**
- * The body of `PATCH /users/me/password`: both passwords exactly as typed
- * (password fields are never trimmed), and never the confirmation.
+ * The body of `PATCH /users/me/password` (`ChangePasswordDto`): both
+ * passwords exactly as typed (password fields are never trimmed), and
+ * never the confirmation.
  */
 export function toChangePasswordBody(
     draft: ChangePasswordDraft,
-): ChangePasswordBody {
+): ChangePasswordRequest {
     return {
         currentPassword: draft.currentPassword,
         newPassword: draft.newPassword,

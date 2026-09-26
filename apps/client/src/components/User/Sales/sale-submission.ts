@@ -2,24 +2,14 @@ import { ref } from 'vue';
 import { isAxiosError } from 'axios';
 import {
     type AppErrorResponse,
-    type DiscountInput,
     ErrorCode,
+    type PaymentRequest,
     type Receipt,
+    type SaleRequest,
+    type SaleTicketRequest,
     SaleStatus,
 } from '@grocery-pos/contracts';
 import { apiErrorBody, apiErrorCode } from '@/utils/api-error';
-import type { PaymentRequest } from './types';
-
-/** The ticket part of `POST /sales`: what is being sold, not how it is paid. */
-export interface SaleTicket {
-    sellDetails: { product: string; quantity: number }[];
-    discount?: DiscountInput;
-}
-
-/** The full `POST /sales` body. */
-export interface SaleRequest extends PaymentRequest, SaleTicket {
-    idempotencyKey: string;
-}
 
 /**
  * A random v4 UUID. `crypto.randomUUID` only exists in secure contexts
@@ -55,7 +45,7 @@ export function createCheckoutAttempt(
     store: AttemptStore = memoryAttemptStore(),
 ) {
     return {
-        keyFor(ticket: SaleTicket): string {
+        keyFor(ticket: SaleTicketRequest): string {
             const signature = JSON.stringify(ticket);
             const current = store.get();
             if (current && current.ticketSignature === signature) {
@@ -130,7 +120,7 @@ interface CartLike {
  */
 export function useSaleCheckout(deps: {
     cart: CartLike;
-    ticket: () => SaleTicket;
+    ticket: () => SaleTicketRequest;
     post: (body: SaleRequest) => Promise<Receipt>;
     generateKey?: () => string;
     /** Keeps the attempt across reloads; in memory when absent. */

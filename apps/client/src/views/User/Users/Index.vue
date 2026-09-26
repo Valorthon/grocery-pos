@@ -240,8 +240,11 @@ import {
     ASSIGNABLE_ROLES,
     canGrantRole,
     canManageUser,
+    type CreateUsersRequest,
     type Paginated,
     STRING_LIMITS,
+    type UpdateUsersRequest,
+    type UserUpdate,
     type UserView,
 } from '@grocery-pos/contracts';
 import {
@@ -421,7 +424,7 @@ async function createUser() {
                     roles: createForm.value.roles,
                 },
             ],
-        });
+        } satisfies CreateUsersRequest);
         uiStore.queueMessage(Color.SUCCESS, 'User created');
         isCreateOpen.value = false;
         createForm.value = { name: '', password: '', roles: [] };
@@ -454,7 +457,7 @@ function openEdit(item: UserView) {
 async function updateUser() {
     saving.value = true;
     try {
-        const update: Record<string, unknown> = {
+        const update: UserUpdate = {
             isActive: editForm.value.isActive,
         };
         if (!isEditingSelf.value) update.roles = editForm.value.roles;
@@ -464,7 +467,7 @@ async function updateUser() {
 
         await api.patch('/users', {
             updates: [{ user: editForm.value._id, update }],
-        });
+        } satisfies UpdateUsersRequest);
         uiStore.queueMessage(Color.SUCCESS, 'User updated');
         isEditOpen.value = false;
         void fetchUsers();

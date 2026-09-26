@@ -379,6 +379,7 @@ import {
     PaymentType,
     type ReceiptDiscount,
     ReversalType,
+    type ReverseSaleRequest,
     Role,
     type SaleLine,
     type SaleReversalView,
@@ -620,7 +621,7 @@ async function confirmReversal() {
             ...(payoutRequired.value && {
                 payoutShiftId: payoutShiftId.value,
             }),
-        });
+        } satisfies ReverseSaleRequest);
         uiStore.queueMessage(
             Color.SUCCESS,
             `Sale ${type === ReversalType.VOID ? 'voided' : 'refunded'}; stock returned`,
