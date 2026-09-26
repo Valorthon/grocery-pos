@@ -3,7 +3,8 @@ import {
     validatedConfig,
 } from '../testing/validated-config';
 import { TypedConfigService } from './typed-config.service';
-import { OPTIONAL_ENV_KEYS } from './validation.env';
+import * as zod from 'zod';
+import { OPTIONAL_ENV_KEYS, optionalKeys } from './validation.env';
 
 // What `openssl rand -base64 48` produces, so only DOMAIN can fail prod.
 const PROD_SECRETS = {
@@ -26,6 +27,23 @@ describe('TypedConfigService', () => {
 
     it('marks only DOMAIN optional: defaulted keys are never absent', () => {
         expect([...OPTIONAL_ENV_KEYS]).toEqual(['DOMAIN']);
+    });
+
+    it('treats a field whose probe throws as not optional, without crashing', () => {
+        // Zod does not catch exceptions thrown inside a transform or refine.
+        const shape = {
+            PLAIN: zod.string().optional(),
+            LOWER: zod
+                .string()
+                .optional()
+                .transform((v) => (v as string).toLowerCase()),
+            REFINED: zod.any().refine((v: { length: number }) => v.length > 0),
+            REQUIRED: zod.string(),
+            DEFAULTED: zod.string().default('x'),
+        };
+
+        expect(() => optionalKeys(shape)).not.toThrow();
+        expect([...optionalKeys(shape)]).toEqual(['PLAIN']);
     });
 
     it.each(['dev', 'test'])(
