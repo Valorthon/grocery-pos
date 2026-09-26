@@ -228,7 +228,7 @@ describe('user editor (issue #20)', () => {
             .click();
         await flush();
         const seller = [...document.querySelectorAll('label')]
-            .filter((l) => l.textContent?.trim() === Role.Seller)
+            .filter((l) => l.textContent?.trim() === String(Role.Seller))
             .slice(-1)[0]!
             .querySelector('input')!;
         expect(seller.checked).toBe(true);

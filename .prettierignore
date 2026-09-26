@@ -1,3 +1,5 @@
 dist
 node_modules
-.eslintrc.js
+coverage
+# pnpm writes it in its own format; reformatting it churns every install.
+pnpm-lock.yaml

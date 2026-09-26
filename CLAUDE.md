@@ -21,14 +21,19 @@ pnpm --filter @grocery-pos/contracts build
 ## Gates (all must pass from the repo root before a PR is merged)
 
 ```bash
+pnpm --filter @grocery-pos/contracts build
+pnpm format:check
 pnpm -r lint
 pnpm -r typecheck
 pnpm -r test
 VITE_NODE_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com VITE_API_TIMEOUT=5000 pnpm -r build
 ```
 
-GitHub CI is known red for unrelated reasons (#28). Merges are gated on the four
-local gates, not on CI.
+CI runs the same steps (plus audit, depcheck and `pnpm licenses:check`) and
+passes on a clean checkout since #28, so a red run is a real failure. Lint is `--max-warnings 0`, and
+`test` enforces coverage thresholds (jest `coverageThreshold` in
+`apps/api/package.json`, vitest `thresholds` in the client and contracts
+`vitest.config.ts`). Raise a threshold when coverage rises; never lower it.
 
 ## Workflow for issues under #31
 
@@ -328,6 +333,30 @@ requestId}`. A 5xx never carries details or internals.
   `@fontsource/poppins`, and the login photo is
   `public/images/login-hero.jpg`, fetched at deploy (README) over a
   gradient, gitignored, never committed.
+
+**CI** (#28)
+
+- `ci.yml` runs on PRs and pushes to `develop`, `staging`, `production`,
+  `master`, with `contents: read` and a per-ref `concurrency` that cancels
+  superseded PR runs (branch pushes never cancel). Contracts are built as an
+  explicit step; contracts has no `prepare` script (the Dockerfiles install
+  before copying its source).
+- `pnpm audit --audit-level high` runs on every CI run but fails it only
+  when `pnpm-lock.yaml` or a `package.json` changed (`dorny/paths-filter`).
+  `audit.yml` runs weekly and on dispatch, failing on any high advisory.
+- Coverage is a ratchet at the level measured in #28; contracts has vitest
+  tests of its pure functions.
+- Both Docker images are built (not pushed) only when a Dockerfile,
+  `.dockerignore`, `nginx.conf.template`, `docker-entrypoint.sh`, a
+  `railway.json`, a `package.json`, `pnpm-workspace.yaml` or
+  `pnpm-lock.yaml` changes.
+- `.husky/pre-push` runs the contracts build, lint and typecheck.
+- The client lints type-aware, but the `no-unsafe-*` family and
+  `no-redundant-type-constituents` are off until #27.
+- `pnpm-lock.yaml` is prettier-ignored. `pnpm licenses:check` scans the
+  whole workspace and denies any GPL/AGPL (not LGPL), failing closed on an
+  unparseable expression (`scripts/license-policy.mjs`, with a `node --test`
+  spec).
 
 **Scope**
 

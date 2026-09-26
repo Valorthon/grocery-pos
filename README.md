@@ -182,11 +182,49 @@ passwords still work until they are changed.
 
 ## Checks
 
+Build the contracts first: their `dist` is gitignored, and the apps resolve
+`@grocery-pos/contracts` through it.
+
 ```bash
-pnpm lint
+pnpm --filter @grocery-pos/contracts build
+pnpm format:check
+pnpm lint                 # --max-warnings 0 in every package
 pnpm typecheck
-pnpm test
-pnpm build
+pnpm test                 # with coverage thresholds (see below)
+pnpm build                # the client needs the VITE_* variables, as in CI
 ```
 
-CI runs all four, plus `pnpm audit`, depcheck, and a license check.
+`pnpm test` runs every package's tests with coverage: jest in `apps/api`
+(`coverageThreshold` in its `package.json`), vitest in `apps/client` and
+`packages/contracts` (`thresholds` in each `vitest.config.ts`). The
+thresholds sit just below the measured coverage; raise them as coverage
+grows, never lower them to get a change through. To run a few tests without
+the threshold, call the runner directly (`pnpm --filter grocery-pos-api exec
+jest src/sales`, `pnpm --filter grocery-pos-client exec vitest run src/stores`).
+
+`git push` runs a pre-push hook (`.husky/pre-push`): the contracts build,
+lint and typecheck. Tests and the build run in CI.
+
+### CI
+
+`.github/workflows/ci.yml` runs on pull requests and on pushes to `develop`,
+`staging`, `production` and `master`. It installs with `--frozen-lockfile`,
+builds the contracts, then runs `format:check`, `pnpm audit --audit-level
+high`, depcheck, the license check (`pnpm licenses:check`, which fails on
+any GPL or AGPL license anywhere in the workspace, but not LGPL), lint, typecheck,
+test and build. A newer push to the same PR cancels its older run; branch
+pushes never cancel each other.
+
+- The audit only fails the run when the change touches `pnpm-lock.yaml` or a
+  `package.json`; otherwise a new advisory is reported without failing.
+  `.github/workflows/audit.yml` runs the audit weekly (and on demand from
+  the Actions tab) and fails on any high advisory.
+- When a Docker-related file changes (either Dockerfile, `.dockerignore`,
+  `apps/client/nginx.conf.template`, `apps/client/docker-entrypoint.sh`,
+  either `railway.json`, any `package.json`, `pnpm-workspace.yaml` or
+  `pnpm-lock.yaml`), a separate job builds both
+  images, without pushing them.
+
+Railway rebuilds a service only when its `build.watchPatterns` match: the
+app's own folder, `packages/contracts`, the lockfile, the root
+`package.json`, `pnpm-workspace.yaml` and `.dockerignore`.

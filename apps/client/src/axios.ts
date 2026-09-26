@@ -145,7 +145,7 @@ api.interceptors.response.use(
                     isSessionDialogShown = true;
                     // Shown by logout after it clears the old toasts.
                     const authStore = useAuthStore();
-                    authStore.logout('Please log in to continue');
+                    void authStore.logout('Please log in to continue');
                 }
 
                 return Promise.reject(refreshError);

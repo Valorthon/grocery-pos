@@ -1,0 +1,4 @@
+# Fast gates before a push (#28). Tests and the build run in CI.
+pnpm --filter @grocery-pos/contracts build
+pnpm -r lint
+pnpm -r typecheck

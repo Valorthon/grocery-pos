@@ -475,7 +475,7 @@ const {
     'Could not load the sales.',
 );
 
-fetchSales();
+void fetchSales();
 
 const isDialogOpen = ref(false);
 const detailsLoading = ref(false);

@@ -385,5 +385,5 @@ const {
     'Please try again.',
 );
 
-loadDashboard();
+void loadDashboard();
 </script>

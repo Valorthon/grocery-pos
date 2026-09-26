@@ -13,24 +13,24 @@
         "start:dev": "nest start --watch",
         "start:debug": "nest start --debug --watch",
         "start:prod": "node dist/main",
-        "lint": "eslint \"src/**/*.ts\"",
-        "test": "jest --passWithNoTests",
-        "test:watch": "jest --watch --passWithNoTests",
-        "test:cov": "jest --coverage --passWithNoTests",
+        "lint": "eslint . --max-warnings 0",
+        "test": "jest --coverage",
+        "test:watch": "jest --watch",
+        "test:cov": "jest --coverage",
         "test:debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "dev": "nest start --watch",
-        "lint:fix": "eslint \"src/**/*.ts\" --fix"
+        "lint:fix": "eslint . --fix"
     },
     "dependencies": {
         "@grocery-pos/contracts": "workspace:*",
-        "@nestjs/common": "^11.0.1",
+        "@nestjs/common": "^11.2.6",
         "@nestjs/config": "^4.0.2",
-        "@nestjs/core": "^11.0.1",
+        "@nestjs/core": "^11.2.6",
         "@nestjs/jwt": "^11.0.1",
         "@nestjs/mongoose": "^11.0.3",
         "@nestjs/passport": "^11.0.5",
-        "@nestjs/platform-express": "^11.0.1",
+        "@nestjs/platform-express": "^11.2.6",
         "@nestjs/terminus": "^11.1.1",
         "@nestjs/throttler": "^6.7.0",
         "argon2": "^0.44.0",
@@ -47,7 +47,7 @@
     "devDependencies": {
         "@eslint/js": "^9.18.0",
         "@nestjs/cli": "^11.0.0",
-        "@nestjs/testing": "^11.0.1",
+        "@nestjs/testing": "^11.2.6",
         "@types/cookie-parser": "^1.4.10",
         "@types/express": "^5.0.0",
         "@types/jest": "^30.0.0",
@@ -76,9 +76,22 @@
             "^.+\\.(t|j)s$": "ts-jest"
         },
         "collectCoverageFrom": [
-            "**/*.(t|j)s"
+            "**/*.(t|j)s",
+            "!**/testing/**"
         ],
         "coverageDirectory": "../coverage",
-        "testEnvironment": "node"
+        "testEnvironment": "node",
+        "coverageReporters": [
+            "text-summary",
+            "lcov"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "statements": 87,
+                "branches": 81,
+                "functions": 91,
+                "lines": 88
+            }
+        }
     }
 }

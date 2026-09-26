@@ -1,29 +1,32 @@
 {
-  "name": "@grocery-pos/contracts",
-  "version": "0.0.0",
-  "private": true,
-  "main": "./dist/cjs/index.js",
-  "module": "./dist/esm/index.js",
-  "types": "./dist/cjs/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/cjs/index.d.ts",
-      "import": "./dist/esm/index.js",
-      "require": "./dist/cjs/index.js"
+    "name": "@grocery-pos/contracts",
+    "version": "0.0.0",
+    "private": true,
+    "main": "./dist/cjs/index.js",
+    "module": "./dist/esm/index.js",
+    "types": "./dist/cjs/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/cjs/index.d.ts",
+            "import": "./dist/esm/index.js",
+            "require": "./dist/cjs/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ./scripts/stamp-formats.mjs",
+        "lint": "eslint . --max-warnings 0",
+        "typecheck": "tsc --noEmit -p tsconfig.json",
+        "test": "vitest run --coverage"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.18.0",
+        "@vitest/coverage-v8": "^4.1.11",
+        "eslint": "^9.18.0",
+        "typescript": "^5.7.3",
+        "typescript-eslint": "^8.20.0",
+        "vitest": "^4.1.11"
     }
-  },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json && node ./scripts/stamp-formats.mjs",
-    "lint": "eslint \"src/**/*.ts\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.18.0",
-    "eslint": "^9.18.0",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
-  }
 }

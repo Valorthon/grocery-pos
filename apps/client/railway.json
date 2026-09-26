@@ -2,7 +2,15 @@
     "$schema": "https://railway.app/railway.schema.json",
     "build": {
         "builder": "DOCKERFILE",
-        "dockerfilePath": "apps/client/Dockerfile"
+        "dockerfilePath": "apps/client/Dockerfile",
+        "watchPatterns": [
+            "/apps/client/**",
+            "/packages/contracts/**",
+            "/pnpm-lock.yaml",
+            "/package.json",
+            "/pnpm-workspace.yaml",
+            "/.dockerignore"
+        ]
     },
     "deploy": {
         "healthcheckPath": "/health",

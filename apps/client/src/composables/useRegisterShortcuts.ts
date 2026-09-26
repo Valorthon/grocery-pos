@@ -20,7 +20,8 @@ export const REGISTER_KEYS = {
 } as const;
 
 export interface Shortcut {
-    run: (event: KeyboardEvent) => void;
+    /** May be async: the handler is not awaited (fire and forget). */
+    run: (event: KeyboardEvent) => void | Promise<void>;
     /**
      * Whether the key works while the focus is in a text field. Defaults
      * to true for function keys (they type nothing) and false for every
@@ -80,7 +81,7 @@ export function useRegisterShortcuts(
             typeof binding === 'function' ? { run: binding } : binding;
         if (!whileTyping && isTextEntry(document.activeElement)) return;
         event.preventDefault();
-        run(event);
+        void run(event);
     }
 
     onMounted(() => window.addEventListener('keydown', onKeydown));

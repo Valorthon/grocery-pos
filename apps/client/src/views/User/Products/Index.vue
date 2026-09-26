@@ -132,5 +132,5 @@ const {
     'Could not load the products.',
 );
 
-fetchProducts();
+void fetchProducts();
 </script>
