@@ -106,4 +106,22 @@ describe('saleNetCash', () => {
             }),
         ).toBe(0);
     });
+
+    it('treats a missing change as none: exact cash stays whole (a legacy row)', () => {
+        expect(
+            saleNetCash({
+                paymentType: PaymentType.CASH,
+                amount: 5_000,
+                tenders: [{ type: TenderType.CASH, amount: 5_000 }],
+                changeGiven: null,
+            }),
+        ).toBe(5_000);
+        expect(
+            saleNetCash({
+                paymentType: PaymentType.CASH,
+                amount: 5_000,
+                tenders: [{ type: TenderType.CASH, amount: 5_000 }],
+            }),
+        ).toBe(5_000);
+    });
 });

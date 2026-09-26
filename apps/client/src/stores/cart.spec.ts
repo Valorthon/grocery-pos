@@ -553,3 +553,75 @@ describe('the cap on restore and on load (#23 re-review)', () => {
         expect(useUIStore().toasts).toEqual([]);
     });
 });
+
+describe('the ticket being charged is locked (#23, #7)', () => {
+    // While POST /sales is in flight the request carries this ticket. An
+    // edit landing then would make the receipt, the saved basket and the
+    // drawer disagree with what was charged, or let the success path
+    // clear a line that was never sold.
+    it('refuses every edit until unlocked', () => {
+        const cart = useCartStore();
+        cart.add(MILK, 2);
+        cart.setDiscount({
+            type: DiscountType.PERCENT,
+            value: 10,
+            reason: 'loyalty',
+        });
+        cart.lock();
+
+        expect(cart.add(MINTS)).toBe(false);
+        expect(cart.remove('p1')).toBeNull();
+        expect(cart.restore({ ...BREAD, quantity: 1 }, 0)).toBe(false);
+        cart.setDiscount(null);
+        cart.setUnitPrices(new Map([['p1', 1]]));
+        cart.clear();
+
+        expect(cart.items).toEqual([{ ...MILK, quantity: 2 }]);
+        expect(cart.subtotal).toBe(19_000);
+        expect(cart.discount).toMatchObject({ value: 10 });
+
+        cart.unlock();
+        cart.clear();
+        expect(cart.items).toEqual([]);
+        expect(cart.discount).toBeNull();
+    });
+
+    it('reset (logout) empties even a locked ticket, so the next cashier never inherits it', () => {
+        const cart = useCartStore();
+        cart.add(MILK);
+        cart.lock();
+        cart.reset();
+        expect(cart.items).toEqual([]);
+        expect(cart.locked).toBe(false);
+    });
+});
+
+describe('cart setUnitPrices', () => {
+    it('updates only the listed lines, in centavos, and the subtotal follows', () => {
+        // The server is the price authority: after it answers with current
+        // prices the ticket shows those, not the ones scanned earlier.
+        const cart = useCartStore();
+        cart.add(MILK, 2);
+        cart.add(MINTS, 1);
+        cart.setUnitPrices(new Map([['p1', 9_999]]));
+        expect(cart.items.map((i) => i.unitPrice)).toEqual([9_999, 2_500]);
+        expect(cart.subtotal).toBe(2 * 9_999 + 2_500);
+    });
+});
+
+describe('cart remove and restore edges', () => {
+    it('removing a product not on the ticket changes nothing', () => {
+        const cart = useCartStore();
+        cart.add(MILK);
+        expect(cart.remove('nope')).toBeNull();
+        expect(cart.items).toHaveLength(1);
+    });
+
+    it('restores at the end when the old position is past it, and at 0 for a negative one', () => {
+        const cart = useCartStore();
+        cart.add(MILK);
+        expect(cart.restore({ ...BREAD, quantity: 1 }, 9)).toBe(true);
+        expect(cart.restore({ ...MINTS, quantity: 1 }, -3)).toBe(true);
+        expect(cart.items.map((i) => i.product)).toEqual(['p2', 'p1', 'p3']);
+    });
+});

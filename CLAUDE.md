@@ -82,10 +82,15 @@ Rules:
 - Client: vitest. Components are mounted with plain `createApp` in jsdom; there
   is no `@vue/test-utils`.
 - Behaviour that needs a real replica set (unique partial indexes, transactions
-  under concurrency, TTL indexes) can't be proven with mocks. Locally, reviewers
-  used a throwaway podman `mongo:7 --replSet rs0` container. Cloud sessions have
-  no Docker or podman: say so in the PR, and flag which checks the user should
-  run locally (or see #30 for an in-memory replica set).
+  under concurrency, rollback, TTL indexes) can't be proven with mocks. It goes
+  in the DB suite, `apps/api/test/db/*.db-spec.ts` (#30): the real `AppModule`
+  over HTTP (`test/db/db-app.ts`), one throwaway `gpos_dbtest_*` database per
+  file. Run it with `pnpm --filter grocery-pos-api test:db`, with
+  `MONGO_URI_TEST` pointing at the docker compose MongoDB (README). It is
+  not part of `pnpm -r test`; CI's `db` job runs it on every PR and push. A
+  cloud session may be able to start `dockerd` and run
+  `mirror.gcr.io/library/mongo:7` (Docker Hub rate-limits) with the repo's
+  `mongo-init.sh`; if it can't, say so in the PR and rely on the `db` job.
 
 ## Decisions already made (don't re-litigate)
 

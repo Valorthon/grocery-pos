@@ -24,7 +24,11 @@ export default tseslint.config(
             },
             sourceType: 'module',
             parserOptions: {
-                projectService: true,
+                projectService: {
+                    // Plain Node scripts (the build's dist check) sit outside
+                    // tsconfig.json; lint them with the default project.
+                    allowDefaultProject: ['scripts/*.mjs'],
+                },
                 tsconfigRootDir: import.meta.dirname,
             },
         },

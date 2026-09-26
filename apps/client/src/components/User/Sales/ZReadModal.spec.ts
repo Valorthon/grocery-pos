@@ -6,6 +6,8 @@ import { useShiftStore } from '@/stores/shift';
 import ZReadModal from './ZReadModal.vue';
 
 vi.mock('@/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('@/router', () => ({ default: router }));
 
 const REPORT: ZReadReport = {
     shiftId: 'shift1',
@@ -87,5 +89,37 @@ describe('ZReadModal (issue #24)', () => {
         expect(text).toContain('Sep 25, 2026, 8:00 AM');
         expect(text).toContain('Sep 25, 2026, 4:00 PM');
         expect(text).not.toContain('Grocery POS Store');
+    });
+
+    it('Back to Dashboard hides the report and goes to the seller dashboard', async () => {
+        // The report stays on the server ("Last shift report"); only the
+        // local copy goes, so the next cashier never sees it here.
+        await mount();
+        const back = [...document.querySelectorAll('button')].find(
+            (b) => b.textContent?.trim() === 'Back to Dashboard',
+        )!;
+        back.click();
+        for (let i = 0; i < 5; i++) await nextTick();
+
+        expect(useShiftStore().zRead).toBeNull();
+        // After the router's dynamic import resolves.
+        await vi.waitFor(() =>
+            expect(router.push).toHaveBeenCalledWith({
+                name: 'SellerDashboard',
+            }),
+        );
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
+    it('Escape closes it without navigating', async () => {
+        router.push.mockClear();
+        await mount();
+        document.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+        for (let i = 0; i < 5; i++) await nextTick();
+
+        expect(useShiftStore().zRead).toBeNull();
+        expect(router.push).not.toHaveBeenCalled();
     });
 });

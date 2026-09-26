@@ -14,7 +14,11 @@ import {
 } from '@nestjs/common';
 import { Error as MongooseError, mongo } from 'mongoose';
 import { IsInt, IsString, Min } from 'class-validator';
-import { GlobalFilter, INTERNAL_MESSAGE } from './global.filter';
+import {
+    GlobalFilter,
+    INTERNAL_MESSAGE,
+    stackWithCauses,
+} from './global.filter';
 import { JWTInvalidError } from '../../auth/types';
 import {
     AppError,
@@ -745,5 +749,62 @@ describe('GlobalFilter logs classified database errors with the stack (issue #8)
         filter.catch(new ForbiddenException(), host);
 
         expect(warnLog.mock.calls[0][0]).not.toContain('\n');
+    });
+});
+
+describe('stackWithCauses: logging whatever was thrown (issue #8)', () => {
+    it('follows the cause chain down to a non-Error cause', () => {
+        const err = new Error('outer', {
+            cause: new Error('middle', { cause: { code: 112 } }),
+        });
+        const stack = stackWithCauses(err)!;
+        expect(stack.split('\nCaused by: ')).toHaveLength(3);
+        expect(stack).toContain('Error: middle');
+        expect(stack.endsWith('Caused by: {"code":112}')).toBe(true);
+    });
+
+    it('stops at a cause cycle instead of looping forever', () => {
+        // A driver error can end up referencing itself through `cause`;
+        // the 500 path must still log and answer.
+        const a = new Error('a');
+        const b = new Error('b', { cause: a });
+        (a as Error & { cause?: unknown }).cause = b;
+        const stack = stackWithCauses(a)!;
+        expect(stack.split('\nCaused by: ')).toHaveLength(2);
+    });
+
+    it('logs a thrown string or an unserialisable object without throwing', () => {
+        expect(stackWithCauses('plain string')).toBe('plain string');
+        const circular: Record<string, unknown> = {};
+        circular.self = circular;
+        expect(stackWithCauses(circular)).toBe('[object Object]');
+        expect(stackWithCauses(undefined)).toBeUndefined();
+    });
+
+    it('answers a thrown non-Error with a generic 500 and logs it', () => {
+        const { host, res } = hostFor('/v1/sales');
+        new GlobalFilter().catch('something broke', host);
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(bodyOf(res)).toMatchObject({
+            message: INTERNAL_MESSAGE,
+            details: null,
+        });
+        const [line, stack] = errorLog.mock.calls[0] as [string, string];
+        expect(line).toContain('something broke');
+        expect(stack).toBe('something broke');
+    });
+
+    it("puts a 5xx AppError's details in the log, never in the body", () => {
+        const { host, res } = hostFor('/v1/restocks');
+        new GlobalFilter().catch(
+            new AppError(ErrorCode.INTERNAL_ERROR, 500, 'Restock failed', {
+                expected: 3,
+                created: 2,
+            }),
+            host,
+        );
+        expect(bodyOf(res).details).toBeNull();
+        const [line] = errorLog.mock.calls[0] as [string];
+        expect(line).toContain('details={"expected":3,"created":2}');
     });
 });

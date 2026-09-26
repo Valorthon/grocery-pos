@@ -70,6 +70,20 @@ describe('JWTAuthGuard.handleRequest', () => {
         expect(err).not.toBeInstanceOf(AppError);
     });
 
+    it('wraps a non-Error strategy failure in an Error that keeps it as the cause', () => {
+        // Still a server fault (a 500 with a stack in the log), never a 401
+        // that would sign the user out over a bug.
+        const raw = { reason: 'strategy threw a plain object' };
+
+        const err = thrownBy(() =>
+            guard.handleRequest(raw, false, undefined, PROTECTED),
+        ) as unknown as Error;
+
+        expect(err).toBeInstanceOf(Error);
+        expect(err).not.toBeInstanceOf(AppError);
+        expect(err.cause).toBe(raw);
+    });
+
     it('passes the decoded user through on a valid token', () => {
         const user = { userId: 'u1', username: 'a', roles: [Role.Seller] };
 

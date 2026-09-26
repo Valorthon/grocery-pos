@@ -13,6 +13,7 @@ import {
     type CheckoutAttempt,
     createCheckoutAttempt,
     newIdempotencyKey,
+    isRejectedSale,
     saleErrorMessage,
     SaleNotCompletedError,
     type SaleRequest,
@@ -457,5 +458,56 @@ describe('saleErrorMessage', () => {
                 }),
             ),
         ).toBe('This sale is already being recorded. Retry in a moment.');
+    });
+
+    // The rest of the wording (issue #30): each tells the cashier whether
+    // retrying can charge the customer twice.
+    it('says a 5xx retry is safe: the key makes it idempotent', () => {
+        expect(
+            saleErrorMessage(
+                httpError(500, { message: 'Internal server error' }),
+            ),
+        ).toBe(
+            'Internal server error. Retry is safe and will not charge twice.',
+        );
+    });
+
+    it('points a reused key with no receipt at Sales History, not a second charge (#7)', () => {
+        expect(
+            saleErrorMessage(
+                httpError(409, {
+                    error: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+                    message: 'Already recorded with a different payment.',
+                }),
+            ),
+        ).toBe(
+            'Already recorded with a different payment. Check Sales History before charging again.',
+        );
+    });
+
+    it('falls back to "Sale failed" when the server sent no message', () => {
+        expect(saleErrorMessage(httpError(403, {}))).toBe('Sale failed.');
+        expect(saleErrorMessage(httpError(502, undefined))).toBe(
+            'Sale failed. Retry is safe and will not charge twice.',
+        );
+    });
+
+    it('uses a non-HTTP error’s own message', () => {
+        expect(saleErrorMessage(new Error('Ticket is empty'))).toBe(
+            'Ticket is empty',
+        );
+        expect(saleErrorMessage('???')).toBe('Sale failed');
+    });
+});
+
+describe('isRejectedSale', () => {
+    it('is true only for a 400: the server refused and recorded nothing', () => {
+        // Anything else (no answer, 5xx, 409) may have been recorded, so
+        // the ticket and its key must be kept for a retry.
+        expect(isRejectedSale(httpError(400, {}))).toBe(true);
+        expect(isRejectedSale(httpError(409, {}))).toBe(false);
+        expect(isRejectedSale(httpError(500, {}))).toBe(false);
+        expect(isRejectedSale(httpError(null))).toBe(false);
+        expect(isRejectedSale(new Error('x'))).toBe(false);
     });
 });

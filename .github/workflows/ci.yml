@@ -19,6 +19,7 @@ jobs:
     changes:
         name: Detect changed paths
         runs-on: ubuntu-latest
+        timeout-minutes: 5
         permissions:
             contents: read
             # paths-filter lists a PR's files through the API.
@@ -66,6 +67,7 @@ jobs:
         name: Verify
         needs: changes
         runs-on: ubuntu-latest
+        timeout-minutes: 30
 
         steps:
             - name: Checkout Code
@@ -123,11 +125,71 @@ jobs:
                   VITE_DOMAIN: ci-test.com
                   VITE_API_TIMEOUT: 5000
 
+    # The real-database suite (issue #30): unique partial indexes,
+    # transactions under concurrency and rollback, which mocked models
+    # cannot prove. Service containers cannot take a command, and
+    # transactions need a replica set, so MongoDB is started with the same
+    # mongo-init.sh docker-compose.yml uses (mongod --replSet rs0, then
+    # rs.initiate).
+    db:
+        name: DB tests (MongoDB replica set)
+        runs-on: ubuntu-latest
+        # Jest has no forceExit here: a hung handle must not burn 6 hours.
+        timeout-minutes: 15
+        env:
+            MONGO_URI_TEST: mongodb://127.0.0.1:27017/?directConnection=true
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v5
+
+            - name: Start MongoDB replica set
+              run: >-
+                  docker run --detach --name mongodb
+                  --publish 127.0.0.1:27017:27017
+                  --volume "$GITHUB_WORKSPACE/mongo-init.sh:/mongo-init.sh:ro"
+                  --entrypoint /bin/bash
+                  mongo:7.0 /mongo-init.sh
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v5
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '22.x'
+                  cache: 'pnpm'
+
+            - name: Install Dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Build Contracts
+              run: pnpm --filter @grocery-pos/contracts build
+
+            - name: Wait for the replica set primary
+              run: |
+                  for i in $(seq 1 60); do
+                      if docker exec mongodb mongosh --quiet --eval 'rs.status().myState' 2>/dev/null | grep -qx 1; then
+                          echo "Replica set is primary."
+                          exit 0
+                      fi
+                      sleep 1
+                  done
+                  docker logs mongodb
+                  exit 1
+
+            - name: DB tests
+              run: pnpm --filter grocery-pos-api test:db
+
+            - name: MongoDB logs on failure
+              if: failure()
+              run: docker logs mongodb 2>&1 | tail -200
+
     docker:
         name: Docker images (build only)
         needs: changes
         if: needs.changes.outputs.docker == 'true'
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         env:
             DOCKER_BUILDKIT: 1
         steps:

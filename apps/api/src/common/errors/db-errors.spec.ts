@@ -90,3 +90,80 @@ describe('classifyDbError on bulk duplicates (issue #8)', () => {
         ]);
     });
 });
+
+describe('classifyDbError on other driver shapes (issue #30)', () => {
+    const mongoError = (props: Record<string, unknown>) =>
+        Object.assign(new Error('driver error'), {
+            name: 'MongoServerError',
+            ...props,
+        });
+
+    it('reads the fields from errorResponse.errmsg when keyPattern is missing', () => {
+        // Some driver paths (e.g. a commit) keep the server reply only in
+        // errorResponse; the field must still be named, never the value.
+        const err = classifyDbError(
+            mongoError({
+                code: 11000,
+                errorResponse: {
+                    errmsg: dup(
+                        'referenceNumber_1',
+                        '{ referenceNumber: "0912" }',
+                    ),
+                },
+            }),
+        );
+        expect(err?.details).toEqual([
+            { msg: 'Already exists', property: 'referenceNumber' },
+        ]);
+        expect(JSON.stringify(err?.details)).not.toContain('0912');
+    });
+
+    it('accepts writeErrors as a single object rather than an array', () => {
+        // Older drivers (and `OneOrMore<WriteError>` typings) hand back one
+        // WriteError as an object; it must still name the field.
+        const err = classifyDbError(
+            Object.assign(new Error('bulk'), {
+                code: 11000,
+                name: 'MongoBulkWriteError',
+                writeErrors: {
+                    code: 11000,
+                    index: 1,
+                    keyPattern: { EAN: 1 },
+                },
+            }),
+        );
+        expect(err?.statusCode).toBe(400);
+        expect(err?.details).toEqual([
+            { msg: 'Already exists', property: 'EAN', index: 1 },
+        ]);
+    });
+
+    it('answers server document validation (code 121) with the failing paths only', () => {
+        const err = classifyDbError(
+            mongoError({
+                code: 121,
+                errorResponse: {
+                    validationErrors: [
+                        { path: 'price', message: 'must be an integer' },
+                        { path: 3 },
+                        'not an object',
+                    ],
+                },
+            }),
+        );
+        expect(err?.details).toEqual([
+            { field: 'price', message: 'must be an integer' },
+            { field: '3', message: 'Invalid value' },
+        ]);
+    });
+
+    it('gives no details for a code 121 without validationErrors', () => {
+        const err = classifyDbError(mongoError({ code: 121 }));
+        expect(err?.statusCode).toBe(400);
+        expect(err?.details).toBeNull();
+    });
+
+    it('leaves other Mongo errors (a write conflict) unclassified: a 500', () => {
+        expect(classifyDbError(mongoError({ code: 112 }))).toBeNull();
+    });
+});

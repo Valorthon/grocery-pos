@@ -205,6 +205,32 @@ jest src/sales`, `pnpm --filter grocery-pos-client exec vitest run src/stores`).
 `git push` runs a pre-push hook (`.husky/pre-push`): the contracts build,
 lint and typecheck. Tests and the build run in CI.
 
+### Real-database tests
+
+`pnpm test` mocks the Mongoose models, so it cannot show what only MongoDB
+enforces: the unique partial indexes, transactions under concurrency and
+rollback. `apps/api/test/db/*.db-spec.ts` boots the real `AppModule`
+against a MongoDB replica set and checks them (duplicate GCash references
+and idempotency keys, concurrent same-key checkouts, concurrent
+voids/refunds, a reversal rolled back mid-transaction, one open shift per
+cashier, concurrent first sales on an empty database). It is a separate
+jest config (`apps/api/jest.db.config.ts`), not part of `pnpm test` or its
+coverage, so the checks above still pass without Docker.
+
+Against the docker compose MongoDB:
+
+```bash
+docker compose up -d
+pnpm --filter @grocery-pos/contracts build
+MONGO_URI_TEST="mongodb://127.0.0.1:27017/?directConnection=true" \
+  pnpm --filter grocery-pos-api test:db
+```
+
+Each spec file creates its own `gpos_dbtest_*` database and drops it
+afterwards; nothing else on the server is touched. Without
+`MONGO_URI_TEST`, or when it is not a replica set, the run fails up front
+instead of skipping. CI runs it in the `db` job.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on pull requests and on pushes to `develop`,
@@ -212,8 +238,10 @@ lint and typecheck. Tests and the build run in CI.
 builds the contracts, then runs `format:check`, `pnpm audit --audit-level
 high`, depcheck, the license check (`pnpm licenses:check`, which fails on
 any GPL or AGPL license anywhere in the workspace, but not LGPL), lint, typecheck,
-test and build. A newer push to the same PR cancels its older run; branch
-pushes never cancel each other.
+test and build. The `db` job starts MongoDB 7 as a single-node replica set
+(the repo's `mongo-init.sh`, as docker compose does) and runs `test:db`. A
+newer push to the same PR cancels its older run; branch pushes never cancel
+each other.
 
 - The audit only fails the run when the change touches `pnpm-lock.yaml` or a
   `package.json`; otherwise a new advisory is reported without failing.

@@ -246,3 +246,59 @@ describe('apps/api/.env.example', () => {
         expect(issuePaths(env).sort()).toEqual(['COOKIE_SECRET', 'JWT_SECRET']);
     });
 });
+
+describe('envSchema REFRESH_EXPIRY_S vs JWT_EXPIRY_S', () => {
+    it('rejects a refresh token that dies before (or with) the access token it renews', () => {
+        // The session could never be renewed: every refresh would come
+        // after the refresh token had already expired.
+        for (const REFRESH_EXPIRY_S of ['900', '600']) {
+            expect(
+                issuePaths({
+                    ...BASE_ENV,
+                    JWT_EXPIRY_S: '900',
+                    REFRESH_EXPIRY_S,
+                }),
+            ).toContain('REFRESH_EXPIRY_S');
+        }
+    });
+
+    it('accepts a refresh expiry longer than the access expiry', () => {
+        expect(
+            issuePaths({
+                ...BASE_ENV,
+                JWT_EXPIRY_S: '900',
+                REFRESH_EXPIRY_S: '901',
+            }),
+        ).toEqual([]);
+    });
+});
+
+describe('envSchema.DOMAIN', () => {
+    // The cookie domain (CookieService). A scheme or a path makes the
+    // browser reject every cookie, so the app would boot and then fail
+    // every login.
+    it.each(['prod', 'stage'])('is required in %s', (NODE_ENV) => {
+        const env: Record<string, unknown> = { ...PROD_ENV, NODE_ENV };
+        delete env.DOMAIN;
+        expect(issuePaths(env)).toContain('DOMAIN');
+        expect(issuePaths({ ...env, DOMAIN: '' })).toContain('DOMAIN');
+    });
+
+    it.each(['dev', 'test'])('may be left blank in %s', (NODE_ENV) => {
+        expect(issuePaths({ ...BASE_ENV, NODE_ENV, DOMAIN: '' })).toEqual([]);
+        expect(issuePaths({ ...BASE_ENV, NODE_ENV })).toEqual([]);
+    });
+
+    it.each(['https://example.com', 'http://example.com', 'example.com/api'])(
+        'rejects %s: a raw hostname only, in every environment',
+        (DOMAIN) => {
+            expect(issuePaths({ ...PROD_ENV, DOMAIN })).toContain('DOMAIN');
+            expect(issuePaths({ ...BASE_ENV, DOMAIN })).toContain('DOMAIN');
+        },
+    );
+
+    it('accepts a raw hostname or a leading-dot parent domain', () => {
+        expect(issuePaths({ ...PROD_ENV, DOMAIN: 'example.com' })).toEqual([]);
+        expect(issuePaths({ ...PROD_ENV, DOMAIN: '.example.com' })).toEqual([]);
+    });
+});
