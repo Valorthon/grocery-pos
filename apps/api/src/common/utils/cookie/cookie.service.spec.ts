@@ -23,7 +23,7 @@ function fakeResponse() {
     return { res, set, cleared };
 }
 
-function service(env: { NODE_ENV: string; DOMAIN?: string }) {
+function service(env: { APP_ENV: string; DOMAIN?: string }) {
     const values: Record<string, unknown> = { JWT_EXPIRY_S, ...env };
     return new CookieService({
         get: (key: string) => values[key],
@@ -46,34 +46,49 @@ afterEach(() => {
  *   sends them back and every session dies after one request;
  * - with DOMAIN they share a site, so `Lax` (the safer choice) works and the
  *   cookies are scoped to that domain;
- * - dev runs over plain http, where a `Secure` cookie is dropped.
+ * - dev runs over plain http, where a `Secure` cookie is dropped;
+ * - prod and stage (APP_ENV) are both deployed over HTTPS.
  */
 describe.each([
     {
-        env: { NODE_ENV: 'dev' },
+        env: { APP_ENV: 'dev' },
         secure: false,
         sameSite: 'lax',
         domain: undefined,
     },
     {
-        env: { NODE_ENV: 'dev', DOMAIN: 'localhost' },
+        env: { APP_ENV: 'dev', DOMAIN: 'localhost' },
         secure: false,
         sameSite: 'lax',
         domain: 'localhost',
     },
     {
-        env: { NODE_ENV: 'prod', DOMAIN: '' },
+        env: { APP_ENV: 'prod', DOMAIN: '' },
         secure: true,
         sameSite: 'none',
         domain: undefined,
     },
     {
-        env: { NODE_ENV: 'prod', DOMAIN: '.example.com' },
+        env: { APP_ENV: 'prod', DOMAIN: '.example.com' },
         secure: true,
         sameSite: 'lax',
         domain: '.example.com',
     },
-])('CookieService in $env.NODE_ENV, DOMAIN=$env.DOMAIN', (row) => {
+    // stage is deployed over HTTPS like prod, so its cookies are Secure
+    // (#29: they used to be sent without it).
+    {
+        env: { APP_ENV: 'stage', DOMAIN: '.example.com' },
+        secure: true,
+        sameSite: 'lax',
+        domain: '.example.com',
+    },
+    {
+        env: { APP_ENV: 'test' },
+        secure: false,
+        sameSite: 'lax',
+        domain: undefined,
+    },
+])('CookieService in $env.APP_ENV, DOMAIN=$env.DOMAIN', (row) => {
     const expiry = new Date(NOW.getTime() + 7 * 24 * 3600 * 1000);
 
     it('sets every cookie with the matrix attributes', () => {
@@ -130,7 +145,7 @@ describe('CookieService cookie roles', () => {
         // The client can read `dummy` to know a session exists, but never
         // the tokens themselves.
         const { res, set } = fakeResponse();
-        const cookies = service({ NODE_ENV: 'prod', DOMAIN: '.example.com' });
+        const cookies = service({ APP_ENV: 'prod', DOMAIN: '.example.com' });
         cookies.createJwt(res, 'j', expiry);
         cookies.createRefresh(res, 'r', expiry);
         cookies.createDummy(res, expiry);
@@ -144,7 +159,7 @@ describe('CookieService cookie roles', () => {
 
     it('scopes the refresh cookie to the auth routes and clears the legacy path first (#12)', () => {
         const { res, set, cleared } = fakeResponse();
-        service({ NODE_ENV: 'dev' }).createRefresh(res, 'r', expiry);
+        service({ APP_ENV: 'dev' }).createRefresh(res, 'r', expiry);
 
         expect(cleared).toEqual([
             [
@@ -168,7 +183,7 @@ describe('CookieService cookie roles', () => {
 
     it('removeRefresh clears both the current and the legacy path', () => {
         const { res, cleared } = fakeResponse();
-        service({ NODE_ENV: 'dev' }).removeRefresh(res);
+        service({ APP_ENV: 'dev' }).removeRefresh(res);
         expect(cleared.map(([, , o]) => o.path).sort()).toEqual(
             [LEGACY_REFRESH_COOKIE_PATH, REFRESH_COOKIE_PATH].sort(),
         );
@@ -176,7 +191,7 @@ describe('CookieService cookie roles', () => {
 
     it('the refresh and marker cookies expire with the session, not a fresh REFRESH_EXPIRY_S (#21)', () => {
         const { res, set } = fakeResponse();
-        const cookies = service({ NODE_ENV: 'dev' });
+        const cookies = service({ APP_ENV: 'dev' });
         cookies.createRefresh(res, 'r', expiry);
         cookies.createDummy(res, expiry);
         for (const [, , o] of set) {
@@ -186,12 +201,12 @@ describe('CookieService cookie roles', () => {
 
     it('the access cookie lives JWT_EXPIRY_S, but never past the session end (#21)', () => {
         const long = fakeResponse();
-        service({ NODE_ENV: 'dev' }).createJwt(long.res, 'j', expiry);
+        service({ APP_ENV: 'dev' }).createJwt(long.res, 'j', expiry);
         expect(long.set[0][2].maxAge).toBe(JWT_EXPIRY_S * 1000);
 
         const ending = new Date(NOW.getTime() + 60_000);
         const short = fakeResponse();
-        service({ NODE_ENV: 'dev' }).createJwt(short.res, 'j', ending);
+        service({ APP_ENV: 'dev' }).createJwt(short.res, 'j', ending);
         expect(short.set[0][2].maxAge).toBe(60_000);
     });
 });

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
+import { resolveAppEnv } from './src/common/typed-config/app-env';
 import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from './src/auth/types/auth.types';
 import { User, UserSchema } from './src/user/user.schema';
@@ -89,13 +90,16 @@ async function dropIfExists(model: { collection: mongoose.Collection }) {
 }
 
 async function seedAll() {
-    assertSeedAllowed(process.env.NODE_ENV, process.argv.slice(2));
+    const { appEnv, warning, error } = resolveAppEnv(process.env);
+    if (error) throw new Error(error);
+    if (warning) console.warn(warning);
+    assertSeedAllowed(appEnv, process.argv.slice(2));
 
     const databaseUrl =
         process.env.DATABASE_URL ?? 'mongodb://127.0.0.1:27017/grocery';
     console.log(
         `Seeding DROPS every collection of ${describeDatabase(databaseUrl)} ` +
-            `(NODE_ENV=${process.env.NODE_ENV ?? 'unset'}).`,
+            `(APP_ENV=${appEnv ?? 'unset'}).`,
     );
     await mongoose.connect(databaseUrl);
     console.log(

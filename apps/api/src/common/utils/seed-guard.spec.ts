@@ -13,13 +13,13 @@ describe('assertSeedAllowed', () => {
         'develop',
         '',
         undefined,
-    ])('refuses NODE_ENV=%p without the flag', (env) => {
+    ])('refuses APP_ENV=%p without the flag', (env) => {
         expect(() => assertSeedAllowed(env, [])).toThrow(FORCE_DESTROY_FLAG);
         expect(() => assertSeedAllowed(env, ['--force'])).toThrow();
     });
 
     it.each(['prod', 'stage', undefined])(
-        'allows NODE_ENV=%p with the flag',
+        'allows APP_ENV=%p with the flag',
         (env) => {
             expect(() =>
                 assertSeedAllowed(env, ['--verbose', FORCE_DESTROY_FLAG]),
@@ -28,7 +28,7 @@ describe('assertSeedAllowed', () => {
     );
 
     it.each(['dev', 'test', ' DEV '])(
-        'allows NODE_ENV=%p without the flag',
+        'allows APP_ENV=%p without the flag',
         (env) => {
             expect(() => assertSeedAllowed(env, [])).not.toThrow();
         },

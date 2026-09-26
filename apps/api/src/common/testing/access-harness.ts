@@ -83,7 +83,7 @@ export async function bootAccessHarness(
     config: Record<string, unknown> = {},
 ): Promise<AccessHarness> {
     const values: Record<string, unknown> = {
-        NODE_ENV: 'test',
+        APP_ENV: 'test',
         COOKIE_SECRET,
         JWT_SECRET,
         STORE_TIMEZONE: 'Asia/Manila',

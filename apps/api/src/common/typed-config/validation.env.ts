@@ -1,6 +1,7 @@
 import * as zod from 'zod';
 import { isValidTimeZone } from '../utils/timezone';
 import { EAN_COUNTER } from '../../constants';
+import { APP_ENVS, isDeployedEnv, resolveAppEnv } from './app-env';
 
 const GENERATE_SECRET_HINT = 'Generate one with: openssl rand -base64 48';
 
@@ -51,12 +52,11 @@ export const EAN_DATA_DIGITS = 12 - String(EAN_COUNTER.PREFIX).length;
 /** Sanity cap for the memory health thresholds (bytes). */
 export const HEALTH_MEMORY_MAX_BYTES = 64 * 1024 ** 3; // 64 GiB
 
-const isStrictEnv = (nodeEnv: string) =>
-    nodeEnv === 'prod' || nodeEnv === 'stage';
-
 export const envSchema = zod
     .object({
-        NODE_ENV: zod.enum(['dev', 'prod', 'stage', 'test']),
+        APP_ENV: zod.enum(APP_ENVS, {
+            error: `APP_ENV must be one of ${APP_ENVS.join(', ')} (the deployment stage; NODE_ENV is for Node itself).`,
+        }),
         PORT: zod.coerce
             .number()
             .int('Port must be an integer')
@@ -122,9 +122,7 @@ export const envSchema = zod
     .refine(
         (data) => {
             const domain = data.DOMAIN;
-            const isLocal = data.NODE_ENV === 'dev' || data.NODE_ENV === 'test';
-
-            if (!isLocal && !domain) {
+            if (isDeployedEnv(data.APP_ENV) && !domain) {
                 return false;
             }
 
@@ -147,7 +145,7 @@ export const envSchema = zod
     )
     .refine(
         (data) =>
-            !isStrictEnv(data.NODE_ENV) ||
+            !isDeployedEnv(data.APP_ENV) ||
             !isPlaceholderSecret(data.JWT_SECRET),
         {
             message: `JWT_SECRET is the .env.example value or an obvious placeholder, which is not allowed in prod/stage. ${GENERATE_SECRET_HINT}`,
@@ -156,7 +154,7 @@ export const envSchema = zod
     )
     .refine(
         (data) =>
-            !isStrictEnv(data.NODE_ENV) ||
+            !isDeployedEnv(data.APP_ENV) ||
             !isPlaceholderSecret(data.COOKIE_SECRET),
         {
             message: `COOKIE_SECRET is the .env.example value or an obvious placeholder, which is not allowed in prod/stage. ${GENERATE_SECRET_HINT}`,
@@ -167,7 +165,7 @@ export const envSchema = zod
     // JWTs and the signed cookies. Dev is exempt so local setups stay simple.
     .refine(
         (data) =>
-            !isStrictEnv(data.NODE_ENV) ||
+            !isDeployedEnv(data.APP_ENV) ||
             data.JWT_SECRET !== data.COOKIE_SECRET,
         {
             message: `JWT_SECRET and COOKIE_SECRET must differ in prod/stage. Generate each separately with: openssl rand -base64 48`,
@@ -176,3 +174,26 @@ export const envSchema = zod
     );
 
 export type EnvTypes = zod.infer<typeof envSchema>;
+
+/**
+ * What ConfigModule validates: resolves APP_ENV (with the NODE_ENV
+ * transition in app-env.ts), then parses. Throws on any problem; `warn`
+ * receives deprecation notices.
+ */
+export function validateEnv(
+    config: Record<string, unknown>,
+    warn: (message: string) => void,
+): EnvTypes {
+    const { appEnv, warning, error } = resolveAppEnv(config);
+    if (error) throw new Error(`Invalid env variable: ${error}`);
+    if (warning) warn(warning);
+
+    const parsed = envSchema.safeParse({ ...config, APP_ENV: appEnv });
+    if (!parsed.success) {
+        throw new Error(
+            'Invalid env variable: ' +
+                JSON.stringify(parsed.error.issues, null, 2),
+        );
+    }
+    return parsed.data;
+}

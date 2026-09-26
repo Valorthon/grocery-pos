@@ -53,7 +53,7 @@ const COOKIE_SECRET = 'cookie-secret';
 const JWT_SECRET = 'jwt-secret';
 
 const CONFIG: Record<string, unknown> = {
-    NODE_ENV: 'test',
+    APP_ENV: 'test',
     DOMAIN: '',
     COOKIE_SECRET,
     JWT_SECRET,

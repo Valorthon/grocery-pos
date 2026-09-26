@@ -6,6 +6,7 @@ import {
     MS_PER_SECOND,
     REFRESH_COOKIE_PATH,
 } from '../../../constants';
+import { isDeployedEnv } from '../../typed-config/app-env';
 
 /**
  * Milliseconds from now until `expiresAt`, never negative. Cookies that
@@ -19,11 +20,15 @@ export function msUntil(expiresAt: Date): number {
 
 @Injectable()
 export class CookieService {
-    private readonly isProd: boolean;
+    /**
+     * prod and stage (APP_ENV) are both served over HTTPS, so their
+     * cookies are Secure (#29: stage used to get plain cookies).
+     */
+    private readonly isDeployed: boolean;
     private readonly isDomainSet: boolean;
 
     constructor(private config: TypedConfigService) {
-        this.isProd = config.get('NODE_ENV') === 'prod';
+        this.isDeployed = isDeployedEnv(config.get('APP_ENV'));
         this.isDomainSet = !!config.get('DOMAIN');
     }
 
@@ -36,8 +41,8 @@ export class CookieService {
     ) {
         res.cookie(name, payload, {
             httpOnly: true,
-            secure: this.isProd,
-            sameSite: this.isProd && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.isDeployed,
+            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
             signed: true,
             maxAge,
             path: path,
@@ -48,8 +53,8 @@ export class CookieService {
     removeSecure(res: Response, name: string, path: string = '/') {
         res.clearCookie(name, {
             httpOnly: true,
-            secure: this.isProd,
-            sameSite: this.isProd && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.isDeployed,
+            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
             signed: true,
             path: path,
             domain: this.config.get('DOMAIN') || undefined,
@@ -105,8 +110,8 @@ export class CookieService {
     createDummy(res: Response, sessionExpiry: Date) {
         res.cookie('dummy', 'true', {
             httpOnly: false,
-            secure: this.isProd,
-            sameSite: this.isProd && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.isDeployed,
+            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
             signed: false,
             maxAge: msUntil(sessionExpiry),
             path: '/',
@@ -117,8 +122,8 @@ export class CookieService {
     removeDummy(res: Response) {
         res.clearCookie('dummy', {
             httpOnly: false,
-            secure: this.isProd,
-            sameSite: this.isProd && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.isDeployed,
+            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
             signed: false,
             path: '/',
             domain: this.config.get('DOMAIN') || undefined,

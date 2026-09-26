@@ -207,3 +207,21 @@ jobs:
                   --build-arg VITE_DOMAIN=ci-test.com
                   --build-arg VITE_API_TIMEOUT=5000
                   --tag grocery-pos-client:ci .
+
+            # The client image as deployed: unprivileged nginx, the security
+            # headers and a /health that needs index.html (#29).
+            - name: Smoke-test client image
+              run: |
+                  docker run -d --name client -p 127.0.0.1:8080:8080 grocery-pos-client:ci
+                  for _ in $(seq 1 30); do
+                      curl -fsS -o /dev/null http://127.0.0.1:8080/health && break
+                      sleep 1
+                  done
+                  test "$(docker exec client id -u)" != 0
+                  headers=$(curl -fsS -D - -o /dev/null http://127.0.0.1:8080/)
+                  echo "$headers"
+                  echo "$headers" | grep -qi "^content-security-policy: .*connect-src 'self' https://api.ci-test.com;"
+                  echo "$headers" | grep -qi '^x-content-type-options: nosniff'
+                  echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000'
+                  echo "$headers" | grep -qi '^cache-control: no-cache'
+                  docker rm -f client

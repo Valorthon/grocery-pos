@@ -1,6 +1,9 @@
+# Rendered by docker-entrypoint.sh (envsubst of ${PORT} and ${API_ORIGIN}
+# only) and run by the unprivileged nginx user: the pid file and every temp
+# path live under /tmp, and nginx listens on $PORT (above 1024).
 worker_processes auto;
-error_log /var/log/nginx/error.log notice;
-pid /var/run/nginx.pid;
+error_log stderr notice;
+pid /tmp/nginx.pid;
 
 events {
     worker_connections 1024;
@@ -10,9 +13,34 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
+    client_body_temp_path /tmp/client_temp;
+    proxy_temp_path /tmp/proxy_temp;
+    fastcgi_temp_path /tmp/fastcgi_temp;
+    uwsgi_temp_path /tmp/uwsgi_temp;
+    scgi_temp_path /tmp/scgi_temp;
+
+    access_log /dev/stdout;
     sendfile on;
     keepalive_timeout 65;
+    server_tokens off;
+
     gzip on;
+    gzip_vary on;
+    gzip_min_length 256;
+    gzip_comp_level 5;
+    gzip_proxied any;
+    # text/html is always compressed once gzip is on.
+    gzip_types text/css text/plain text/xml application/javascript
+        application/json application/manifest+json application/xml
+        image/svg+xml image/x-icon;
+
+    # Hashed build output never changes under its name; everything else
+    # (index.html, the SPA fallback, favicons, the login photo) revalidates.
+    # Only sent on success, so a missing asset's 404 is not cached for a year.
+    map $uri $cache_control {
+        ~^/assets/ "public, max-age=31536000, immutable";
+        default "no-cache";
+    }
 
     server {
         listen ${PORT} default_server;
@@ -20,14 +48,46 @@ http {
         server_name _;
         root /usr/share/nginx/html;
         index index.html;
+        absolute_redirect off;
+
+        # Every add_header lives here, at server level. nginx drops ALL
+        # inherited add_header lines in a location that declares its own, so
+        # no location below may use add_header; per-path values go through
+        # a map (like $cache_control) instead.
+        #
+        # CSP (docs/DEPLOY.md): scripts, styles and fonts come from this
+        # origin only, with no inline or eval'd code; the app talks to itself
+        # and to the API (API_ORIGIN). No 'unsafe-inline' for styles: Vue
+        # applies :style bindings through the CSSOM, which CSP allows, and
+        # templates carry no static style attributes (layout-drift.spec.ts).
+        # data: images are Vite's inlined small SVGs (the logo).
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${API_ORIGIN}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        # One year, no includeSubDomains/preload: this host serves no
+        # subdomains, and if it were an apex domain, includeSubDomains
+        # would force HTTPS on every other subdomain of the owner's domain.
+        add_header Strict-Transport-Security "max-age=31536000" always;
+        add_header Cache-Control $cache_control;
 
         location / {
             try_files $uri $uri/ /index.html;
         }
 
-        # lightweight healthcheck for Railway
-        location /health {
+        # Missing hashed files are a 404, not index.html served as JS.
+        location /assets/ {
+            try_files $uri =404;
+        }
+
+        # Railway's healthcheckPath and the image HEALTHCHECK: unhealthy
+        # when the build output is missing.
+        location = /health {
             access_log off;
+            default_type text/plain;
+            if (!-f $document_root/index.html) {
+                return 503 "index.html missing\n";
+            }
             return 200 "healthy\n";
         }
     }

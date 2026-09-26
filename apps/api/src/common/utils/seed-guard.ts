@@ -8,24 +8,25 @@ export const FORCE_DESTROY_FLAG = '--force-destroy-data';
 
 /**
  * The only environments seeded without `--force-destroy-data`. An
- * allow-list: prod, stage, an unset NODE_ENV or a typo all need the flag.
+ * allow-list: prod, stage, an unset APP_ENV or a typo all need the flag.
  */
 const SEEDABLE_ENVS = ['dev', 'test'];
 
 /**
- * Throws unless seeding is allowed: freely when NODE_ENV is `dev` or
- * `test`, otherwise only when `argv` carries `--force-destroy-data`.
+ * Throws unless seeding is allowed: freely when APP_ENV (resolved by
+ * `resolveAppEnv`) is `dev` or `test`, otherwise only when `argv` carries
+ * `--force-destroy-data`.
  */
 export function assertSeedAllowed(
-    nodeEnv: string | undefined,
+    appEnv: string | undefined,
     argv: readonly string[],
 ): void {
-    const env = nodeEnv?.trim().toLowerCase() ?? '';
+    const env = appEnv?.trim().toLowerCase() ?? '';
     if (SEEDABLE_ENVS.includes(env)) return;
     if (argv.includes(FORCE_DESTROY_FLAG)) return;
 
     throw new Error(
-        `Refusing to seed: NODE_ENV is ${env ? `'${env}'` : 'unset'}, and ` +
+        `Refusing to seed: APP_ENV is ${env ? `'${env}'` : 'unset'}, and ` +
             `seeding DROPS every collection. Seeding runs freely only in ` +
             `${SEEDABLE_ENVS.join(' or ')}; pass ${FORCE_DESTROY_FLAG} if you ` +
             `really mean to wipe this database.`,

@@ -1,27 +1,32 @@
 # Grocery POS Client
 
+Vue 3 + Vite + Tailwind 4. Setup, checks and deployment are in the
+[root README](../../README.md) and [docs/DEPLOY.md](../../docs/DEPLOY.md);
+the commands below run from the **repo root**.
+
 ## Setup
 
 ```bash
 pnpm install
+pnpm --filter @grocery-pos/contracts build
+cp apps/client/.env.example apps/client/.env
 ```
 
-Installs all project dependencies.
+`vite.config.ts` validates the `VITE_*` variables
+(`src/config/validation.env.ts`) and refuses to start the dev server or the
+build when one is missing or malformed; the console shows which. The
+`VITE_*` values are inlined into the bundle at build time.
 
-## Environment Setup
+## Run
 
 ```bash
-cp .env.example .env
+pnpm --filter grocery-pos-client dev
 ```
 
-Copy the example environment file and adjust the variables as needed. See `.env.example` for available options.
+Runs the app with hot reload on `http://localhost:5173`.
 
-## Run the App
+## Test
 
 ```bash
-pnpm run dev
+pnpm --filter grocery-pos-client test   # vitest in jsdom, with coverage thresholds
 ```
-
-Runs the app in development mode with hot reload.
-
-The app runs on `http://localhost:5173`.
