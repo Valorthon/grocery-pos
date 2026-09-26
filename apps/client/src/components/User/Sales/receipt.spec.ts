@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PaymentType, TenderType } from '@grocery-pos/contracts';
 import { hasCashTender, saleNumber } from './receipt';
-import type { Receipt } from './types';
+import type { Receipt } from '@grocery-pos/contracts';
 
 describe('saleNumber', () => {
     it('is the last 8 characters of the id, upper case', () => {

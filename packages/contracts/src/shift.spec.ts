@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PaymentType } from './enums';
-import { TenderType } from './sales';
+import { PaymentType } from './enums.js';
+import { TenderType } from './sales.js';
 import {
     CASH_DENOMINATIONS,
     billCountTotal,
     isDenomination,
     saleNetCash,
-} from './shift';
+} from './shift.js';
 
 describe('CASH_DENOMINATIONS', () => {
     it('has unique, dot-free ids and positive centavo values', () => {

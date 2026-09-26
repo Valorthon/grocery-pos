@@ -1,6 +1,7 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Inventory } from './inventory.schema';
+import { Inventory, type InventoryRowDoc } from './inventory.schema';
+import type { Paginated } from '@grocery-pos/contracts';
 import { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { RestockDto } from '../restock/types';
 import { AdjustDto } from '../adjustment/types';
@@ -75,11 +76,9 @@ export class InventoryService {
      *   a product with no inventory row never appears, so the `$facet` count
      *   and the page agree (issue #14).
      */
-    async getAll(
-        dto: GetAllDto,
-    ): Promise<{ data: Inventory[]; totalItems: number }> {
+    async getAll(dto: GetAllDto): Promise<Paginated<InventoryRowDoc>> {
         const [result] = await this.model.aggregate<{
-            data: Inventory[];
+            data: InventoryRowDoc[];
             metadata: { total: number }[];
         }>(inventoryListPipeline(dto));
 

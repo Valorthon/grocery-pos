@@ -9,6 +9,13 @@ import {
 import { CurrentUser, Role } from '../../auth/types';
 import type { AuthUser } from '../../auth/types';
 import { Roles } from '../../auth/auth.decorator';
+import type {
+    AdjustmentLine,
+    Paginated,
+    AdjustmentRow,
+    UserRef,
+} from '@grocery-pos/contracts';
+import { asJson } from '../../common/wire';
 @Roles(Role.Adjuster)
 @Controller('adjustments')
 export class AdjustmentController {
@@ -20,27 +27,25 @@ export class AdjustmentController {
     }
 
     @Get()
-    async getAll(@Query() dto: GetAllDto) {
-        const data = await this.service.getAll(dto);
-        return data;
+    async getAll(@Query() dto: GetAllDto): Promise<Paginated<AdjustmentRow>> {
+        return asJson(await this.service.getAll(dto));
     }
 
     @Get('details/:adjustment')
     async getDetails(
         @Param() paramDto: GetDetailsParamDto,
         @Query() queryDto: GetDetailsQueryDto,
-    ) {
-        const data = await this.service.getDetails({
-            ...paramDto,
-            ...queryDto,
-        });
-
-        return data;
+    ): Promise<Paginated<AdjustmentLine>> {
+        return asJson(
+            await this.service.getDetails({
+                ...paramDto,
+                ...queryDto,
+            }),
+        );
     }
 
     @Get('users')
-    async getAdjustUsers() {
-        const data = await this.service.getAdjustUsers();
-        return data;
+    async getAdjustUsers(): Promise<UserRef[]> {
+        return asJson(await this.service.getAdjustUsers());
     }
 }

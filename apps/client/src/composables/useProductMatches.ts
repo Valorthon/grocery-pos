@@ -1,14 +1,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { type ProductMatch, STRING_LIMITS } from '@grocery-pos/contracts';
 import api from '@/axios';
-import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
-
-/** One `GET /products/matches` row. */
-export interface ProductMatch {
-    EAN: string;
-    name: string;
-    product: string;
-}
+import type { ComboboxOption } from '@/components/ui/types';
 
 export const SEARCH_FAILED = 'Could not search products. Try again.';
 

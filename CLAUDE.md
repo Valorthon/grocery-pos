@@ -161,6 +161,40 @@ requestId}`. A 5xx never carries details or internals.
   at error level with its stack; a 4xx is one warn line. The access log
   (`TimingMiddleware`) prints the path without the query string, plus the id.
 
+**Wire contracts** (#27)
+
+- Every response body has a type in contracts: `src/wire/` (sales,
+  catalog/stock, users/auth, dashboard, shift wrappers), the shift views in
+  `shift.ts`, `AppErrorResponse` (`error: ErrorCode`) and `Paginated<T>`.
+  Ids and dates are strings; money is centavos; the ADMIN-only dashboard
+  fields are optional.
+- Each has a `*_SHAPE` (`WireShape<T>`: every key, required/optional,
+  compiler-checked). Controllers declare the wire type as their return
+  type via `asJson` (`common/wire.ts`); services type `.lean()`/populate
+  reads with `*Doc` types.
+- Drift: `test/db/wire.db-spec.ts` checks real responses, every nested
+  object and every array element, against the shapes (`wireShapeDiff`,
+  `__v` ignored), plus value kinds by key name (`_id` an id string,
+  timestamps ISO, money integers) and populated-vs-id refs per route.
+  Unit specs check the receipt, Z-read, dashboard and error body. A new or
+  renamed response field goes in the contract type and its shape.
+- No response carries a sale's `idempotencyKey` or `requestHash`
+  (`INTERNAL_SALE_FIELDS`, projected out of `GET /sales`, the dashboard's
+  `recentSales` and the void/refund answer); the server keeps them for
+  replays.
+- Client: `api.get<T>` with contract types, no `any`, no eslint-disable.
+  `no-explicit-any` and the `no-unsafe-*`/`no-redundant-type-constituents`
+  rules are errors. Shared types live in `.ts` files, never exported from
+  `.vue`. `BaseTable` is generic over its rows.
+- Client errors: `apiErrorCode`/`apiErrorBody` in `utils/api-error.ts`
+  return the typed `ErrorCode`; branch on it when the reason matters.
+  Session handling still keys on the 401 status (every `AUTH_*` is a 401).
+- `GET /users` validates with the user module's `GetUsersDto` (renamed
+  from its `GetAllDto` in #27, same rules: name ≤ `USERNAME`, no `EAN`);
+  `user.e2e.spec.ts` pins it.
+- Contracts' relative imports end in `.js`; the build fails otherwise, so
+  plain Node can load the ESM build.
+
 **Text** (#15)
 
 - There's no sanitising pipe. Text is stored as typed, and Vue escapes it on
@@ -356,8 +390,8 @@ requestId}`. A 5xx never carries details or internals.
   `railway.json`, a `package.json`, `pnpm-workspace.yaml` or
   `pnpm-lock.yaml` changes.
 - `.husky/pre-push` runs the contracts build, lint and typecheck.
-- The client lints type-aware, but the `no-unsafe-*` family and
-  `no-redundant-type-constituents` are off until #27.
+- The client lints type-aware; the `no-unsafe-*` family and
+  `no-redundant-type-constituents` are on since #27 (see Wire contracts).
 - `pnpm-lock.yaml` is prettier-ignored. `pnpm licenses:check` scans the
   whole workspace and denies any GPL/AGPL (not LGPL), failing closed on an
   unparseable expression (`scripts/license-policy.mjs`, with a `node --test`

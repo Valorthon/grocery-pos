@@ -2,15 +2,24 @@
 
 A point-of-sale and inventory system for a grocery store, as a pnpm workspace.
 
-| Package                  | Path                 | What it is                                                         |
-| ------------------------ | -------------------- | ------------------------------------------------------------------ |
-| `grocery-pos-api`        | `apps/api`           | NestJS 11 + Mongoose 8 REST API (MongoDB)                          |
-| `grocery-pos-client`     | `apps/client`        | Vue 3 + Vite + Tailwind 4 SPA                                      |
-| `@grocery-pos/contracts` | `packages/contracts` | Types shared by both: roles, validation limits, enums, error codes |
+| Package                  | Path                 | What it is                                                                                         |
+| ------------------------ | -------------------- | -------------------------------------------------------------------------------------------------- |
+| `grocery-pos-api`        | `apps/api`           | NestJS 11 + Mongoose 8 REST API (MongoDB)                                                          |
+| `grocery-pos-client`     | `apps/client`        | Vue 3 + Vite + Tailwind 4 SPA                                                                      |
+| `@grocery-pos/contracts` | `packages/contracts` | Shared by both: roles, limits, enums, error codes, money math and the wire types of every response |
 
 `packages/contracts` is the single source of truth for anything both sides must
-agree on. If you add a role, change a field limit, or add an error code, change
-it there — not in one app.
+agree on. If you add a role, change a field limit, add an error code, or change
+what a route returns, change it there — not in one app.
+
+Each response body has a wire type in contracts (`src/wire/`, plus the shift
+views in `shift.ts` and `AppErrorResponse`/`Paginated` in `errors.ts`), typed
+as the JSON sent: ids and timestamps are strings, money is integer centavos.
+The client reads responses through them (`api.get<Paginated<SaleRow>>(…)`);
+the API's controllers declare them as return types (`asJson`), and the
+real-database suite checks real responses against their `*_SHAPE` key lists.
+The build emits CommonJS and ES modules; relative imports in `src` end in
+`.js` so plain Node can load the ESM build (the build fails otherwise).
 
 ## Setup
 
@@ -213,7 +222,9 @@ rollback. `apps/api/test/db/*.db-spec.ts` boots the real `AppModule`
 against a MongoDB replica set and checks them (duplicate GCash references
 and idempotency keys, concurrent same-key checkouts, concurrent
 voids/refunds, a reversal rolled back mid-transaction, one open shift per
-cashier, concurrent first sales on an empty database). It is a separate
+cashier, concurrent first sales on an empty database), and that real
+responses have exactly the keys of their contracts wire types
+(`wire.db-spec.ts`). It is a separate
 jest config (`apps/api/jest.db.config.ts`), not part of `pnpm test` or its
 coverage, so the checks above still pass without Docker.
 

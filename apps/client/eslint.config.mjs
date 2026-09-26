@@ -37,7 +37,7 @@ export default tseslint.config(
     eslintPluginPrettierRecommended, // After the rule sets: turns off their formatting rules
     {
         rules: {
-            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-explicit-any': 'error',
             'no-undef': 'off',
             'vue/block-lang': [
                 'error',
@@ -67,15 +67,16 @@ export default tseslint.config(
                 { allowThrowingAny: true, allowThrowingUnknown: true },
             ],
 
-            // Deferred to #27, which removes the client's `any`s. Types
-            // imported from .vue files (e.g. ComboboxOption) also resolve to
-            // an error type under typescript-eslint, which trips these.
-            '@typescript-eslint/no-unsafe-argument': 'off',
-            '@typescript-eslint/no-unsafe-assignment': 'off',
-            '@typescript-eslint/no-unsafe-call': 'off',
-            '@typescript-eslint/no-unsafe-member-access': 'off',
-            '@typescript-eslint/no-unsafe-return': 'off',
-            '@typescript-eslint/no-redundant-type-constituents': 'off',
+            // On since #27: API responses are typed with the contracts wire
+            // types, so nothing untyped reaches the views. Keep shared types
+            // in .ts files: typescript-eslint reads a type imported from a
+            // .vue file through the `*.vue` shim, as an error type.
+            '@typescript-eslint/no-unsafe-argument': 'error',
+            '@typescript-eslint/no-unsafe-assignment': 'error',
+            '@typescript-eslint/no-unsafe-call': 'error',
+            '@typescript-eslint/no-unsafe-member-access': 'error',
+            '@typescript-eslint/no-unsafe-return': 'error',
+            '@typescript-eslint/no-redundant-type-constituents': 'error',
 
             'prettier/prettier': ['error', { endOfLine: 'auto' }],
         },

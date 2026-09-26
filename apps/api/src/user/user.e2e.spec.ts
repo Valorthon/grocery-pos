@@ -9,11 +9,7 @@
  */
 import { createHmac } from 'node:crypto';
 import { AddressInfo } from 'node:net';
-import {
-    INestApplication,
-    ValidationPipe,
-    VersioningType,
-} from '@nestjs/common';
+import { INestApplication, VersioningType } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
@@ -30,6 +26,7 @@ import { JWTStrategy } from '../auth/jwt.strategy';
 import { Role } from '../auth/types';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { GlobalFilter } from '../common/global/global.filter';
+import { createValidationPipe } from '../common/pipes/validation.pipe';
 import { ErrorCode } from '../common/errors';
 import {
     FakeUserModel,
@@ -136,14 +133,7 @@ describe('Users (e2e)', () => {
 
         app = moduleRef.createNestApplication({ logger: false });
         app.use(cookieParser(COOKIE_SECRET));
-        app.useGlobalPipes(
-            new ValidationPipe({
-                transform: true,
-                whitelist: true,
-                forbidNonWhitelisted: true,
-                transformOptions: { enableImplicitConversion: true },
-            }),
-        );
+        app.useGlobalPipes(createValidationPipe());
         app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
         await app.listen(0, '127.0.0.1');
 
@@ -387,6 +377,43 @@ describe('Users (e2e)', () => {
     });
 
     describe('validation -> 400', () => {
+        // Its own query DTO, not the product list's (#16, #27): a name is
+        // bounded like a username, and there is no barcode to search.
+        it('GET with a name up to the username limit -> 200', async () => {
+            const name = 'a'.repeat(STRING_LIMITS.USERNAME);
+            const res = await call(
+                admin,
+                'GET',
+                `/users?page=1&limit=5&name=${name}`,
+            );
+
+            expect(res.status).toBe(200);
+            expect(res.body).toEqual({ data: [], totalItems: 0 });
+        });
+
+        it('GET with a name past the username limit -> 400', async () => {
+            const name = 'a'.repeat(STRING_LIMITS.USERNAME + 1);
+            const res = await call(
+                admin,
+                'GET',
+                `/users?page=1&limit=5&name=${name}`,
+            );
+
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ErrorCode.VALIDATION_INVALID_INPUT);
+        });
+
+        it('GET with an EAN param -> 400', async () => {
+            const res = await call(
+                admin,
+                'GET',
+                '/users?page=1&limit=5&EAN=480',
+            );
+
+            expect(res.status).toBe(400);
+            expect(res.body.message).toContain('property EAN should not exist');
+        });
+
         it.each([
             ['UNAUTHENTICATED', [Role.Unauthenticated]],
             ['an unknown role', ['GOD']],

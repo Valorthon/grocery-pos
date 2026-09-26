@@ -11,8 +11,12 @@ import {
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { useAuthStore } from '@/stores/auth';
 import Index from './Index.vue';
+import type { ApiGet, ApiSend } from '@/testing/api-mock';
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({
+    get: vi.fn<ApiGet>(),
+    post: vi.fn<ApiSend>(),
+}));
 vi.mock('@/axios', () => ({ default: api }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -181,14 +185,14 @@ describe('admin void/refund cash payout (issue #2)', () => {
     it('says the open shifts could not be loaded, not that none is open', async () => {
         serve(CASH_SALE, [openShift(OTHER_SHIFT, 'ben')]);
         const serveShifts = api.get.getMockImplementation()!;
-        api.get.mockImplementation((url: string, ...rest: unknown[]) =>
+        api.get.mockImplementation((url, config) =>
             url === '/shifts'
                 ? Promise.reject(
                       new AxiosError('Network Error', 'ERR_NETWORK', {
                           headers: new AxiosHeaders(),
                       }),
                   )
-                : serveShifts(url, ...rest),
+                : serveShifts(url, config),
         );
         await startVoid();
 

@@ -110,9 +110,9 @@
                                 <slot
                                     :name="`cell-${header.key}`"
                                     :item="row"
-                                    :value="row[header.key]"
+                                    :value="cell(row, header.key)"
                                 >
-                                    {{ row[header.key] }}
+                                    {{ cell(row, header.key) }}
                                 </slot>
                             </td>
                         </tr>
@@ -176,24 +176,17 @@
     </div>
 </template>
 
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends TableRow">
 import { computed } from 'vue';
 import { AlertCircle, RotateCw } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import type { Component } from 'vue';
-
-export interface TableHeader {
-    key: string;
-    title: string;
-    align?: 'left' | 'right' | 'center';
-    sortable?: boolean;
-}
+import type { TableHeader, TableRow } from './types';
 
 const props = withDefaults(
     defineProps<{
         headers: TableHeader[];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        items: any[];
+        items: T[];
         loading?: boolean;
         /**
          * Why the rows could not be loaded (issue #18): shown in their
@@ -226,10 +219,18 @@ const props = withDefaults(
 const emit = defineEmits<{
     (e: 'update:page', value: number): void;
     (e: 'update:itemsPerPage', value: number): void;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (e: 'click:row', row: any): void;
+    (e: 'click:row', row: T): void;
     (e: 'retry'): void;
 }>();
+
+defineSlots<
+    Record<`cell-${string}`, (props: { item: T; value: unknown }) => unknown>
+>();
+
+/** The row's `key` field, for a cell without a slot. */
+function cell(row: T, key: string): unknown {
+    return (row as Record<string, unknown>)[key];
+}
 
 function alignClass(align?: string): string {
     switch (align) {

@@ -4,8 +4,9 @@ import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { fieldError, flush, type } from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import Index from './Index.vue';
+import type { ApiGet } from '@/testing/api-mock';
 
-const api = vi.hoisted(() => ({ get: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
 vi.mock('@/axios', () => ({ default: api }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -50,7 +51,7 @@ async function mount() {
 const listCalls = () =>
     api.get.mock.calls
         .filter(([url]) => url === '/adjustments')
-        .map(([, config]) => config.params);
+        .map(([, config]) => config?.params);
 
 async function choose(value: string) {
     const select = document.querySelector('select')!;
@@ -58,6 +59,28 @@ async function choose(value: string) {
     select.dispatchEvent(new Event('change'));
     await flush();
 }
+
+describe('adjustment history rows (#27)', () => {
+    it('lists an adjustment whose adjuster account is gone as N/A', async () => {
+        // `adjustedBy` is populated by name, and null once the user is
+        // gone (contracts AdjustmentRow): a valid row, not a failed load.
+        api.get.mockImplementation((url) =>
+            Promise.resolve({
+                data:
+                    url === '/adjustments/users'
+                        ? []
+                        : {
+                              data: [{ ...ADJUSTMENT, adjustedBy: null }],
+                              totalItems: 1,
+                          },
+            }),
+        );
+        await mount();
+
+        expect(document.body.textContent).toContain('weekly count');
+        expect(document.body.textContent).toContain('N/A');
+    });
+});
 
 describe('adjustment history filters (issue #20)', () => {
     it('lists by the picked user, and by everyone again from "All users"', async () => {
@@ -72,7 +95,7 @@ describe('adjustment history filters (issue #20)', () => {
         api.get.mockClear();
         await choose('');
         expect(listCalls()).toHaveLength(1);
-        expect(listCalls()[0].adjustedBy).toBeUndefined();
+        expect(listCalls()[0]?.adjustedBy).toBeUndefined();
     });
 
     it('refuses a reversed date range without sending it', async () => {

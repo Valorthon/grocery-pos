@@ -1,11 +1,10 @@
 /// <reference types="vite/client" />
 
-export {};
-
 declare module '*.vue' {
+    // Read only by tools without Vue support (typescript-eslint); vue-tsc
+    // types each .vue file itself.
     import type { DefineComponent } from 'vue';
-    // eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-explicit-any
-    const component: DefineComponent<{}, {}, any>;
+    const component: DefineComponent;
     export default component;
 }
 

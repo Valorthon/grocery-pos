@@ -7,19 +7,24 @@ import { useShiftStore } from './shift';
 import { Color, useUIStore } from './ui';
 import { hasSessionMarker } from '@/utils/session-cookie';
 
-import { Role } from '@grocery-pos/contracts';
+import {
+    type LoginResponse,
+    type ProfileView,
+    Role,
+} from '@grocery-pos/contracts';
 
 export { Role };
 
-/** Mirrors GET /v1/users/profile exactly (apps/api/src/user/user.controller.ts). */
-export interface User {
+/**
+ * The signed-in user: `GET /v1/users/profile` (contracts `ProfileView`),
+ * cached in localStorage.
+ */
+export interface User extends Omit<ProfileView, 'userId'> {
     /**
      * The account's id; keys this cashier's saved basket (#23). Absent on a
      * user cached before it was sent, until the profile is re-read.
      */
     userId?: string;
-    username: string;
-    roles: Role[];
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -41,8 +46,11 @@ export const useAuthStore = defineStore('auth', () => {
     const login = async (
         username: string,
         password: string,
-    ): Promise<unknown> => {
-        const response = await api.post('/auth/login', { username, password });
+    ): Promise<LoginResponse> => {
+        const response = await api.post<LoginResponse>('/auth/login', {
+            username,
+            password,
+        });
         const data = response.data;
         // Immediately fetch full profile so roles are available
         await fetchMe();
@@ -130,7 +138,7 @@ export const useAuthStore = defineStore('auth', () => {
      */
     const fetchMe = async (): Promise<User | null> => {
         try {
-            const response = await api.get('/users/profile');
+            const response = await api.get<ProfileView>('/users/profile');
             user.value = response.data;
             localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value));
             useCartStore().setOwner(user.value?.userId);

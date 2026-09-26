@@ -18,6 +18,12 @@ import {
     NewProductsDto,
     UpdateBulkDto,
 } from './types';
+import type {
+    Paginated,
+    ProductMatch,
+    ProductView,
+} from '@grocery-pos/contracts';
+import { asJson } from '../common/wire';
 
 /**
  * Effective roles per route (handler @Roles replaces the class's; Admin
@@ -43,38 +49,41 @@ export class ProductController {
     // The register's name / partial-barcode search.
     @Roles(Role.Restocker, Role.Adjuster, Role.Seller)
     @Get('matches')
-    async getMatches(@Query() dto: MatchesDto) {
-        const data = await this.service.getMatches(dto);
-        return data;
+    async getMatches(@Query() dto: MatchesDto): Promise<ProductMatch[]> {
+        return await this.service.getMatches(dto);
     }
 
     @Get('ensureValid')
-    async ensureValid(@Query() dto: EnsureValidDto) {
+    async ensureValid(@Query() dto: EnsureValidDto): Promise<void> {
         await this.service.ensureValid(dto);
     }
 
     @Roles(Role.Restocker, Role.Adjuster, Role.Seller)
     @Get(':EAN')
-    async getByBarcode(@Param() dto: GetDto) {
-        const data = await this.service.getByBarcode(dto);
-        return data;
+    async getByBarcode(@Param() dto: GetDto): Promise<ProductView> {
+        return asJson(await this.service.getByBarcode(dto));
     }
 
     // Non-price fields: Restocker, Adjuster. `price`: Admin only; the whole
     // batch is a 403 otherwise (see assertMayChangePrices).
     @Patch()
-    async update(@CurrentUser() user: AuthUser, @Body() dto: UpdateBulkDto) {
+    async update(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: UpdateBulkDto,
+    ): Promise<void> {
         await this.service.update(user, dto);
     }
 
     @Get()
-    async getAll(@Query() dto: GetAllDto) {
-        const data = await this.service.getAll(dto);
-        return data;
+    async getAll(@Query() dto: GetAllDto): Promise<Paginated<ProductView>> {
+        return asJson(await this.service.getAll(dto));
     }
 
     @Post('bulk')
-    async addMany(@CurrentUser() user: AuthUser, @Body() dto: NewProductsDto) {
+    async addMany(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: NewProductsDto,
+    ): Promise<void> {
         await this.service.addMany(user, dto);
     }
 }

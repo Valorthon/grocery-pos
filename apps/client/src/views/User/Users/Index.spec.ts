@@ -15,11 +15,12 @@ import { PASSWORD_HINT, REQUIRED } from '@/utils/rules';
 import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 import Index from './Index.vue';
+import type { ApiGet, ApiSend } from '@/testing/api-mock';
 
 const api = vi.hoisted(() => ({
-    get: vi.fn(),
-    post: vi.fn(),
-    patch: vi.fn(),
+    get: vi.fn<ApiGet>(),
+    post: vi.fn<ApiSend>(),
+    patch: vi.fn<ApiSend>(),
 }));
 vi.mock('@/axios', () => ({ default: api }));
 
@@ -297,7 +298,7 @@ describe('users search and create errors (issue #20 review)', () => {
         expect(tableError()).not.toBeNull();
         await click('Retry');
 
-        expect(api.get.mock.calls.map(([, c]) => c.params)).toEqual([
+        expect(api.get.mock.calls.map(([, c]) => c?.params)).toEqual([
             expect.objectContaining({ page: 2, name: 'ana' }),
             expect.objectContaining({ page: 2, name: 'ana' }),
         ]);

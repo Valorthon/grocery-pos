@@ -739,21 +739,23 @@
                             <button
                                 type="button"
                                 :disabled="isTicketLocked"
-                                :aria-pressed="discountChoice === 'FIXED'"
+                                :aria-pressed="
+                                    discountChoice === DiscountType.FIXED
+                                "
                                 class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
                                 :class="
-                                    discountChoice === 'FIXED'
+                                    discountChoice === DiscountType.FIXED
                                         ? 'bg-slate-900 text-white'
                                         : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
                                 "
-                                @click="applyDiscount('FIXED')"
+                                @click="applyDiscount(DiscountType.FIXED)"
                             >
                                 ₱ Amount
                             </button>
                         </div>
 
                         <div
-                            v-if="discountChoice === 'FIXED'"
+                            v-if="discountChoice === DiscountType.FIXED"
                             class="space-y-1"
                         >
                             <label
@@ -927,7 +929,6 @@ import {
     useTemplateRef,
     watch,
 } from 'vue';
-import { isAxiosError } from 'axios';
 import {
     AlertCircle,
     ArrowDownLeft,
@@ -948,13 +949,14 @@ import {
 } from '@lucide/vue';
 import api from '@/axios';
 import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
-import { apiErrorCode, useShiftStore } from '@/stores/shift';
+import { useShiftStore } from '@/stores/shift';
+import { apiErrorCode } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
 import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
-import type { PaymentRequest, Receipt } from '@/components/User/Sales/types';
+import type { PaymentRequest } from '@/components/User/Sales/types';
 import {
     fixedDiscountError,
     paymentLabel,
@@ -992,16 +994,10 @@ import {
     DrawerMovementType,
     ErrorCode,
     PaymentType,
+    type ProductView,
+    type Receipt,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
-
-interface Product {
-    _id: string;
-    EAN: string;
-    name: string;
-    /** Centavos. */
-    price: number;
-}
 
 /** How long a removed line can be put back (decision 2026-09-25, #23). */
 const UNDO_MS = 5000;
@@ -1071,11 +1067,11 @@ const discountOptions = [0, 5, 10, 15, 20];
 // ---- Discount: kept with the cart, so it survives leaving the page and a
 // refresh (#23). A FIXED value is centavos; 0 means not typed yet.
 
-/** The picked option: 0 (none), a percent, or 'FIXED'. */
-const discountChoice = computed<number | 'FIXED'>(() => {
+/** The picked option: 0 (none), a percent, or FIXED. */
+const discountChoice = computed<number | DiscountType.FIXED>(() => {
     const d = cartStore.discount;
     if (!d) return 0;
-    return d.type === DiscountType.FIXED ? 'FIXED' : d.value;
+    return d.type === DiscountType.FIXED ? DiscountType.FIXED : d.value;
 });
 const showDiscount = ref(cartStore.discount !== null);
 /** The typed fixed amount, in pesos. */
@@ -1085,7 +1081,7 @@ const fixedText = ref(
         : '',
 );
 const fixedError = computed(() =>
-    discountChoice.value === 'FIXED'
+    discountChoice.value === DiscountType.FIXED
         ? fixedDiscountError(fixedText.value, cartStore.subtotal)
         : '',
 );
@@ -1182,7 +1178,10 @@ function quantityError(product: string, text: string): string {
 const qtyErrors = computed<Record<string, string>>(() =>
     Object.fromEntries(
         Object.entries(qtyDrafts)
-            .map(([product, text]) => [product, quantityError(product, text)])
+            .map(([product, text]): [string, string] => [
+                product,
+                quantityError(product, text),
+            ])
             .filter(([, error]) => error),
     ),
 );
@@ -1520,12 +1519,12 @@ async function onScanSubmit() {
 
 async function lookUpBarcode(EAN: string, qty: number, submitted: string) {
     try {
-        const res = await api.get<Product>(
+        const res = await api.get<ProductView>(
             `/products/${encodeURIComponent(EAN)}`,
         );
         addProduct(res.data, qty, submitted);
     } catch (error) {
-        if (isAxiosError(error) && error.response?.status === 404) {
+        if (apiErrorCode(error) === ErrorCode.PRODUCT_NOT_FOUND) {
             showFeedback('error', `Barcode "${EAN}" not found`);
         } else {
             showFeedback('error', 'Could not look up that code');
@@ -1541,7 +1540,7 @@ async function selectMatch(
     if (cartStore.locked) return;
     clearFeedback();
     try {
-        const res = await api.get<Product>(
+        const res = await api.get<ProductView>(
             `/products/${encodeURIComponent(match.EAN)}`,
         );
         addProduct(res.data, qty, submitted);
@@ -1550,7 +1549,7 @@ async function selectMatch(
     }
 }
 
-function addProduct(product: Product, quantity: number, submitted: string) {
+function addProduct(product: ProductView, quantity: number, submitted: string) {
     if (cartStore.locked) {
         showFeedback('error', 'Wait for the sale to finish recording');
         return;
@@ -1590,7 +1589,7 @@ function resetDiscountUi() {
     showDiscount.value = false;
 }
 
-function applyDiscount(choice: number | 'FIXED') {
+function applyDiscount(choice: number | DiscountType.FIXED) {
     if (cartStore.locked) return;
     if (choice === 0) {
         cartStore.setDiscount(null);
@@ -1598,7 +1597,7 @@ function applyDiscount(choice: number | 'FIXED') {
         return;
     }
     const reason = cartStore.discount?.reason ?? '';
-    if (choice === 'FIXED') {
+    if (choice === DiscountType.FIXED) {
         const centavos = parsePesos(fixedText.value);
         cartStore.setDiscount({
             type: DiscountType.FIXED,
@@ -1733,7 +1732,7 @@ async function refreshCartPrices(): Promise<boolean> {
             cartStore.items.map(
                 async (item) =>
                     (
-                        await api.get<Product>(
+                        await api.get<ProductView>(
                             `/products/${encodeURIComponent(item.EAN)}`,
                         )
                     ).data,

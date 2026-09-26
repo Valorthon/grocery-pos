@@ -1,13 +1,14 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
-import { isAxiosError } from 'axios';
 import api from '@/axios';
-import { apiErrorText } from '@/utils/api-error';
+import { apiErrorCode, apiErrorText } from '@/utils/api-error';
 import {
     type BillCounts,
     type CashierDrawerMovement,
+    type CurrentShiftResponse,
     type CurrentShiftView,
     ErrorCode,
+    type LastClosedResponse,
     type ZReadReport,
 } from '@grocery-pos/contracts';
 
@@ -40,13 +41,6 @@ export class StaleResponseError extends Error {
         super('Signed out before the server answered');
         this.name = 'StaleResponseError';
     }
-}
-
-/** The API's `ErrorCode` on a failed request, if any. */
-export function apiErrorCode(error: unknown): string | undefined {
-    if (!isAxiosError(error)) return undefined;
-    const data = error.response?.data as { error?: unknown } | undefined;
-    return typeof data?.error === 'string' ? data.error : undefined;
 }
 
 /**
@@ -91,9 +85,7 @@ export const useShiftStore = defineStore('shift', () => {
     /** Reads the caller's open shift from the server. */
     async function fetchCurrent(): Promise<CurrentShiftView | null> {
         const gen = generation;
-        const res = await api.get<{ shift: CurrentShiftView | null }>(
-            '/shifts/current',
-        );
+        const res = await api.get<CurrentShiftResponse>('/shifts/current');
         if (gen === generation) setShift(res.data.shift);
         return activeShift.value;
     }
@@ -186,9 +178,7 @@ export const useShiftStore = defineStore('shift', () => {
      */
     async function showLastReport(): Promise<boolean> {
         const gen = generation;
-        const res = await api.get<{ report: ZReadReport | null }>(
-            '/shifts/last-closed',
-        );
+        const res = await api.get<LastClosedResponse>('/shifts/last-closed');
         // Signed out meanwhile: never show one cashier's report to the next.
         if (gen !== generation) return false;
         zRead.value = res.data.report;

@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { Sales } from './sales.schema';
+import {
+    INTERNAL_SALE_FIELDS,
+    SaleDoc,
+    SaleRowDoc,
+    Sales,
+} from './sales.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import { SalesDetails } from './sales-details.schema';
+import { SaleLineDoc, SalesDetails } from './sales-details.schema';
 import {
     DiscountType,
     GetAllDto,
@@ -16,9 +21,11 @@ import {
 } from './types';
 import {
     discountAmount,
+    type Paginated,
     REVERSAL_STATUS,
     saleNetCash,
 } from '@grocery-pos/contracts';
+import type { NameRef } from '../common/wire';
 import {
     DISCOUNT_LIMITS,
     NUMERIC_LIMITS,
@@ -127,7 +134,7 @@ export class SalesService {
     async getAll(
         user: AuthUser,
         dto: GetAllDto,
-    ): Promise<{ data: Sales[]; totalItems: number }> {
+    ): Promise<Paginated<SaleRowDoc>> {
         const { page, limit } = dto;
 
         const skip = (page - 1) * limit;
@@ -142,8 +149,8 @@ export class SalesService {
         if (!filter) return { data: [], totalItems: 0 };
 
         const projection = user.roles.includes(Role.Admin)
-            ? undefined
-            : CASHIER_HIDDEN_SALE_FIELDS;
+            ? INTERNAL_SALE_FIELDS
+            : { ...INTERNAL_SALE_FIELDS, ...CASHIER_HIDDEN_SALE_FIELDS };
 
         const [data, totalItems] = await Promise.all([
             this.model
@@ -151,11 +158,11 @@ export class SalesService {
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
-                .populate({
+                .populate<{ cashier: NameRef | null }>({
                     path: 'cashier',
                     select: 'name',
                 })
-                .lean(),
+                .lean<SaleRowDoc[]>(),
 
             // Exact, never estimatedDocumentCount: the total is shown to
             // the user and must match the pages (issue #16).
@@ -177,7 +184,7 @@ export class SalesService {
     async getDetails(
         user: AuthUser,
         dto: GetDetailsDto,
-    ): Promise<SalesDetails[]> {
+    ): Promise<SaleLineDoc[]> {
         const { sales } = dto;
 
         const scope = await this.scopeFor(user);
@@ -191,11 +198,11 @@ export class SalesService {
 
         return await this.modelDetails
             .find({ sales })
-            .populate({
+            .populate<{ product: NameRef | null }>({
                 path: 'product',
                 select: 'name',
             })
-            .lean();
+            .lean<SaleLineDoc[]>();
     }
 
     /**
@@ -532,9 +539,15 @@ export class SalesService {
                                 },
                             },
                         },
-                        { session, new: true, runValidators: true },
+                        {
+                            session,
+                            new: true,
+                            runValidators: true,
+                            // The response is the sale, less its internals.
+                            projection: INTERNAL_SALE_FIELDS,
+                        },
                     )
-                    .lean();
+                    .lean<SaleDoc>();
 
                 if (!sale) {
                     const existing = await this.model

@@ -19,7 +19,8 @@ import {
     type SaleRequest,
     useSaleCheckout,
 } from './sale-submission';
-import type { PaymentRequest, Receipt } from './types';
+import type { Receipt } from '@grocery-pos/contracts';
+import type { PaymentRequest } from './types';
 
 const UUID =
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

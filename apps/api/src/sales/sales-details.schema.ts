@@ -3,6 +3,7 @@ import { Sales } from './sales.schema';
 import mongoose, { Types } from 'mongoose';
 import { Product } from '../product/product.schema';
 import { NUMERIC_LIMITS } from '../constants';
+import type { NameRef } from '../common/wire';
 
 @Schema()
 export class SalesDetails {
@@ -47,3 +48,10 @@ export class SalesDetails {
 }
 
 export const SalesDetailsSchema = SchemaFactory.createForClass(SalesDetails);
+
+/** A sale line read with its product populated by name (null once deleted). */
+export type SaleLineDoc = Omit<SalesDetails, 'sales' | 'product'> & {
+    _id: Types.ObjectId;
+    sales: Types.ObjectId;
+    product: NameRef | null;
+};

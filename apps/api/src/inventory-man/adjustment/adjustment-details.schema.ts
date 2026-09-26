@@ -3,6 +3,7 @@ import mongoose, { Types } from 'mongoose';
 import { Adjustment } from './adjustment.schema';
 import { Product } from '../../product/product.schema';
 import { VALIDATION, STRING_LIMITS } from '../../constants';
+import type { ProductDoc } from '../../product/product.schema';
 
 @Schema()
 export class AdjustmentDetails {
@@ -50,3 +51,13 @@ export class AdjustmentDetails {
 
 export const AdjustmentDetailsSchema =
     SchemaFactory.createForClass(AdjustmentDetails);
+
+/** An adjustment line joined to its product (`GET /adjustments/details/:id`). */
+export type AdjustmentLineDoc = Omit<
+    AdjustmentDetails,
+    'adjustment' | 'product'
+> & {
+    _id: Types.ObjectId;
+    adjustment: Types.ObjectId;
+    product: ProductDoc;
+};

@@ -20,6 +20,7 @@ import {
     DEFAULT_TERMINAL,
     ShiftStatus,
 } from '@grocery-pos/contracts';
+import { Role } from '@grocery-pos/contracts';
 import { useShiftStore } from '@/stores/shift';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
@@ -140,7 +141,7 @@ describe('SellerLayout sidebar (issue #26)', () => {
     function signIn(userId: string) {
         localStorage.setItem(
             'user',
-            JSON.stringify({ userId, username: 'ana', roles: ['SELLER'] }),
+            JSON.stringify({ userId, username: 'ana', roles: [Role.Seller] }),
         );
         // The auth store reads the cached user when it is created.
         pinia = createPinia();

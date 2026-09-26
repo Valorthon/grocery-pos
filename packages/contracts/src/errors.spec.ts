@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ErrorCode } from './errors';
+import { ErrorCode } from './errors.js';
 
 describe('ErrorCode', () => {
     const entries = Object.entries(ErrorCode);

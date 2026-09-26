@@ -11,6 +11,14 @@ import {
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { Roles } from '../auth/auth.decorator';
+import type {
+    Paginated,
+    Receipt,
+    SaleLine,
+    SaleRow,
+    SaleView,
+} from '@grocery-pos/contracts';
+import { asJson } from '../common/wire';
 
 /**
  * Access decisions (issue #13, product owner 2026-09-24; narrowed to the
@@ -43,24 +51,27 @@ export class SalesController {
     constructor(private service: SalesService) {}
 
     @Get()
-    async getAll(@CurrentUser() user: AuthUser, @Query() dto: GetAllDto) {
-        const data = await this.service.getAll(user, dto);
-        return data;
+    async getAll(
+        @CurrentUser() user: AuthUser,
+        @Query() dto: GetAllDto,
+    ): Promise<Paginated<SaleRow>> {
+        return asJson(await this.service.getAll(user, dto));
     }
 
     @Get('details/:sales')
     async getDetails(
         @CurrentUser() user: AuthUser,
         @Param() dto: GetDetailsDto,
-    ) {
-        const data = await this.service.getDetails(user, dto);
-        return data;
+    ): Promise<SaleLine[]> {
+        return asJson(await this.service.getDetails(user, dto));
     }
 
     @Post()
-    async sell(@CurrentUser() user: AuthUser, @Body() dto: SellDto) {
-        const data = await this.service.sell(user, dto);
-        return data;
+    async sell(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: SellDto,
+    ): Promise<Receipt> {
+        return asJson(await this.service.sell(user, dto));
     }
 
     /** Reverses a mis-rung sale. Admin only; returns the updated sale. */
@@ -70,11 +81,13 @@ export class SalesController {
         @CurrentUser() user: AuthUser,
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
-    ) {
-        return await this.service.reverse(user, id, {
-            ...dto,
-            type: ReversalType.VOID,
-        });
+    ): Promise<SaleView> {
+        return asJson(
+            await this.service.reverse(user, id, {
+                ...dto,
+                type: ReversalType.VOID,
+            }),
+        );
     }
 
     /** Reverses a sale the customer returned. Admin only; returns the updated sale. */
@@ -84,10 +97,12 @@ export class SalesController {
         @CurrentUser() user: AuthUser,
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
-    ) {
-        return await this.service.reverse(user, id, {
-            ...dto,
-            type: ReversalType.REFUND,
-        });
+    ): Promise<SaleView> {
+        return asJson(
+            await this.service.reverse(user, id, {
+                ...dto,
+                type: ReversalType.REFUND,
+            }),
+        );
     }
 }

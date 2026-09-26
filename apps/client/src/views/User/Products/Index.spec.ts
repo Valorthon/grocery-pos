@@ -3,8 +3,9 @@ import { type App, createApp } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { click, field, flush, type } from '@/testing/form-dom';
 import Index from './Index.vue';
+import type { ApiGet } from '@/testing/api-mock';
 
-const api = vi.hoisted(() => ({ get: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
 vi.mock('@/axios', () => ({ default: api }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -36,7 +37,7 @@ async function mount() {
     await flush();
 }
 
-const params = () => api.get.mock.calls.map(([, config]) => config.params);
+const params = () => api.get.mock.calls.map(([, config]) => config?.params);
 
 describe('product list search (issue #20)', () => {
     it('searches from the Search button', async () => {

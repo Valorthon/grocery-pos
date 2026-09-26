@@ -5,7 +5,7 @@ import {
     SaleStatus,
     isValidReferenceNumber,
     normalizeReferenceNumber,
-} from './sales';
+} from './sales.js';
 
 describe('GCash reference numbers', () => {
     it('strips the spaces GCash prints between digit groups', () => {

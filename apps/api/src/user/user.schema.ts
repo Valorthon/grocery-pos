@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import type { Types } from 'mongoose';
 import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import { Role } from '../auth/types/auth.types';
 import { STRING_LIMITS } from '../constants';
@@ -46,3 +47,13 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+/**
+ * An account as `GET /users` reads it: never the password hash (nor
+ * `adminLock`, which the schema never selects).
+ */
+export type UserViewDoc = Omit<User, 'passwordHash' | 'adminLock'> & {
+    _id: Types.ObjectId;
+    createdAt: Date;
+    updatedAt: Date;
+};

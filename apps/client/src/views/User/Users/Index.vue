@@ -44,16 +44,19 @@
             :items-length="totalItems"
             @retry="fetchUsers"
         >
-            <template #cell-roles="{ value }">
+            <template #cell-roles="{ item }">
                 <div class="flex flex-wrap gap-1">
-                    <Badge v-for="role in value" :key="role" color="primary">{{
-                        role
-                    }}</Badge>
+                    <Badge
+                        v-for="role in item.roles"
+                        :key="role"
+                        color="primary"
+                        >{{ role }}</Badge
+                    >
                 </div>
             </template>
-            <template #cell-isActive="{ value }">
-                <Badge :color="value ? 'success' : 'error'">{{
-                    value ? 'Active' : 'Inactive'
+            <template #cell-isActive="{ item }">
+                <Badge :color="item.isActive ? 'success' : 'error'">{{
+                    item.isActive ? 'Active' : 'Inactive'
                 }}</Badge>
             </template>
             <template #cell-actions="{ item }">
@@ -224,7 +227,9 @@ import {
     ASSIGNABLE_ROLES,
     canGrantRole,
     canManageUser,
+    type Paginated,
     STRING_LIMITS,
+    type UserView,
 } from '@grocery-pos/contracts';
 import {
     useAppliedFilters,
@@ -241,8 +246,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
     () => ({ name: searchName.value }),
     search,
 );
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const serverItems = ref<any[]>([]);
+const serverItems = ref<UserView[]>([]);
 
 const uiStore = useUIStore();
 const saving = ref(false);
@@ -260,10 +264,10 @@ const grantableRoles = computed(() =>
     roleOptions.filter((role) => canGrantRole(myRoles.value, role)),
 );
 
-function canEdit(item: { name?: string; roles?: Role[] }): boolean {
+function canEdit(item: UserView): boolean {
     return (
         item.name === authStore.user?.username ||
-        canManageUser(myRoles.value, item.roles ?? [])
+        canManageUser(myRoles.value, item.roles)
     );
 }
 
@@ -336,7 +340,7 @@ const {
     load: fetchUsers,
 } = useListFetch(
     () =>
-        api.get(`/users`, {
+        api.get<Paginated<UserView>>(`/users`, {
             params: {
                 page: page.value,
                 limit: limit.value,
@@ -410,8 +414,7 @@ async function createUser() {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function openEdit(item: any) {
+function openEdit(item: UserView) {
     editForm.value = {
         _id: item._id,
         name: item.name,
@@ -420,10 +423,8 @@ function openEdit(item: any) {
         // the table row, so Cancel leaves the row as it was. It also drops
         // roles that can't be stored (e.g. UNAUTHENTICATED on legacy
         // documents), so saving cleans them up.
-        roles: (item.roles ?? []).filter((role: Role) =>
-            ASSIGNABLE_ROLES.includes(role),
-        ),
-        isActive: item.isActive ?? true,
+        roles: item.roles.filter((role) => ASSIGNABLE_ROLES.includes(role)),
+        isActive: item.isActive,
     };
     isEditOpen.value = true;
 }

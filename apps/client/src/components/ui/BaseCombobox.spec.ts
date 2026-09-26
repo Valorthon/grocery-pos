@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { type App, createApp, h, nextTick, ref } from 'vue';
-import BaseCombobox, { type ComboboxOption } from './BaseCombobox.vue';
+import BaseCombobox from './BaseCombobox.vue';
+import type { ComboboxOption } from './types';
 
 const MILK: ComboboxOption = {
     value: 'id-milk',

@@ -5,7 +5,7 @@ import {
     canGrantRole,
     canManageUser,
     holdsRole,
-} from './roles';
+} from './roles.js';
 
 describe('holdsRole', () => {
     it('is true for a held role, and for ADMIN whatever the role', () => {

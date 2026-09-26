@@ -3,11 +3,17 @@ import { UserService } from './user.service';
 import {
     ChangePasswordDto,
     CreateBulkDto,
-    GetAllDto,
+    GetUsersDto,
     UpdateBulkDto,
 } from './types/user.dto';
 import { Roles } from '../auth/auth.decorator';
-import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
+import {
+    ASSIGNABLE_ROLES,
+    type Paginated,
+    type ProfileView,
+    type UserView,
+} from '@grocery-pos/contracts';
+import { asJson } from '../common/wire';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { RefreshTokenService } from '../auth/refresh-token/refresh-token.service';
@@ -26,7 +32,7 @@ export class UserController {
     // legacy/unassignable ones, gets 403 here; that is intended.
     @Roles(...ASSIGNABLE_ROLES)
     @Get('/profile')
-    getProfile(@CurrentUser() user: AuthUser) {
+    getProfile(@CurrentUser() user: AuthUser): ProfileView {
         return {
             // The client keys this cashier's saved basket by it (#23).
             userId: user.userId,
@@ -36,9 +42,8 @@ export class UserController {
     }
 
     @Get()
-    async getAll(@Query() dto: GetAllDto) {
-        const data = await this.service.getAll(dto);
-        return data;
+    async getAll(@Query() dto: GetUsersDto): Promise<Paginated<UserView>> {
+        return asJson(await this.service.getAll(dto));
     }
 
     /**

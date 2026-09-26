@@ -53,9 +53,9 @@
             :items-length="totalItems"
             @retry="fetchProducts"
         >
-            <template #cell-price="{ value }">
+            <template #cell-price="{ item }">
                 <span class="font-medium">{{
-                    formatCurrency(value ?? 0)
+                    formatCurrency(item.price)
                 }}</span>
             </template>
         </BaseTable>
@@ -72,6 +72,7 @@ import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
+import type { Paginated, ProductView } from '@grocery-pos/contracts';
 import {
     useAppliedFilters,
     useListFetch,
@@ -95,8 +96,16 @@ const headers = [
     { key: 'price', title: 'Price', align: 'right' as const },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const serverItems = ref<any[]>([]);
+/** A row of the products table. */
+interface ProductListRow {
+    id: string;
+    EAN: string;
+    name: string;
+    /** Centavos. */
+    price: number;
+}
+
+const serverItems = ref<ProductListRow[]>([]);
 
 const resetFilters = () => {
     searchEAN.value = '';
@@ -110,7 +119,7 @@ const {
     load: fetchProducts,
 } = useListFetch(
     () =>
-        api.get(`/products`, {
+        api.get<Paginated<ProductView>>(`/products`, {
             params: {
                 page: page.value,
                 limit: limit.value,
@@ -119,8 +128,7 @@ const {
             },
         }),
     (result) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        serverItems.value = result.data.data.map((product: any) => ({
+        serverItems.value = result.data.data.map((product) => ({
             id: product._id,
             EAN: product.EAN,
             name: product.name,

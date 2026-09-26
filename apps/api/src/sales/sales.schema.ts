@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Types } from 'mongoose';
 import { User } from '../user/user.schema';
+import type { NameRef } from '../common/wire';
 import {
     DiscountType,
     PaymentType,
@@ -66,7 +67,7 @@ export class SaleDiscount {
         type: mongoose.Schema.Types.ObjectId,
         ref: User.name,
     })
-    approvedBy!: User | Types.ObjectId;
+    approvedBy!: Types.ObjectId;
 }
 
 export const SaleDiscountSchema = SchemaFactory.createForClass(SaleDiscount);
@@ -113,7 +114,7 @@ export class SaleReversal {
         type: mongoose.Schema.Types.ObjectId,
         ref: User.name,
     })
-    approvedBy!: User | Types.ObjectId;
+    approvedBy!: Types.ObjectId;
 
     @Prop({ type: Date, required: true })
     at!: Date;
@@ -231,6 +232,23 @@ export class Sales {
 
 export const SalesSchema = SchemaFactory.createForClass(Sales);
 
+/**
+ * A sale as a response reads it (`.lean()`, `INTERNAL_SALE_FIELDS`
+ * projected out), unpopulated: the cashier is an id.
+ */
+export type SaleDoc = Omit<
+    Sales,
+    'cashier' | keyof typeof INTERNAL_SALE_FIELDS
+> & {
+    _id: Types.ObjectId;
+    cashier: Types.ObjectId;
+};
+
+/** A sale read with its cashier populated by name (null once deleted). */
+export type SaleRowDoc = Omit<SaleDoc, 'cashier'> & {
+    cashier: NameRef | null;
+};
+
 // One sale per GCash transfer. Partial so the many sales without a
 // reference (every CASH sale) do not collide on a missing value.
 SalesSchema.index(
@@ -276,3 +294,13 @@ SalesSchema.index({ shift: 1, createdAt: -1 });
 export const COUNTED_SALES_FILTER = {
     status: { $nin: [...REVERSED_SALE_STATUSES] },
 };
+
+/**
+ * Sale fields no response carries (product owner, #27): the checkout's
+ * idempotency key and request hash. The server keeps them for replays of
+ * `POST /sales`; the client never reads them back from a stored sale.
+ */
+export const INTERNAL_SALE_FIELDS = {
+    idempotencyKey: 0,
+    requestHash: 0,
+} as const;

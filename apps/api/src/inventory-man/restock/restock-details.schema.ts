@@ -3,6 +3,7 @@ import mongoose, { Types } from 'mongoose';
 import { Product } from '../../product/product.schema';
 import { Restock } from './restock.schema';
 import { NUMERIC_LIMITS } from '../../constants';
+import type { ProductDoc } from '../../product/product.schema';
 
 @Schema()
 export class RestockDetails {
@@ -48,3 +49,9 @@ export class RestockDetails {
 
 export const RestockDetailsSchema =
     SchemaFactory.createForClass(RestockDetails);
+
+/** A restock line joined to its product (`GET /restocks/details/:id`). */
+export type RestockLineDoc = Omit<RestockDetails, 'product'> & {
+    _id: Types.ObjectId;
+    product: ProductDoc;
+};

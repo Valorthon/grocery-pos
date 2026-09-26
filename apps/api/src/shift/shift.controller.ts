@@ -3,6 +3,14 @@ import { Roles } from '../auth/auth.decorator';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { ShiftService } from './shift.service';
+import type {
+    CurrentShiftResponse,
+    CurrentShiftView,
+    LastClosedResponse,
+    Paginated,
+    ShiftListItem,
+    ZReadReport,
+} from '@grocery-pos/contracts';
 import {
     CloseShiftDto,
     DrawerMovementDto,
@@ -36,12 +44,17 @@ export class ShiftController {
     constructor(private service: ShiftService) {}
 
     @Post()
-    async open(@CurrentUser() user: AuthUser, @Body() dto: OpenShiftDto) {
+    async open(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: OpenShiftDto,
+    ): Promise<CurrentShiftView> {
         return await this.service.open(user, dto.counts);
     }
 
     @Get('current')
-    async current(@CurrentUser() user: AuthUser) {
+    async current(
+        @CurrentUser() user: AuthUser,
+    ): Promise<CurrentShiftResponse> {
         return { shift: await this.service.current(user) };
     }
 
@@ -49,29 +62,34 @@ export class ShiftController {
     async drawer(
         @CurrentUser() user: AuthUser,
         @Body() dto: DrawerMovementDto,
-    ) {
+    ): Promise<CurrentShiftView> {
         return await this.service.recordDrawer(user, dto);
     }
 
     @Post('current/close')
-    async closeOwn(@CurrentUser() user: AuthUser, @Body() dto: CloseShiftDto) {
+    async closeOwn(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: CloseShiftDto,
+    ): Promise<ZReadReport> {
         return await this.service.closeOwn(user, dto.counts);
     }
 
     @Get('last-closed')
-    async lastClosed(@CurrentUser() user: AuthUser) {
+    async lastClosed(
+        @CurrentUser() user: AuthUser,
+    ): Promise<LastClosedResponse> {
         return { report: await this.service.lastClosed(user) };
     }
 
     @Roles(Role.Admin)
     @Get()
-    async list(@Query() dto: ListShiftsDto) {
+    async list(@Query() dto: ListShiftsDto): Promise<Paginated<ShiftListItem>> {
         return await this.service.list(dto);
     }
 
     @Roles(Role.Admin)
     @Get(':id')
-    async getById(@Param() { id }: ShiftIdParamDto) {
+    async getById(@Param() { id }: ShiftIdParamDto): Promise<ShiftListItem> {
         return await this.service.getById(id);
     }
 
@@ -81,7 +99,7 @@ export class ShiftController {
         @CurrentUser() user: AuthUser,
         @Param() { id }: ShiftIdParamDto,
         @Body() dto: CloseShiftDto,
-    ) {
+    ): Promise<ZReadReport> {
         return await this.service.closeById(user, id, dto.counts);
     }
 }
