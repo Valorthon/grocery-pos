@@ -165,10 +165,12 @@ describe('assertCanUpdate', () => {
             expect(check(MANAGER, STOCKER, change)).toBeNull();
         });
 
-        it('lets a manager edit their own name and active flag', () => {
+        it('lets a manager rename themselves', () => {
+            // The edit form sends the unchanged isActive along with the name.
             expect(
                 check(MANAGER, MANAGER, { name: 'boss', isActive: true }),
             ).toBeNull();
+            expect(check(MANAGER, MANAGER, { name: 'boss' })).toBeNull();
         });
 
         it('lets an admin touch another admin', () => {
@@ -198,6 +200,33 @@ describe('assertCanUpdate', () => {
             expect(check(MANAGER, MANAGER, { password: 'new' })).toEqual(
                 forbidden(ErrorCode.USER_PASSWORD_RESET_FORBIDDEN),
             );
+        });
+    });
+    describe('rule 6: self-deactivation (issue #61)', () => {
+        it('refuses a manager deactivating themselves', () => {
+            expect(check(MANAGER, MANAGER, { isActive: false })).toEqual(
+                forbidden(ErrorCode.USER_SELF_DEACTIVATE),
+            );
+            expect(
+                check(MANAGER, MANAGER, { name: 'boss', isActive: false }),
+            ).toEqual(forbidden(ErrorCode.USER_SELF_DEACTIVATE));
+        });
+
+        it('refuses a staff member who also manages deactivating themselves', () => {
+            const lead = user('lead', Role.Seller, Role.UserManager);
+            expect(check(lead, lead, { isActive: false })).toEqual(
+                forbidden(ErrorCode.USER_SELF_DEACTIVATE),
+            );
+        });
+
+        it('leaves an admin deactivating themselves to the last-admin check', () => {
+            expect(check(ADMIN, ADMIN, { isActive: false })).toBeNull();
+            const both = user('both', Role.Admin, Role.UserManager);
+            expect(check(both, both, { isActive: false })).toBeNull();
+        });
+
+        it('still lets a manager deactivate a cashier', () => {
+            expect(check(MANAGER, CASHIER, { isActive: false })).toBeNull();
         });
     });
 });

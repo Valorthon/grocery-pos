@@ -1,9 +1,10 @@
-import { ExecutionContext } from '@nestjs/common';
+import { Controller, ExecutionContext, Get } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RoleGuard } from './role.guard';
 import { Role } from '../types';
 import { SalesController } from '../../sales/sales.controller';
 import { AuthController } from '../auth.controller';
+import { Public, Roles } from '../auth.decorator';
 
 type Handler = keyof SalesController;
 
@@ -126,5 +127,117 @@ describe('RoleGuard without a user on the request', () => {
         } as unknown as ExecutionContext;
 
         expect(guard.canActivate(ctx)).toBe(true);
+    });
+});
+
+describe('RoleGuard fails closed without roles (issue #61)', () => {
+    const guard = new RoleGuard(new Reflector());
+
+    @Controller('probe')
+    class ProbeController {
+        @Get('none')
+        noRoles(): void {}
+
+        @Roles()
+        @Get('empty')
+        emptyRoles(): void {}
+
+        @Public()
+        @Get('open')
+        open(): void {}
+
+        @Roles(Role.Seller)
+        @Get('seller')
+        seller(): void {}
+    }
+
+    @Roles()
+    @Controller('empty-class')
+    class EmptyClassController {
+        @Get()
+        inherits(): void {}
+    }
+
+    function probe(
+        controller: object,
+        handler: () => void,
+        user: { roles: Role[] } | undefined,
+    ): ExecutionContext {
+        return {
+            switchToHttp: () => ({ getRequest: () => ({ user }) }),
+            getHandler: () => handler,
+            getClass: () => controller,
+        } as unknown as ExecutionContext;
+    }
+
+    const everyone: Role[][] = [
+        [Role.Seller],
+        [Role.UserManager],
+        [Role.Adjuster, Role.Restocker],
+        [Role.Admin],
+    ];
+
+    it.each(everyone)(
+        'refuses a route with no @Roles metadata (%s)',
+        (...roles) => {
+            const ctx = probe(
+                ProbeController,
+                ProbeController.prototype.noRoles,
+                { roles },
+            );
+            expect(guard.canActivate(ctx)).toBe(false);
+        },
+    );
+
+    it.each(everyone)(
+        'refuses a route with an empty @Roles() (%s)',
+        (...roles) => {
+            expect(
+                guard.canActivate(
+                    probe(
+                        ProbeController,
+                        ProbeController.prototype.emptyRoles,
+                        {
+                            roles,
+                        },
+                    ),
+                ),
+            ).toBe(false);
+            expect(
+                guard.canActivate(
+                    probe(
+                        EmptyClassController,
+                        EmptyClassController.prototype.inherits,
+                        { roles },
+                    ),
+                ),
+            ).toBe(false);
+        },
+    );
+
+    it('still lets a @Public() route through, signed in or not', () => {
+        const handler = ProbeController.prototype.open;
+        expect(
+            guard.canActivate(probe(ProbeController, handler, undefined)),
+        ).toBe(true);
+        expect(
+            guard.canActivate(
+                probe(ProbeController, handler, { roles: [Role.Seller] }),
+            ),
+        ).toBe(true);
+    });
+
+    it('still checks a route that names its roles', () => {
+        const handler = ProbeController.prototype.seller;
+        expect(
+            guard.canActivate(
+                probe(ProbeController, handler, { roles: [Role.Seller] }),
+            ),
+        ).toBe(true);
+        expect(
+            guard.canActivate(
+                probe(ProbeController, handler, { roles: [Role.Restocker] }),
+            ),
+        ).toBe(false);
     });
 });

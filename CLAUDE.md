@@ -239,6 +239,15 @@ requestId}`. A 5xx never carries details or internals.
   (`MANAGEABLE_ROLES`). Only ADMIN may touch ADMIN or USER_MANAGER accounts or
   reset other users' passwords. Nobody may change their own roles. The last
   active ADMIN can't be removed.
+- A USER_MANAGER may rename themselves but not deactivate themselves (403
+  `USER_SELF_DEACTIVATE`); the Users editor disables their own Active box.
+  An ADMIN may deactivate themselves unless they are the last active ADMIN
+  (`USER_LAST_ADMIN`) (#61).
+- `RoleGuard` fails closed: a non-`@Public()` route whose `@Roles` is
+  missing or empty is 403 for everyone. `route-roles.spec.ts` finds the
+  controllers by walking `AppModule`'s module metadata
+  (`common/testing/app-routes.ts`, inherited handlers included) and fails
+  on such a route (#61).
 - Dashboard money is ADMIN-only and stripped on the server. A cashier sees only
   their own sales. Price changes are ADMIN-only.
 - Deactivating a user, changing their roles, or resetting or changing a password
@@ -435,8 +444,7 @@ requestId}`. A 5xx never carries details or internals.
 - Receipts are shown on screen only, with no printing. BIR compliance (VAT,
   official receipts, SC/PWD) is deferred to #48.
 - Editing and archiving products is #38, not part of the list views.
-- Open decisions are in **#61**: USER_MANAGER self-edits, and a fail-closed
-  `RoleGuard`.
+- Open decisions and follow-ups are listed in #31.
 
 ## Status
 

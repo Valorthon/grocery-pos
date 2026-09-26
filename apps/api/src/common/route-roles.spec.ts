@@ -1,88 +1,96 @@
 /**
- * Every route states who may call it (issue #13).
+ * Every route states who may call it (issues #13, #61).
  *
- * RoleGuard lets any signed-in user through when a route's effective
- * `@Roles()` list is empty or missing, so an empty decorator (or a
- * forgotten one) silently opens a route to every role. This spec loads
- * every `*.controller.ts` under src/ and fails if any handler that is not
- * `@Public()` ends up with no explicit role list. "Any signed-in user" is
- * written `@Roles(...ASSIGNABLE_ROLES)`.
+ * RoleGuard fails closed: a route that is not `@Public()` and whose
+ * effective `@Roles()` list is empty or missing is refused for everyone
+ * (403). This spec makes that a build failure instead of a dead route. It
+ * finds the controllers the way Nest does, by walking AppModule's module
+ * metadata (`common/testing/app-routes.ts`), checks inherited handlers
+ * too, and fails if any handler that is not `@Public()` ends up with no
+ * explicit role list. "Any signed-in user" is written
+ * `@Roles(...ASSIGNABLE_ROLES)`.
  */
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Controller, Get, Module } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY, ROLES_KEY } from '../auth/auth.decorator';
+import { IS_PUBLIC_KEY, ROLES_KEY, Roles } from '../auth/auth.decorator';
 import { Role } from '../auth/types';
+import {
+    appControllers,
+    controllersOf,
+    handlersOf,
+    type Controller as Ctor,
+} from './testing/app-routes';
 
-type Constructor = abstract new (...args: never[]) => unknown;
-type Handler = (...args: unknown[]) => unknown;
+// AppModule's TypedConfigModule validates the environment as soon as it
+// is imported (ConfigModule.forRoot), and a unit run has no .env. It
+// registers no controllers, so an empty stand-in changes nothing here.
+jest.mock('./typed-config/typed-config.module', () => ({
+    TypedConfigModule: class TypedConfigModule {},
+}));
 
 const SRC = join(__dirname, '..');
+const reflector = new Reflector();
 
-function controllerFiles(dir: string): string[] {
+const routes = appControllers().flatMap((controller) =>
+    handlersOf(controller).map(([name, handler]) => {
+        const targets = [handler, controller];
+        return {
+            label: `${controller.name}.${name}`,
+            isPublic:
+                reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, targets) ===
+                true,
+            roles: reflector.getAllAndOverride<Role[] | undefined>(
+                ROLES_KEY,
+                targets,
+            ),
+            ownRoles: Reflect.getMetadata(ROLES_KEY, handler) as
+                Role[] | undefined,
+            classRoles: Reflect.getMetadata(ROLES_KEY, controller) as
+                Role[] | undefined,
+        };
+    }),
+);
+
+/**
+ * Classes decorated with `@Controller()` in any non-test source file that
+ * mentions the decorator, whatever the file is called. The module walk
+ * must find each one, so a controller cannot slip past this spec.
+ */
+function controllersOnDisk(dir = SRC): Ctor[] {
     return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
         const path = join(dir, entry.name);
-        if (entry.isDirectory()) return controllerFiles(path);
-        return entry.name.endsWith('.controller.ts') ? [path] : [];
+        if (entry.isDirectory()) {
+            return entry.name === 'testing' ? [] : controllersOnDisk(path);
+        }
+        if (!/\.ts$/.test(entry.name) || /\.(spec|d)\.ts$/.test(entry.name))
+            return [];
+        if (!readFileSync(path, 'utf8').includes('@Controller(')) return [];
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const exported = require(path) as Record<string, unknown>;
+        return Object.values(exported).filter(
+            (value): value is Ctor =>
+                typeof value === 'function' &&
+                Reflect.getMetadata('__controller__', value) === true,
+        );
     });
 }
 
-/** Classes decorated with `@Controller()`. */
-function controllersIn(file: string): Constructor[] {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const exports = require(file) as Record<string, unknown>;
-    return Object.values(exports).filter(
-        (value): value is Constructor =>
-            typeof value === 'function' &&
-            Reflect.getMetadata('__controller__', value) === true,
-    );
-}
-
-function handlersOf(controller: Constructor): Array<[string, Handler]> {
-    const proto = controller.prototype as Record<string, unknown>;
-    return Object.getOwnPropertyNames(proto)
-        .filter((name) => name !== 'constructor')
-        .map((name) => [name, proto[name]] as [string, unknown])
-        .filter(
-            (entry): entry is [string, Handler] =>
-                typeof entry[1] === 'function' &&
-                // Only route handlers carry a request method.
-                Reflect.getMetadata('method', entry[1]) !== undefined,
-        );
-}
-
-const reflector = new Reflector();
-
-const routes = controllerFiles(SRC).flatMap((file) =>
-    controllersIn(file).flatMap((controller) =>
-        handlersOf(controller).map(([name, handler]) => {
-            const targets = [handler, controller];
-            return {
-                label: `${controller.name}.${name}`,
-                isPublic:
-                    reflector.getAllAndOverride<boolean>(
-                        IS_PUBLIC_KEY,
-                        targets,
-                    ) === true,
-                roles: reflector.getAllAndOverride<Role[] | undefined>(
-                    ROLES_KEY,
-                    targets,
-                ),
-                ownRoles: Reflect.getMetadata(ROLES_KEY, handler) as
-                    Role[] | undefined,
-                classRoles: Reflect.getMetadata(ROLES_KEY, controller) as
-                    Role[] | undefined,
-            };
-        }),
-    ),
-);
-
 describe('Route role declarations', () => {
-    it('finds the controllers', () => {
-        const labels = routes.map((r) => r.label);
-        expect(labels).toEqual(
+    it('finds every controller the app serves', () => {
+        const served = appControllers();
+        const onDisk = controllersOnDisk();
+
+        expect(onDisk.length).toBeGreaterThan(0);
+        expect(served.map((c) => c.name).sort()).toEqual(
+            onDisk.map((c) => c.name).sort(),
+        );
+        expect(routes.map((r) => r.label)).toEqual(
             expect.arrayContaining([
+                'AuthController.login',
                 'DashboardController.getDashboard',
+                'HealthController.checkLiveness',
                 'SalesController.getAll',
                 'ProductController.update',
                 'UserController.getProfile',
@@ -102,4 +110,60 @@ describe('Route role declarations', () => {
             expect(route.roles?.length ?? 0).toBeGreaterThan(0);
         },
     );
+});
+
+describe('Route discovery (app-routes.ts)', () => {
+    @Controller('base')
+    class BaseController {
+        @Roles(Role.Admin)
+        @Get('a')
+        inherited(): void {}
+
+        @Roles(Role.Admin)
+        @Get('b')
+        overridden(): void {}
+    }
+
+    @Controller('child')
+    class ChildController extends BaseController {
+        @Roles(Role.Seller)
+        @Get('c')
+        own(): void {}
+
+        // An undecorated override is not a route in Nest either.
+        override overridden(): void {}
+    }
+
+    @Module({ controllers: [ChildController] })
+    class LeafModule {}
+
+    @Module({})
+    class DynamicHost {}
+
+    @Module({
+        imports: [
+            { forwardRef: () => LeafModule },
+            {
+                module: DynamicHost,
+                controllers: [BaseController],
+            },
+        ],
+    })
+    class RootModule {}
+
+    it('walks static, forward-ref and dynamic imports', () => {
+        expect(
+            controllersOf(RootModule)
+                .map((c) => c.name)
+                .sort(),
+        ).toEqual(['BaseController', 'ChildController']);
+    });
+
+    it('checks inherited handlers and honours overrides', () => {
+        expect(
+            handlersOf(ChildController)
+                .map(([name]) => name)
+                .sort(),
+        ).toEqual(['inherited', 'own']);
+    });
 });
