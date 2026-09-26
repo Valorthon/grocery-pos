@@ -61,3 +61,7 @@ export interface LoginResponse {
 export const LOGIN_RESPONSE_SHAPE: WireShape<LoginResponse> = {
     user: 'required',
 };
+
+export const LOGIN_USER_SHAPE: WireShape<LoginResponse['user']> = {
+    username: 'required',
+};

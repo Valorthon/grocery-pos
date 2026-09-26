@@ -5,6 +5,12 @@ import type { WireShape } from '../wire-shape.js';
 import type { ProductRef } from './catalog.js';
 import type { UserRef } from './users.js';
 
+/** One tender of a receipt or a stored sale. Centavos. */
+export const TENDER_SHAPE: WireShape<Tender> = {
+    type: 'required',
+    amount: 'required',
+};
+
 /** One line of a receipt. Centavos. */
 export interface ReceiptItem {
     productName: string;
