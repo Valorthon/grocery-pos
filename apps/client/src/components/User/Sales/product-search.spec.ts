@@ -55,11 +55,26 @@ describe('parseScan', () => {
 });
 
 describe('isBarcode', () => {
-    it('is true only for exactly 13 digits', () => {
+    it('is true for 13, 12 or 8 digits (#87)', () => {
+        expect(isBarcode('4006381333931')).toBe(true);
+        expect(isBarcode('036000291452')).toBe(true);
+        expect(isBarcode('96385074')).toBe(true);
         expect(isBarcode('2000000000015')).toBe(true);
-        expect(isBarcode('200000000001')).toBe(false);
+    });
+
+    it('ignores the check digit: a legacy code may carry a wrong one', () => {
+        expect(isBarcode('4006381333932')).toBe(true);
+        expect(isBarcode('036000291453')).toBe(true);
+        expect(isBarcode('96385075')).toBe(true);
+    });
+
+    it('is false for other lengths and text', () => {
         expect(isBarcode('20000000000150')).toBe(false);
+        expect(isBarcode('200000000')).toBe(false);
+        expect(isBarcode('1234567')).toBe(false);
+        expect(isBarcode('9638507a')).toBe(false);
         expect(isBarcode('milk')).toBe(false);
+        expect(isBarcode('')).toBe(false);
     });
 });
 

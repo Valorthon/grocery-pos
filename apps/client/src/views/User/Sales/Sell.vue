@@ -1461,13 +1461,18 @@ watch(
 /**
  * Enter / the Scan button. In order:
  * 1. a highlighted match (picked with the arrow keys) is added;
- * 2. a full 13-digit barcode is looked up exactly, as a scanner expects;
+ * 2. digits as long as a barcode (13, 12 or 8, `isBarcode`) are looked up
+ *    exactly first, as a scanner expects, and a hit is added. The check
+ *    digit is not checked, so a legacy code saved with a wrong one still
+ *    scans. A miss falls through to the search (#87): the digits may be a
+ *    typed fragment of a longer code;
  * 3. otherwise the input is searched now, and a single match of a *name*
  *    is added straight away. A digits-only fragment is never auto-added,
  *    even with one match: it may be the tail of a scan that lost its first
  *    digits, or a short number that happens to hit one product;
  * 4. every other outcome (a digit fragment, no match, several matches, a
  *    failed search) gets a message, and the cashier picks from the list.
+ *    A barcode that missed and matches nothing says "Barcode … not found".
  * Nothing happens while the ticket is locked for checkout.
  */
 async function onScanSubmit() {
@@ -1483,12 +1488,16 @@ async function onScanSubmit() {
         return;
     }
 
-    if (isBarcode(query)) {
-        await lookUpBarcode(query, qty, submitted);
-        return;
+    const barcode = isBarcode(query);
+    cancelPendingSearch();
+    if (barcode) {
+        const outcome = await lookUpBarcode(query, qty, submitted);
+        if (outcome !== 'missing') return;
+        // Retyped while the lookup ran: the live search for the new text
+        // must not be cancelled by a search for the old one.
+        if (searchTerm.value !== query) return;
     }
 
-    cancelPendingSearch();
     const found = await search.search(query);
     // The input changed, was cleared, or a newer search (a second Enter)
     // took over: that one reports instead.
@@ -1502,7 +1511,12 @@ async function onScanSubmit() {
             `Couldn't search products: ${search.error.value}`,
         );
     } else if (found.length === 0) {
-        showFeedback('error', `No item matching "${query}"`);
+        showFeedback(
+            'error',
+            barcode
+                ? `Barcode "${query}" not found`
+                : `No item matching "${query}"`,
+        );
     } else if (found.length === 1 && !/^\d+$/.test(query)) {
         await selectMatch(found[0], qty, submitted);
     } else {
@@ -1517,18 +1531,28 @@ async function onScanSubmit() {
     }
 }
 
-async function lookUpBarcode(EAN: string, qty: number, submitted: string) {
+/**
+ * The exact lookup of a barcode-shaped input: `added` when it was found
+ * (and handed to `addProduct`), `missing` on PRODUCT_NOT_FOUND so the
+ * caller searches instead, `failed` (reported here) on any other error.
+ */
+async function lookUpBarcode(
+    EAN: string,
+    qty: number,
+    submitted: string,
+): Promise<'added' | 'missing' | 'failed'> {
     try {
         const res = await api.get<ProductView>(
             `/products/${encodeURIComponent(EAN)}`,
         );
         addProduct(res.data, qty, submitted);
+        return 'added';
     } catch (error) {
         if (apiErrorCode(error) === ErrorCode.PRODUCT_NOT_FOUND) {
-            showFeedback('error', `Barcode "${EAN}" not found`);
-        } else {
-            showFeedback('error', 'Could not look up that code');
+            return 'missing';
         }
+        showFeedback('error', 'Could not look up that code');
+        return 'failed';
     }
 }
 

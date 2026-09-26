@@ -89,6 +89,15 @@ describe('GetDto', () => {
         ).toHaveLength(0);
     });
 
+    it.each(['036000291452', '96385074'])(
+        'accepts a UPC-A or EAN-8 as scanned: %s (#87)',
+        async (EAN) => {
+            expect(await propertyErrors(GetDto, { EAN }, 'EAN')).toHaveLength(
+                0,
+            );
+        },
+    );
+
     it('rejects a code longer than an EAN', async () => {
         const [error] = await propertyErrors(
             GetDto,
