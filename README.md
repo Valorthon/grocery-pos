@@ -211,8 +211,9 @@ lint and typecheck. Tests and the build run in CI.
 `staging`, `production` and `master`. It installs with `--frozen-lockfile`,
 builds the contracts, then runs `format:check`, `pnpm audit --audit-level
 high`, depcheck, the license check (`pnpm licenses:check`, which fails on
-GPL-2.0, GPL-3.0 and AGPL-3.0 anywhere in the workspace), lint, typecheck,
-test and build. A newer run on the same PR or branch cancels the older one.
+any GPL or AGPL license anywhere in the workspace, but not LGPL), lint, typecheck,
+test and build. A newer push to the same PR cancels its older run; branch
+pushes never cancel each other.
 
 - The audit only fails the run when the change touches `pnpm-lock.yaml` or a
   `package.json`; otherwise a new advisory is reported without failing.
@@ -220,7 +221,8 @@ test and build. A newer run on the same PR or branch cancels the older one.
   the Actions tab) and fails on any high advisory.
 - When a Docker-related file changes (either Dockerfile, `.dockerignore`,
   `apps/client/nginx.conf.template`, `apps/client/docker-entrypoint.sh`,
-  either `railway.json`, or `pnpm-lock.yaml`), a separate job builds both
+  either `railway.json`, any `package.json`, `pnpm-workspace.yaml` or
+  `pnpm-lock.yaml`), a separate job builds both
   images, without pushing them.
 
 Railway rebuilds a service only when its `build.watchPatterns` match: the

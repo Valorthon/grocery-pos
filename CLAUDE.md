@@ -338,8 +338,9 @@ requestId}`. A 5xx never carries details or internals.
 
 - `ci.yml` runs on PRs and pushes to `develop`, `staging`, `production`,
   `master`, with `contents: read` and a per-ref `concurrency` that cancels
-  superseded runs. Contracts are built as an explicit step; there is no
-  `prepare` script (the Dockerfiles install before copying contracts' source).
+  superseded PR runs (branch pushes never cancel). Contracts are built as an
+  explicit step; contracts has no `prepare` script (the Dockerfiles install
+  before copying its source).
 - `pnpm audit --audit-level high` runs on every CI run but fails it only
   when `pnpm-lock.yaml` or a `package.json` changed (`dorny/paths-filter`).
   `audit.yml` runs weekly and on dispatch, failing on any high advisory.
@@ -347,12 +348,15 @@ requestId}`. A 5xx never carries details or internals.
   tests of its pure functions.
 - Both Docker images are built (not pushed) only when a Dockerfile,
   `.dockerignore`, `nginx.conf.template`, `docker-entrypoint.sh`, a
-  `railway.json` or `pnpm-lock.yaml` changes.
+  `railway.json`, a `package.json`, `pnpm-workspace.yaml` or
+  `pnpm-lock.yaml` changes.
 - `.husky/pre-push` runs the contracts build, lint and typecheck.
 - The client lints type-aware, but the `no-unsafe-*` family and
   `no-redundant-type-constituents` are off until #27.
-- `pnpm-lock.yaml` is prettier-ignored; the license check
-  (`scripts/check-licenses.mjs`) scans the whole workspace.
+- `pnpm-lock.yaml` is prettier-ignored. `pnpm licenses:check` scans the
+  whole workspace and denies any GPL/AGPL (not LGPL), failing closed on an
+  unparseable expression (`scripts/license-policy.mjs`, with a `node --test`
+  spec).
 
 **Scope**
 

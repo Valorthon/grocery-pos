@@ -16,7 +16,7 @@
         "migrate:decode-entities": "pnpm --filter grocery-pos-api migrate:decode-entities",
         "format": "prettier --write \"{apps,packages,scripts}/**/*.{ts,mjs,vue,css,html,json,md}\" \"*.{json,md,yml,yaml}\" \".github/**/*.{yml,yaml}\"",
         "format:check": "prettier --check \"{apps,packages,scripts}/**/*.{ts,mjs,vue,css,html,json,md}\" \"*.{json,md,yml,yaml}\" \".github/**/*.{yml,yaml}\"",
-        "licenses:check": "node scripts/check-licenses.mjs",
+        "licenses:check": "node --test scripts/license-policy.test.mjs && node scripts/check-licenses.mjs",
         "prepare": "husky"
     },
     "devDependencies": {

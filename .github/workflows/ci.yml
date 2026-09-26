@@ -8,10 +8,12 @@ on:
 permissions:
     contents: read
 
-# A new push to the same PR or branch cancels the run it supersedes.
+# A new push to the same PR cancels the run it supersedes. Branch pushes
+# never cancel: each run diffs only its own push, so a cancelled run could
+# let a dependency change land without a blocking audit.
 concurrency:
     group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-    cancel-in-progress: true
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
     changes:
@@ -45,6 +47,8 @@ jobs:
                       deps:
                         - 'pnpm-lock.yaml'
                         - '**/package.json'
+                      # What the Dockerfiles copy or run, except app and
+                      # contracts source, which the verify job builds.
                       docker:
                         - 'apps/api/Dockerfile'
                         - 'apps/client/Dockerfile'
@@ -54,6 +58,9 @@ jobs:
                         - 'apps/api/railway.json'
                         - 'apps/client/railway.json'
                         - 'pnpm-lock.yaml'
+                        - 'pnpm-workspace.yaml'
+                        - 'package.json'
+                        - '**/package.json'
 
     verify:
         name: Verify
