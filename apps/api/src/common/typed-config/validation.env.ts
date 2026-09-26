@@ -176,6 +176,37 @@ export const envSchema = zod
 export type EnvTypes = zod.infer<typeof envSchema>;
 
 /**
+ * Keys of `shape` that may be absent after validation: `undefined` parses
+ * and stays `undefined` (not replaced by a default). A probe that throws
+ * (a refine or transform that assumes a string) counts as not optional, so
+ * the import never crashes and `get` keeps failing loudly for that key.
+ */
+export function optionalKeys<Key extends string>(
+    shape: Record<Key, zod.ZodType>,
+): Set<Key> {
+    return new Set(
+        (Object.keys(shape) as Key[]).filter((key) => {
+            try {
+                const result = shape[key].safeParse(undefined);
+                return result.success && result.data === undefined;
+            } catch {
+                return false;
+            }
+        }),
+    );
+}
+
+/**
+ * Today that is DOMAIN, which only prod and stage require (#91).
+ * TypedConfigService.get returns `undefined` for these instead of throwing.
+ * A permissive field such as `zod.any()` would also land here; the spec
+ * pins the set.
+ */
+export const OPTIONAL_ENV_KEYS: ReadonlySet<keyof EnvTypes> = optionalKeys(
+    envSchema.shape,
+);
+
+/**
  * What ConfigModule validates: resolves APP_ENV (with the NODE_ENV
  * transition in app-env.ts), then parses. Throws on any problem; `warn`
  * receives deprecation notices.

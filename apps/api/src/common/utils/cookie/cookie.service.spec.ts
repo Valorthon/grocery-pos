@@ -1,8 +1,15 @@
+import { Controller, Get, INestApplication, Res } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import cookieParser from 'cookie-parser';
 import type { CookieOptions, Response } from 'express';
 import {
     LEGACY_REFRESH_COOKIE_PATH,
     REFRESH_COOKIE_PATH,
 } from '../../../constants';
+import {
+    DEV_ENV_WITHOUT_DOMAIN,
+    validatedConfig,
+} from '../../testing/validated-config';
 import { TypedConfigService } from '../../typed-config/typed-config.service';
 import { CookieService, msUntil } from './cookie.service';
 
@@ -218,4 +225,88 @@ describe('msUntil', () => {
         expect(msUntil(new Date(NOW.getTime() + 1234))).toBe(1234);
         expect(msUntil(new Date(NOW.getTime() - 5000))).toBe(0);
     });
+});
+
+/**
+ * #91: with DOMAIN entirely unset (not `DOMAIN=`), the real config used to
+ * throw "Missing env variable: DOMAIN" on every login. This goes through the
+ * real TypedConfigService and Express, and reads the Set-Cookie headers.
+ */
+describe('CookieService with DOMAIN unset in dev (#91)', () => {
+    @Controller()
+    class LoginLikeController {
+        constructor(private readonly cookies: CookieService) {}
+
+        @Get('login')
+        login(@Res() res: Response) {
+            const expiry = new Date(Date.now() + 3600 * 1000);
+            this.cookies.createJwt(res, 'j', expiry);
+            this.cookies.createRefresh(res, 'r', expiry);
+            this.cookies.createDummy(res, expiry);
+            res.status(204).end();
+        }
+
+        @Get('logout')
+        logout(@Res() res: Response) {
+            this.cookies.removeJwt(res);
+            this.cookies.removeRefresh(res);
+            this.cookies.removeDummy(res);
+            res.status(204).end();
+        }
+    }
+
+    const savedDomain = process.env.DOMAIN;
+    let app: INestApplication;
+    let base: string;
+
+    beforeAll(async () => {
+        // The file's fake timers would stall the HTTP round trip.
+        jest.useRealTimers();
+        delete process.env.DOMAIN;
+        const moduleRef = await Test.createTestingModule({
+            controllers: [LoginLikeController],
+            providers: [
+                CookieService,
+                {
+                    provide: TypedConfigService,
+                    useValue: validatedConfig(DEV_ENV_WITHOUT_DOMAIN),
+                },
+            ],
+        }).compile();
+        app = moduleRef.createNestApplication({ logger: false });
+        app.use(cookieParser(DEV_ENV_WITHOUT_DOMAIN.COOKIE_SECRET));
+        await app.listen(0, '127.0.0.1');
+        base = await app.getUrl();
+    });
+
+    beforeEach(() => {
+        jest.useRealTimers();
+    });
+
+    afterAll(async () => {
+        await app?.close();
+        if (savedDomain !== undefined) process.env.DOMAIN = savedDomain;
+    });
+
+    it.each(['login', 'logout'])(
+        '%s sets its cookies with no Domain attribute',
+        async (route) => {
+            const res = await fetch(`${base}/${route}`);
+            const setCookies = res.headers.getSetCookie();
+
+            expect(res.status).toBe(204);
+            // refresh twice: its legacy path is cleared as well (#12).
+            expect(setCookies.map((c) => c.split('=')[0]).sort()).toEqual([
+                'dummy',
+                'jwt',
+                'refresh',
+                'refresh',
+            ]);
+            for (const cookie of setCookies) {
+                expect(cookie).not.toMatch(/;\s*Domain=/i);
+                expect(cookie).toMatch(/;\s*SameSite=Lax/i);
+                expect(cookie).not.toMatch(/;\s*Secure/i);
+            }
+        },
+    );
 });
