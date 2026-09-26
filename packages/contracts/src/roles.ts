@@ -37,7 +37,9 @@ export const MANAGEABLE_ROLES: readonly Role[] = [
 
 /**
  * Whether `actorRoles` includes `role`. ADMIN holds every role, as in
- * RoleGuard, except where a permission is `ownRoleOnly` (selling, #84).
+ * RoleGuard's default, with no exceptions here: `holdsRole([Admin], Seller)`
+ * is true. The `ownRoleOnly` rule (selling, #84) is applied by
+ * `permissionsOf` and by RoleGuard on `@RequireOwnRole` routes, not here.
  */
 export function holdsRole(actorRoles: readonly Role[], role: Role): boolean {
     return actorRoles.includes(Role.Admin) || actorRoles.includes(role);

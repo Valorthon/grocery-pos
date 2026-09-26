@@ -9,8 +9,7 @@ import { ASSIGNABLE_ROLES, holdsRole, Role } from './roles.js';
  *
  * - every route listed under a permission has exactly `roles` as its
  *   effective `@Roles(...)` (the handler's, else the controller's);
- * - every route that is not `@Public()` is listed under some permission.
- *
+ * - every route that is not `@Public()` is listed under some permission;
  * - a permission is `ownRoleOnly` exactly when its routes are
  *   `@RequireOwnRole(...)` rather than `@Roles(...)`.
  *
