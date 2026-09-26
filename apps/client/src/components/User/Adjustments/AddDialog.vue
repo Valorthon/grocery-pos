@@ -68,7 +68,7 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
-import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
+import type { ComboboxOption } from '@/components/ui/types';
 import { AddForm, AddFormInput } from './dto';
 import { adjustmentLineErrors } from './validation';
 import { useProductMatches } from '@/composables/useProductMatches';

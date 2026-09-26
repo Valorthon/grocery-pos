@@ -67,7 +67,7 @@
         max-width="44rem"
         scrollable
     >
-        <AdjustDetails :item="selectedItem" />
+        <AdjustDetails v-if="selectedItem" :item="selectedItem" />
     </BaseModal>
 </template>
 
@@ -87,14 +87,15 @@ import { dateRangeError } from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
 import { formatStoreDateTime } from '@/utils/datetime';
+import type { Paginated, AdjustmentRow, UserRef } from '@grocery-pos/contracts';
+import type { AdjustmentListRow } from '@/components/User/Adjustments/rows';
 import AdjustDetails from '@/components/User/Adjustments/DetailsDialog.vue';
 
 const router = useRouter();
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchAdjust());
 const totalItems = ref(0);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const serverItems = ref<any[]>([]);
+const serverItems = ref<AdjustmentListRow[]>([]);
 
 const headers = [
     { key: 'description', title: 'Description' },
@@ -111,13 +112,11 @@ const userOptions = ref<Array<{ label: string; value: string }>>([]);
 // itself still loads.
 const fetchUserOptions = async () => {
     try {
-        const result = await api.get('/adjustments/users');
-        userOptions.value = result.data.map(
-            ({ _id, name }: { _id: string; name: string }) => ({
-                label: name,
-                value: _id,
-            }),
-        );
+        const result = await api.get<UserRef[]>('/adjustments/users');
+        userOptions.value = result.data.map(({ _id, name }) => ({
+            label: name,
+            value: _id,
+        }));
     } catch (error) {
         uiStore.queueMessage(
             Color.ERROR,
@@ -181,7 +180,7 @@ const {
     load: fetchAdjust,
 } = useListFetch(
     () =>
-        api.get(`/adjustments`, {
+        api.get<Paginated<AdjustmentRow>>(`/adjustments`, {
             params: {
                 page: page.value,
                 limit: limit.value,
@@ -189,11 +188,10 @@ const {
             },
         }),
     (result) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        serverItems.value = result.data.data.map((adjust: any) => ({
+        serverItems.value = result.data.data.map((adjust) => ({
             id: adjust._id,
             description: adjust.description,
-            adjustedBy: adjust.adjustedBy.name,
+            adjustedBy: adjust.adjustedBy?.name ?? 'N/A',
             date: formatStoreDateTime(adjust.createdAt),
         }));
 
@@ -205,10 +203,9 @@ const {
 void fetchAdjust();
 
 const isDialogOpen = ref(false);
-const selectedItem = ref();
+const selectedItem = ref<AdjustmentListRow | null>(null);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function showDetails(row: any) {
+function showDetails(row: AdjustmentListRow) {
     selectedItem.value = row;
     isDialogOpen.value = true;
 }

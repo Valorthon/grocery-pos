@@ -265,7 +265,9 @@ describe('api when the refresh itself fails', () => {
                 'rejected',
             ]);
             expect(
-                results.map((r) => (r as PromiseRejectedResult).reason),
+                results.map(
+                    (r) => (r as PromiseRejectedResult).reason as unknown,
+                ),
             ).toEqual([refreshError, refreshError]);
             expect(logout).not.toHaveBeenCalled();
             expect(cookieWrites).toEqual([]);

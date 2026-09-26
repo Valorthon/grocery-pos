@@ -70,6 +70,7 @@ import {
     useListFetch,
     useListPaging,
 } from '@/composables/useListFetch';
+import type { InventoryRow, Paginated } from '@grocery-pos/contracts';
 
 const router = useRouter();
 const { page, limit, search } = useListPaging(() => fetchInventory());
@@ -88,8 +89,16 @@ const headers = [
     { key: 'stock', title: 'Stock', align: 'right' as const },
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const serverItems = ref<any[]>([]);
+/** A row of the inventory table. */
+interface InventoryListRow {
+    /** The product's id. */
+    id: string;
+    EAN: string;
+    name: string;
+    stock: number;
+}
+
+const serverItems = ref<InventoryListRow[]>([]);
 
 const resetFilters = () => {
     searchEAN.value = '';
@@ -103,7 +112,7 @@ const {
     load: fetchInventory,
 } = useListFetch(
     () =>
-        api.get(`/inventories`, {
+        api.get<Paginated<InventoryRow>>(`/inventories`, {
             params: {
                 page: page.value,
                 limit: limit.value,
@@ -112,16 +121,14 @@ const {
             },
         }),
     (result) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = result.data.data.map((inventory: any) => ({
+        const data = result.data.data.map((inventory) => ({
             id: inventory.product._id,
             EAN: inventory.product.EAN,
             name: inventory.product.name,
             stock: inventory.stock,
         }));
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        data.sort((a, b) => a.name.localeCompare(b.name));
 
         serverItems.value = data;
         totalItems.value = result.data.totalItems;

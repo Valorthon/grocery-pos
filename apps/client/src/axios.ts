@@ -76,7 +76,9 @@ api.interceptors.response.use(
         const originalRequest = error.config as InternalAxiosRequestConfig & {
             _retry?: boolean;
         };
-        // Check if error is 401 and we haven't tried to refresh yet
+        // A 401 is the session's answer: every AUTH_* ErrorCode is a 401 on
+        // the API (and nothing else is), so the status is the check here.
+        // Where a specific reason matters, callers read `apiErrorCode`.
         if (
             error.response?.status === 401 &&
             !originalRequest._retry &&

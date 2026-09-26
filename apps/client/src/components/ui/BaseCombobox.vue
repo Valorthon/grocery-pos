@@ -110,14 +110,7 @@
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
 import { CircleCheck } from '@lucide/vue';
 import Spinner from './Spinner.vue';
-
-export interface ComboboxOption {
-    value: string;
-    label: string;
-    subtitle?: string;
-    /** Text written back into the input when picked; defaults to `label`. */
-    display?: string;
-}
+import type { ComboboxOption } from './types';
 
 const props = withDefaults(
     defineProps<{

@@ -97,15 +97,11 @@ import {
     useListPaging,
 } from '@/composables/useListFetch';
 import { formatCurrency } from '@/utils/currency';
+import type { Paginated, RestockLine } from '@grocery-pos/contracts';
+import type { RestockListRow } from './rows';
 
 const props = defineProps<{
-    item: {
-        id: string;
-        description: string;
-        restockedBy: string;
-        totalCost: number | string;
-        date: Date;
-    };
+    item: RestockListRow;
 }>();
 
 const { page, limit, search } = useListPaging(() => fetchDetails());
@@ -125,7 +121,16 @@ const headers = [
     { key: 'totalCost', title: 'Total Cost', align: 'right' as const },
 ];
 
-const serverItems = ref<Array<Record<string, unknown>>>([]);
+/** A row of the restock's lines. Money formatted. */
+interface RestockLineRow {
+    id: string;
+    name: string;
+    quantity: number;
+    unitCost: string;
+    totalCost: string;
+}
+
+const serverItems = ref<RestockLineRow[]>([]);
 
 const resetFilters = () => {
     searchEAN.value = '';
@@ -139,7 +144,7 @@ const {
     load: fetchDetails,
 } = useListFetch(
     () =>
-        api.get(`/restocks/details/${props.item.id}`, {
+        api.get<Paginated<RestockLine>>(`/restocks/details/${props.item.id}`, {
             params: {
                 page: page.value,
                 limit: limit.value,
@@ -148,22 +153,13 @@ const {
             },
         }),
     (result) => {
-        serverItems.value = result.data.data.map(
-            (details: {
-                id: string;
-                product?: { name: string };
-                quantity: number;
-                unitCost: number;
-            }) => ({
-                id: details.id,
-                name: details.product?.name,
-                quantity: details.quantity,
-                unitCost: formatCurrency(details.unitCost ?? 0),
-                totalCost: formatCurrency(
-                    (details.unitCost ?? 0) * (details.quantity ?? 0),
-                ),
-            }),
-        );
+        serverItems.value = result.data.data.map((details) => ({
+            id: details._id,
+            name: details.product.name,
+            quantity: details.quantity,
+            unitCost: formatCurrency(details.unitCost),
+            totalCost: formatCurrency(details.unitCost * details.quantity),
+        }));
 
         totalItems.value = result.data.totalItems;
     },

@@ -1,5 +1,5 @@
 import { PaymentType, TenderType } from '@grocery-pos/contracts';
-import type { Receipt } from './types';
+import type { Receipt } from '@grocery-pos/contracts';
 
 /** Characters of the sale id shown as its number on the receipt. */
 export const SALE_NUMBER_LENGTH = 8;

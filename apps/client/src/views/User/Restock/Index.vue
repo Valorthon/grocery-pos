@@ -67,7 +67,7 @@
         max-width="52rem"
         scrollable
     >
-        <RestockDetails :item="selectedItem" />
+        <RestockDetails v-if="selectedItem" :item="selectedItem" />
     </BaseModal>
 </template>
 
@@ -89,13 +89,14 @@ import { apiErrorMessages } from '@/utils/api-error';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
+import type { Paginated, RestockRow, UserRef } from '@grocery-pos/contracts';
+import type { RestockListRow } from '@/components/User/Restock/rows';
 
 const router = useRouter();
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchRestock());
 const totalItems = ref(0);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const serverItems = ref<any[]>([]);
+const serverItems = ref<RestockListRow[]>([]);
 
 const headers = [
     { key: 'description', title: 'Description' },
@@ -113,13 +114,11 @@ const userOptions = ref<Array<{ label: string; value: string }>>([]);
 // itself still loads.
 const fetchUserOptions = async () => {
     try {
-        const result = await api.get('/restocks/users');
-        userOptions.value = result.data.map(
-            ({ _id, name }: { _id: string; name: string }) => ({
-                label: name,
-                value: _id,
-            }),
-        );
+        const result = await api.get<UserRef[]>('/restocks/users');
+        userOptions.value = result.data.map(({ _id, name }) => ({
+            label: name,
+            value: _id,
+        }));
     } catch (error) {
         uiStore.queueMessage(
             Color.ERROR,
@@ -183,7 +182,7 @@ const {
     load: fetchRestock,
 } = useListFetch(
     () =>
-        api.get(`/restocks`, {
+        api.get<Paginated<RestockRow>>(`/restocks`, {
             params: {
                 page: page.value,
                 limit: limit.value,
@@ -191,12 +190,11 @@ const {
             },
         }),
     (result) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        serverItems.value = result.data.data.map((restock: any) => ({
+        serverItems.value = result.data.data.map((restock) => ({
             id: restock._id,
             description: restock.description,
-            restockedBy: restock.restockedBy.name,
-            totalCost: formatCurrency(restock.totalCost ?? 0),
+            restockedBy: restock.restockedBy?.name ?? 'N/A',
+            totalCost: formatCurrency(restock.totalCost),
             date: formatStoreDateTime(restock.createdAt),
         }));
 
@@ -208,10 +206,9 @@ const {
 void fetchRestock();
 
 const isDialogOpen = ref(false);
-const selectedItem = ref();
+const selectedItem = ref<RestockListRow | null>(null);
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function showDetails(row: any) {
+function showDetails(row: RestockListRow) {
     selectedItem.value = row;
     isDialogOpen.value = true;
 }

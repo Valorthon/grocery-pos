@@ -2,14 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
-import { PaymentType, SaleStatus } from '@grocery-pos/contracts';
-import { useCartStore } from '@/stores/cart';
+import { ErrorCode, PaymentType, SaleStatus } from '@grocery-pos/contracts';
+import { type StoredAttempt, useCartStore } from '@/stores/cart';
+import type { SaleRequest } from '@/components/User/Sales/sale-submission';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
 import Sell from './Sell.vue';
 
 const get = vi.hoisted(() => vi.fn());
-const post = vi.hoisted(() => vi.fn());
+const post = vi.hoisted(() =>
+    vi.fn<(url: string, body: SaleRequest) => Promise<{ data: unknown }>>(),
+);
 vi.mock('@/axios', () => ({ default: { get, post } }));
 
 const MILK = { product: 'p1', EAN: '2000000000015', name: 'milk' };
@@ -963,6 +966,48 @@ describe('Sell scan feedback (#23)', () => {
     });
 });
 
+describe('Sell barcode lookup errors (#27)', () => {
+    function apiError(status: number, error: ErrorCode) {
+        const config = { headers: new AxiosHeaders() };
+        return new AxiosError(
+            'Request failed',
+            'ERR_BAD_REQUEST',
+            config,
+            null,
+            {
+                status,
+                statusText: '',
+                data: { statusCode: status, error, message: 'x' },
+                headers: {},
+                config,
+            },
+        );
+    }
+
+    async function scanUnknown(error: unknown) {
+        serve(
+            () => Promise.resolve([]),
+            () => Promise.reject(error),
+        );
+        mount();
+        input().value = '4006381333931';
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+    }
+
+    it('says a barcode is not found when the API answers PRODUCT_NOT_FOUND', async () => {
+        await scanUnknown(apiError(404, ErrorCode.PRODUCT_NOT_FOUND));
+        expect(text('scan-alert')).toContain(
+            'Barcode "4006381333931" not found',
+        );
+    });
+
+    it('says the lookup failed for any other error', async () => {
+        await scanUnknown(apiError(503, ErrorCode.INTERNAL_ERROR));
+        expect(text('scan-alert')).toContain('Could not look up that code');
+    });
+});
+
 describe('Sell match list (#22 follow-up)', () => {
     it('scrolls the highlighted match into view', async () => {
         const scroll = vi.fn();
@@ -1163,7 +1208,9 @@ describe('Sell checkout across a reload (#23 review)', () => {
     }
 
     function saved() {
-        return JSON.parse(localStorage.getItem('grocery_pos_cart_v1:u-ana')!);
+        return JSON.parse(
+            localStorage.getItem('grocery_pos_cart_v1:u-ana')!,
+        ) as { attempt: StoredAttempt | null };
     }
 
     it('saves the key with the basket before the sale is sent', async () => {

@@ -194,7 +194,7 @@ import { computed, onBeforeUnmount, watch } from 'vue';
 import { CheckCircle2, RotateCcw } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import type { Receipt } from './types';
+import type { Receipt } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
 import { paymentLabel, tenderLabel } from './checkout';
 import { DEFAULT_TERMINAL, DiscountType } from '@grocery-pos/contracts';

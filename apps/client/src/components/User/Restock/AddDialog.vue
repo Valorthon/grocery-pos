@@ -102,7 +102,7 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
-import type { ComboboxOption } from '@/components/ui/BaseCombobox.vue';
+import type { ComboboxOption } from '@/components/ui/types';
 import { AddForm, AddFormInput } from './dto';
 import { restockLineErrors } from './validation';
 import { Color, useUIStore } from '@/stores/ui';

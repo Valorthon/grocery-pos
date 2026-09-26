@@ -61,8 +61,8 @@
                         >{{ value }}</Badge
                     >
                 </template>
-                <template #cell-status="{ value }">
-                    <Badge :color="statusColor(value)">{{ value }}</Badge>
+                <template #cell-status="{ item, value }">
+                    <Badge :color="statusColor(item.status)">{{ value }}</Badge>
                 </template>
             </BaseTable>
         </div>
@@ -366,15 +366,23 @@ import Spinner from '@/components/ui/Spinner.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
-import { apiErrorMessages, apiErrorText } from '@/utils/api-error';
+import {
+    apiErrorCode,
+    apiErrorMessages,
+    apiErrorText,
+} from '@/utils/api-error';
 import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import {
     DiscountType,
     ErrorCode,
     type Paginated,
     PaymentType,
+    type ReceiptDiscount,
     ReversalType,
     Role,
+    type SaleLine,
+    type SaleReversalView,
+    type SaleRow,
     saleNetCash,
     SaleStatus,
     type ShiftListItem,
@@ -382,13 +390,8 @@ import {
     STRING_LIMITS,
     type Tender,
 } from '@grocery-pos/contracts';
-import type {
-    ReceiptDiscount,
-    SaleReversal,
-} from '@/components/User/Sales/types';
 import { paymentLabel, tenderLabel } from '@/components/User/Sales/checkout';
 import { useAuthStore } from '@/stores/auth';
-import { apiErrorCode } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
 
 /** The ledger fields of a sale that explain its total (centavos). */
@@ -401,9 +404,22 @@ interface SaleTotals {
     tenders: Tender[];
     changeGiven: number;
     referenceNumber: string | null;
-    reversal: SaleReversal | null;
+    reversal: SaleReversalView | null;
     /** The shift the sale was rung in; null for sales from before shifts. */
     shift: string | null;
+}
+
+/** A row of the sales table. */
+interface SaleListRow {
+    id: string;
+    cashier: string;
+    /** Formatted. */
+    amount: string;
+    totals: SaleTotals;
+    paymentType: PaymentType;
+    status: SaleStatus;
+    /** Formatted in the store timezone. */
+    date: string;
 }
 
 const authStore = useAuthStore();
@@ -413,8 +429,7 @@ const canSell = computed(() => authStore.hasRole(Role.Seller));
 const router = useRouter();
 const { page, limit } = useListPaging(() => fetchSales());
 const totalItems = ref(0);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const serverItems = ref<any[]>([]);
+const serverItems = ref<SaleListRow[]>([]);
 
 const headers = [
     { key: 'cashier', title: 'Cashier' },
@@ -444,12 +459,11 @@ const {
     load: fetchSales,
 } = useListFetch(
     () =>
-        api.get(`/sales`, {
+        api.get<Paginated<SaleRow>>(`/sales`, {
             params: { page: page.value, limit: limit.value },
         }),
     (result) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        serverItems.value = result.data.data.map((sale: any) => ({
+        serverItems.value = result.data.data.map((sale) => ({
             id: sale._id,
             cashier: sale.cashier?.name ?? 'N/A',
             amount: formatCurrency(sale.amount ?? 0),
@@ -479,8 +493,7 @@ void fetchSales();
 
 const isDialogOpen = ref(false);
 const detailsLoading = ref(false);
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const details = ref<any[]>([]);
+const details = ref<SaleLine[]>([]);
 const detailsError = ref('');
 const selectedId = ref('');
 const selectedSale = ref<SaleTotals | null>(null);
@@ -633,11 +646,10 @@ async function confirmReversal() {
     }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function showDetails(row: any) {
+async function showDetails(row: SaleListRow) {
     cancelReversal();
     selectedId.value = row.id;
-    selectedSale.value = row.totals ?? null;
+    selectedSale.value = row.totals;
     isDialogOpen.value = true;
     await loadDetails();
 }
@@ -657,7 +669,9 @@ async function loadDetails() {
     detailsError.value = '';
     details.value = [];
     try {
-        const res = await api.get(`/sales/details/${selectedId.value}`);
+        const res = await api.get<SaleLine[]>(
+            `/sales/details/${selectedId.value}`,
+        );
         if (call === detailsCall) details.value = res.data;
     } catch (error) {
         if (call === detailsCall) {

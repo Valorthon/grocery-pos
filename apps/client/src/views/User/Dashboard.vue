@@ -107,7 +107,8 @@
                                 <td class="py-3 px-5">
                                     <Badge
                                         :color="
-                                            sale.paymentType === 'CASH'
+                                            sale.paymentType ===
+                                            PaymentType.CASH
                                                 ? 'success'
                                                 : 'info'
                                         "
@@ -116,7 +117,7 @@
                                     <Badge
                                         v-if="
                                             sale.status &&
-                                            sale.status !== 'COMPLETED'
+                                            sale.status !== SaleStatus.COMPLETED
                                         "
                                         color="error"
                                         class="ml-1"
@@ -193,48 +194,21 @@ import { useListFetch } from '@/composables/useListFetch';
 import { useAuthStore } from '@/stores/auth';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
+import {
+    type DashboardView,
+    PaymentType,
+    SaleStatus,
+} from '@grocery-pos/contracts';
 
 const authStore = useAuthStore();
 
 /**
- * GET /dashboard. `todayRevenue` and `recentSales` are money figures the
- * API returns to ADMIN only (issue #13); for other management roles they
- * are absent and their tiles are not shown.
+ * GET /dashboard (contracts `DashboardView`). `todayRevenue` and
+ * `recentSales` are money figures the API returns to ADMIN only (issue
+ * #13); for other management roles they are absent and their tiles are
+ * not shown.
  */
-interface DashboardData {
-    totalProducts: number;
-    /** Products with 1 to LOW_STOCK_THRESHOLD (contracts) units on hand. */
-    lowStockCount: number;
-    /** Products with none on hand (issue #16). */
-    outOfStockCount: number;
-    todaySalesCount: number;
-    /** Centavos. ADMIN only. */
-    todayRevenue?: number;
-    /** ADMIN only. */
-    recentSales?: Array<{
-        _id: string;
-        amount: number;
-        paymentType: string;
-        /** Absent on sales recorded before statuses existed. */
-        status?: string;
-        createdAt: string;
-        cashier?: { name: string };
-    }>;
-    recentRestocks: Array<{
-        _id: string;
-        description: string;
-        createdAt: string;
-        restockedBy?: { name: string };
-    }>;
-    recentAdjustments: Array<{
-        _id: string;
-        description: string;
-        createdAt: string;
-        adjustedBy?: { name: string };
-    }>;
-}
-
-const data = ref<DashboardData | null>(null);
+const data = ref<DashboardView | null>(null);
 
 /** Whether the API sent money figures, i.e. the caller is an ADMIN. */
 const showsMoney = computed(() => data.value?.todayRevenue !== undefined);
@@ -378,7 +352,7 @@ const {
     error: loadError,
     load: loadDashboard,
 } = useListFetch(
-    () => api.get<DashboardData>('/dashboard'),
+    () => api.get<DashboardView>('/dashboard'),
     (res) => {
         data.value = res.data;
     },

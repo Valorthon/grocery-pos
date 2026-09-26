@@ -86,9 +86,11 @@ import {
     useListFetch,
     useListPaging,
 } from '@/composables/useListFetch';
+import type { AdjustmentLine, Paginated } from '@grocery-pos/contracts';
+import type { AdjustmentListRow } from './rows';
 
 const props = defineProps<{
-    item: { id: string; description: string; adjustedBy: string; date: Date };
+    item: AdjustmentListRow;
 }>();
 
 const { page, limit, search } = useListPaging(() => fetchDetails());
@@ -107,7 +109,15 @@ const headers = [
     { key: 'reason', title: 'Reason' },
 ];
 
-const serverItems = ref<Array<Record<string, unknown>>>([]);
+/** A row of the adjustment's lines. */
+interface AdjustmentLineRow {
+    id: string;
+    name: string;
+    change: number;
+    reason: string;
+}
+
+const serverItems = ref<AdjustmentLineRow[]>([]);
 
 const resetFilters = () => {
     searchEAN.value = '';
@@ -121,19 +131,21 @@ const {
     load: fetchDetails,
 } = useListFetch(
     () =>
-        api.get(`/adjustments/details/${props.item.id}`, {
-            params: {
-                page: page.value,
-                limit: limit.value,
-                name: applied.value.name?.toUpperCase(),
-                EAN: applied.value.EAN,
+        api.get<Paginated<AdjustmentLine>>(
+            `/adjustments/details/${props.item.id}`,
+            {
+                params: {
+                    page: page.value,
+                    limit: limit.value,
+                    name: applied.value.name?.toUpperCase(),
+                    EAN: applied.value.EAN,
+                },
             },
-        }),
+        ),
     (result) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        serverItems.value = result.data.data.map((details: any) => ({
-            id: details.id,
-            name: details.product?.name,
+        serverItems.value = result.data.data.map((details) => ({
+            id: details._id,
+            name: details.product.name,
             change: details.change,
             reason: details.reason,
         }));

@@ -1,11 +1,14 @@
 import { ref } from 'vue';
 import { isAxiosError } from 'axios';
 import {
+    type AppErrorResponse,
     type DiscountInput,
     ErrorCode,
+    type Receipt,
     SaleStatus,
 } from '@grocery-pos/contracts';
-import type { PaymentRequest, Receipt } from './types';
+import { apiErrorBody, apiErrorCode } from '@/utils/api-error';
+import type { PaymentRequest } from './types';
 
 /** The ticket part of `POST /sales`: what is being sold, not how it is paid. */
 export interface SaleTicket {
@@ -209,11 +212,10 @@ export class SaleNotCompletedError extends Error {
  * already recorded with a different payment, or null for any other error.
  */
 function recordedReceipt(error: unknown): Receipt | null {
-    if (!isAxiosError(error) || error.response?.status !== 409) return null;
-    const data = error.response.data as
-        { error?: unknown; details?: { receipt?: Receipt } | null } | undefined;
-    if (data?.error !== ErrorCode.SALE_IDEMPOTENCY_MISMATCH) return null;
-    const receipt = data.details?.receipt;
+    const body = apiErrorBody(error);
+    if (body?.error !== ErrorCode.SALE_IDEMPOTENCY_MISMATCH) return null;
+    const details = body.details as { receipt?: Receipt } | null;
+    const receipt = details?.receipt;
     return receipt && typeof receipt._id === 'string' ? receipt : null;
 }
 
@@ -228,17 +230,18 @@ export function saleErrorMessage(error: unknown): string {
         return 'No response from the server. The sale may already be recorded: Retry is safe and will not charge twice.';
     }
 
-    const data = res.data as { message?: unknown; error?: unknown } | undefined;
+    const data = res.data as Partial<AppErrorResponse> | undefined;
     const message =
         typeof data?.message === 'string' && data.message
             ? data.message.replace(/\.$/, '')
             : 'Sale failed';
 
-    if (data?.error === ErrorCode.SALE_IN_PROGRESS) return `${message}.`;
-    if (data?.error === ErrorCode.SHIFT_NOT_OPEN) {
+    const code = apiErrorCode(error);
+    if (code === ErrorCode.SALE_IN_PROGRESS) return `${message}.`;
+    if (code === ErrorCode.SHIFT_NOT_OPEN) {
         return 'Your shift is no longer open, so nothing was charged. Open a shift to continue; the ticket is kept.';
     }
-    if (data?.error === ErrorCode.SALE_IDEMPOTENCY_MISMATCH) {
+    if (code === ErrorCode.SALE_IDEMPOTENCY_MISMATCH) {
         return `${message}. Check Sales History before charging again.`;
     }
     if (res.status === 400) {

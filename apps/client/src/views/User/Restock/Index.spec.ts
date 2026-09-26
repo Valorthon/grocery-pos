@@ -6,8 +6,9 @@ import { click, field, fieldError, flush, type } from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import { useUIStore } from '@/stores/ui';
 import Index from './Index.vue';
+import type { ApiGet } from '@/testing/api-mock';
 
-const api = vi.hoisted(() => ({ get: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
 vi.mock('@/axios', () => ({ default: api }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
@@ -90,7 +91,7 @@ describe('restock history errors (issue #18)', () => {
                     url === '/restocks/users'
                         ? []
                         : {
-                              data: [{ ...RESTOCK, restockedBy: null }],
+                              data: [null],
                               totalItems: 1,
                           },
             }),
@@ -102,6 +103,27 @@ describe('restock history errors (issue #18)', () => {
         );
         expect(log).toHaveBeenCalledWith(expect.any(TypeError));
         expect(document.querySelector('.animate-pulse')).toBeNull();
+    });
+
+    it('lists a restock whose restocker account is gone as N/A (#27)', async () => {
+        // `restockedBy` is populated by name, and null once the user is
+        // gone (contracts RestockRow): a valid row, not a failed load.
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/restocks/users'
+                        ? []
+                        : {
+                              data: [{ ...RESTOCK, restockedBy: null }],
+                              totalItems: 1,
+                          },
+            }),
+        );
+        const host = await mount();
+
+        expect(tableError()).toBeNull();
+        expect(host.textContent).toContain('weekly delivery');
+        expect(host.textContent).toContain('N/A');
     });
 
     it('hides the pager beside the error: its page count is stale', async () => {
@@ -166,7 +188,7 @@ describe('restock history filters and paging (issue #20)', () => {
     const listCalls = () =>
         api.get.mock.calls
             .filter(([url]) => url === '/restocks')
-            .map(([, config]) => config.params);
+            .map(([, config]) => config?.params);
 
     const selects = () => [...document.querySelectorAll('select')];
     const userFilter = () => selects()[0]!;
@@ -195,7 +217,7 @@ describe('restock history filters and paging (issue #20)', () => {
         api.get.mockClear();
         await choose(filter, '');
         expect(listCalls()).toHaveLength(1);
-        expect(listCalls()[0].restockedBy).toBeUndefined();
+        expect(listCalls()[0]?.restockedBy).toBeUndefined();
     });
 
     it('goes back to page 1, in one request, when a filter changes on page 2', async () => {

@@ -1,14 +1,10 @@
 import { computed, ref } from 'vue';
 import { isAxiosError, isCancel } from 'axios';
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { type ProductMatch, STRING_LIMITS } from '@grocery-pos/contracts';
 import { apiErrorText } from '@/utils/api-error';
 
 /** One row of `GET /products/matches`. */
-export interface Match {
-    product: string;
-    EAN: string;
-    name: string;
-}
+export type Match = ProductMatch;
 
 /** Every EAN in the system is exactly 13 digits (see EanCounterService). */
 const BARCODE = /^\d{13}$/;

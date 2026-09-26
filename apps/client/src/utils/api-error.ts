@@ -1,5 +1,5 @@
 import { isAxiosError } from 'axios';
-import type { AppErrorResponse } from '@grocery-pos/contracts';
+import { type AppErrorResponse, ErrorCode } from '@grocery-pos/contracts';
 
 export const NETWORK_ERROR_MESSAGE =
     'Could not reach the server. Check the connection and try again.';
@@ -11,6 +11,31 @@ const isObject = (v: unknown): v is Loose =>
 
 const nonEmpty = (v: unknown): v is string =>
     typeof v === 'string' && v.trim() !== '';
+
+const ERROR_CODES = new Set<unknown>(Object.values(ErrorCode));
+
+/**
+ * The API's error body (contracts `AppErrorResponse`) of a failed request,
+ * or null: no response (network), or a body without a known `ErrorCode`
+ * (e.g. a proxy's HTML page). Only `error` is checked, so read the other
+ * fields defensively.
+ */
+export function apiErrorBody(error: unknown): AppErrorResponse | null {
+    if (!isAxiosError(error)) return null;
+    const data: unknown = error.response?.data;
+    return isObject(data) && ERROR_CODES.has(data.error)
+        ? (data as unknown as AppErrorResponse)
+        : null;
+}
+
+/**
+ * The API's `ErrorCode` for a failed request (issue #27), or undefined
+ * when there is none (see `apiErrorBody`). Branch on this, not on the
+ * status or the message, when the reason matters (e.g. SHIFT_NOT_OPEN).
+ */
+export function apiErrorCode(error: unknown): ErrorCode | undefined {
+    return apiErrorBody(error)?.error;
+}
 
 export interface ApiErrorOptions {
     /**

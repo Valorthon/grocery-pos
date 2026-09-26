@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
+import { type AppErrorResponse, ErrorCode } from '@grocery-pos/contracts';
 import {
+    apiErrorBody,
+    apiErrorCode,
     apiErrorMessages,
     apiErrorText,
     NETWORK_ERROR_MESSAGE,
@@ -27,10 +30,10 @@ function httpError(status: number, data: unknown): AxiosError {
 }
 
 /** A GlobalFilter body (issue #8). */
-function body(message: string, details: unknown = null) {
+function body(message: string, details: unknown = null): AppErrorResponse {
     return {
         statusCode: 400,
-        error: 'VAL_001',
+        error: ErrorCode.VALIDATION_INVALID_INPUT,
         message,
         timestamp: '2026-09-25T00:00:00.000Z',
         path: '/v1/products/bulk',
@@ -257,5 +260,36 @@ describe('apiErrorText', () => {
         expect(
             apiErrorText(new TypeError('x is undefined'), 'Could not load'),
         ).toBe('Could not load');
+    });
+});
+
+describe('apiErrorBody and apiErrorCode (#27)', () => {
+    it("read the API's body and its ErrorCode", () => {
+        const sent = {
+            ...body('No open shift'),
+            statusCode: 409,
+            error: ErrorCode.SHIFT_NOT_OPEN,
+        };
+        const error = httpError(409, sent);
+
+        expect(apiErrorBody(error)).toEqual(sent);
+        expect(apiErrorCode(error)).toBe(ErrorCode.SHIFT_NOT_OPEN);
+    });
+
+    it.each([
+        [
+            'no response (network)',
+            new AxiosError('Network Error', 'ERR_NETWORK'),
+        ],
+        [
+            'a body that is not an object',
+            httpError(502, '<html>Bad gateway</html>'),
+        ],
+        ['a body without a code', httpError(500, { message: 'Boom' })],
+        ['an unknown code', httpError(400, { ...body('x'), error: 'VAL_001' })],
+        ['an error that is not from axios', new Error('bug')],
+    ])('find nothing for %s', (_label, error) => {
+        expect(apiErrorBody(error)).toBeNull();
+        expect(apiErrorCode(error)).toBeUndefined();
     });
 });

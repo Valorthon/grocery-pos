@@ -81,7 +81,8 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
 import { countPieces, countsError } from './shift';
 import type { BillCounts } from './shift';
-import { apiErrorCode, apiErrorMessage, useShiftStore } from '@/stores/shift';
+import { apiErrorMessage, useShiftStore } from '@/stores/shift';
+import { apiErrorCode } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 

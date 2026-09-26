@@ -8,7 +8,7 @@ import {
     TenderType,
 } from '@grocery-pos/contracts';
 import ReceiptModal from './ReceiptModal.vue';
-import type { Receipt } from './types';
+import type { Receipt } from '@grocery-pos/contracts';
 
 const RECEIPT: Receipt = {
     _id: '66f3a1b2c3d4e5f601234567',
