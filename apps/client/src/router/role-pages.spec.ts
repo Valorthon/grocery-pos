@@ -13,7 +13,7 @@ import {
     PERMISSIONS,
     Role,
 } from '@grocery-pos/contracts';
-import { canOpenRoute, type RouteAccessMeta } from './access';
+import { canOpenRoute, homeRouteFor, type RouteAccessMeta } from './access';
 
 vi.mock('@/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 
@@ -43,6 +43,24 @@ describe('Roles page rows and client routes', () => {
             }
         },
     );
+});
+
+describe('Change own password (#88)', () => {
+    const row = PERMISSIONS.find((p) => p.label === 'Change own password');
+
+    it('is shown for every role', () => {
+        for (const role of ASSIGNABLE_ROLES) {
+            expect(appPermissionsOf(role), role).toContain(row);
+        }
+    });
+
+    // The dialog is in the profile menu of both layouts, so on every page:
+    // the row names each role's home page, which that role always has.
+    it.each(ASSIGNABLE_ROLES)("names %s's home page", (role) => {
+        const home = homeRouteFor([role]).name;
+        expect(home).not.toBe('Login');
+        expect(row?.pages).toContain(home);
+    });
 });
 
 describe('canOpenRoute', () => {

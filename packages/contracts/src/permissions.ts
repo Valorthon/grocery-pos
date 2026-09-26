@@ -55,8 +55,10 @@ export const PERMISSIONS: readonly Permission[] = [
         label: 'Change own password',
         roles: ASSIGNABLE_ROLES,
         routes: ['GET /users/profile', 'PATCH /users/me/password'],
-        // No screen for it yet.
-        appRoles: [],
+        // The profile menu's "Change password" dialog (#88), in both
+        // layouts, so on every signed-in page: listed here as each role's
+        // home page (the admin dashboard, or the seller dashboard).
+        pages: ['Dashboard', 'SellerDashboard'],
     },
     {
         label: 'Stock dashboard',

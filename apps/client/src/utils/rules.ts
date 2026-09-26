@@ -95,6 +95,32 @@ export function passwordError(value: string, optional = false): string {
 }
 
 /**
+ * The current password of a self-service change (`ChangePasswordDto`,
+ * #88): required and at most `STRING_LIMITS.PASSWORD`, never trimmed, and
+ * no length minimum (an old password may predate the policy).
+ */
+export function currentPasswordError(value: string): string {
+    if (!value) return 'Current password is required';
+    if (value.length > STRING_LIMITS.PASSWORD)
+        return `At most ${STRING_LIMITS.PASSWORD} characters`;
+    return '';
+}
+
+export const PASSWORDS_DIFFER = 'The passwords do not match';
+
+/**
+ * The "confirm new password" field (#88): client-side only, it is never
+ * sent. It must repeat the new password exactly.
+ */
+export function confirmPasswordError(
+    newPassword: string,
+    confirm: string,
+): string {
+    if (!confirm) return 'Confirm the new password';
+    return confirm === newPassword ? '' : PASSWORDS_DIFFER;
+}
+
+/**
  * Why a typed or scanned product barcode is refused, or '' when it is
  * accepted (or auto-generated, so not typed at all). The same rules as the
  * API's create and import validation (`barcodeError` in contracts, #14):

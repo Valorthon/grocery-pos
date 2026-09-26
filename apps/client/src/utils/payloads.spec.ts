@@ -3,6 +3,7 @@ import { DiscountType } from '@grocery-pos/contracts';
 import {
     newProductLines,
     toAdjustmentBody,
+    toChangePasswordBody,
     toEnsureValidQuery,
     toNewProductsBody,
     toRestockBody,
@@ -261,5 +262,24 @@ describe('toSaleTicket (POST /sales ticket, #23)', () => {
                 reason: 'senior',
             }).discount,
         ).toEqual({ type: DiscountType.PERCENT, value: 10, reason: 'senior' });
+    });
+});
+
+describe('toChangePasswordBody (PATCH /users/me/password, #88)', () => {
+    it('sends exactly currentPassword and newPassword, untrimmed, never the confirmation', () => {
+        const body = toChangePasswordBody({
+            currentPassword: ' old secret ',
+            newPassword: ' new secret ',
+            confirmPassword: ' new secret ',
+        });
+
+        expect(body).toEqual({
+            currentPassword: ' old secret ',
+            newPassword: ' new secret ',
+        });
+        expect(Object.keys(body).sort()).toEqual([
+            'currentPassword',
+            'newPassword',
+        ]);
     });
 });

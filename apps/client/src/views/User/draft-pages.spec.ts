@@ -5,7 +5,7 @@
  * `testing/stub-add-dialog.ts`); the save dialogs are real.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { type App, type Component, createApp, h } from 'vue';
+import { type App, type Component, createApp, h, ref, type VNode } from 'vue';
 import {
     createMemoryHistory,
     createRouter,
@@ -21,8 +21,13 @@ import { Role, useAuthStore } from '@/stores/auth';
 import ProductsAdd from './Products/Add.vue';
 import RestockAdd from './Restock/Add.vue';
 import AdjustmentAdd from './Adjustments/Add.vue';
+import ChangePasswordDialog from '@/components/User/Account/ChangePasswordDialog.vue';
+import {
+    PASSWORD_CHANGED,
+    PASSWORD_CHANGED_STAYED,
+} from '@/components/User/Account/change-password';
 
-const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 
 // The auth store logs out through the app router: point it at this
@@ -159,7 +164,11 @@ afterEach(() => {
 
 const Elsewhere = { render: () => h('p', 'elsewhere') };
 
-async function mountPage(page: Component) {
+/**
+ * `beside`: rendered next to the page, as a layout's own dialogs are
+ * (e.g. the profile menu's change-password dialog, #88).
+ */
+async function mountPage(page: Component, beside?: () => VNode) {
     router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -175,7 +184,9 @@ async function mountPage(page: Component) {
     await router.push('/draft');
     const host = document.createElement('div');
     document.body.appendChild(host);
-    app = createApp({ render: () => h(RouterView) });
+    app = createApp({
+        render: () => (beside ? [h(RouterView), beside()] : h(RouterView)),
+    });
     app.use(pinia);
     app.use(router);
     app.mount(host);
@@ -362,6 +373,75 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         expect(auth.user).not.toBeNull();
         expect(auth.userLogoutPending).toBe(false);
         expect(rows()).toHaveLength(1);
+    });
+
+    describe('after a password change (#88)', () => {
+        const dialogOpen = ref(false);
+        const dialog = () =>
+            h(ChangePasswordDialog, {
+                modelValue: dialogOpen.value,
+                'onUpdate:modelValue': (value: boolean) => {
+                    dialogOpen.value = value;
+                },
+            });
+
+        async function changePassword() {
+            dialogOpen.value = true;
+            await flush();
+            await type('Current password', 'secret');
+            await type('New password', 'new-secret');
+            await type('Confirm new password', 'new-secret');
+            await press('Change password');
+        }
+
+        beforeEach(() => {
+            dialogOpen.value = false;
+            api.patch.mockReset().mockResolvedValue({ data: '' });
+        });
+
+        it('asks before logging out; Stay keeps the drafts and says to log out later', async () => {
+            await mountPage(c.page, dialog);
+            const auth = useAuthStore();
+            await addDraft(c, 'First');
+
+            await changePassword();
+
+            expect(api.patch).toHaveBeenCalledTimes(1);
+            expect(dialogOpen.value).toBe(false);
+            expect(confirmText()).toBe(
+                'You have 1 unsaved draft. Log out and discard it?',
+            );
+            await press('Stay');
+
+            expect(router.currentRoute.value.name).toBe('Draft');
+            expect(api.post).not.toHaveBeenCalled();
+            expect(auth.user).not.toBeNull();
+            expect(rows()).toHaveLength(1);
+            // Only the notice: the page's own toasts (e.g. products' "added")
+            // may be up too.
+            const notice = useUIStore().toasts.filter((t) =>
+                t.lines.includes(PASSWORD_CHANGED_STAYED),
+            );
+            expect(notice.map((t) => [t.color, t.sticky])).toEqual([
+                [Color.INFO, true],
+            ]);
+        });
+
+        it('logs out to Login with the notice once "Log out" is chosen', async () => {
+            api.post.mockResolvedValue({});
+            await mountPage(c.page, dialog);
+            await addDraft(c, 'First');
+
+            await changePassword();
+            await press('Log out');
+
+            expect(router.currentRoute.value.name).toBe('Login');
+            expect(api.post.mock.calls).toEqual([['/auth/logout']]);
+            expect(useAuthStore().user).toBeNull();
+            expect(useUIStore().toasts.map((t) => [t.color, t.lines])).toEqual([
+                [Color.SUCCESS, [PASSWORD_CHANGED]],
+            ]);
+        });
     });
 
     it('logs out once "Log out" is chosen', async () => {

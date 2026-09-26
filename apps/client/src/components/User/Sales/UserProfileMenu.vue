@@ -1,5 +1,10 @@
 <template>
-    <BaseDropdown v-model="open" align="right" width-class="w-64">
+    <BaseDropdown
+        ref="dropdown"
+        v-model="open"
+        align="right"
+        width-class="w-64"
+    >
         <template #trigger="{ trigger }">
             <button
                 v-if="variant === 'icon'"
@@ -87,6 +92,17 @@
             <button
                 type="button"
                 role="menuitem"
+                class="w-full px-3 py-2 rounded-lg hover:bg-slate-100 text-slate-700 flex items-center gap-2.5 text-left transition-colors focus-ring"
+                data-testid="change-password"
+                @click="openChangePassword"
+            >
+                <KeyRound class="w-4 h-4 text-slate-500" />
+                <span class="text-xs font-semibold">Change password</span>
+            </button>
+
+            <button
+                type="button"
+                role="menuitem"
                 class="w-full px-3 py-2 rounded-lg hover:bg-red-50 text-red-600 flex items-center gap-2.5 text-left transition-colors focus-ring"
                 @click="logout"
             >
@@ -95,12 +111,16 @@
             </button>
         </template>
     </BaseDropdown>
+
+    <!-- Teleported to the body, so it sits outside the menu (#88). -->
+    <ChangePasswordDialog v-model="changingPassword" />
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { ChevronDown, ChevronUp, LogOut } from '@lucide/vue';
+import { computed, ref, useTemplateRef } from 'vue';
+import { ChevronDown, ChevronUp, KeyRound, LogOut } from '@lucide/vue';
 import BaseDropdown from '@/components/ui/BaseDropdown.vue';
+import ChangePasswordDialog from '@/components/User/Account/ChangePasswordDialog.vue';
 import { useAuthStore } from '@/stores/auth';
 
 withDefaults(defineProps<{ variant?: 'bar' | 'box' | 'icon' }>(), {
@@ -133,6 +153,23 @@ const roleLabel = computed(() => {
         )
         .join(', ');
 });
+
+const changingPassword = ref(false);
+const dropdown = useTemplateRef<InstanceType<typeof BaseDropdown>>('dropdown');
+
+/**
+ * Opens the change-password dialog (#88). The menu item goes away with the
+ * menu, so the account button takes the focus first: the dialog gives it
+ * back there when it closes.
+ */
+function openChangePassword() {
+    open.value = false;
+    const root: unknown = dropdown.value?.$el;
+    if (root instanceof HTMLElement) {
+        root.querySelector<HTMLElement>('[data-dropdown-trigger]')?.focus();
+    }
+    changingPassword.value = true;
+}
 
 // Through the page's leave guard: a draft page asks first (issue #19).
 function logout() {
