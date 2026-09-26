@@ -277,6 +277,10 @@ requestId}`. A 5xx never carries details or internals.
   generic message, 429 "try again in…", network/5xx "can't reach the
   server". The login page has no Remember me, Privacy or Terms; a forgotten
   password is "ask an admin to reset it".
+- The UI says "Log in" and "Log out", never "Sign in/out"
+  (`layout-drift.spec.ts`). The login fields have visible "Username" and
+  "Password" labels tied by `for`/`id`; the placeholders stay as hints
+  (#85).
 
 **Client payloads and errors** (#33, #18)
 
@@ -297,6 +301,9 @@ requestId}`. A 5xx never carries details or internals.
 - Field rules in `utils/rules.ts` mirror the API DTOs exactly, neither
   stricter nor looser. Forms validate on submit and show errors inline.
 - Money is typed as text and parsed by `parsePesos`.
+- A restock unit cost may be ₱0 (`NUMERIC_LIMITS.UNIT_COST_MIN`, DTO and
+  schemas alike), never negative; saving asks "Record at ₱0 cost?" naming
+  the ₱0 lines, and "Go back" keeps the drafts (#85).
 - `BaseInput` has `inheritAttrs: false`: attrs go on the `<input>`, class and
   style on the wrapper.
 - The product combobox binds a snapshot taken at pick time; toggling "new
@@ -310,7 +317,7 @@ requestId}`. A 5xx never carries details or internals.
 - `ConfirmDialog` + `useConfirm()` confirm Clear and leaving with drafts
   (`useUnsavedDraftsGuard`). `beforeunload` is registered only while drafts
   exist.
-- Sign out (`authStore.requestLogout`) navigates to Login first, so a draft
+- Log out (`authStore.requestLogout`) navigates to Login first, so a draft
   page asks "Log out and discard?"; "Stay" keeps the drafts and the
   session. A forced logout (the session already ended) never asks.
 - While a save is in flight, navigation is held with an info toast, no
@@ -344,14 +351,22 @@ requestId}`. A 5xx never carries details or internals.
 **Register (Phase 6)** (#22–#26)
 
 - Keys (`useRegisterShortcuts`): F2 scan box, F4 selected line's quantity,
-  F8 discount, F9 Tender & Charge, Delete removes the focused line. F5 is
-  never bound. Keys are off while a modal is open (except the tender sheet).
+  F8 discount, F9 Tender & Charge. F5 is never bound. Keys are off while a
+  modal is open (except the tender sheet).
+- Delete (#85) removes the focused ticket line, or, from the scan box
+  while it is empty, the highlighted line (the one just scanned or
+  selected; else the last line). With text in the box (or mid-IME
+  composition) Delete edits the text. Both have the 5s Undo. Only the
+  first press counts (a held key's repeats are ignored). Never while the
+  tender sheet or a modal is on top, or from the discount, the Qty picker
+  or a quantity field.
 - `BaseModal` is a labelled `role=dialog`; `modal-stack.ts` owns Escape
   (topmost only), the focus trap, `inert` background, scroll lock and focus
   return. The scan box takes the focus back after clicks and modals.
 - While a receipt shows, a stray Enter does nothing and a scan starts the
   next sale with that item.
-- Void Ticket asks first. A removed line has a 5s Undo. Quantities are
+- Void Ticket asks first, with lines and units ("Void this ticket (2
+  lines, 5 items)?", singular for 1). A removed line has a 5s Undo. Quantities are
   editable. The Qty multiplier (or `12*`) applies to the next scan only and
   shows a badge.
 - Basket, discount and checkout attempt (`idempotencyKey`) are kept per
@@ -370,6 +385,16 @@ requestId}`. A 5xx never carries details or internals.
 - Denominations are unchanged. Shift In refuses a ₱0/empty float with an
   inline reason. `BillCountInput` counts on input, flags bad entries inline
   and reports them via `v-model:invalid`.
+- Toasts (#85): top-right in the admin layout; bottom-center in the seller
+  layout (`uiStore.toastPlacement`, set by `SellerLayout`). On the
+  register (`uiStore.registerToast`, set by `Sell.vue`;
+  `components/toast-placement.ts`) they sit at the bottom, centred on the
+  measured ticket column (sidebar included), above the sticky Tender
+  footer below `lg`, and above the Undo bar while it shows; while the
+  tender sheet is open they move to the top (over the inert page behind
+  the sheet). They never cover the Undo bar or Tender & Charge, nor the
+  scan box except behind an open sheet; they may cover the last ticket
+  rows, and a tall stack the sheet's header.
 - Touch layout (#26): below `lg` (64rem, `useIsLarge`) the register has a
   sticky footer (total + Tender) that opens the tender panel as a sheet on
   the modal stack (`useTenderSheet`); the basket scrolls on its own. From

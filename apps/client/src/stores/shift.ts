@@ -38,7 +38,7 @@ function clearLegacyShiftStorage(): void {
  */
 export class StaleResponseError extends Error {
     constructor() {
-        super('Signed out before the server answered');
+        super('Logged out before the server answered');
         this.name = 'StaleResponseError';
     }
 }
@@ -164,7 +164,7 @@ export const useShiftStore = defineStore('shift', () => {
             }
             throw error;
         }
-        // Signed out meanwhile: this report is not for whoever is here now.
+        // Logged out meanwhile: this report is not for whoever is here now.
         if (gen !== generation) throw new StaleResponseError();
         setShift(null);
         shiftOutOpen.value = false;
@@ -179,7 +179,7 @@ export const useShiftStore = defineStore('shift', () => {
     async function showLastReport(): Promise<boolean> {
         const gen = generation;
         const res = await api.get<LastClosedResponse>('/shifts/last-closed');
-        // Signed out meanwhile: never show one cashier's report to the next.
+        // Logged out meanwhile: never show one cashier's report to the next.
         if (gen !== generation) return false;
         zRead.value = res.data.report;
         return res.data.report !== null;

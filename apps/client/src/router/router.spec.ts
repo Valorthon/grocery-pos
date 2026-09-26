@@ -161,7 +161,7 @@ describe('dashboard access (issue #13)', () => {
     });
 
     it('sends a signed-in user who opens Login back to their home page', async () => {
-        // Not while signing out (guard.spec.ts): then Login must show.
+        // Not while logging out (guard.spec.ts): then Login must show.
         signIn([Role.Seller]);
         const router = await freshRouter();
 

@@ -2,7 +2,7 @@ import { isAxiosError } from 'axios';
 
 export const LOGIN_ERRORS = {
     /**
-     * Any rejected sign-in. The API answers an unknown user, a wrong
+     * Any rejected login. The API answers an unknown user, a wrong
      * password and a deactivated account with the same 401 (#12), and the
      * form must not tell them apart either.
      */
@@ -19,11 +19,11 @@ function waitPhrase(seconds: number): string {
 }
 
 /**
- * What the login form says when signing in fails (#21). Decided by the
+ * What the login form says when logging in fails (#21). Decided by the
  * status, never by the API's error code or text, so users never see a raw
  * code like `AUTH_001`:
  * - 400/401: the one generic credentials message. A 400 is input the API
- *   refused outright (e.g. too long), which cannot be a valid sign-in.
+ *   refused outright (e.g. too long), which cannot be a valid login.
  * - 429: too many attempts, with the wait from `details.retryAfterS` when
  *   the API gives one.
  * - anything else (no response, a timeout, a 5xx): the server is

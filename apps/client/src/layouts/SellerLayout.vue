@@ -51,7 +51,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+    watchEffect,
+} from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Menu } from '@lucide/vue';
 import Navigation from '@/components/User/Sales/Navigation.vue';
@@ -73,6 +80,17 @@ const drawer = ref(false);
 
 const isDashboard = computed(() => route.name === 'SellerDashboard');
 
+// Toasts sit bottom-center here, clear of the register's scan box and
+// ticket; on the register, above its sticky Tender footer (#85). The admin
+// layout keeps them top-right.
+watchEffect(() => {
+    uiStore.toastPlacement =
+        route.name === 'Sell' ? 'register' : 'bottom-center';
+});
+onBeforeUnmount(() => {
+    uiStore.toastPlacement = 'top-right';
+});
+
 /**
  * The register needs an open shift, and the server is the judge (issue #2):
  * once it has answered and there is none, the cashier is sent to the
@@ -85,7 +103,7 @@ function requireShift() {
     }
 }
 
-// On every sign-in and page load: resume the caller's open shift, if any.
+// On every login and page load: resume the caller's open shift, if any.
 onMounted(async () => {
     try {
         await shiftStore.fetchCurrent();

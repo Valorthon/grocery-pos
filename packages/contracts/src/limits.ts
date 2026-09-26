@@ -26,6 +26,13 @@ export const STRING_LIMITS = {
 export const NUMERIC_LIMITS = {
     /** Smallest price or cost, in centavos: free products are invalid. */
     PRICE_MIN: 1,
+    /**
+     * Smallest restock unit cost, in centavos (#85): ₱0 is allowed (a free
+     * sample, a supplier bonus), after the client asks "Record at ₱0
+     * cost?"; a negative cost never is. A restock's `totalCost` may then be
+     * ₱0 too.
+     */
+    UNIT_COST_MIN: 0,
     QUANTITY_MIN: 1,
     STOCK_MIN: 0,
     /** Smallest sale total, in centavos: a sale cannot total ₱0. */

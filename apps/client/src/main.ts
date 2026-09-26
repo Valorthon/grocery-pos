@@ -17,7 +17,7 @@ import './assets/main.css';
 const app = createApp(App);
 
 app.use(createPinia());
-// Start re-reading the signed-in user's roles right away; the router's
+// Start re-reading the logged-in user's roles right away; the router's
 // guard awaits the same request before the first navigation resolves.
 void useAuthStore().initSession();
 app.use(router);

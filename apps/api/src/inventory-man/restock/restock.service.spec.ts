@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { RestockService } from './restock.service';
-import { Restock } from './restock.schema';
+import { Restock, RestockSchema } from './restock.schema';
 import mongoose from 'mongoose';
 import { RestockDetails, RestockDetailsSchema } from './restock-details.schema';
 import { InventoryService } from '../inventory/inventory.service';
@@ -136,6 +136,47 @@ describe('RestockDetails schema quantity (issue #14)', () => {
     });
 });
 
+describe('Restock schemas at a ₱0 cost (#85)', () => {
+    const DetailsModel = mongoose.model(
+        `${RestockDetails.name}_zero_cost`,
+        RestockDetailsSchema,
+    );
+    const RestockModel = mongoose.model(
+        `${Restock.name}_zero_cost`,
+        RestockSchema,
+    );
+
+    function unitCostError(unitCost: number) {
+        const doc = new DetailsModel({
+            restock: new mongoose.Types.ObjectId(),
+            product: new mongoose.Types.ObjectId(),
+            quantity: 3,
+            unitCost,
+        });
+        return doc.validateSync()?.errors.unitCost?.kind;
+    }
+
+    function totalCostError(totalCost: number) {
+        const doc = new RestockModel({
+            description: 'free samples',
+            restockedBy: new mongoose.Types.ObjectId(),
+            totalCost,
+        });
+        return doc.validateSync()?.errors.totalCost?.kind;
+    }
+
+    it('stores a ₱0 unit cost and a ₱0 total', () => {
+        expect(unitCostError(0)).toBeUndefined();
+        expect(totalCostError(0)).toBeUndefined();
+    });
+
+    it('still refuses a negative or fractional cost', () => {
+        expect(unitCostError(-1)).toBe('min');
+        expect(totalCostError(-1)).toBe('min');
+        expect(unitCostError(0.5)).toBe('user defined');
+    });
+});
+
 describe('RestockService.restock (issue #30)', () => {
     const USER = {
         userId: '507f1f77bcf86cd799439099',
@@ -247,6 +288,43 @@ describe('RestockService.restock (issue #30)', () => {
                     },
                 },
             ],
+            expect.anything(),
+        );
+    });
+
+    it('counts a ₱0 line as nothing in the total and records its ₱0 cost (#85)', async () => {
+        inventoryRestock.mockResolvedValue([
+            { product: P1, quantity: 3, unitCost: 1999 },
+            { product: P2, quantity: 5, unitCost: 0 },
+        ]);
+        await service.restock(USER, {
+            description: 'delivery',
+            restockDetails: [
+                { product: P1, quantity: 3, unitCost: 1999 },
+                { product: P2, quantity: 5, unitCost: 0 },
+            ],
+        } as unknown as RestockDto);
+
+        expect(create).toHaveBeenCalledWith(
+            [expect.objectContaining({ totalCost: 5_997 })],
+            expect.anything(),
+        );
+        const [inserts] = bulkWrite.mock.calls[0] as [
+            { insertOne: { document: { unitCost: number } } }[],
+        ];
+        expect(inserts.map((i) => i.insertOne.document.unitCost)).toEqual([
+            1999, 0,
+        ]);
+    });
+
+    it('records a ₱0 total when every line is free (#85)', async () => {
+        await service.restock(USER, {
+            description: 'samples',
+            restockDetails: [{ product: P1, quantity: 4, unitCost: 0 }],
+        } as unknown as RestockDto);
+
+        expect(create).toHaveBeenCalledWith(
+            [expect.objectContaining({ totalCost: 0 })],
             expect.anything(),
         );
     });

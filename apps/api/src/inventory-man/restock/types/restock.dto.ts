@@ -88,11 +88,11 @@ export class RestockFields {
     @IsInt()
     quantity!: number;
 
-    /** Centavos. */
+    /** Centavos. ₱0 is accepted (the client confirms it first, #85). */
     @IsInt()
     @IsNotEmpty()
     @Type(() => Number)
-    @Min(NUMERIC_LIMITS.PRICE_MIN)
+    @Min(NUMERIC_LIMITS.UNIT_COST_MIN)
     @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     unitCost!: number;
 }

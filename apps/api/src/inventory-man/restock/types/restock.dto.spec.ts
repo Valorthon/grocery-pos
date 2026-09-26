@@ -25,8 +25,12 @@ describe('RestockFields.unitCost', () => {
         expect(error?.constraints).toHaveProperty('isInt');
     });
 
-    it('rejects a zero cost', async () => {
-        const [error] = await unitCostErrors(0);
+    it('accepts a ₱0 cost (the client confirms it first, #85)', async () => {
+        expect(await unitCostErrors(0)).toHaveLength(0);
+    });
+
+    it('rejects a negative cost', async () => {
+        const [error] = await unitCostErrors(-1);
 
         expect(error?.constraints).toHaveProperty('min');
     });

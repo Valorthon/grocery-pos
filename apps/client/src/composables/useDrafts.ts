@@ -71,7 +71,7 @@ export interface DraftGuardOptions {
  * Guards a draft page's unsaved rows (issue #19) while it has any:
  *
  * - leaving for another page asks first (in-app, through `confirm`), and
- *   so does Sign out (`requestLogout` navigates to Login before it ends
+ *   so does Log out (`requestLogout` navigates to Login before it ends
  *   the session): "Stay" keeps the drafts and the session;
  * - while a save is in flight nobody leaves, and nobody is asked: the
  *   save's own outcome decides (it goes to the list, or reports the error
@@ -83,7 +83,7 @@ export interface DraftGuardOptions {
  * A page empties its list once the drafts are saved or cleared, so its
  * own navigation after a save is never stopped. A forced end of the
  * session is never stopped either: the refresh that failed and the
- * router's "no session" redirect both leave the user signed out before
+ * router's "no session" redirect both leave the user logged out before
  * they navigate, the server session is already gone, and the drafts
  * could not be saved anyway.
  */

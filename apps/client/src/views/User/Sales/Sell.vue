@@ -6,6 +6,7 @@
     >
         <!-- LEFT: scan input + live ticket (+ the tender footer below lg) -->
         <div
+            ref="ticketColumn"
             class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-white"
         >
             <div class="p-4 sm:p-5 bg-white shrink-0 border-b border-slate-200">
@@ -928,6 +929,7 @@ import {
     shallowRef,
     useTemplateRef,
     watch,
+    watchEffect,
 } from 'vue';
 import {
     AlertCircle,
@@ -951,7 +953,7 @@ import api from '@/axios';
 import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import { apiErrorCode } from '@/utils/api-error';
-import { Color, useUIStore } from '@/stores/ui';
+import { Color, REGISTER_TOAST_IDLE, useUIStore } from '@/stores/ui';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
@@ -962,6 +964,7 @@ import {
     paymentLabel,
     previewSale,
 } from '@/components/User/Sales/checkout';
+import { voidTicketMessage } from '@/components/User/Sales/ticket';
 import {
     isRejectedSale,
     saleErrorMessage,
@@ -981,12 +984,14 @@ import {
 import { integerError } from '@/utils/rules';
 import { toSaleTicket } from '@/utils/payloads';
 import {
+    isTextEntry,
     REGISTER_KEYS,
     useRegisterShortcuts,
 } from '@/composables/useRegisterShortcuts';
 import { useStickyFocus } from '@/composables/useStickyFocus';
 import { useIsLarge } from '@/composables/useMediaQuery';
 import { useTenderSheet } from '@/composables/useTenderSheet';
+import { useElementBox } from '@/composables/useElementBox';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     DiscountType,
@@ -1315,14 +1320,35 @@ function removeLine(product: string) {
 }
 
 /**
- * Delete: only with the focus on a ticket line or one of its buttons, so
- * it never removes a line from the discount, the Qty picker or nowhere.
+ * What Delete removes (#23, #85): the line the focus is on (the line or
+ * one of its buttons, not its quantity field), or, from the empty scan
+ * box, the highlighted line (the one just scanned, `selectedLine`), else
+ * the last line. Nothing from the discount, the Qty picker, nowhere, a
+ * scan box with text (Delete edits it) or the tender sheet.
  */
-function removeSelected() {
-    const line =
-        document.activeElement?.closest<HTMLElement>('[data-ticket-line]');
+function deleteTarget(): string | null {
+    // The sheet's focus trap keeps the focus out of the ticket anyway.
+    if (cartStore.locked || tender.isTop()) return null;
+    const active = document.activeElement;
+    if (active && active === scanInput.value) {
+        if (searchQuery.value !== '') return null;
+        // What is highlighted is what goes: every scan selects its line,
+        // a repeat scan too (it merges in place). New lines are appended,
+        // so the last one is the fallback.
+        const items = cartStore.items;
+        const selected = items.find((i) => i.product === selectedLine.value);
+        return (selected ?? items[items.length - 1])?.product ?? null;
+    }
+    if (isTextEntry(active)) return null;
     // The line the focus is on, which focusing it also selected.
-    const product = line?.dataset.product;
+    return (
+        active?.closest<HTMLElement>('[data-ticket-line]')?.dataset.product ??
+        null
+    );
+}
+
+function removeSelected() {
+    const product = deleteTarget();
     if (product) removeLine(product);
 }
 
@@ -1361,6 +1387,22 @@ watch(
         }
     },
 );
+// ---- Toasts keep clear of the register (#85): centred on the ticket
+// column (it moves with the sidebar), at the top while the tender sheet is
+// open (its Tender & Charge is at the bottom), and above the Undo bar.
+
+const ticketColumn = useElementBox(useTemplateRef<HTMLElement>('ticketColumn'));
+watchEffect(() => {
+    uiStore.registerToast = {
+        sheetOpen: tender.isSheet.value,
+        undoShown: undo.value !== null,
+        column: ticketColumn.value,
+    };
+});
+onBeforeUnmount(() => {
+    uiStore.registerToast = { ...REGISTER_TOAST_IDLE };
+});
+
 // Another tab replaced the basket: an Undo from before would put a line
 // back into a ticket it no longer belongs to.
 watch(() => cartStore.remoteChanges, dismissUndo);
@@ -1655,10 +1697,12 @@ const {
 
 async function voidTicket() {
     if (cartStore.locked || !cartStore.items.length) return;
-    const units = cartStore.totalUnits;
     const ok = await confirm({
         title: 'Void Ticket',
-        message: `Void this ticket of ${units} ${units === 1 ? 'item' : 'items'}?`,
+        message: voidTicketMessage(
+            cartStore.items.length,
+            cartStore.totalUnits,
+        ),
         confirmLabel: 'Void Ticket',
         cancelLabel: 'Keep Ticket',
         danger: true,
@@ -1793,9 +1837,10 @@ async function backToTicket() {
 
 /**
  * The register's keys (issues #22, #23). Off while a modal is open; the
- * checkout answers Enter and Escape itself. Delete never fires in a text
- * field (it deletes text there): it removes the selected line when the
- * focus is on the line or one of its buttons.
+ * checkout answers Enter and Escape itself. Delete removes the line the
+ * focus is on (the line or one of its buttons), or the highlighted line
+ * from the empty scan box (#85); in any field with text it edits the
+ * text. A held Delete removes one line (its repeats are ignored).
  *
  * Below lg (#26) they also work while the tender sheet is on top (not
  * under a dialog): F2 and F4 close it and go to the ticket; F8 and F9
@@ -1838,7 +1883,12 @@ useRegisterShortcuts(
         },
         [REGISTER_KEYS.REMOVE_LINE]: {
             run: removeSelected,
-            whileTyping: false,
+            // The scan box is a text field; deleteTarget decides. Not
+            // mid-IME composition (the box reads empty then), and a held
+            // key removes one line, not the ticket (#85).
+            whileTyping: true,
+            once: true,
+            when: (event) => !event.isComposing && deleteTarget() !== null,
         },
     },
     { activeWhile: tender.isTop },

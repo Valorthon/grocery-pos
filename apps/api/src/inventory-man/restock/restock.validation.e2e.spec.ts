@@ -120,6 +120,30 @@ describe('Restock and inventory validation (e2e, issue #14)', () => {
         expect(messages).toEqual([`restockDetails.0.newProduct.${message}`]);
     });
 
+    it('accepts a ₱0 unit cost and passes it on as 0 (#85)', async () => {
+        const res = await restock({ product: PRODUCT, unitCost: 0 });
+
+        expect(res.status).toBe(201);
+        expect(restockService.restock).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                restockDetails: [
+                    expect.objectContaining({ product: PRODUCT, unitCost: 0 }),
+                ],
+            }),
+        );
+    });
+
+    it('still refuses a negative unit cost (#85)', async () => {
+        const messages = await refused(
+            await restock({ product: PRODUCT, unitCost: -1 }),
+        );
+
+        expect(messages).toEqual([
+            'restockDetails.0.unitCost must not be less than 0',
+        ]);
+    });
+
     it('lists out-of-stock rows for maxStock=0', async () => {
         const res = await harness.call(
             caller(Role.Restocker),

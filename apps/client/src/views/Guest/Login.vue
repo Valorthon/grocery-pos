@@ -40,12 +40,17 @@
                         Welcome Back!
                     </h1>
                     <p class="mt-1 text-slate-500 font-medium">
-                        Sign in to your account.
+                        Log in to your account.
                     </p>
                     <hr class="mt-4" />
                 </div>
 
                 <form @submit.prevent="handleLogin">
+                    <label
+                        for="login-username"
+                        class="block mb-1.5 text-sm font-semibold text-slate-700"
+                        >Username</label
+                    >
                     <div class="relative mb-3">
                         <span
                             class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -60,13 +65,17 @@
                             autocomplete="username"
                             autocapitalize="none"
                             spellcheck="false"
-                            aria-label="Username"
                             placeholder="Username"
                             :disabled="loading"
                             class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
                         />
                     </div>
 
+                    <label
+                        for="login-password"
+                        class="block mb-1.5 text-sm font-semibold text-slate-700"
+                        >Password</label
+                    >
                     <div class="relative mb-1">
                         <span
                             class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
@@ -79,7 +88,6 @@
                             :type="showPassword ? 'text' : 'password'"
                             name="password"
                             autocomplete="current-password"
-                            aria-label="Password"
                             placeholder="••••••••"
                             :disabled="loading"
                             class="w-full pl-11 pr-11 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
@@ -119,7 +127,7 @@
                         size="lg"
                         :loading="loading"
                     >
-                        Login
+                        Log in
                         <ArrowRight class="w-4 h-4" />
                     </BaseButton>
                 </form>
@@ -160,7 +168,7 @@ const handleLogin = async () => {
         await authStore.login(form.username, form.password);
         const home = homeRouteFor(authStore.user?.roles ?? []);
         if (home.name === 'Login') {
-            // No role opens any page: do not stay half signed in.
+            // No role opens any page: do not stay half logged in.
             await authStore.logout();
             errorMsg.value = 'This account has no access to the app.';
             return;

@@ -167,12 +167,12 @@ function homeFor(authStore: ReturnType<typeof useAuthStore>) {
     if (home.name === 'Login') {
         // A session whose roles open no page (none, or only legacy ones).
         // Drop the local user now, synchronously, so the redirect to Login
-        // is not bounced straight back here as "already signed in"; then
+        // is not bounced straight back here as "already logged in"; then
         // end the server session too (best-effort, as logout always is).
         authStore.user = null;
         localStorage.removeItem('user');
         void authStore.logout(
-            'Your account has no access. Please sign in again.',
+            'Your account has no access. Please log in again.',
         );
     }
 
@@ -202,7 +202,7 @@ router.beforeEach(async (to) => {
         return { name: 'Login' };
     }
 
-    // Signing out goes to Login before the session ends (requestLogout).
+    // Logging out goes to Login before the session ends (requestLogout).
     if (
         to.name === 'Login' &&
         isAuthenticated &&
