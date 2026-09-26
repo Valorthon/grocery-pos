@@ -408,11 +408,20 @@ requestId}`. A 5xx never carries details or internals.
   there; storage errors fall back to expanded). Below `lg` it is a modal
   drawer on the modal stack (menu button, backdrop, X, Escape, navigation
   close it); the register behind it is inert and its keys pause.
+- The admin `UserSidebar` is the same drawer below `lg`, and below `md`
+  the seller dashboard header's tabs are in a menu drawer (#89). All three
+  are `role=dialog` + `aria-modal` only while they are drawers, and use
+  `useModalDrawer`: the page behind is inert, the focus goes back to the
+  menu button, growing past the breakpoint closes the drawer, and an
+  unmount while open (e.g. Back swapping the layout) leaves nothing on the
+  stack and puts the focus on the new `<main>`, never `<body>`.
 - Every register button and field is at least 44px (`min-h-11 min-w-11` or
-  `w-11 h-11`), including the scan box's Clear, Enter / Scan and the Qty
-  select. `BaseModal`'s header close (×) is still 32px, in every dialog.
-  No text below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for
-  classes and CSS `font-size`.
+  `w-11 h-11`), including the scan box's Clear, Enter / Scan, the Qty
+  select and `BaseModal`'s header close (×) in every dialog (#89). The
+  scan box hides its F2 hint below `sm`, and its right padding fits its
+  buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear. No text
+  below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for classes
+  and CSS `font-size`.
 - No third-party runtime assets: Poppins (400–900) comes from
   `@fontsource/poppins`, and the login photo is
   `public/images/login-hero.jpg`, fetched by the client Docker build (best

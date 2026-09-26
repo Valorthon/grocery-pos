@@ -3,13 +3,17 @@
         class="w-full bg-white border-b border-slate-200 h-16 shrink-0 z-30 flex items-center justify-between px-4"
     >
         <div class="flex items-center gap-3">
+            <!-- Below lg the sidebar is a drawer (#89): its menu button. -->
             <button
                 type="button"
-                class="lg:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus-ring"
+                class="lg:hidden min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus-ring"
                 aria-label="Open navigation menu"
-                @click="emit('toggle-drawer')"
+                aria-controls="admin-sidebar"
+                :aria-expanded="drawerOpen"
+                data-testid="admin-menu"
+                @click="emit('open-drawer')"
             >
-                <Menu class="w-5 h-5" />
+                <Menu class="w-6 h-6" aria-hidden="true" />
             </button>
 
             <button
@@ -83,7 +87,8 @@ import {
 import { useAuthStore, Role } from '@/stores/auth';
 import UserProfileMenu from '@/components/User/Sales/UserProfileMenu.vue';
 
-const emit = defineEmits<{ (e: 'toggle-drawer'): void }>();
+defineProps<{ drawerOpen: boolean }>();
+const emit = defineEmits<{ (e: 'open-drawer'): void }>();
 
 const router = useRouter();
 const authStore = useAuthStore();
