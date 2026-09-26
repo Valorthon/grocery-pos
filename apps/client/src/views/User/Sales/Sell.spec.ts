@@ -2249,3 +2249,54 @@ describe('Sell at lg (#26)', () => {
         expect(panel.hasAttribute('role')).toBe(false);
     });
 });
+
+describe('Sell scan box on phones (#89)', () => {
+    function classes(el: Element) {
+        return el.className.split(/\s+/);
+    }
+
+    it('hides the F2 hint below sm and keeps it from sm up', async () => {
+        mount();
+        await flush();
+
+        const hint = document.querySelector('[data-testid="scan-key-hint"]')!;
+        expect(classes(hint)).toEqual(
+            expect.arrayContaining(['hidden', 'sm:inline-flex']),
+        );
+        expect(hint.querySelector('[data-key-hint]')?.textContent).toBe('F2');
+    });
+
+    it('gives the text the room the buttons leave, with and without Clear', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await flush();
+
+        // Empty: Enter / Scan (and the F2 hint from sm) on the right.
+        expect(classes(input())).toEqual(
+            expect.arrayContaining(['pr-32', 'sm:pr-48']),
+        );
+        expect(classes(input())).not.toContain('pr-48');
+        expect(classes(input())).not.toContain('sm:pr-52');
+
+        // With text, Clear shows too, and the padding makes room for it
+        // at every width: the cluster is ~203px from sm up (> pr-48).
+        await type('milk');
+        expect(classes(input())).toEqual(
+            expect.arrayContaining(['pr-43', 'sm:pr-52']),
+        );
+        expect(classes(input())).not.toContain('pr-32');
+        expect(classes(input())).not.toContain('sm:pr-48');
+        const clear = document.querySelector(
+            'button[aria-label="Clear search"]',
+        )!;
+        const scan = [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Enter / Scan'),
+        )!;
+        const qty = document.querySelector('select[aria-label^="Quantity"]')!;
+        for (const control of [clear, scan, qty]) {
+            expect(classes(control)).toEqual(
+                expect.arrayContaining(['min-h-11', 'min-w-11']),
+            );
+        }
+    });
+});
