@@ -223,6 +223,9 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(sidebar().textContent).toContain('Register (Sale)');
             expect(sidebar().className).toContain('lg:w-64');
             expect(sidebar().hasAttribute('inert')).toBe(false);
+            // A rail in the page, not a dialog (#89).
+            expect(sidebar().hasAttribute('role')).toBe(false);
+            expect(sidebar().hasAttribute('aria-modal')).toBe(false);
             expect(
                 document.querySelector('[data-testid="sidebar-collapse"]'),
             ).not.toBeNull();
@@ -297,6 +300,12 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(sidebar().className).toContain('translate-x-0');
             expect(backdrop()).not.toBeNull();
             expect(menuButton().getAttribute('aria-expanded')).toBe('true');
+            // A modal dialog while it is a drawer (#89).
+            expect(sidebar().getAttribute('role')).toBe('dialog');
+            expect(sidebar().getAttribute('aria-modal')).toBe('true');
+            expect(sidebar().getAttribute('aria-label')).toBe(
+                'Navigation menu',
+            );
             // Labels are shown in the drawer, and the focus moves into it.
             expect(sidebar().textContent).toContain('Register (Sale)');
             expect(sidebar().contains(document.activeElement)).toBe(true);
@@ -439,6 +448,28 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(anyModalOpen.value).toBe(false);
             expect(document.querySelector('[inert]')).toBeNull();
             expect(document.body.style.overflow).toBe('');
+        });
+
+        it('sends the focus to <main> when Back swaps the layout with it open (#89)', async () => {
+            await mountAt('/seller');
+            await router.push('/seller/register');
+            await flush();
+            menuButton().focus();
+            menuButton().click();
+            await flush();
+            expect(anyModalOpen.value).toBe(true);
+
+            // The dashboard has no sidebar: it and its menu button go.
+            router.back();
+            await flush();
+
+            expect(router.currentRoute.value.name).toBe('SellerDashboard');
+            expect(
+                document.querySelector('[data-testid="seller-sidebar"]'),
+            ).toBeNull();
+            expect(anyModalOpen.value).toBe(false);
+            expect(document.querySelector('[inert]')).toBeNull();
+            expect(document.activeElement?.tagName).toBe('MAIN');
         });
     });
 });
@@ -629,6 +660,27 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             expect(anyModalOpen.value).toBe(false);
             expect(document.querySelector('[inert]')).toBeNull();
             expect(document.body.style.overflow).toBe('');
+        });
+
+        it('sends the focus to <main>, not <body>, when Back leaves the dashboard with it open', async () => {
+            await mountAt('/seller/register');
+            await router.push('/seller');
+            await flush();
+            menuButton().focus();
+            await open();
+
+            // The register has no dashboard header: it and its menu go.
+            router.back();
+            await flush();
+
+            expect(router.currentRoute.value.name).toBe('Sell');
+            expect(drawer()).toBeNull();
+            expect(
+                document.querySelector('[data-testid="seller-nav-menu"]'),
+            ).toBeNull();
+            expect(anyModalOpen.value).toBe(false);
+            expect(appRoot().hasAttribute('inert')).toBe(false);
+            expect(document.activeElement?.tagName).toBe('MAIN');
         });
     });
 });

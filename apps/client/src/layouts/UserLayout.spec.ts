@@ -59,6 +59,13 @@ async function mountAt(path: string) {
                     component: Stub,
                 })),
             },
+            // Another layout (e.g. the seller's), reached by Back.
+            {
+                path: '/elsewhere',
+                name: 'Elsewhere',
+                // A plain options object: the file's one defineComponent is Stub.
+                component: { render: () => h('main', 'Elsewhere') },
+            },
         ],
     });
     await router.push(path);
@@ -149,6 +156,10 @@ describe('UserLayout sidebar at lg and up', () => {
         expect(sidebar().hasAttribute('inert')).toBe(false);
         expect(sidebar().className).toContain('lg:w-64');
         expect(sidebar().textContent).toContain('Product List');
+        // A rail in the page, not a dialog.
+        expect(sidebar().hasAttribute('role')).toBe(false);
+        expect(sidebar().hasAttribute('aria-modal')).toBe(false);
+        expect(sidebar().hasAttribute('aria-label')).toBe(false);
         expect(
             document.querySelector('[data-testid="admin-sidebar-close"]'),
         ).toBeNull();
@@ -199,6 +210,9 @@ describe('UserLayout sidebar below lg: a drawer (#89)', () => {
 
         expect(menuButton().getAttribute('aria-expanded')).toBe('true');
         expect(sidebar().hasAttribute('inert')).toBe(false);
+        expect(sidebar().getAttribute('role')).toBe('dialog');
+        expect(sidebar().getAttribute('aria-modal')).toBe('true');
+        expect(sidebar().getAttribute('aria-label')).toBe('Navigation menu');
         expect(sidebar().className).toContain('translate-x-0');
         expect(backdrop()).not.toBeNull();
         expect(anyModalOpen.value).toBe(true);
@@ -343,5 +357,28 @@ describe('UserLayout sidebar below lg: a drawer (#89)', () => {
         expect(anyModalOpen.value).toBe(false);
         expect(document.querySelector('[inert]')).toBeNull();
         expect(document.body.style.overflow).toBe('');
+    });
+
+    it('sends the focus to <main>, not <body>, when Back leaves the layout with it open', async () => {
+        await mountAt('/elsewhere');
+        await router.push('/admin/products');
+        await flush();
+        menuButton().focus();
+        menuButton().click();
+        await flush();
+        expect(anyModalOpen.value).toBe(true);
+
+        router.back();
+        await flush();
+
+        expect(router.currentRoute.value.name).toBe('Elsewhere');
+        expect(
+            document.querySelector('[data-testid="admin-sidebar"]'),
+        ).toBeNull();
+        expect(anyModalOpen.value).toBe(false);
+        expect(document.querySelector('[inert]')).toBeNull();
+        expect(document.body.style.overflow).toBe('');
+        expect(document.activeElement?.tagName).toBe('MAIN');
+        expect(document.activeElement?.textContent).toBe('Elsewhere');
     });
 });

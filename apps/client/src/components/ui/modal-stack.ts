@@ -222,7 +222,7 @@ export function removeModal(entry: ModalEntry): void {
 }
 
 /** The page's `<main>` landmark, else its first focusable element. */
-function focusPage(): void {
+export function focusPage(): void {
     const main = document.querySelector<HTMLElement>('main');
     if (main && !main.closest('[inert]')) {
         if (!main.hasAttribute('tabindex')) main.setAttribute('tabindex', '-1');

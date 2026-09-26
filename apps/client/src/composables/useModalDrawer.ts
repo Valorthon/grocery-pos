@@ -1,6 +1,8 @@
-import { onBeforeUnmount, type Ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, type Ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
+    anyModalOpen,
+    focusPage,
     focusables,
     type ModalEntry,
     pushModal,
@@ -42,6 +44,9 @@ export function useModalDrawer(options: ModalDrawerOptions): void {
         opener: null,
     };
 
+    /** Pushed and not yet removed (a close's removal may still be due). */
+    let onStack = false;
+
     function menuButton(): HTMLElement | null {
         return document.querySelector<HTMLElement>(
             `[aria-controls="${options.id}"]`,
@@ -52,6 +57,7 @@ export function useModalDrawer(options: ModalDrawerOptions): void {
         options.open,
         (open) => {
             if (!open) {
+                onStack = false;
                 removeModal(entry);
                 return;
             }
@@ -61,6 +67,7 @@ export function useModalDrawer(options: ModalDrawerOptions): void {
                     ? active
                     : menuButton();
             pushModal(entry);
+            onStack = true;
             const nav = options.panel()?.querySelector<HTMLElement>('nav');
             // The focus moves to the drawer's first link.
             if (nav) focusables(nav)[0]?.focus();
@@ -70,5 +77,34 @@ export function useModalDrawer(options: ModalDrawerOptions): void {
 
     watch(() => route.fullPath, options.close);
 
-    onBeforeUnmount(() => removeModal(entry));
+    // Unmounted while open (e.g. the browser's Back button swapped the
+    // layout): the menu button usually goes with it, so the focus must not
+    // be handed to it now and then lost to <body> as it is removed. The
+    // stack is cleaned up at once; once the DOM has settled, the focus goes
+    // to the menu button if it survived, else to the page's <main>.
+    onBeforeUnmount(() => {
+        if (!onStack) return;
+        onStack = false;
+        const opener = entry.opener;
+        entry.opener = null;
+        removeModal(entry);
+        void nextTick(() => {
+            const active = document.activeElement;
+            // Another modal on top owns the focus.
+            if (anyModalOpen.value) return;
+            if (
+                active &&
+                active !== document.body &&
+                active.isConnected &&
+                !active.closest('[inert]')
+            ) {
+                return;
+            }
+            if (opener?.isConnected && !opener.closest('[inert]')) {
+                opener.focus({ preventScroll: true });
+            } else {
+                focusPage();
+            }
+        });
+    });
 }
