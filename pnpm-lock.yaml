@@ -60,6 +60,9 @@ importers:
       argon2:
         specifier: ^0.44.0
         version: 0.44.0
+      body-parser:
+        specifier: ^2.3.0
+        version: 2.3.0
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -97,6 +100,9 @@ importers:
       '@nestjs/testing':
         specifier: ^11.2.6
         version: 11.2.6(@nestjs/common@11.2.6(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.6)(@nestjs/platform-express@11.2.6)
+      '@types/body-parser':
+        specifier: ^1.19.6
+        version: 1.19.6
       '@types/cookie-parser':
         specifier: ^1.4.10
         version: 1.4.10(@types/express@5.0.6)

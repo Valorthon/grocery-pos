@@ -28,6 +28,7 @@ import { JWTAuthGuard } from '../../auth/guards/jwt.guard';
 import { RoleGuard } from '../../auth/guards/role.guard';
 import { JWTStrategy } from '../../auth/jwt.strategy';
 import { Role } from '../../auth/types';
+import { useBodyParsers } from '../body-parsers';
 import { GlobalFilter } from '../global/global.filter';
 import { createValidationPipe } from '../pipes/validation.pipe';
 import { RequestIdModule } from '../request-id/request-id';
@@ -106,7 +107,11 @@ export async function bootAccessHarness(
         ],
     }).compile();
 
-    const app = moduleRef.createNestApplication({ logger: false });
+    const app = moduleRef.createNestApplication({
+        logger: false,
+        bodyParser: false,
+    });
+    useBodyParsers(app);
     app.useGlobalPipes(createValidationPipe());
     app.use(cookieParser(COOKIE_SECRET));
     app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });

@@ -182,9 +182,12 @@ describe('Error responses (e2e, issue #8)', () => {
         );
 
         expect(res.status).toBe(400);
-        expect(((await res.json()) as { error: string }).error).toBe(
-            ErrorCode.VALIDATION_INVALID_INPUT,
-        );
+        // A fixed message: JSON.parse's own quotes the body (#94).
+        expect(await res.json()).toMatchObject({
+            error: ErrorCode.VALIDATION_INVALID_INPUT,
+            message: 'Malformed request body',
+            details: null,
+        });
         expect(errorLog).not.toHaveBeenCalled();
     });
 

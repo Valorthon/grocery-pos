@@ -95,7 +95,7 @@ Runtime variables:
 
 `apps/client/nginx.conf.template` sends on every response:
 
-- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' <API origin>; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`.
+- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' <API origin>; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-to csp-endpoint; report-uri <API origin>/v1/csp-report`.
     - No inline or eval'd script. The client sets `zod.config({ jitless: true })`
       so zod does not probe `new Function`.
     - No inline styles. Vue applies `:style` bindings through the CSSOM, which
@@ -103,6 +103,12 @@ Runtime variables:
       class or a `<style>` block (`layout-drift.spec.ts` enforces it).
     - `img-src data:` covers the small SVGs Vite inlines (the logo). Fonts
       (`@fontsource/poppins`) and the login photo are same-origin.
+    - Violations are reported to the API (see
+      [CSP violation reports](#csp-violation-reports)).
+- `Reporting-Endpoints: csp-endpoint="<API origin>/v1/csp-report"`, the
+  endpoint the CSP's `report-to` names.
+- `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`:
+  the POS uses none of these, so nothing on the page may ask for them.
 - `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
   `Referrer-Policy: strict-origin-when-cross-origin`.
 - `Strict-Transport-Security: max-age=31536000`, without `includeSubDomains`:
@@ -117,6 +123,41 @@ All `add_header` lines sit at server level. nginx drops every inherited
 headers; per-path values go through a `map`.
 
 The API sets its own headers with helmet.
+
+### CSP violation reports
+
+Browsers report CSP violations to the API's `POST /v1/csp-report`
+(`apps/api/src/csp-report`), which logs one warn line per report and
+answers 204. No third party receives them.
+
+- Two formats: Chromium uses `report-to` (the Reporting API,
+  `application/reports+json`, an array, batched and sent a little later);
+  browsers without it use `report-uri` (`application/csp-report`, one report
+  per request). A browser that supports `report-to` ignores `report-uri`.
+- A line reads
+  `[<request id>] CSP violation: directive=… blocked=… document=…`.
+  Query strings, fragments and user info are stripped from the URIs; the
+  rest of the report (samples, the policy), headers and cookies are never
+  logged. At most 5 reports of one request are logged, the rest counted.
+- The route is public, rate-limited to 60 requests a minute per IP, and
+  parses only those two media types, capped at 16KB (413 above), on that
+  route alone. Malformed JSON or a body that is not a report is a 400 with
+  a fixed message; nothing is echoed back. Any other media type is a 415.
+- On every route, a body the parsers refuse (too large, malformed, an
+  unsupported charset or `Content-Encoding`, ...) gets a fixed message per
+  error type, and only the type is logged: body-parser's own messages
+  quote the request's headers or body.
+- The path's `/v1` is the API's URI version; `<API origin>` is the same
+  `API_ORIGIN` as `connect-src`. Reports are not subject to `connect-src`
+  (their fetch destination is `report`), so it needs no extra source.
+- CORS: `report-uri` reports are sent `no-cors` and need nothing. Chromium
+  sends a `report-to` upload cross-origin with a CORS preflight (`OPTIONS`,
+  `Access-Control-Request-Headers: content-type`) and no cookies, and drops
+  the report unless the answer allows the client's origin. The API's CORS
+  config (`FRONTEND_URL`) already does, so **`FRONTEND_URL` must be exactly
+  the client's origin** or `report-to` reports are lost (and so is the app).
+  Chromium only uploads `report-to` reports to an `https` endpoint (it
+  queued them forever for `http://localhost` in testing).
 
 ## APP_ENV and NODE_ENV
 

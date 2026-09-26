@@ -73,8 +73,12 @@ function safeString(value: unknown): string {
  * - `HttpException` (Nest, guards, `ValidationPipe`): its real status and a
  *   matching code (`codeForStatus`). The ValidationPipe's message list is
  *   joined into `message` and kept in `details.messages`.
- * - An exposed `http-errors` 4xx (body-parser's 413, malformed JSON): its
- *   status, a matching code and its message.
+ * - An exposed `http-errors` 4xx (body-parser's 413, malformed JSON, a bad
+ *   charset or Content-Encoding): its status, a matching code and a fixed
+ *   message for its `type` (`BODY_ERROR_MESSAGES`), never its own message,
+ *   which can quote request headers or the body (#94). main.ts installs
+ *   the parsers through `body-parsers.ts`, so a JSON syntax error reaches
+ *   this filter as such rather than as Nest's BadRequestException.
  * - Anything else: 500 INTERNAL_ERROR with a generic message.
  *
  * Every body carries the request's correlation id. A 5xx is logged as an
@@ -213,6 +217,18 @@ export class GlobalFilter implements ExceptionFilter {
             return;
         }
 
+        // A body-parser error: its type only. Its own message can quote
+        // request headers or the body.
+        const httpError = exposedClientError(exception);
+        if (
+            httpError &&
+            !(exception instanceof AppError) &&
+            !(exception instanceof HttpException)
+        ) {
+            this.logger.warn(`${line}: body-parser ${httpError.type}`);
+            return;
+        }
+
         this.logger.warn(`${line}: ${body.message}`);
     }
 }
@@ -230,21 +246,53 @@ function isClassifiedDbError(exception: unknown): boolean {
 }
 
 /**
+ * The fixed client message for each `type` body-parser and raw-body give
+ * their errors. Their own messages can quote the request: `unsupported
+ * content encoding "<Content-Encoding>"`, `unsupported charset "<charset>"`,
+ * or a JSON syntax error quoting the body. So the message sent and logged
+ * is chosen by `type` (#94), never taken from the error.
+ */
+export const BODY_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+    'entity.too.large': 'request entity too large',
+    'entity.parse.failed': 'Malformed request body',
+    'entity.verify.failed': 'Request body verification failed',
+    'charset.unsupported': 'Unsupported charset',
+    'encoding.unsupported': 'Unsupported content encoding',
+    'request.aborted': 'Request aborted',
+    'request.size.invalid': 'Request size did not match its content length',
+    'parameters.too.many': 'Too many parameters',
+    'querystring.parse.rangeError': 'Too deeply nested parameters',
+};
+
+/** For an exposed http error of no known `type`. */
+export const BODY_ERROR_FALLBACK_MESSAGE = 'Request body refused';
+
+/**
  * An `http-errors` client error, as body-parser raises it (413 entity too
- * large, 400 malformed JSON, 415 unsupported charset): `expose` is true
- * only when its message is meant for the client.
+ * large, 400 malformed JSON, 415 unsupported charset or encoding): `expose`
+ * is true for a client error. Its status is kept; its message is the fixed
+ * one for its `type`, and `type` is what gets logged.
  */
 function exposedClientError(
     exception: unknown,
-): { status: number; message: string } | null {
+): { status: number; message: string; type: string } | null {
     if (!(exception instanceof Error)) return null;
     const e = exception as Error & {
         expose?: unknown;
         status?: unknown;
         statusCode?: unknown;
+        type?: unknown;
     };
     const status = Number(e.status ?? e.statusCode);
     if (e.expose !== true || !Number.isInteger(status)) return null;
     if (status < 400 || status >= 500) return null;
-    return { status, message: e.message };
+    const type =
+        typeof e.type === 'string' && Object.hasOwn(BODY_ERROR_MESSAGES, e.type)
+            ? e.type
+            : 'unknown';
+    return {
+        status,
+        type,
+        message: BODY_ERROR_MESSAGES[type] ?? BODY_ERROR_FALLBACK_MESSAGE,
+    };
 }
