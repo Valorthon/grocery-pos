@@ -86,8 +86,9 @@ Rules:
   in the DB suite, `apps/api/test/db/*.db-spec.ts` (#30): the real `AppModule`
   over HTTP (`test/db/db-app.ts`), one throwaway `gpos_dbtest_*` database per
   file. Run it with `pnpm --filter grocery-pos-api test:db`, with
-  `MONGO_URI_TEST` pointing at the docker compose MongoDB (README). It is not part of `pnpm -r test`; CI's `db` job runs it on every PR
-  and push. A cloud session may be able to start `dockerd` and run
+  `MONGO_URI_TEST` pointing at the docker compose MongoDB (README). It is
+  not part of `pnpm -r test`; CI's `db` job runs it on every PR and push. A
+  cloud session may be able to start `dockerd` and run
   `mirror.gcr.io/library/mongo:7` (Docker Hub rate-limits) with the repo's
   `mongo-init.sh`; if it can't, say so in the PR and rely on the `db` job.
 
