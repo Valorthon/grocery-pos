@@ -62,7 +62,19 @@ http {
         # applies :style bindings through the CSSOM, which CSP allows, and
         # templates carry no static style attributes (layout-drift.spec.ts).
         # data: images are Vite's inlined small SVGs (the logo).
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${API_ORIGIN}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" always;
+        #
+        # Violations are reported to the API's POST /v1/csp-report, which
+        # logs one line per report (#94): report-to (Reporting API, via the
+        # csp-endpoint named in Reporting-Endpoints) where supported, and
+        # report-uri for the browsers that ignore report-to. Report
+        # requests are not subject to connect-src (their fetch destination
+        # is "report"), and the API origin is in it anyway. The /v1 is the
+        # API's URI version (main.ts).
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ${API_ORIGIN}; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-to csp-endpoint; report-uri ${API_ORIGIN}/v1/csp-report" always;
+        add_header Reporting-Endpoints "csp-endpoint=\"${API_ORIGIN}/v1/csp-report\"" always;
+        # The POS uses none of these powerful features; nothing on the page
+        # (or anything injected into it) may ask for them.
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-Frame-Options "DENY" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;

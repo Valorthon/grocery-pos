@@ -25,6 +25,7 @@ import {
 } from '@grocery-pos/contracts';
 import { AppModule } from '../../src/app.module';
 import { Role } from '../../src/auth/types';
+import { useBodyParsers } from '../../src/common/body-parsers';
 import { createValidationPipe } from '../../src/common/pipes/validation.pipe';
 import { DB_PREFIX, uriWithDb } from './db-uri';
 
@@ -102,7 +103,11 @@ export async function bootDbApp(): Promise<DbApp> {
     const moduleRef = await Test.createTestingModule({
         imports: [AppModule],
     }).compile();
-    const app = moduleRef.createNestApplication({ logger: ['error'] });
+    const app = moduleRef.createNestApplication({
+        logger: ['error'],
+        bodyParser: false,
+    });
+    useBodyParsers(app);
     app.useGlobalPipes(createValidationPipe());
     app.use(cookieParser(COOKIE_SECRET));
     app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });

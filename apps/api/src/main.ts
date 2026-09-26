@@ -8,12 +8,16 @@ import helmet from 'helmet';
 import { createValidationPipe } from './common/pipes/validation.pipe';
 import { corsOptions } from './common/cors';
 import { isDeployedEnv } from './common/typed-config/app-env';
+import { useBodyParsers } from './common/body-parsers';
 
 async function bootstrap() {
     const logger = new Logger('Bootstrap');
 
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
         bufferLogs: true,
+        // Installed below by useBodyParsers, so a parser's error never
+        // carries the request's headers or body into a response or log.
+        bodyParser: false,
     });
     app.use(helmet());
 
@@ -30,6 +34,9 @@ async function bootstrap() {
     });
 
     app.enableCors(corsOptions(config.get('FRONTEND_URL')));
+    // After CORS, where Nest puts its own parsers: a refused body still
+    // gets the CORS headers, so the client can read the error.
+    useBodyParsers(app);
 
     // Deployed (APP_ENV prod/stage on Railway), the API sits behind exactly one
     // reverse proxy, which appends the real client address to

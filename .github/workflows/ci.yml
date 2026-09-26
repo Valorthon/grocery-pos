@@ -232,3 +232,7 @@ jobs:
                   echo "$headers" | grep -qi '^x-content-type-options: nosniff'
                   echo "$headers" | grep -qi '^strict-transport-security: max-age=31536000'
                   echo "$headers" | grep -qi '^cache-control: no-cache'
+                  # CSP reports go to the API (#94).
+                  echo "$headers" | grep -qi "^content-security-policy: .*; report-to csp-endpoint; report-uri https://api.ci-test.com/v1/csp-report"
+                  echo "$headers" | grep -qi '^reporting-endpoints: csp-endpoint="https://api.ci-test.com/v1/csp-report"'
+                  echo "$headers" | grep -qi '^permissions-policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()'

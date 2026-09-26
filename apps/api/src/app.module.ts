@@ -22,6 +22,7 @@ import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RateLimitModule } from './auth/rate-limit/rate-limit';
 import { RequestIdModule } from './common/request-id/request-id';
+import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
     imports: [
@@ -49,6 +50,7 @@ import { RequestIdModule } from './common/request-id/request-id';
         EanCounterModule,
         HealthModule,
         DashboardModule,
+        CspReportModule,
     ],
     controllers: [],
     providers: [
