@@ -215,6 +215,48 @@ describe('UserLayout app bar targets (#107)', () => {
             ).toContain('min-h-11');
         });
     }
+
+    it('tightens its spacing below sm only, so it fits at 320px', async () => {
+        media = stubMatchMedia(false);
+        await mountAt('/admin/products');
+        const header = document.querySelector('header')!;
+        const [left, right] = [...header.children];
+
+        expect(classes(header)).toEqual(
+            expect.arrayContaining(['px-2', 'sm:px-4']),
+        );
+        expect(classes(left)).toEqual(
+            expect.arrayContaining(['gap-2', 'sm:gap-3']),
+        );
+        expect(classes(right)).toEqual(
+            expect.arrayContaining(['gap-1', 'sm:gap-2']),
+        );
+        expect(
+            classes(header.querySelector('[data-dropdown-trigger]')),
+        ).toEqual(
+            expect.arrayContaining([
+                'px-1.5',
+                'sm:px-2.5',
+                'gap-1',
+                'sm:gap-2',
+            ]),
+        );
+    });
+
+    it('gives the rail account button 44px when collapsed', async () => {
+        media = stubMatchMedia(true);
+        await mountAt('/admin/products');
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="admin-sidebar-collapse"]',
+            )!
+            .click();
+        await flush();
+
+        expect(
+            classes(sidebar().querySelector('[data-dropdown-trigger]')),
+        ).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+    });
 });
 
 describe('UserLayout sidebar below lg: a drawer (#89)', () => {

@@ -244,6 +244,12 @@ describe('SellerLayout sidebar (issue #26)', () => {
 
             expect(sidebar().className).toContain('lg:w-20');
             expect(sidebar().textContent).not.toContain('Register (Sale)');
+            // The rail's account button is a 44px target too (#107).
+            expect(
+                sidebar()
+                    .querySelector('[data-dropdown-trigger]')!
+                    .className.split(/\s+/),
+            ).toEqual(expect.arrayContaining(['w-11', 'h-11']));
             expect(localStorage.getItem('grocery_pos_sidebar_v1:u1')).toBe(
                 'collapsed',
             );

@@ -1,8 +1,8 @@
 <template>
     <header
-        class="w-full bg-white border-b border-slate-200 h-16 shrink-0 z-30 flex items-center justify-between px-4"
+        class="w-full bg-white border-b border-slate-200 h-16 shrink-0 z-30 flex items-center justify-between px-2 sm:px-4"
     >
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 sm:gap-3">
             <!-- Below lg the sidebar is a drawer (#89): its menu button. -->
             <button
                 type="button"
@@ -35,7 +35,7 @@
             </button>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1 sm:gap-2">
             <button
                 v-if="canAddProduct"
                 type="button"

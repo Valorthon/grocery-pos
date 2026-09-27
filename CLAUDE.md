@@ -445,8 +445,9 @@ requestId}`. A 5xx never carries details or internals.
   `w-11 h-11`), including the scan box's Clear, Enter / Scan, the Qty
   select and `BaseModal`'s header close (×) in every dialog (#89); so
   are the admin app bar's Add Product/Restock/Adjust, the `UserProfileMenu`
-  bar trigger, the seller dashboard tabs, and the Cash In/Drop quick
-  amounts (two columns below `sm`, four from `sm`) (#107). The
+  bar and rail (`icon`) triggers, the seller dashboard tabs, and the Cash
+  In/Drop quick amounts (two columns below `sm`, four from `sm`) (#107).
+  Below `sm` the admin bar tightens its padding and gaps to fit at 320px. The
   scan box hides its F2 hint below `sm`, and its right padding fits its
   buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear. No text
   below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for classes
