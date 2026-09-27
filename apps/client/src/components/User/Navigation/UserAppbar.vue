@@ -39,7 +39,7 @@
             <button
                 v-if="canAddProduct"
                 type="button"
-                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                class="w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
                 title="Add Product"
                 aria-label="Add Product"
                 @click="router.push({ name: 'Products/Add' })"
@@ -50,7 +50,7 @@
             <button
                 v-if="canRestock"
                 type="button"
-                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                class="w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
                 title="Restock Inventory"
                 aria-label="Restock Inventory"
                 @click="router.push({ name: 'Restocks/Add' })"
@@ -61,7 +61,7 @@
             <button
                 v-if="canAdjust"
                 type="button"
-                class="p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                class="w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
                 title="Adjust Stock"
                 aria-label="Adjust Stock"
                 @click="router.push({ name: 'Adjustments/Add' })"

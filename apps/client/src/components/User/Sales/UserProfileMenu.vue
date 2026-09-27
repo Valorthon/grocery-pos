@@ -53,7 +53,7 @@
             <button
                 v-else
                 v-bind="trigger"
-                class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all focus-ring"
+                class="min-h-11 flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all focus-ring"
             >
                 <span
                     class="w-7 h-7 rounded-full bg-slate-900 text-white text-xs font-extrabold flex items-center justify-center"

@@ -443,7 +443,10 @@ requestId}`. A 5xx never carries details or internals.
   stack and puts the focus on the new `<main>`, never `<body>`.
 - Every register button and field is at least 44px (`min-h-11 min-w-11` or
   `w-11 h-11`), including the scan box's Clear, Enter / Scan, the Qty
-  select and `BaseModal`'s header close (×) in every dialog (#89). The
+  select and `BaseModal`'s header close (×) in every dialog (#89); so
+  are the admin app bar's Add Product/Restock/Adjust, the `UserProfileMenu`
+  bar trigger, the seller dashboard tabs, and the Cash In/Drop quick
+  amounts (two columns below `sm`, four from `sm`) (#107). The
   scan box hides its F2 hint below `sm`, and its right padding fits its
   buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear. No text
   below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for classes

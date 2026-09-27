@@ -56,12 +56,21 @@
                     {{ errors.amount }}
                 </p>
 
-                <div class="flex items-center gap-1.5 mt-2">
+                <!--
+                    Two columns below sm, so every chip is whole at 360px;
+                    four in a row from sm up (#107).
+                -->
+                <div
+                    class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-2"
+                    role="group"
+                    aria-label="Quick amounts"
+                    data-testid="drawer-quick-amounts"
+                >
                     <button
                         v-for="q in quickAmounts"
                         :key="q"
                         type="button"
-                        class="px-2.5 py-1 rounded-lg border font-bold text-xs transition-colors active:scale-[0.98]"
+                        class="min-h-11 min-w-11 px-2.5 py-1 rounded-lg border font-bold text-xs transition-colors active:scale-[0.98] focus-ring"
                         :class="
                             amountCentavos === q
                                 ? 'bg-slate-900 text-white border-slate-900'

@@ -185,6 +185,38 @@ describe('UserLayout sidebar at lg and up', () => {
     });
 });
 
+describe('UserLayout app bar targets (#107)', () => {
+    function classes(el: Element | null | undefined): string[] {
+        expect(el).toBeTruthy();
+        return el!.className.split(/\s+/);
+    }
+
+    for (const large of [false, true]) {
+        it(`makes every app bar button at least 44px ${large ? 'from' : 'below'} lg`, async () => {
+            media = stubMatchMedia(large);
+            await mountAt('/admin/products');
+            const header = document.querySelector('header')!;
+
+            for (const label of [
+                'Add Product',
+                'Restock Inventory',
+                'Adjust Stock',
+            ]) {
+                const button = header.querySelector(
+                    `button[aria-label="${label}"]`,
+                );
+                expect(classes(button)).toEqual(
+                    expect.arrayContaining(['w-11', 'h-11']),
+                );
+                expect(classes(button)).not.toContain('p-2');
+            }
+            expect(
+                classes(header.querySelector('[data-dropdown-trigger]')),
+            ).toContain('min-h-11');
+        });
+    }
+});
+
 describe('UserLayout sidebar below lg: a drawer (#89)', () => {
     beforeEach(() => {
         media = stubMatchMedia(false);

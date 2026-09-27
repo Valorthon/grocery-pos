@@ -43,7 +43,7 @@
                 >
                     <button
                         type="button"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
+                        class="min-h-11 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
                         :class="
                             isDashboard
                                 ? 'bg-slate-100 text-slate-900'
@@ -57,7 +57,7 @@
 
                     <button
                         type="button"
-                        class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
+                        class="min-h-11 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
                         :class="
                             isOrders
                                 ? 'bg-slate-100 text-slate-900'

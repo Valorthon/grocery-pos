@@ -529,6 +529,28 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             );
             expect(tabs.textContent).toContain('Orders & Sales');
         });
+
+        it('makes the tabs and the account button at least 44px (#107)', async () => {
+            media = stubMatchMedia(true);
+            await mountAt('/seller');
+
+            const tabs = [
+                ...document.querySelectorAll<HTMLButtonElement>(
+                    'header nav button',
+                ),
+            ];
+            expect(tabs.map((t) => t.textContent?.trim())).toEqual([
+                'Dashboard',
+                'Orders & Sales',
+            ]);
+            for (const tab of tabs) {
+                expect(tab.className.split(/\s+/)).toContain('min-h-11');
+            }
+            const account = document.querySelector<HTMLElement>(
+                'header [data-dropdown-trigger]',
+            )!;
+            expect(account.className.split(/\s+/)).toContain('min-h-11');
+        });
     });
 
     describe('below md: a drawer', () => {
