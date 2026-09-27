@@ -366,6 +366,60 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
         expect(reportLines()).toHaveLength(1);
     });
 
+    it('logs rate-limited reports as one line per IP at the window end, not one per request (#108)', async () => {
+        const body = JSON.stringify(legacyReport());
+        for (let i = 0; i < RATE_LIMITS.cspReport.ip.limit; i++) {
+            await post(body, 'application/csp-report');
+        }
+        warn.mockClear();
+
+        const blocked = 25;
+        for (let i = 0; i < blocked; i++) {
+            const res = await post(body, 'application/csp-report', {
+                'x-request-id': `blocked-${i}`,
+            });
+            // The answer itself is unchanged.
+            expect(res.status).toBe(429);
+            expect(res.headers.get('x-request-id')).toBe(`blocked-${i}`);
+            expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
+            expect(await res.json()).toMatchObject({
+                statusCode: 429,
+                error: ErrorCode.RATE_LIMITED,
+                path: '/v1/csp-report',
+                requestId: `blocked-${i}`,
+                details: { retryAfterS: expect.any(Number) },
+            });
+        }
+        expect(warn).not.toHaveBeenCalled();
+
+        cspLog.flush();
+        const lines = warn.mock.calls.map((call) => String(call[0]));
+        expect(lines).toEqual([
+            // The accepted reports' repeats, then the refused ones.
+            expect.stringContaining('CSP violation repeated'),
+            expect.stringMatching(
+                new RegExp(
+                    `^CSP reports rate-limited: ${blocked} from (::ffff:)?127\\.0\\.0\\.1 in this window$`,
+                ),
+            ),
+        ]);
+    });
+
+    it('keeps the warn line of a 4xx on other routes', async () => {
+        // Only the CSP limiter's 429 is aggregated: any other 4xx here,
+        // e.g. on the probe route, keeps its warn line.
+        await fetch(`${base}/probe`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: '{"x": ',
+        });
+        expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
+            expect.stringContaining(
+                `-> 400 ${ErrorCode.VALIDATION_INVALID_INPUT}`,
+            ),
+        ]);
+    });
+
     describe('counts refused bodies against the limit (#108)', () => {
         const report = JSON.stringify(legacyReport());
         const refusals: [string, () => Promise<Response>, number][] = [

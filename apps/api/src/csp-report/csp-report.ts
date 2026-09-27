@@ -17,9 +17,11 @@
  * policy) is ignored and never logged.
  */
 
+import { API_VERSION_PREFIX } from '../constants';
+
 /** The controller's route, and its full path under URI version 1. */
 export const CSP_REPORT_ROUTE = 'csp-report';
-export const CSP_REPORT_PATH = `/v1/${CSP_REPORT_ROUTE}`;
+export const CSP_REPORT_PATH = `${API_VERSION_PREFIX}/${CSP_REPORT_ROUTE}`;
 
 export const CSP_REPORT_CONTENT_TYPES = [
     'application/csp-report',
@@ -50,6 +52,13 @@ export const CSP_REPORT_DEDUP_WINDOW_MS = 60_000;
  * logged, only counted in one line at the window's end.
  */
 export const CSP_REPORT_DEDUP_MAX_KEYS = 1000;
+
+/**
+ * At most this many client IPs have their rate-limited reports counted per
+ * window (one summary line each at its end); requests from further IPs are
+ * counted in one overflow line.
+ */
+export const CSP_REPORT_LIMITED_MAX_IPS = 1000;
 
 /** The longest logged value; longer ones are cut and marked with `…`. */
 const FIELD_MAX = 200;
@@ -153,13 +162,13 @@ export function cspReportLine(
     return `[${requestId}] CSP violation: directive=${directive} blocked=${blockedUri} document=${documentUri}`;
 }
 
-/** The de-duplication key: exactly the three logged fields. */
+/** The de-duplication key: exactly the three logged fields, unambiguous. */
 export function cspViolationKey({
     directive,
     blockedUri,
     documentUri,
 }: CspViolation): string {
-    return `${directive} ${blockedUri} ${documentUri}`;
+    return JSON.stringify([directive, blockedUri, documentUri]);
 }
 
 /** The window-end line for a violation that repeated after being logged. */
@@ -170,4 +179,9 @@ export function cspRepeatLine(
 ): string {
     const { directive, blockedUri, documentUri } = violation;
     return `[${requestId}] CSP violation repeated ${repeats} more ${repeats === 1 ? 'time' : 'times'} in this window: directive=${directive} blocked=${blockedUri} document=${documentUri}`;
+}
+
+/** The window-end line for the reports refused by the rate limit. */
+export function cspRateLimitedLine(ip: string, count: number): string {
+    return `CSP reports rate-limited: ${count} from ${logSafe(ip)} in this window`;
 }

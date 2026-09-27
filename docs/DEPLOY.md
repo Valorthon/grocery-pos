@@ -142,14 +142,23 @@ answers 204. No third party receives them.
 - A violation (directive + blocked + document, as logged) is logged once a
   minute; its repeats in that minute are counted and summarised at the
   minute's end in one line,
-  `[<request id of the first line>] CSP violation repeated N more times in this window: …`.
+  `[<request id of the first line>] CSP violation repeated N more time(s) in this window: …`
+  ("time" for 1, "times" otherwise).
   At most 1000 distinct violations are tracked a minute; beyond that, new
-  ones are only counted in one line.
+  ones are only counted in one line,
+  `CSP violation: N reports of other violations not logged in this window (1000 distinct already)`.
+  So a flood of distinct (e.g. forged) violations can hide a genuinely new
+  one behind that count until the next minute.
 - The route is public, rate-limited to 60 requests a minute per IP (every
   POST counts, including ones refused while parsing: the limit runs before
-  any body parser, and a blocked client's body is not read), and
-  parses only those two media types, capped at 16KB (413 above), on that
-  route alone. Malformed JSON or a body that is not a report is a 400 with
+  any body parser, and a blocked client's body is not read). A refused
+  request still gets the usual 429 body and headers, but no warn line of
+  its own: they are counted per client IP (the same `req.ip` the limit
+  uses) and logged once a minute as
+  `CSP reports rate-limited: N from <client IP> in this window`, for at
+  most 1000 IPs a minute (the rest in one "from other IPs" line).
+- The route parses only those two media types, capped at 16KB (413
+  above), on that route alone. Malformed JSON or a body that is not a report is a 400 with
   a fixed message; nothing is echoed back. Any other media type is a 415.
 - On every route, a body the parsers refuse (too large, malformed, an
   unsupported charset or `Content-Encoding`, ...) gets a fixed message per

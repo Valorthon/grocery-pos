@@ -19,6 +19,7 @@ import {
     BODY_ERROR_FALLBACK_MESSAGE,
     BODY_ERROR_MESSAGES,
     INTERNAL_MESSAGE,
+    loggedByRaiser,
     stackWithCauses,
 } from './global.filter';
 import { JWTInvalidError } from '../../auth/types';
@@ -140,6 +141,42 @@ describe('GlobalFilter on rate limiting', () => {
                 details: { retryAfterS: 60 },
             }),
         );
+        // An unmarked 429 keeps its warn line.
+        expect(warnLog).toHaveBeenCalledWith(
+            expect.stringContaining(`-> 429 ${ErrorCode.RATE_LIMITED}`),
+        );
+    });
+
+    it('answers a loggedByRaiser 4xx the same way, without its warn line (#108)', () => {
+        const plain = hostFor('/v1/csp-report');
+        new GlobalFilter().catch(
+            new RateLimitError('Too many attempts', { retryAfterS: 60 }),
+            plain.host,
+        );
+        warnLog.mockClear();
+
+        const marked = hostFor('/v1/csp-report');
+        new GlobalFilter().catch(
+            loggedByRaiser(
+                new RateLimitError('Too many attempts', { retryAfterS: 60 }),
+            ),
+            marked.host,
+        );
+
+        expect(marked.res.status).toHaveBeenCalledWith(429);
+        expect({ ...bodyOf(marked.res), timestamp: 0, requestId: 0 }).toEqual({
+            ...bodyOf(plain.res),
+            timestamp: 0,
+            requestId: 0,
+        });
+        expect(warnLog).not.toHaveBeenCalled();
+        expect(errorLog).not.toHaveBeenCalled();
+    });
+
+    it('still logs a loggedByRaiser 5xx', () => {
+        const { host } = hostFor('/v1/csp-report');
+        new GlobalFilter().catch(loggedByRaiser(new Error('boom')), host);
+        expect(errorLog).toHaveBeenCalledTimes(1);
     });
 });
 

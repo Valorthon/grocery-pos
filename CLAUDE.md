@@ -506,6 +506,10 @@ requestId}`. A 5xx never carries details or internals.
   so refused bodies count too (#108). A violation (its three logged
   fields) is logged once per 60s window, its repeats summarised in one line
   at the window's end (`CspReportLog`, at most 1000 tracked per window).
+  The limiter's 429 is answered as usual but not logged per request
+  (`loggedByRaiser` in `global.filter.ts`, opt-in per error): it is counted
+  per client IP and logged as one line per IP per window, naming the IP (at
+  most 1000 IPs, then one overflow line).
   A parser 5xx keeps the original error as a non-enumerable `cause` for the
   log; the response stays fixed.
   Chromium's `report-to` upload is a CORS preflighted request without

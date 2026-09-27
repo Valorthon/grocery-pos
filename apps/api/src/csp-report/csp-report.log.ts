@@ -7,7 +7,9 @@ import {
 import {
     CSP_REPORT_DEDUP_MAX_KEYS,
     CSP_REPORT_DEDUP_WINDOW_MS,
+    CSP_REPORT_LIMITED_MAX_IPS,
     CSP_REPORTS_LOGGED_MAX,
+    cspRateLimitedLine,
     cspRepeatLine,
     cspReportLine,
     CspViolation,
@@ -36,6 +38,11 @@ interface Seen {
  * `CSP_REPORTS_LOGGED_MAX` new violations are logged, the rest counted in
  * one line (and not tracked, so a later report can still log them).
  *
+ * Requests refused by the rate limit (429) are not logged one by one
+ * (GlobalFilter skips them, `loggedByRaiser`): they are counted per client
+ * IP and summarised in one line per IP at the window's end, for at most
+ * `CSP_REPORT_LIMITED_MAX_IPS` IPs; the rest in one overflow line.
+ *
  * Process memory, like the throttler's counters: one API instance.
  */
 @Injectable()
@@ -43,6 +50,8 @@ export class CspReportLog implements OnModuleInit, OnModuleDestroy {
     private readonly logger = new Logger('CspReport');
     private seen = new Map<string, Seen>();
     private overflow = 0;
+    private limited = new Map<string, number>();
+    private limitedOverflow = 0;
     private timer?: NodeJS.Timeout;
 
     onModuleInit(): void {
@@ -85,6 +94,18 @@ export class CspReportLog implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    /** Counts one request the rate limit refused, from `ip`. */
+    rateLimited(ip: string): void {
+        const count = this.limited.get(ip);
+        if (count !== undefined) {
+            this.limited.set(ip, count + 1);
+        } else if (this.limited.size >= CSP_REPORT_LIMITED_MAX_IPS) {
+            this.limitedOverflow++;
+        } else {
+            this.limited.set(ip, 1);
+        }
+    }
+
     /** Ends the window: logs the summaries, then forgets everything. */
     flush(): void {
         for (const { violation, requestId, repeats } of this.seen.values()) {
@@ -97,7 +118,17 @@ export class CspReportLog implements OnModuleInit, OnModuleDestroy {
                 `CSP violation: ${this.overflow} reports of other violations not logged in this window (${CSP_REPORT_DEDUP_MAX_KEYS} distinct already)`,
             );
         }
+        for (const [ip, count] of this.limited) {
+            this.logger.warn(cspRateLimitedLine(ip, count));
+        }
+        if (this.limitedOverflow > 0) {
+            this.logger.warn(
+                `CSP reports rate-limited: ${this.limitedOverflow} from other IPs in this window (${CSP_REPORT_LIMITED_MAX_IPS} IPs already)`,
+            );
+        }
         this.seen = new Map();
         this.overflow = 0;
+        this.limited = new Map();
+        this.limitedOverflow = 0;
     }
 }

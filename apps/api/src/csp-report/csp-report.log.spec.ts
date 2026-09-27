@@ -2,8 +2,10 @@ import { Logger } from '@nestjs/common';
 import {
     CSP_REPORT_DEDUP_MAX_KEYS,
     CSP_REPORT_DEDUP_WINDOW_MS,
+    CSP_REPORT_LIMITED_MAX_IPS,
     CSP_REPORTS_LOGGED_MAX,
     CspViolation,
+    cspViolationKey,
 } from './csp-report';
 import { CspReportLog } from './csp-report.log';
 
@@ -119,5 +121,60 @@ describe('CspReportLog (#108)', () => {
         warn.mockClear();
         log.report('next', [violation('https://c.example/new.js')]);
         expect(lines()).toEqual([expect.stringContaining('[next]')]);
+    });
+
+    it('keys violations unambiguously: fields containing spaces never collide', () => {
+        log.report('r1', [
+            { directive: 'a b', blockedUri: 'c', documentUri: 'd' },
+            { directive: 'a', blockedUri: 'b c', documentUri: 'd' },
+        ]);
+        expect(lines()).toHaveLength(2);
+        expect(
+            cspViolationKey({
+                directive: 'a b',
+                blockedUri: 'c',
+                documentUri: 'd',
+            }),
+        ).not.toBe(
+            cspViolationKey({
+                directive: 'a',
+                blockedUri: 'b c',
+                documentUri: 'd',
+            }),
+        );
+    });
+
+    it('counts rate-limited requests per IP and logs one line per IP when the window ends', () => {
+        for (let i = 0; i < 3; i++) log.rateLimited('203.0.113.7');
+        log.rateLimited('2001:db8::1');
+        expect(lines()).toEqual([]);
+
+        log.flush();
+        expect(lines()).toEqual([
+            'CSP reports rate-limited: 3 from 203.0.113.7 in this window',
+            'CSP reports rate-limited: 1 from 2001:db8::1 in this window',
+        ]);
+
+        warn.mockClear();
+        log.flush();
+        expect(lines()).toEqual([]);
+    });
+
+    it(`counts rate-limited requests from at most ${CSP_REPORT_LIMITED_MAX_IPS} IPs a window, the rest in one line`, () => {
+        for (let i = 0; i < CSP_REPORT_LIMITED_MAX_IPS; i++) {
+            log.rateLimited(`ip-${i}`);
+        }
+        log.rateLimited('ip-0');
+        log.rateLimited('one-too-many');
+        log.rateLimited('two-too-many');
+
+        log.flush();
+        expect(lines()).toHaveLength(CSP_REPORT_LIMITED_MAX_IPS + 1);
+        expect(lines()[0]).toBe(
+            'CSP reports rate-limited: 2 from ip-0 in this window',
+        );
+        expect(lines().at(-1)).toBe(
+            `CSP reports rate-limited: 2 from other IPs in this window (${CSP_REPORT_LIMITED_MAX_IPS} IPs already)`,
+        );
     });
 });
