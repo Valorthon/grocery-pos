@@ -59,6 +59,7 @@ describe('Users (e2e)', () => {
     const model = new FakeUserModel();
     const tokens = new FakeRefreshTokenModel();
     let throttles: ThrottlerStorageService;
+    let seedHash: string;
 
     let admin: FakeUserRow;
     let manager: FakeUserRow;
@@ -84,7 +85,11 @@ describe('Users (e2e)', () => {
         path: string,
         body?: unknown,
         sid?: string,
-    ): Promise<{ status: number; body: Record<string, unknown> }> {
+    ): Promise<{
+        status: number;
+        body: Record<string, unknown>;
+        headers: Headers;
+    }> {
         const res = await fetch(`${base}${path}`, {
             method,
             headers: {
@@ -94,7 +99,11 @@ describe('Users (e2e)', () => {
             body: body === undefined ? undefined : JSON.stringify(body),
         });
         const text = await res.text();
-        return { status: res.status, body: text ? JSON.parse(text) : {} };
+        return {
+            status: res.status,
+            body: text ? JSON.parse(text) : {},
+            headers: res.headers,
+        };
     }
 
     const patchUsers = (
@@ -141,32 +150,34 @@ describe('Users (e2e)', () => {
         base = `http://127.0.0.1:${port}/v1`;
         jwt = app.get(JwtService);
         throttles = app.get(getStorageToken());
+        // argon2 is deliberately slow (#109): hash the seed password once,
+        // not before every test.
+        seedHash = await argon.hash('secret');
     });
 
     afterAll(async () => {
         await app.close();
     });
 
-    beforeEach(async () => {
+    beforeEach(() => {
         model.rows = [];
         model.writes.length = 0;
         tokens.rows.clear();
         throttles.storage.clear();
-        const hash = await argon.hash('secret');
         admin = model.seed({
             name: 'admin',
             roles: [Role.Admin],
-            passwordHash: hash,
+            passwordHash: seedHash,
         });
         manager = model.seed({
             name: 'manager',
             roles: [Role.UserManager],
-            passwordHash: hash,
+            passwordHash: seedHash,
         });
         cashier = model.seed({
             name: 'cashier',
             roles: [Role.Seller],
-            passwordHash: hash,
+            passwordHash: seedHash,
         });
     });
 
@@ -778,14 +789,25 @@ describe('Users (e2e)', () => {
     });
 
     it(`PATCH /users/me/password: ${RATE_LIMITS.password.account.limit} tries per user, then 429 (#12)`, async () => {
+        const { limit, ttl } = RATE_LIMITS.password.account;
         const attempt = (as: FakeUserRow) =>
             call(as, 'PATCH', '/users/me/password', {
                 currentPassword: 'guess',
                 newPassword: 'fresh-secret',
             });
+        // Every request counts, however it ends: the throttler guard runs
+        // before the ValidationPipe. An invalid body is a 400 without an
+        // argon2 verify, so the budget is spent cheaply: a run of argon2
+        // verifies (~64 MiB each) timed out on a loaded runner (#109).
+        const cheap = (as: FakeUserRow) =>
+            call(as, 'PATCH', '/users/me/password', {
+                currentPassword: 'guess',
+            });
 
-        for (let i = 0; i < RATE_LIMITS.password.account.limit; i++) {
-            expect((await attempt(cashier)).status).toBe(403);
+        // One real wrong guess (the attack being limited) counts too.
+        expect((await attempt(cashier)).status).toBe(403);
+        for (let i = 1; i < limit; i++) {
+            expect((await cheap(cashier)).status).toBe(400);
         }
 
         const blocked = await attempt(cashier);
@@ -794,8 +816,15 @@ describe('Users (e2e)', () => {
             statusCode: 429,
             error: ErrorCode.RATE_LIMITED,
         });
+        // The per-user throttler blocked it, with the production window,
+        // not the (higher) per-IP one.
+        expect(blocked.headers.get('retry-after-account')).toBe(
+            String(ttl / 1000),
+        );
+        expect(blocked.headers.get('retry-after-ip')).toBeNull();
 
-        // Another user on the same IP is unaffected.
-        expect((await attempt(manager)).status).toBe(403);
+        // Another user on the same IP is unaffected (past the guard, so
+        // validated).
+        expect((await cheap(manager)).status).toBe(400);
     });
 });
