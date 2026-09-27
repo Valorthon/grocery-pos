@@ -15,6 +15,27 @@ import {
 } from '../errors';
 import { requestIdOf } from '../request-id/request-id';
 
+/**
+ * Marks a 4xx whose log its raiser writes itself, aggregated (the CSP
+ * report rate limit's per-IP window summary, #108): GlobalFilter answers
+ * it exactly as usual but writes no warn line for it. Opt-in per error; a
+ * 5xx is always logged.
+ */
+const LOGGED_BY_RAISER = Symbol('loggedByRaiser');
+
+export function loggedByRaiser<T extends object>(err: T): T {
+    Object.defineProperty(err, LOGGED_BY_RAISER, { value: true });
+    return err;
+}
+
+function isLoggedByRaiser(err: unknown): boolean {
+    return (
+        typeof err === 'object' &&
+        err !== null &&
+        (err as Record<symbol, unknown>)[LOGGED_BY_RAISER] === true
+    );
+}
+
 /** The only message a client ever sees for an unexpected failure. */
 export const INTERNAL_MESSAGE = 'Internal server error';
 
@@ -205,6 +226,8 @@ export class GlobalFilter implements ExceptionFilter {
             );
             return;
         }
+
+        if (isLoggedByRaiser(exception)) return;
 
         // A classified database error (a duplicate key, a validation
         // failure) is a 4xx, but its stack and the driver error behind it
