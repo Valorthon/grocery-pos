@@ -1,6 +1,7 @@
 /**
- * `POST /v1/csp-report` over real HTTP (#94): the real CspReportModule
- * (its route-scoped body parser and rate limit) behind the global
+ * `POST /v1/csp-report` over real HTTP (#94, #108): the real
+ * CspReportModule (its route-scoped body parser, its rate limit ahead of
+ * every parser, its de-duplicated log) behind the global
  * JWTAuthGuard, RoleGuard, GlobalFilter, RequestIdModule, main.ts's
  * ValidationPipe and CORS options. No caller signs in: browsers send
  * reports without credentials.
@@ -32,6 +33,7 @@ import { createValidationPipe } from '../common/pipes/validation.pipe';
 import { RequestIdModule } from '../common/request-id/request-id';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { CSP_REPORT_MAX_BYTES, CSP_REPORTS_LOGGED_MAX } from './csp-report';
+import { CspReportLog } from './csp-report.log';
 import { CspReportModule } from './csp-report.module';
 
 const FRONTEND = 'https://pos.example.com';
@@ -100,6 +102,7 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
     let app: INestApplication;
     let base: string;
     let throttles: { storage: Map<string, unknown> };
+    let cspLog: CspReportLog;
     let warn: jest.SpyInstance;
 
     function post(
@@ -152,6 +155,7 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
         const { port } = app.getHttpServer().address() as AddressInfo;
         base = `http://127.0.0.1:${port}/v1`;
         throttles = app.get(getStorageToken());
+        cspLog = app.get(CspReportLog);
     });
 
     afterAll(async () => {
@@ -160,6 +164,8 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
 
     beforeEach(() => {
         throttles.storage.clear();
+        // A fresh de-duplication window (logged nowhere: logger is off).
+        cspLog.flush();
         warn = jest
             .spyOn(Logger.prototype, 'warn')
             .mockImplementation(() => undefined);
@@ -248,8 +254,13 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
     });
 
     it(`logs at most ${CSP_REPORTS_LOGGED_MAX} reports of one request, then counts the rest`, async () => {
-        const batch = Array.from({ length: CSP_REPORTS_LOGGED_MAX + 5 }, () =>
-            reportingApiEntry('inline', 'style-src-attr'),
+        const batch = Array.from(
+            { length: CSP_REPORTS_LOGGED_MAX + 5 },
+            (_, i) =>
+                reportingApiEntry(
+                    `https://cdn.example.org/${i}.js`,
+                    'script-src',
+                ),
         );
         const res = await post(
             JSON.stringify(batch),
@@ -350,7 +361,202 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
             ErrorCode.RATE_LIMITED,
         );
         expect(Number(res.headers.get('retry-after'))).toBeGreaterThan(0);
-        expect(reportLines()).toHaveLength(RATE_LIMITS.cspReport.ip.limit);
+        expect(Number(res.headers.get('retry-after-ip'))).toBeGreaterThan(0);
+        // One violation: logged once, its repeats summarised (#108).
+        expect(reportLines()).toHaveLength(1);
+    });
+
+    describe('counts refused bodies against the limit (#108)', () => {
+        const report = JSON.stringify(legacyReport());
+        const refusals: [string, () => Promise<Response>, number][] = [
+            [
+                'a body over the cap (route parser, 413)',
+                () =>
+                    post(
+                        JSON.stringify(
+                            legacyReport({
+                                'script-sample': 'x'.repeat(
+                                    CSP_REPORT_MAX_BYTES,
+                                ),
+                            }),
+                        ),
+                        'application/csp-report',
+                    ),
+                413,
+            ],
+            [
+                'a bad charset (route parser, 415)',
+                () => post(report, 'application/csp-report; charset=bogus-cs'),
+                415,
+            ],
+            [
+                'a bad Content-Encoding (route parser, 415)',
+                () =>
+                    post(report, 'application/reports+json', {
+                        'content-encoding': 'bogus',
+                    }),
+                415,
+            ],
+            [
+                'malformed JSON (global JSON parser, 400)',
+                () => post('{"csp-report": ', 'application/json'),
+                400,
+            ],
+            [
+                'a JSON body over 100kb (global JSON parser, 413)',
+                () =>
+                    post(
+                        JSON.stringify({ x: 'x'.repeat(110 * 1024) }),
+                        'application/json',
+                    ),
+                413,
+            ],
+            [
+                'another media type (handler, 415)',
+                () => post(report, 'text/plain'),
+                415,
+            ],
+            [
+                'a malformed report (handler, 400)',
+                () => post('"x"', 'application/csp-report'),
+                400,
+            ],
+        ];
+
+        it.each(refusals)(
+            '%s counts: after the limit, a valid report is a 429',
+            async (_label, refuse, status) => {
+                for (let i = 0; i < RATE_LIMITS.cspReport.ip.limit; i++) {
+                    expect((await refuse()).status).toBe(status);
+                }
+
+                const res = await post(report, 'application/csp-report');
+                expect(res.status).toBe(429);
+                expect(reportLines()).toEqual([]);
+            },
+        );
+
+        it('a mix of refusals and reports shares one budget', async () => {
+            const limit = RATE_LIMITS.cspReport.ip.limit;
+            for (let i = 0; i < limit; i++) {
+                const [, send, status] = refusals[i % refusals.length];
+                const res =
+                    i % 2 === 0
+                        ? await send()
+                        : await post(report, 'application/csp-report');
+                expect(res.status).toBe(i % 2 === 0 ? status : 204);
+            }
+            expect((await post(report, 'application/csp-report')).status).toBe(
+                429,
+            );
+        });
+
+        it('refuses a blocked client before reading its body: a 429, not a 413', async () => {
+            for (let i = 0; i < RATE_LIMITS.cspReport.ip.limit; i++) {
+                await post(report, 'application/csp-report');
+            }
+            const [, oversized] = refusals[0];
+            const res = await oversized();
+            expect(res.status).toBe(429);
+            expect(((await res.json()) as { error: string }).error).toBe(
+                ErrorCode.RATE_LIMITED,
+            );
+        });
+
+        it('does not count CORS preflights', async () => {
+            for (let i = 0; i < RATE_LIMITS.cspReport.ip.limit + 1; i++) {
+                await fetch(`${base}/csp-report`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        origin: FRONTEND,
+                        'access-control-request-method': 'POST',
+                    },
+                });
+            }
+            expect((await post(report, 'application/csp-report')).status).toBe(
+                204,
+            );
+        });
+    });
+
+    describe('de-duplicates repeated violations (#108)', () => {
+        function reportFrom(document: string, blocked: string) {
+            return JSON.stringify(
+                legacyReport({
+                    'document-uri': document,
+                    'blocked-uri': blocked,
+                }),
+            );
+        }
+
+        it('logs a violation once per window, whatever the query strings, and summarises the repeats at its end', async () => {
+            const first = await post(
+                reportFrom(
+                    'https://pos.example.com/seller/sell?a=1',
+                    'https://evil.example.net/x.js?t=1',
+                ),
+                'application/csp-report',
+            );
+            for (let i = 2; i <= 4; i++) {
+                await post(
+                    reportFrom(
+                        `https://pos.example.com/seller/sell?a=${i}`,
+                        `https://evil.example.net/x.js?t=${i}`,
+                    ),
+                    'application/csp-report',
+                );
+            }
+            // A different document is a different violation.
+            await post(
+                reportFrom(
+                    'https://pos.example.com/admin',
+                    'https://evil.example.net/x.js',
+                ),
+                'application/csp-report',
+            );
+            // Repeats inside one Reporting API batch count too.
+            await post(
+                JSON.stringify([
+                    reportingApiEntry('eval', 'script-src'),
+                    reportingApiEntry('eval', 'script-src'),
+                ]),
+                'application/reports+json',
+            );
+
+            const firstId = first.headers.get('x-request-id');
+            expect(reportLines()).toEqual([
+                `[${firstId}] CSP violation: directive=script-src-elem blocked=https://evil.example.net/x.js document=https://pos.example.com/seller/sell`,
+                expect.stringContaining(
+                    'blocked=https://evil.example.net/x.js document=https://pos.example.com/admin',
+                ),
+                expect.stringContaining('directive=script-src blocked=eval'),
+            ]);
+
+            warn.mockClear();
+            cspLog.flush();
+            expect(reportLines()).toEqual([
+                `[${firstId}] CSP violation repeated 3 more times in this window: directive=script-src-elem blocked=https://evil.example.net/x.js document=https://pos.example.com/seller/sell`,
+                expect.stringContaining(
+                    'CSP violation repeated 1 more time in this window: directive=script-src blocked=eval',
+                ),
+            ]);
+            expect(JSON.stringify(warn.mock.calls)).not.toMatch(/[?&][at]=/);
+
+            // A new window logs it again.
+            warn.mockClear();
+            const again = await post(
+                reportFrom(
+                    'https://pos.example.com/seller/sell',
+                    'https://evil.example.net/x.js',
+                ),
+                'application/csp-report',
+            );
+            expect(reportLines()).toEqual([
+                expect.stringContaining(
+                    `[${again.headers.get('x-request-id')}] CSP violation: directive=script-src-elem`,
+                ),
+            ]);
+        });
     });
 
     it("answers the Reporting API's CORS preflight from the client origin", async () => {

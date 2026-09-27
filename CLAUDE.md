@@ -501,7 +501,13 @@ requestId}`. A 5xx never carries details or internals.
   `Permissions-Policy` denying camera, microphone, geolocation, payment and
   usb. The route parses only `application/csp-report` and
   `application/reports+json`, 16KB max, on that route alone (global parsing
-  is unchanged), and is rate-limited per IP (`RATE_LIMITS.cspReport`).
+  is unchanged), and is rate-limited per IP (`RATE_LIMITS.cspReport`) by
+  `CspReportLimiter`, which `useBodyParsers` installs ahead of every parser
+  so refused bodies count too (#108). A violation (its three logged
+  fields) is logged once per 60s window, its repeats summarised in one line
+  at the window's end (`CspReportLog`, at most 1000 tracked per window).
+  A parser 5xx keeps the original error as a non-enumerable `cause` for the
+  log; the response stays fixed.
   Chromium's `report-to` upload is a CORS preflighted request without
   cookies, allowed by the API's `FRONTEND_URL` CORS; no third party.
   Body-parser failures answer and log a fixed message per error `type`

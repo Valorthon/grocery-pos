@@ -1,9 +1,13 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { text } from 'body-parser';
-import { RateLimitModule } from '../auth/rate-limit/rate-limit';
+import {
+    CspReportLimiter,
+    RateLimitModule,
+} from '../auth/rate-limit/rate-limit';
 import { withSafeErrors } from '../common/body-parsers';
 import { CSP_REPORT_CONTENT_TYPES, CSP_REPORT_MAX_BYTES } from './csp-report';
 import { CspReportController } from './csp-report.controller';
+import { CspReportLog } from './csp-report.log';
 
 /**
  * CSP violation reports (#94). The app's global body parsers (Nest's
@@ -11,10 +15,14 @@ import { CspReportController } from './csp-report.controller';
  * this module adds a text parser for exactly those two types on exactly
  * this controller's route, capped at `CSP_REPORT_MAX_BYTES` (a larger
  * body is a 413 before the handler runs). Global parsing is unchanged.
+ *
+ * Its rate limit (`CspReportLimiter`) runs before any parser, installed
+ * by `useBodyParsers` through `useCspReportLimit` (#108).
  */
 @Module({
     imports: [RateLimitModule],
     controllers: [CspReportController],
+    providers: [CspReportLimiter, CspReportLog],
 })
 export class CspReportModule implements NestModule {
     configure(consumer: MiddlewareConsumer) {

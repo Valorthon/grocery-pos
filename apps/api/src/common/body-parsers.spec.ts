@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { bodyParserFailure, withSafeErrors } from './body-parsers';
+import { stackWithCauses } from './global/global.filter';
 
 describe('bodyParserFailure (#94)', () => {
     it('keeps status, expose and type, never the message or cause', () => {
@@ -42,6 +43,45 @@ describe('bodyParserFailure (#94)', () => {
         expect(failure.status).toBe(status);
         expect(failure.expose).toBe(expose);
         expect(failure.type).toBeUndefined();
+    });
+
+    it('keeps no cause on a 4xx: its message is the client input', () => {
+        const failure = bodyParserFailure(
+            Object.assign(new Error('bad "hunter2"'), {
+                status: 415,
+                expose: true,
+            }),
+        );
+        expect(failure.cause).toBeUndefined();
+        expect(stackWithCauses(failure)).not.toContain('hunter2');
+    });
+
+    it.each([
+        ['stream.encoding.set', 500],
+        ['stream.not.readable', 500],
+        ['an unknown failure', undefined],
+    ])(
+        'keeps a 5xx (%s) original as a non-enumerable cause, logged by stackWithCauses (#108)',
+        (type, status) => {
+            const original = Object.assign(
+                new Error(`internal ${type} detail`),
+                { status, expose: false, type },
+            );
+            const failure = bodyParserFailure(original);
+
+            expect(failure.status).toBe(500);
+            expect(failure.message).toBe('Request body refused');
+            expect(failure.cause).toBe(original);
+            expect(Object.keys(failure)).not.toContain('cause');
+            expect(JSON.stringify(failure)).not.toContain('detail');
+            expect(stackWithCauses(failure)).toContain(
+                `Caused by: Error: internal ${type} detail`,
+            );
+        },
+    );
+
+    it('keeps a non-Error 5xx cause as it is', () => {
+        expect(bodyParserFailure('boom').cause).toBe('boom');
     });
 });
 

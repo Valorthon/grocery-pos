@@ -64,6 +64,7 @@ export const RATE_LIMITS = {
         // Unauthenticated. A page load that trips the CSP sends one legacy
         // report per violation (plus batched Reporting API posts), and a
         // shop's terminals share one IP; beyond this, reports are dropped.
+        // Every POST counts, refused ones too (`CspReportLimiter`, #108).
         ip: { limit: 60, ttl: MINUTE_MS },
     },
 } as const;
@@ -148,6 +149,41 @@ export class LoginAttemptLimiter {
     }
 }
 
+/**
+ * `POST /v1/csp-report`'s per-IP budget (#94, #108), counted in the same
+ * throttler storage as the guards. Not a guard: guards run after the body
+ * parsers, so a report refused while parsing (413, a bad charset or
+ * Content-Encoding, malformed JSON) would never be counted. `cspReportLimit`
+ * (csp-report.throttle.ts) calls it before any parser reads the body, so
+ * every request to the route counts once, accepted or refused, and a
+ * blocked client's body is never read. Provided by CspReportModule.
+ */
+@Injectable()
+export class CspReportLimiter {
+    constructor(
+        @InjectThrottlerStorage() private readonly storage: ThrottlerStorage,
+    ) {}
+
+    /** Counts one request; a 429 `RateLimitError` once the IP is over. */
+    async hit(req: RequestLike, res: Response): Promise<void> {
+        const { limit, ttl } = RATE_LIMITS.cspReport.ip;
+        const { isBlocked, timeToBlockExpire } = await this.storage.increment(
+            `csp-report-ip|${clientIp(req)}`,
+            ttl,
+            limit,
+            ttl,
+            THROTTLER_IP,
+        );
+        if (isBlocked) {
+            res.setHeader(
+                `Retry-After-${THROTTLER_IP}`,
+                String(timeToBlockExpire),
+            );
+            throw rateLimited(res, timeToBlockExpire);
+        }
+    }
+}
+
 @Module({
     imports: [
         ThrottlerModule.forRoot({
@@ -193,16 +229,5 @@ export const PasswordChangeRateLimit = () =>
                 getTracker: userTracker,
             },
         }),
-        UseGuards(RateLimitGuard),
-    );
-
-/**
- * `POST /csp-report` (#94): per IP only. Browsers send reports without
- * credentials, so there is no account to count.
- */
-export const CspReportRateLimit = () =>
-    applyDecorators(
-        Throttle({ [THROTTLER_IP]: RATE_LIMITS.cspReport.ip }),
-        SkipThrottle({ [THROTTLER_ACCOUNT]: true }),
         UseGuards(RateLimitGuard),
     );

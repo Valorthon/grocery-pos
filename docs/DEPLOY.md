@@ -139,7 +139,15 @@ answers 204. No third party receives them.
   Query strings, fragments and user info are stripped from the URIs; the
   rest of the report (samples, the policy), headers and cookies are never
   logged. At most 5 reports of one request are logged, the rest counted.
-- The route is public, rate-limited to 60 requests a minute per IP, and
+- A violation (directive + blocked + document, as logged) is logged once a
+  minute; its repeats in that minute are counted and summarised at the
+  minute's end in one line,
+  `[<request id of the first line>] CSP violation repeated N more times in this window: …`.
+  At most 1000 distinct violations are tracked a minute; beyond that, new
+  ones are only counted in one line.
+- The route is public, rate-limited to 60 requests a minute per IP (every
+  POST counts, including ones refused while parsing: the limit runs before
+  any body parser, and a blocked client's body is not read), and
   parses only those two media types, capped at 16KB (413 above), on that
   route alone. Malformed JSON or a body that is not a report is a 400 with
   a fixed message; nothing is echoed back. Any other media type is a 415.
