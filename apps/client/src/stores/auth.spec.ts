@@ -3,7 +3,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import { Role, ShiftStatus } from '@grocery-pos/contracts';
 import { AxiosError, type AxiosResponse } from 'axios';
 
-vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
+vi.mock('@/axios', () => ({
+    default: { post: vi.fn(), get: vi.fn() },
+    refreshSession: vi.fn(),
+}));
 
 /** The API marks sessions with a readable `dummy` cookie alongside httpOnly ones. */
 function setDummyCookie(present: boolean) {
@@ -129,6 +132,97 @@ describe('auth store', () => {
         setDummyCookie(true);
 
         expect(store.isAuthenticated).toBe(false);
+    });
+
+    describe('setUsername (self-rename, #106)', () => {
+        it('renames the user in memory and in storage, keeping the rest', async () => {
+            const cached = {
+                userId: 'm1',
+                username: 'boss',
+                roles: [Role.UserManager],
+            };
+            localStorage.setItem('user', JSON.stringify(cached));
+            const store = await loadStore();
+
+            store.setUsername('chief');
+
+            expect(store.user).toEqual({ ...cached, username: 'chief' });
+            expect(JSON.parse(localStorage.getItem('user')!)).toEqual({
+                ...cached,
+                username: 'chief',
+            });
+        });
+
+        it('does nothing without a user', async () => {
+            const store = await loadStore();
+
+            store.setUsername('chief');
+
+            expect(store.user).toBeNull();
+            expect(localStorage.getItem('user')).toBeNull();
+        });
+    });
+
+    describe('renameSelf (#106)', () => {
+        const cached = {
+            userId: 'm1',
+            username: 'boss',
+            roles: [Role.UserManager],
+        };
+
+        async function setup() {
+            localStorage.setItem('user', JSON.stringify(cached));
+            const axiosModule = await import('@/axios');
+            const refresh = vi.mocked(axiosModule.refreshSession);
+            const get = vi.mocked(axiosModule.default.get);
+            refresh.mockReset();
+            get.mockReset();
+            return { refresh, get, store: await loadStore() };
+        }
+
+        it('shows the name at once, then refreshes the token and re-reads the profile', async () => {
+            const { refresh, get, store } = await setup();
+            let finishRefresh!: () => void;
+            refresh.mockReturnValue(
+                new Promise<void>((resolve) => (finishRefresh = resolve)),
+            );
+            get.mockResolvedValue({ data: { ...cached, username: 'chief' } });
+
+            const done = store.renameSelf('chief');
+            expect(store.user?.username).toBe('chief');
+            expect(get).not.toHaveBeenCalled();
+
+            finishRefresh();
+            await done;
+
+            expect(refresh).toHaveBeenCalledTimes(1);
+            expect(get).toHaveBeenCalledWith('/users/profile');
+            expect(store.user).toEqual({ ...cached, username: 'chief' });
+            expect(JSON.parse(localStorage.getItem('user')!)).toEqual({
+                ...cached,
+                username: 'chief',
+            });
+        });
+
+        it('keeps the new name when the refresh fails, and stays logged in', async () => {
+            const { refresh, get, store } = await setup();
+            refresh.mockRejectedValue(new Error('timeout'));
+
+            await expect(store.renameSelf('chief')).resolves.toBeUndefined();
+
+            expect(get).not.toHaveBeenCalled();
+            expect(store.user).toEqual({ ...cached, username: 'chief' });
+        });
+
+        it('keeps the new name when the profile read fails (not a 401)', async () => {
+            const { refresh, get, store } = await setup();
+            refresh.mockResolvedValue();
+            get.mockRejectedValue(new Error('network down'));
+
+            await store.renameSelf('chief');
+
+            expect(store.user).toEqual({ ...cached, username: 'chief' });
+        });
     });
 
     describe('roles', () => {

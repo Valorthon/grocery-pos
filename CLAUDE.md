@@ -252,6 +252,16 @@ requestId}`. A 5xx never carries details or internals.
   `USER_SELF_DEACTIVATE`); the Users editor disables their own Active box.
   An ADMIN may deactivate themselves unless they are the last active ADMIN
   (`USER_LAST_ADMIN`) (#61).
+- The Users editor renames whoever it opens for (#106): an ADMIN anyone, a
+  USER_MANAGER themselves and the users they manage, as the API allows. The
+  name is trimmed and lowercased as the API stores it, length-checked on
+  that (`USERNAME`), sent only when it changed, and confirmed first
+  ("They/You will log in as …"). A taken name (`DB_DUPLICATE_KEY` naming
+  `name`) is inline. A rename revokes no session. A self-rename shows the
+  new name at once, then `authStore.renameSelf` refreshes the session
+  through axios's single-flight `refreshSession` (the token carries the
+  new name) and re-reads the profile; a failed refresh keeps the new name.
+  Another user's token keeps the old name until it refreshes.
 - `RoleGuard` fails closed: a non-`@Public()` route whose `@Roles` is
   missing or empty is 403 for everyone. `route-roles.spec.ts` finds the
   controllers by walking `AppModule`'s module metadata
