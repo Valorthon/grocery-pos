@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { isAxiosError } from 'axios';
-import api from '@/axios';
+import api, { refreshSession } from '@/axios';
 import { USER_STORAGE_KEY, useCartStore } from './cart';
 import { useShiftStore } from './shift';
 import { Color, useUIStore } from './ui';
@@ -168,6 +168,26 @@ export const useAuthStore = defineStore('auth', () => {
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value));
     };
 
+    /**
+     * After a successful self-rename (#106): shows the new name at once
+     * (`setUsername`), then refreshes the session so the access token (and
+     * so `/users/profile`, receipts and shift records) carries it too, and
+     * re-reads the profile. The refresh is the one the 401 interceptor
+     * uses, shared with any in flight; only its 401 ends the session. Any
+     * other failure keeps the name set here until the token refreshes on
+     * its own. Never rejects.
+     */
+    const renameSelf = async (username: string): Promise<void> => {
+        setUsername(username);
+        try {
+            await refreshSession();
+            await fetchMe();
+        } catch {
+            // Handled: a 401 from the refresh logged out (axios.ts), one
+            // from the profile dropped the user (fetchMe).
+        }
+    };
+
     let sessionCheck: Promise<void> | null = null;
 
     /**
@@ -226,6 +246,7 @@ export const useAuthStore = defineStore('auth', () => {
         resetRegister,
         fetchMe,
         setUsername,
+        renameSelf,
         initSession,
         hasRole,
         isAdmin,

@@ -263,7 +263,7 @@ import {
     useListFetch,
     useListPaging,
 } from '@/composables/useListFetch';
-import { apiErrorCode, apiErrorMessages } from '@/utils/api-error';
+import { apiErrorBody, apiErrorMessages } from '@/utils/api-error';
 
 const { page, limit, search } = useListPaging(() => fetchUsers());
 const totalItems = ref(0);
@@ -504,6 +504,21 @@ function confirmRename(): Promise<boolean> {
     });
 }
 
+/** A `DB_DUPLICATE_KEY` whose details name the `name` field. */
+function isDuplicateName(error: unknown): boolean {
+    const body = apiErrorBody(error);
+    return (
+        body?.error === ErrorCode.DB_DUPLICATE_KEY &&
+        Array.isArray(body.details) &&
+        body.details.some(
+            (d: unknown) =>
+                typeof d === 'object' &&
+                d !== null &&
+                (d as { property?: unknown }).property === 'name',
+        )
+    );
+}
+
 async function updateUser() {
     if (saving.value) return;
     // Any user the editor opens for may be renamed: the API lets an admin
@@ -511,10 +526,9 @@ async function updateUser() {
     // they manage, exactly the rows `canEdit` opens (issue #106).
     const renaming = isRename.value;
     if (renaming) {
-        const nameError = textError(
-            editForm.value.name,
-            STRING_LIMITS.USERNAME,
-        );
+        // Measured as the API measures it: trimmed and lowercased (a
+        // lowercase can be longer, e.g. "İ").
+        const nameError = textError(newName.value, STRING_LIMITS.USERNAME);
         editErrors.value = nameError ? { name: nameError } : {};
         if (nameError) return;
         if (!(await confirmRename())) return;
@@ -536,14 +550,15 @@ async function updateUser() {
         await api.patch('/users', {
             updates: [{ user: editForm.value._id, update }],
         } satisfies UpdateUsersRequest);
-        // A rename keeps the session; the app bar shows the new name now.
-        if (renaming && self) authStore.setUsername(name);
+        // A rename keeps the session; the app bar shows the new name now,
+        // and the refreshed token carries it to the server's copies.
+        if (renaming && self) void authStore.renameSelf(name);
         uiStore.queueMessage(Color.SUCCESS, 'User updated');
         isEditOpen.value = false;
         void fetchUsers();
     } catch (error) {
-        // `name` is the users' only unique field: the new name is taken.
-        if (renaming && apiErrorCode(error) === ErrorCode.DB_DUPLICATE_KEY) {
+        // The new name is taken: the duplicate key names `name`.
+        if (renaming && isDuplicateName(error)) {
             editErrors.value = { name: 'This username is already taken' };
             return;
         }

@@ -22,7 +22,8 @@ const api = vi.hoisted(() => ({
     post: vi.fn<ApiSend>(),
     patch: vi.fn<ApiSend>(),
 }));
-vi.mock('@/axios', () => ({ default: api }));
+const refreshSession = vi.hoisted(() => vi.fn<() => Promise<void>>());
+vi.mock('@/axios', () => ({ default: api, refreshSession }));
 
 function httpError(status: number, body: object): AxiosError {
     const config = { headers: new AxiosHeaders() };
@@ -49,6 +50,7 @@ beforeEach(() => {
     api.get.mockReset();
     api.post.mockReset();
     api.patch.mockReset();
+    refreshSession.mockReset();
     useAuthStore().user = { username: 'boss', roles: [Role.Admin] };
 });
 
@@ -541,8 +543,10 @@ describe('renaming users (issue #106)', () => {
                 },
             ],
         });
-        // Someone else's rename leaves the signed-in user as they were.
+        // Someone else's rename leaves the logged-in user as they were,
+        // and their session alone.
         expect(useAuthStore().user?.username).toBe('boss');
+        expect(refreshSession).not.toHaveBeenCalled();
         expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
             ['User updated'],
         ]);
@@ -606,6 +610,22 @@ describe('renaming users (issue #106)', () => {
         expect(api.patch).not.toHaveBeenCalled();
     });
 
+    it('measures the length lowercased, as the API does', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('ana');
+        // "İ" lowercases to two code units: at the limit as typed, over
+        // it as the API stores it.
+        await type('Username', 'İ'.repeat(STRING_LIMITS.USERNAME));
+
+        await save();
+
+        expect(fieldError('Username')).toBe(
+            `At most ${STRING_LIMITS.USERNAME} characters`,
+        );
+        expect(confirmText()).toBeUndefined();
+    });
+
     it('shows a taken name on the field, not as a toast', async () => {
         api.get.mockResolvedValue({ data: ROWS });
         api.patch.mockRejectedValueOnce(
@@ -628,6 +648,28 @@ describe('renaming users (issue #106)', () => {
 
         await type('Username', 'bea');
         expect(fieldError('Username')).toBe('');
+    });
+
+    it('toasts a duplicate key that does not name the username', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockRejectedValueOnce(
+            httpError(400, {
+                error: ErrorCode.DB_DUPLICATE_KEY,
+                message: 'Duplicate key',
+                details: [{ property: 'email', msg: 'Duplicate key' }],
+            }),
+        );
+        await mount();
+        await editRow('ana');
+        await type('Username', 'bea');
+        await save();
+
+        await answer('Rename');
+
+        expect(fieldError('Username')).toBe('');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['email: Duplicate key'],
+        ]);
     });
 
     it('still toasts other failures of a rename', async () => {
@@ -657,8 +699,20 @@ describe('renaming users (issue #106)', () => {
             username: 'boss',
             roles: [Role.UserManager],
         };
-        api.get.mockResolvedValue({ data: ROWS });
+        api.get.mockImplementation((url) =>
+            Promise.resolve({
+                data:
+                    url === '/users/profile'
+                        ? {
+                              userId: 'm1',
+                              username: 'chief',
+                              roles: [Role.UserManager],
+                          }
+                        : ROWS,
+            }),
+        );
         api.patch.mockResolvedValueOnce({ data: {} });
+        refreshSession.mockResolvedValueOnce();
         await mount();
         await editRow('boss');
         await type('Username', 'chief');
@@ -681,6 +735,41 @@ describe('renaming users (issue #106)', () => {
             username: 'chief',
             roles: [Role.UserManager],
         });
+        // The token is refreshed so the server's copy has the new name
+        // too (a reload would otherwise show the old one), then re-read.
+        expect(refreshSession).toHaveBeenCalledTimes(1);
+        const profileRead = api.get.mock.calls.findIndex(
+            ([url]) => url === '/users/profile',
+        );
+        expect(profileRead).toBeGreaterThan(-1);
+        expect(refreshSession.mock.invocationCallOrder[0]!).toBeLessThan(
+            api.get.mock.invocationCallOrder[profileRead]!,
+        );
+    });
+
+    it('keeps the new name when the refresh after a self-rename fails', async () => {
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockResolvedValueOnce({ data: {} });
+        refreshSession.mockRejectedValueOnce(
+            new AxiosError('timeout', 'ECONNABORTED'),
+        );
+        await mount();
+        await editRow('boss');
+        await type('Username', 'chief');
+        await save();
+        await answer('Rename');
+
+        expect(refreshSession).toHaveBeenCalledTimes(1);
+        expect(api.get).not.toHaveBeenCalledWith('/users/profile');
+        expect(useAuthStore().user?.username).toBe('chief');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User updated'],
+        ]);
     });
 
     it('keeps the own-row rules while the own name is being edited', async () => {

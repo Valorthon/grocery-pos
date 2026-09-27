@@ -30,7 +30,11 @@ vi.mock('./stores/ui', () => ({
     useUIStore: () => ({ queueMessage: vi.fn() }),
 }));
 
-const { default: api, isAuthEndpoint } = await import('./axios');
+const {
+    default: api,
+    isAuthEndpoint,
+    refreshSession,
+} = await import('./axios');
 
 function respond(
     config: InternalAxiosRequestConfig,
@@ -436,5 +440,98 @@ describe('api refresh state machine across requests (issue #30)', () => {
         refreshAnswers(401);
         await Promise.allSettled([api.get('/d')]);
         expect(logout).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('refreshSession (self-rename, #106)', () => {
+    let refresh: MockInstance<typeof axios.post>;
+    let cookieWrites: string[];
+
+    beforeEach(() => {
+        logout.mockReset();
+        refresh = vi.spyOn(axios, 'post');
+        cookieWrites = [];
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        Object.defineProperty(document, 'cookie', {
+            configurable: true,
+            get: () => 'dummy=true',
+            set: (value: string) => cookieWrites.push(value),
+        });
+    });
+
+    afterEach(() => {
+        api.defaults.adapter = undefined;
+    });
+
+    function refreshAfter(status: number) {
+        refresh.mockImplementation(
+            () =>
+                new Promise((resolve, reject) =>
+                    setTimeout(() => {
+                        if (status < 300) {
+                            resolve({ status });
+                            return;
+                        }
+                        const config = {
+                            headers: new AxiosHeaders(),
+                        } as InternalAxiosRequestConfig;
+                        reject(
+                            new AxiosError(
+                                `Request failed with status code ${status}`,
+                                AxiosError.ERR_BAD_REQUEST,
+                                config,
+                                undefined,
+                                respond(config, status),
+                            ),
+                        );
+                    }, 5),
+                ),
+        );
+    }
+
+    it('shares one refresh with requests that 401 meanwhile', async () => {
+        let calls = 0;
+        api.defaults.adapter = ((config) =>
+            ++calls === 1
+                ? fail(config, 401, { error: 'AUTH_002' })
+                : Promise.resolve(respond(config, 200))) as AxiosAdapter;
+        refreshAfter(201);
+
+        const [own, request, again] = await Promise.allSettled([
+            refreshSession(),
+            api.get('/products'),
+            refreshSession(),
+        ]);
+
+        expect([own.status, request.status, again.status]).toEqual([
+            'fulfilled',
+            'fulfilled',
+            'fulfilled',
+        ]);
+        expect(refresh).toHaveBeenCalledTimes(1);
+        expect(refresh.mock.calls[0]?.[0]).toBe(
+            'http://api.test/v1/auth/refresh',
+        );
+    });
+
+    it('rejects on a 5xx and keeps the session', async () => {
+        refreshAfter(503);
+
+        await expect(refreshSession()).rejects.toBeInstanceOf(AxiosError);
+
+        expect(logout).not.toHaveBeenCalled();
+        expect(cookieWrites).toEqual([]);
+    });
+
+    it('logs out only on a 401', async () => {
+        // A successful refresh first: a new session, whose end is shown.
+        refreshAfter(200);
+        await refreshSession();
+        refreshAfter(401);
+
+        await expect(refreshSession()).rejects.toBeInstanceOf(AxiosError);
+
+        expect(logout).toHaveBeenCalledTimes(1);
+        expect(logout).toHaveBeenCalledWith('Please log in to continue');
     });
 });
