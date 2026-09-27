@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
+import { ErrorCode, Role, STRING_LIMITS } from '@grocery-pos/contracts';
 import {
     check,
     click,
@@ -466,5 +466,272 @@ describe('own account (issue #61)', () => {
 
         expect(activeBox().disabled).toBe(false);
         expect(hint()).toBeNull();
+    });
+});
+
+describe('renaming users (issue #106)', () => {
+    const ROWS = {
+        data: [
+            {
+                _id: 'm1',
+                name: 'boss',
+                roles: [Role.UserManager],
+                isActive: true,
+            },
+            { _id: 'u1', name: 'ana', roles: [Role.Seller], isActive: true },
+            { _id: 'a1', name: 'root', roles: [Role.Admin], isActive: true },
+        ],
+        totalItems: 3,
+    };
+
+    async function editRow(name: string) {
+        const row = [...document.querySelectorAll('tbody tr')].find((tr) =>
+            tr.textContent?.includes(name),
+        )!;
+        row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
+        await flush();
+    }
+
+    const dialogTitles = () =>
+        [...document.querySelectorAll('h2')].map((h) => h.textContent);
+    const confirmText = () =>
+        [...document.querySelectorAll('[role="dialog"]')]
+            .find((d) => d.textContent?.includes('will log in as'))
+            ?.querySelector('p')?.textContent;
+
+    /** Clicks the edit dialog's Save (the confirm has no Save). */
+    const save = () => click('Save');
+
+    /** Answers the rename confirmation. */
+    async function answer(label: 'Rename' | 'Cancel') {
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes('will log in as'),
+        )!;
+        [...dialog.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === label)!
+            .click();
+        await flush();
+    }
+
+    it('lets an admin rename a user after confirming the new login name', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockResolvedValueOnce({ data: {} });
+        await mount();
+        await editRow('ana');
+
+        expect(field('Username').disabled).toBe(false);
+        await type('Username', '  Bea ');
+        await save();
+
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(dialogTitles()).toContain('Rename this user?');
+        expect(confirmText()).toBe('ana becomes bea. They will log in as bea.');
+
+        await answer('Rename');
+
+        expect(api.patch).toHaveBeenCalledWith('/users', {
+            updates: [
+                {
+                    user: 'u1',
+                    update: {
+                        isActive: true,
+                        roles: [Role.Seller],
+                        name: 'bea',
+                    },
+                },
+            ],
+        });
+        // Someone else's rename leaves the signed-in user as they were.
+        expect(useAuthStore().user?.username).toBe('boss');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User updated'],
+        ]);
+    });
+
+    it('keeps the dialog and the typed name when the rename is cancelled', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('ana');
+        await type('Username', 'bea');
+        await save();
+
+        await answer('Cancel');
+
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(dialogTitles()).toContain('Edit User');
+        expect(field('Username').value).toBe('bea');
+    });
+
+    it('sends no name when it is unchanged (case and spaces aside)', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockResolvedValueOnce({ data: {} });
+        await mount();
+        await editRow('ana');
+        await type('Username', ' ANA ');
+
+        await save();
+
+        expect(confirmText()).toBeUndefined();
+        expect(api.patch).toHaveBeenCalledWith('/users', {
+            updates: [
+                {
+                    user: 'u1',
+                    update: { isActive: true, roles: [Role.Seller] },
+                },
+            ],
+        });
+    });
+
+    it('validates the new name like a new account, inline', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('ana');
+
+        await type('Username', '   ');
+        await save();
+        expect(fieldError('Username')).toBe(REQUIRED);
+        expect(confirmText()).toBeUndefined();
+
+        await type('Username', 'b');
+        expect(fieldError('Username')).toBe('');
+
+        // The input's maxlength stops typing; a pasted long name still
+        // gets the API's limit (trimmed, as the API trims).
+        field('Username').removeAttribute('maxlength');
+        await type('Username', 'b'.repeat(STRING_LIMITS.USERNAME + 1));
+        await save();
+        expect(fieldError('Username')).toBe(
+            `At most ${STRING_LIMITS.USERNAME} characters`,
+        );
+        expect(api.patch).not.toHaveBeenCalled();
+    });
+
+    it('shows a taken name on the field, not as a toast', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockRejectedValueOnce(
+            httpError(400, {
+                error: ErrorCode.DB_DUPLICATE_KEY,
+                message: 'Duplicate key',
+                details: [{ property: 'name', msg: 'Duplicate key' }],
+            }),
+        );
+        await mount();
+        await editRow('ana');
+        await type('Username', 'root');
+        await save();
+
+        await answer('Rename');
+
+        expect(fieldError('Username')).toBe('This username is already taken');
+        expect(useUIStore().toasts).toEqual([]);
+        expect(dialogTitles()).toContain('Edit User');
+
+        await type('Username', 'bea');
+        expect(fieldError('Username')).toBe('');
+    });
+
+    it('still toasts other failures of a rename', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockRejectedValueOnce(
+            httpError(403, {
+                error: ErrorCode.USER_TARGET_FORBIDDEN,
+                message: 'Only an admin can modify an admin or a user manager',
+            }),
+        );
+        await mount();
+        await editRow('ana');
+        await type('Username', 'bea');
+        await save();
+
+        await answer('Rename');
+
+        expect(fieldError('Username')).toBe('');
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['Only an admin can modify an admin or a user manager'],
+        ]);
+    });
+
+    it('lets a user manager rename themselves and shows the new name at once', async () => {
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({ data: ROWS });
+        api.patch.mockResolvedValueOnce({ data: {} });
+        await mount();
+        await editRow('boss');
+        await type('Username', 'chief');
+        await save();
+
+        expect(dialogTitles()).toContain('Rename your account?');
+        expect(confirmText()).toBe(
+            'boss becomes chief. You will log in as chief.',
+        );
+        await answer('Rename');
+
+        // Own roles are never sent; the session stays.
+        expect(api.patch).toHaveBeenCalledWith('/users', {
+            updates: [
+                { user: 'm1', update: { isActive: true, name: 'chief' } },
+            ],
+        });
+        expect(useAuthStore().user).toEqual({
+            userId: 'm1',
+            username: 'chief',
+            roles: [Role.UserManager],
+        });
+    });
+
+    it('keeps the own-row rules while the own name is being edited', async () => {
+        // A cached user without an id is matched by name: typing a new
+        // one must not unlock the own roles or the Active box.
+        useAuthStore().user = { username: 'boss', roles: [Role.UserManager] };
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('boss');
+
+        await type('Username', 'chief');
+        await flush();
+
+        const seller = field(String(Role.Seller));
+        expect(seller.disabled).toBe(true);
+        expect(
+            document.querySelector('[data-testid="self-active-hint"]'),
+        ).not.toBeNull();
+    });
+
+    it('lets a user manager rename a cashier they manage', async () => {
+        useAuthStore().user = {
+            userId: 'm1',
+            username: 'boss',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+
+        await editRow('ana');
+        expect(field('Username').disabled).toBe(false);
+
+        // An admin's row does not open for a user manager at all.
+        const rootEdit = [...document.querySelectorAll('tbody tr')]
+            .find((tr) => tr.textContent?.includes('root'))!
+            .querySelector<HTMLButtonElement>('button[aria-label^="Edit"]')!;
+        expect(rootEdit.disabled).toBe(true);
+    });
+
+    it('closes the confirmation with the page', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('ana');
+        await type('Username', 'bea');
+        await save();
+        expect(confirmText()).toBeDefined();
+
+        app!.unmount();
+        app = null;
+        await flush();
+
+        expect(api.patch).not.toHaveBeenCalled();
     });
 });

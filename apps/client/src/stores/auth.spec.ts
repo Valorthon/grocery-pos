@@ -131,6 +131,35 @@ describe('auth store', () => {
         expect(store.isAuthenticated).toBe(false);
     });
 
+    describe('setUsername (self-rename, #106)', () => {
+        it('renames the user in memory and in storage, keeping the rest', async () => {
+            const cached = {
+                userId: 'm1',
+                username: 'boss',
+                roles: [Role.UserManager],
+            };
+            localStorage.setItem('user', JSON.stringify(cached));
+            const store = await loadStore();
+
+            store.setUsername('chief');
+
+            expect(store.user).toEqual({ ...cached, username: 'chief' });
+            expect(JSON.parse(localStorage.getItem('user')!)).toEqual({
+                ...cached,
+                username: 'chief',
+            });
+        });
+
+        it('does nothing without a user', async () => {
+            const store = await loadStore();
+
+            store.setUsername('chief');
+
+            expect(store.user).toBeNull();
+            expect(localStorage.getItem('user')).toBeNull();
+        });
+    });
+
     describe('roles', () => {
         it('reports only the roles the user actually holds', async () => {
             localStorage.setItem(

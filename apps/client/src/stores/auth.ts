@@ -157,6 +157,17 @@ export const useAuthStore = defineStore('auth', () => {
         }
     };
 
+    /**
+     * The logged-in user renamed their own account (#106): the app bar and
+     * profile menu show the new login name at once, and the cached copy
+     * follows. The id, roles and session are unchanged.
+     */
+    const setUsername = (username: string): void => {
+        if (!user.value) return;
+        user.value = { ...user.value, username };
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value));
+    };
+
     let sessionCheck: Promise<void> | null = null;
 
     /**
@@ -214,6 +225,7 @@ export const useAuthStore = defineStore('auth', () => {
         userLogoutPending,
         resetRegister,
         fetchMe,
+        setUsername,
         initSession,
         hasRole,
         isAdmin,
