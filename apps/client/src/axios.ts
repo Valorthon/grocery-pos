@@ -60,6 +60,67 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     return config;
 });
 
+/**
+ * Refreshes the session (rotates the refresh token, issues a new access
+ * token). Single-flight: while one refresh is in flight, later callers
+ * wait for it and share its outcome. Only a 401 from the refresh ends the
+ * session (logout, once per lost session); a timeout, network error or
+ * 5xx rejects and keeps the user logged in. Used by the 401 interceptor
+ * below and after a self-rename, so the access token carries the new
+ * username (#106).
+ */
+export function refreshSession(): Promise<void> {
+    if (isRefreshing) {
+        return new Promise<void>((resolve, reject) => {
+            failedQueue.push({ resolve: () => resolve(), reject });
+        });
+    }
+    isRefreshing = true;
+    return (async () => {
+        try {
+            // Bare axios, so a 401 here cannot recurse into the
+            // interceptor. Bounded like every other call (bare axios
+            // defaults to no timeout, which would park every queued
+            // request forever). Any 2xx is success: axios rejects
+            // anything else.
+            await axios.post(
+                `${env.VITE_API_URL}${constant.refresh}`,
+                {},
+                {
+                    withCredentials: true, // Send cookies with refresh token
+                    timeout: env.VITE_API_TIMEOUT,
+                },
+            );
+            processQueue(null);
+            isRefreshing = false;
+            isSessionDialogShown = false;
+        } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+
+            processQueue(refreshError as AxiosError);
+            isRefreshing = false;
+
+            // Only a 401 means the session is over. A 5xx or a network
+            // error is transient: the server kept the cookies, so keep
+            // the user logged in and let the caller fail on its own.
+            const sessionOver =
+                isAxiosError(refreshError) &&
+                refreshError.response?.status === 401;
+            if (sessionOver) {
+                clearSessionMarker(env.VITE_DOMAIN);
+
+                if (!isSessionDialogShown) {
+                    isSessionDialogShown = true;
+                    // Shown by logout after it clears the old toasts.
+                    const authStore = useAuthStore();
+                    void authStore.logout('Please log in to continue');
+                }
+            }
+            throw refreshError;
+        }
+    })();
+}
+
 // RESPONSE interceptor with intelligent refresh token logic.
 //
 // Replays after a refresh resend `originalRequest` as it was, body
@@ -84,74 +145,12 @@ api.interceptors.response.use(
             !originalRequest._retry &&
             !isAuthEndpoint(originalRequest.url)
         ) {
-            // If already refreshing, queue this request
-            if (isRefreshing) {
-                return new Promise((resolve, reject) => {
-                    failedQueue.push({ resolve, reject });
-                })
-                    .then(() => {
-                        // One refresh per request: if the replay 401s too,
-                        // it is rejected instead of refreshing again.
-                        originalRequest._retry = true;
-                        return api(originalRequest);
-                    })
-                    .catch((err) => {
-                        return Promise.reject(err);
-                    });
-            }
-
+            // One refresh per request: if the replay 401s too, it is
+            // rejected instead of refreshing again. A refresh failure
+            // rejects with the refresh's own error.
             originalRequest._retry = true;
-            isRefreshing = true;
-
-            try {
-                // Bare axios, so a 401 here cannot recurse into this
-                // interceptor. Bounded like every other call (bare axios
-                // defaults to no timeout, which would park every queued
-                // request forever). Any 2xx is success: axios rejects
-                // anything else.
-                await axios.post(
-                    `${env.VITE_API_URL}${constant.refresh}`,
-                    {},
-                    {
-                        withCredentials: true, // Send cookies with refresh token
-                        timeout: env.VITE_API_TIMEOUT,
-                    },
-                );
-
-                // Process queued requests
-                processQueue(null);
-
-                isRefreshing = false;
-
-                // Retry original request
-                isSessionDialogShown = false;
-
-                return api(originalRequest);
-            } catch (refreshError) {
-                console.error('Token refresh failed:', refreshError);
-
-                processQueue(refreshError as AxiosError);
-                isRefreshing = false;
-
-                // Only a 401 means the session is over. A 5xx or a network
-                // error is transient: the server kept the cookies, so keep
-                // the user logged in and let this request fail on its own.
-                const sessionOver =
-                    isAxiosError(refreshError) &&
-                    refreshError.response?.status === 401;
-                if (!sessionOver) return Promise.reject(refreshError);
-
-                clearSessionMarker(env.VITE_DOMAIN);
-
-                if (!isSessionDialogShown) {
-                    isSessionDialogShown = true;
-                    // Shown by logout after it clears the old toasts.
-                    const authStore = useAuthStore();
-                    void authStore.logout('Please log in to continue');
-                }
-
-                return Promise.reject(refreshError);
-            }
+            await refreshSession();
+            return api(originalRequest);
         }
 
         // For other errors, just reject

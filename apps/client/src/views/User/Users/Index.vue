@@ -155,7 +155,13 @@
         :closable="!saving"
     >
         <div class="space-y-4">
-            <BaseInput v-model="editForm.name" label="Username" disabled />
+            <BaseInput
+                v-model="editForm.name"
+                label="Username"
+                :maxlength="STRING_LIMITS.USERNAME"
+                :error="editErrors.name"
+                @update:model-value="editErrors = {}"
+            />
             <BaseInput
                 v-if="canResetPassword"
                 v-model="editForm.password"
@@ -215,6 +221,8 @@
             >
         </template>
     </BaseModal>
+
+    <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
 </template>
 
 <script setup lang="ts">
@@ -228,6 +236,8 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import { useConfirm } from '@/composables/useConfirm';
 import {
     fieldErrors,
     PASSWORD_HINT,
@@ -241,6 +251,7 @@ import {
     canGrantRole,
     canManageUser,
     type CreateUsersRequest,
+    ErrorCode,
     type Paginated,
     STRING_LIMITS,
     type UpdateUsersRequest,
@@ -252,7 +263,7 @@ import {
     useListFetch,
     useListPaging,
 } from '@/composables/useListFetch';
-import { apiErrorMessages } from '@/utils/api-error';
+import { apiErrorBody, apiErrorMessages } from '@/utils/api-error';
 
 const { page, limit, search } = useListPaging(() => fetchUsers());
 const totalItems = ref(0);
@@ -313,11 +324,28 @@ const createModel = guardedOpen(isCreateOpen);
 const editModel = guardedOpen(isEditOpen);
 const editForm = ref({
     _id: '',
+    /** The row's username when the dialog opened, as stored. */
+    originalName: '',
     name: '',
     password: '',
     roles: [] as Role[],
     isActive: true,
 });
+/** Why the new username would be refused (issue #106), set on Save. */
+const editErrors = ref<{ name?: string }>({});
+
+const {
+    request: confirmRequest,
+    confirm,
+    answer: answerConfirm,
+} = useConfirm();
+
+/**
+ * The username as the API stores it (`UpdateFields.name`: trimmed and
+ * lowercased), so "Ana " for "ana" is no rename.
+ */
+const newName = computed(() => editForm.value.name.trim().toLowerCase());
+const isRename = computed(() => newName.value !== editForm.value.originalName);
 
 // Your own row: by id when the session knows it (a rename would leave the
 // stored username stale), else by username (a user cached before the
@@ -327,7 +355,11 @@ function isSelf(row: { _id: string; name: string }): boolean {
     if (!me) return false;
     return me.userId ? row._id === me.userId : row.name === me.username;
 }
-const isEditingSelf = computed(() => isSelf(editForm.value));
+// By the row as opened: typing a new username must not change whose row
+// this is (a cached user without an id is matched by name).
+const isEditingSelf = computed(() =>
+    isSelf({ _id: editForm.value._id, name: editForm.value.originalName }),
+);
 // A user manager may rename themselves but not deactivate themselves
 // (issue #61). An admin may, unless they are the last active one, which
 // the server checks.
@@ -442,6 +474,7 @@ async function createUser() {
 function openEdit(item: UserView) {
     editForm.value = {
         _id: item._id,
+        originalName: item.name,
         name: item.name,
         password: '',
         // A new array (issue #20): ticking roles edits this copy, never
@@ -451,15 +484,64 @@ function openEdit(item: UserView) {
         roles: item.roles.filter((role) => ASSIGNABLE_ROLES.includes(role)),
         isActive: item.isActive,
     };
+    editErrors.value = {};
     isEditOpen.value = true;
 }
 
+/**
+ * The username is the login name, so a rename is confirmed first, naming
+ * the name to log in with from now on (issue #106).
+ */
+function confirmRename(): Promise<boolean> {
+    const self = isEditingSelf.value;
+    const name = newName.value;
+    return confirm({
+        title: self ? 'Rename your account?' : 'Rename this user?',
+        message: `${editForm.value.originalName} becomes ${name}. ${
+            self ? 'You' : 'They'
+        } will log in as ${name}.`,
+        confirmLabel: 'Rename',
+    });
+}
+
+/** A `DB_DUPLICATE_KEY` whose details name the `name` field. */
+function isDuplicateName(error: unknown): boolean {
+    const body = apiErrorBody(error);
+    return (
+        body?.error === ErrorCode.DB_DUPLICATE_KEY &&
+        Array.isArray(body.details) &&
+        body.details.some(
+            (d: unknown) =>
+                typeof d === 'object' &&
+                d !== null &&
+                (d as { property?: unknown }).property === 'name',
+        )
+    );
+}
+
 async function updateUser() {
+    if (saving.value) return;
+    // Any user the editor opens for may be renamed: the API lets an admin
+    // rename anyone and a user manager rename themselves and the users
+    // they manage, exactly the rows `canEdit` opens (issue #106).
+    const renaming = isRename.value;
+    if (renaming) {
+        // Measured as the API measures it: trimmed and lowercased (a
+        // lowercase can be longer, e.g. "İ").
+        const nameError = textError(newName.value, STRING_LIMITS.USERNAME);
+        editErrors.value = nameError ? { name: nameError } : {};
+        if (nameError) return;
+        if (!(await confirmRename())) return;
+    }
+    const self = isEditingSelf.value;
+    const name = newName.value;
     saving.value = true;
     try {
         const update: UserUpdate = {
             isActive: editForm.value.isActive,
         };
+        // Sent only when it changed, as the API stores it.
+        if (renaming) update.name = name;
         if (!isEditingSelf.value) update.roles = editForm.value.roles;
         if (canResetPassword.value && editForm.value.password) {
             update.password = editForm.value.password;
@@ -468,10 +550,18 @@ async function updateUser() {
         await api.patch('/users', {
             updates: [{ user: editForm.value._id, update }],
         } satisfies UpdateUsersRequest);
+        // A rename keeps the session; the app bar shows the new name now,
+        // and the refreshed token carries it to the server's copies.
+        if (renaming && self) void authStore.renameSelf(name);
         uiStore.queueMessage(Color.SUCCESS, 'User updated');
         isEditOpen.value = false;
         void fetchUsers();
     } catch (error) {
+        // The new name is taken: the duplicate key names `name`.
+        if (renaming && isDuplicateName(error)) {
+            editErrors.value = { name: 'This username is already taken' };
+            return;
+        }
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(error, 'Could not update the user.'),
