@@ -7,6 +7,15 @@
  * The persistence edge is faked: an in-memory User model and a connection
  * whose transactions are serialized and roll back on a throw.
  */
+// Real argon2 with cheap hash parameters, so the password tests stay fast
+// under load (#109); user.service.spec.ts pins production's defaults.
+jest.mock('argon2', () =>
+    jest
+        .requireActual<typeof import('./testing/cheap-argon2')>(
+            './testing/cheap-argon2',
+        )
+        .cheapArgon2(),
+);
 import { createHmac } from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { INestApplication, VersioningType } from '@nestjs/common';
@@ -59,6 +68,7 @@ describe('Users (e2e)', () => {
     const model = new FakeUserModel();
     const tokens = new FakeRefreshTokenModel();
     let throttles: ThrottlerStorageService;
+    let seedHash: string;
 
     let admin: FakeUserRow;
     let manager: FakeUserRow;
@@ -84,7 +94,11 @@ describe('Users (e2e)', () => {
         path: string,
         body?: unknown,
         sid?: string,
-    ): Promise<{ status: number; body: Record<string, unknown> }> {
+    ): Promise<{
+        status: number;
+        body: Record<string, unknown>;
+        headers: Headers;
+    }> {
         const res = await fetch(`${base}${path}`, {
             method,
             headers: {
@@ -94,7 +108,11 @@ describe('Users (e2e)', () => {
             body: body === undefined ? undefined : JSON.stringify(body),
         });
         const text = await res.text();
-        return { status: res.status, body: text ? JSON.parse(text) : {} };
+        return {
+            status: res.status,
+            body: text ? JSON.parse(text) : {},
+            headers: res.headers,
+        };
     }
 
     const patchUsers = (
@@ -141,32 +159,33 @@ describe('Users (e2e)', () => {
         base = `http://127.0.0.1:${port}/v1`;
         jwt = app.get(JwtService);
         throttles = app.get(getStorageToken());
+        // Hash the seed password once, not before every test (#109).
+        seedHash = await argon.hash('secret');
     });
 
     afterAll(async () => {
         await app.close();
     });
 
-    beforeEach(async () => {
+    beforeEach(() => {
         model.rows = [];
         model.writes.length = 0;
         tokens.rows.clear();
         throttles.storage.clear();
-        const hash = await argon.hash('secret');
         admin = model.seed({
             name: 'admin',
             roles: [Role.Admin],
-            passwordHash: hash,
+            passwordHash: seedHash,
         });
         manager = model.seed({
             name: 'manager',
             roles: [Role.UserManager],
-            passwordHash: hash,
+            passwordHash: seedHash,
         });
         cashier = model.seed({
             name: 'cashier',
             roles: [Role.Seller],
-            passwordHash: hash,
+            passwordHash: seedHash,
         });
     });
 
@@ -778,14 +797,29 @@ describe('Users (e2e)', () => {
     });
 
     it(`PATCH /users/me/password: ${RATE_LIMITS.password.account.limit} tries per user, then 429 (#12)`, async () => {
+        const { limit, ttl } = RATE_LIMITS.password.account;
         const attempt = (as: FakeUserRow) =>
             call(as, 'PATCH', '/users/me/password', {
                 currentPassword: 'guess',
                 newPassword: 'fresh-secret',
             });
+        // Every request that passes the JWT and role guards counts, however
+        // it ends: the rate-limit guard runs after them but before the
+        // ValidationPipe. An invalid body is a 400 without an argon2 verify,
+        // so the budget is spent cheaply: a run of real argon2 verifies timed
+        // out on a loaded runner (#109).
+        const cheap = async (as: FakeUserRow) => {
+            const res = await call(as, 'PATCH', '/users/me/password', {
+                currentPassword: 'guess',
+            });
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ErrorCode.VALIDATION_INVALID_INPUT);
+        };
 
-        for (let i = 0; i < RATE_LIMITS.password.account.limit; i++) {
-            expect((await attempt(cashier)).status).toBe(403);
+        // One real wrong guess (the attack being limited) counts too.
+        expect((await attempt(cashier)).status).toBe(403);
+        for (let i = 1; i < limit; i++) {
+            await cheap(cashier);
         }
 
         const blocked = await attempt(cashier);
@@ -794,8 +828,15 @@ describe('Users (e2e)', () => {
             statusCode: 429,
             error: ErrorCode.RATE_LIMITED,
         });
+        // The per-user throttler blocked it, with the production window,
+        // not the (higher) per-IP one.
+        expect(blocked.headers.get('retry-after-account')).toBe(
+            String(ttl / 1000),
+        );
+        expect(blocked.headers.get('retry-after-ip')).toBeNull();
 
-        // Another user on the same IP is unaffected.
-        expect((await attempt(manager)).status).toBe(403);
+        // Another user on the same IP is unaffected (past the guard, so
+        // validated).
+        await cheap(manager);
     });
 });
