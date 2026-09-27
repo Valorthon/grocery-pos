@@ -180,6 +180,41 @@ describe('DrawerActionModal (issue #25)', () => {
         });
     });
 
+    for (const [action, labels] of [
+        [
+            DrawerMovementType.CASH_IN,
+            ['₱200.00', '₱500.00', '₱1,000.00', '₱2,000.00'],
+        ],
+        [
+            DrawerMovementType.CASH_DROP,
+            ['₱1,000.00', '₱2,000.00', '₱3,000.00', '₱5,000.00'],
+        ],
+    ] as const) {
+        it(`lays the ${action} quick amounts out whole at 360px, each at least 44px (#107)`, async () => {
+            await openModal(action);
+            const group = document.querySelector<HTMLElement>(
+                '[data-testid="drawer-quick-amounts"]',
+            )!;
+            // Two columns below sm, four from sm: never a single row that
+            // overflows the dialog at 360px.
+            expect(group.className.split(/\s+/)).toEqual(
+                expect.arrayContaining([
+                    'grid',
+                    'grid-cols-2',
+                    'sm:grid-cols-4',
+                ]),
+            );
+            expect(group.className).not.toMatch(/\bflex\b/);
+            const chips = [...group.querySelectorAll('button')];
+            expect(chips.map((c) => c.textContent?.trim())).toEqual(labels);
+            for (const chip of chips) {
+                expect(chip.className.split(/\s+/)).toEqual(
+                    expect.arrayContaining(['min-h-11', 'min-w-11']),
+                );
+            }
+        });
+    }
+
     it('does not check a drop against the drawer (blind, #2)', async () => {
         await openModal(DrawerMovementType.CASH_DROP);
         api.post.mockResolvedValue({ data: { ...SHIFT } });
