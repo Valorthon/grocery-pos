@@ -7,6 +7,15 @@
  * The persistence edge is faked: an in-memory User model and a connection
  * whose transactions are serialized and roll back on a throw.
  */
+// Real argon2 with cheap hash parameters, so the password tests stay fast
+// under load (#109); user.service.spec.ts pins production's defaults.
+jest.mock('argon2', () =>
+    jest
+        .requireActual<typeof import('./testing/cheap-argon2')>(
+            './testing/cheap-argon2',
+        )
+        .cheapArgon2(),
+);
 import { createHmac } from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { INestApplication, VersioningType } from '@nestjs/common';
@@ -150,8 +159,7 @@ describe('Users (e2e)', () => {
         base = `http://127.0.0.1:${port}/v1`;
         jwt = app.get(JwtService);
         throttles = app.get(getStorageToken());
-        // argon2 is deliberately slow (#109): hash the seed password once,
-        // not before every test.
+        // Hash the seed password once, not before every test (#109).
         seedHash = await argon.hash('secret');
     });
 
@@ -795,19 +803,23 @@ describe('Users (e2e)', () => {
                 currentPassword: 'guess',
                 newPassword: 'fresh-secret',
             });
-        // Every request counts, however it ends: the throttler guard runs
-        // before the ValidationPipe. An invalid body is a 400 without an
-        // argon2 verify, so the budget is spent cheaply: a run of argon2
-        // verifies (~64 MiB each) timed out on a loaded runner (#109).
-        const cheap = (as: FakeUserRow) =>
-            call(as, 'PATCH', '/users/me/password', {
+        // Every request that passes the JWT and role guards counts, however
+        // it ends: the rate-limit guard runs after them but before the
+        // ValidationPipe. An invalid body is a 400 without an argon2 verify,
+        // so the budget is spent cheaply: a run of real argon2 verifies timed
+        // out on a loaded runner (#109).
+        const cheap = async (as: FakeUserRow) => {
+            const res = await call(as, 'PATCH', '/users/me/password', {
                 currentPassword: 'guess',
             });
+            expect(res.status).toBe(400);
+            expect(res.body.error).toBe(ErrorCode.VALIDATION_INVALID_INPUT);
+        };
 
         // One real wrong guess (the attack being limited) counts too.
         expect((await attempt(cashier)).status).toBe(403);
         for (let i = 1; i < limit; i++) {
-            expect((await cheap(cashier)).status).toBe(400);
+            await cheap(cashier);
         }
 
         const blocked = await attempt(cashier);
@@ -825,6 +837,6 @@ describe('Users (e2e)', () => {
 
         // Another user on the same IP is unaffected (past the guard, so
         // validated).
-        expect((await cheap(manager)).status).toBe(400);
+        await cheap(manager);
     });
 });

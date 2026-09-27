@@ -3,12 +3,16 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
 import * as argon from 'argon2';
 
-// argon2's exports cannot be spied on in place; wrap verify (still real) so
-// the enumeration tests can see how it is called.
-jest.mock('argon2', () => {
-    const actual = jest.requireActual<typeof import('argon2')>('argon2');
-    return { ...actual, verify: jest.fn(actual.verify) };
-});
+// argon2's exports cannot be spied on in place. Real argon2, with hash and
+// verify wrapped so the tests can see how they are called, and hashes made
+// with cheap parameters so the suite stays fast under load (#109).
+jest.mock('argon2', () =>
+    jest
+        .requireActual<typeof import('./testing/cheap-argon2')>(
+            './testing/cheap-argon2',
+        )
+        .cheapArgon2(),
+);
 import { UserService } from './user.service';
 import { User, UserSchema } from './user.schema';
 import { Role } from '../auth/types';
@@ -497,6 +501,59 @@ describe('UserService.checkCredentials (no enumeration, #12)', () => {
         await expect(
             service.checkCredentials('cashier', 'right-password'),
         ).resolves.toMatchObject({ name: 'cashier', isActive: true });
+    });
+});
+
+describe('UserService argon2 parameters (#109)', () => {
+    const hash = jest.mocked(argon.hash);
+
+    it("hashes every password with argon2's defaults: only the specs make them cheap", async () => {
+        const model = new FakeUserModel();
+        const admin = model.seed({ name: 'admin', roles: [Role.Admin] });
+        const cashier = model.seed({
+            name: 'cashier',
+            roles: [Role.Seller],
+            passwordHash: await argon.hash('old-pw'),
+        });
+        const moduleRef = await Test.createTestingModule({
+            providers: [
+                UserService,
+                {
+                    provide: getConnectionToken(),
+                    useValue: fakeConnection(model),
+                },
+                { provide: getModelToken(User.name), useValue: model },
+            ],
+        }).compile();
+        const service = moduleRef.get(UserService);
+        hash.mockClear();
+
+        await service.create(as(admin), {
+            users: [
+                { name: 'till2', password: 'create-pw', roles: [Role.Seller] },
+            ],
+        });
+        await service.update(as(admin), {
+            updates: [
+                {
+                    user: cashier._id.toString(),
+                    update: { password: 'reset-pw' },
+                },
+            ],
+        });
+        await service.changeOwnPassword(as(cashier), {
+            currentPassword: 'reset-pw',
+            newPassword: 'own-pw',
+        });
+        await service.checkCredentials('nobody', 'x'); // the dummy hash
+
+        // No options: production gets the library defaults (64 MiB, t=3, p=4).
+        expect(hash.mock.calls).toStrictEqual([
+            ['create-pw'],
+            ['reset-pw'],
+            ['own-pw'],
+            [expect.any(String)],
+        ]);
     });
 });
 
