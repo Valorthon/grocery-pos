@@ -244,6 +244,12 @@ describe('SellerLayout sidebar (issue #26)', () => {
 
             expect(sidebar().className).toContain('lg:w-20');
             expect(sidebar().textContent).not.toContain('Register (Sale)');
+            // The rail's account button is a 44px target too (#107).
+            expect(
+                sidebar()
+                    .querySelector('[data-dropdown-trigger]')!
+                    .className.split(/\s+/),
+            ).toEqual(expect.arrayContaining(['w-11', 'h-11']));
             expect(localStorage.getItem('grocery_pos_sidebar_v1:u1')).toBe(
                 'collapsed',
             );
@@ -528,6 +534,28 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
                 expect.arrayContaining(['hidden', 'md:flex']),
             );
             expect(tabs.textContent).toContain('Orders & Sales');
+        });
+
+        it('makes the tabs and the account button at least 44px (#107)', async () => {
+            media = stubMatchMedia(true);
+            await mountAt('/seller');
+
+            const tabs = [
+                ...document.querySelectorAll<HTMLButtonElement>(
+                    'header nav button',
+                ),
+            ];
+            expect(tabs.map((t) => t.textContent?.trim())).toEqual([
+                'Dashboard',
+                'Orders & Sales',
+            ]);
+            for (const tab of tabs) {
+                expect(tab.className.split(/\s+/)).toContain('min-h-11');
+            }
+            const account = document.querySelector<HTMLElement>(
+                'header [data-dropdown-trigger]',
+            )!;
+            expect(account.className.split(/\s+/)).toContain('min-h-11');
         });
     });
 
