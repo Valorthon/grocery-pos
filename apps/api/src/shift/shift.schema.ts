@@ -66,6 +66,9 @@ export const DrawerMovementSchema =
  */
 @Schema({ timestamps: true })
 export class Shift {
+    @Prop({ type: Number }) lateOfflineCount?: number;
+    @Prop({ type: Number, default: 0, select: false })
+    offlineLeaseLock?: number;
     @Prop({
         required: true,
         type: mongoose.Schema.Types.ObjectId,

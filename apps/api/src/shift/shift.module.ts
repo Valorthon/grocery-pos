@@ -1,3 +1,7 @@
+import {
+    OfflineLease,
+    OfflineLeaseSchema,
+} from '../offline/offline-lease.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Sales, SalesSchema } from '../sales/sales.schema';
@@ -9,6 +13,7 @@ import { ShiftService } from './shift.service';
     imports: [
         MongooseModule.forFeature([
             { name: Shift.name, schema: ShiftSchema },
+            { name: OfflineLease.name, schema: OfflineLeaseSchema },
             // Read at close for the Z-read. SalesModule depends on this
             // module (sales are written into shifts), not the other way.
             { name: Sales.name, schema: SalesSchema },

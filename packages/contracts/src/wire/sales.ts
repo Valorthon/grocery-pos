@@ -136,6 +136,12 @@ export const SALE_REVERSAL_VIEW_SHAPE: WireShape<SaleReversalView> = {
  * those for replays and no response carries them (#27).
  */
 export interface SaleView {
+    soldAt?: string;
+    offline?: boolean;
+    stockShortfall?: boolean;
+    reconciledBy?: string;
+    reconciliationReason?: string;
+    lateOffline?: boolean;
     _id: string;
     /** Centavos: the charged total, after any discount. */
     amount: number;
@@ -160,6 +166,12 @@ export interface SaleView {
 }
 
 export const SALE_VIEW_SHAPE: WireShape<SaleView> = {
+    soldAt: 'optional',
+    offline: 'optional',
+    stockShortfall: 'optional',
+    reconciledBy: 'optional',
+    reconciliationReason: 'optional',
+    lateOffline: 'optional',
     _id: 'required',
     amount: 'required',
     cashier: 'required',

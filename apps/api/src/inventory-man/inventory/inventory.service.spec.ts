@@ -898,6 +898,7 @@ describe('InventoryService.getAll (issue #14)', () => {
             $facet: {
                 metadata: [{ $count: 'total' }],
                 data: [
+                    { $project: { offlineShortfall: 0 } },
                     { $sort: { 'product.name': 1, _id: 1 } },
                     { $skip: 5 },
                     { $limit: 5 },

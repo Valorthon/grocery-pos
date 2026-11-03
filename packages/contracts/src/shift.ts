@@ -213,6 +213,8 @@ export interface ZReadDrawer {
  *   overShort   = countedCash - expectedCash
  */
 export interface ZReadReport {
+    /** Supplemental late uploads; the stored closing figures stay unchanged. */
+    offlineAddendum?: { count: number; netCash: number };
     shiftId: string;
     cashierName: string;
     terminal: string;

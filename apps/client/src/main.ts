@@ -23,3 +23,10 @@ void useAuthStore().initSession();
 app.use(router);
 
 app.mount('#app');
+
+// New workers wait for old tabs to close; an update never reloads an active checkout.
+if (import.meta.env.PROD) {
+    void import('./offline/pwa-source').then(({ registerOfflineWorker }) =>
+        registerOfflineWorker(),
+    );
+}

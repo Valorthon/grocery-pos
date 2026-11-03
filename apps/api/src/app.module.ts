@@ -22,6 +22,7 @@ import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RateLimitModule } from './auth/rate-limit/rate-limit';
 import { RequestIdModule } from './common/request-id/request-id';
+import { OfflineModule } from './offline/offline.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
@@ -51,6 +52,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
         HealthModule,
         DashboardModule,
         CspReportModule,
+        OfflineModule,
     ],
     controllers: [],
     providers: [

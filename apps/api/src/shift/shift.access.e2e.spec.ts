@@ -21,6 +21,7 @@ import {
     Caller,
 } from '../common/testing/access-harness';
 import { Sales } from '../sales/sales.schema';
+import { OfflineLease } from '../offline/offline-lease.schema';
 import { ShiftController } from './shift.controller';
 import { Shift } from './shift.schema';
 import { ShiftService } from './shift.service';
@@ -49,6 +50,10 @@ describe('Shift routes (e2e)', () => {
                 },
                 { provide: getModelToken(Shift.name), useValue: shifts },
                 { provide: getModelToken(Sales.name), useValue: sales },
+                {
+                    provide: getModelToken(OfflineLease.name),
+                    useValue: new FakeModel(),
+                },
             ],
         );
     });

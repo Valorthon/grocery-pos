@@ -11,3 +11,5 @@ export * from './barcode.js';
 export * from './permissions.js';
 export * from './wire-shape.js';
 export * from './wire/index.js';
+
+export * from './offline.js';

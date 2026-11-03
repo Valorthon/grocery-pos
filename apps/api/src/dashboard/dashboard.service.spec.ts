@@ -100,9 +100,9 @@ describe('DashboardService.getDashboard', () => {
 
     function matchedRange(): { $gte: Date; $lt: Date } {
         const pipeline = aggregate.mock.calls[0][0] as Array<{
-            $match?: { createdAt: { $gte: Date; $lt: Date } };
+            $match?: { $or: Array<{ soldAt: { $gte: Date; $lt: Date } }> };
         }>;
-        return pipeline[0].$match!.createdAt;
+        return pipeline[0].$match!.$or[0].soldAt;
     }
 
     it('bounds "today" by Manila midnight, not server midnight', async () => {

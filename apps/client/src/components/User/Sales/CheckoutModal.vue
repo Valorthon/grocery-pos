@@ -60,6 +60,7 @@
                                 ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                         "
+                        :disabled="cashOnly"
                         @click="selectMethod(PaymentType.GCASH)"
                     >
                         <QrCode class="w-5 h-5" />
@@ -74,6 +75,7 @@
                                 ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
                                 : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                         "
+                        :disabled="cashOnly"
                         @click="selectMethod(PaymentType.SPLIT)"
                     >
                         <Split class="w-5 h-5" />
@@ -428,6 +430,7 @@ const props = defineProps<{
     /** Preview total due, in centavos, from `previewSale` in Sell.vue. */
     total: number;
     initialMethod?: PaymentType;
+    cashOnly?: boolean;
     initialCash?: number | null;
     /**
      * Records the sale (`POST /sales`). The modal stays open until it
@@ -510,6 +513,7 @@ function currency(value: number): string {
 }
 
 async function selectMethod(next: PaymentType) {
+    if (props.cashOnly && next !== PaymentType.CASH) return;
     method.value = next;
     if (next === PaymentType.CASH && !amountTendered.value) {
         amountTendered.value = centavosToPesoInput(total.value);

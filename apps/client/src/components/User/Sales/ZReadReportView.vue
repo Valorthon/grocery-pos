@@ -31,6 +31,17 @@
             </div>
         </div>
 
+        <p
+            v-if="report.offlineAddendum"
+            class="rounded-lg border border-amber-200 bg-amber-50 p-3 font-sans text-sm"
+            data-testid="offline-addendum"
+        >
+            Admin reconciliation addendum:
+            {{ report.offlineAddendum.count }} offline sales and
+            {{ currency(report.offlineAddendum.netCash) }} cash were recorded
+            after close. These are separate from the unchanged closing totals
+            below.
+        </p>
         <section
             class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
         >

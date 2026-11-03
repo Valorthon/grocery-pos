@@ -21,6 +21,7 @@ import {
 import { AuthUser } from '../auth/types';
 import { runInTransaction } from '../common/utils/db';
 import { Sales } from '../sales/sales.schema';
+import { OfflineLease } from '../offline/offline-lease.schema';
 import { Shift } from './shift.schema';
 import { ShiftService } from './shift.service';
 import {
@@ -65,6 +66,10 @@ beforeEach(async () => {
             { provide: getConnectionToken(), useValue: connection },
             { provide: getModelToken(Shift.name), useValue: shifts },
             { provide: getModelToken(Sales.name), useValue: sales },
+            {
+                provide: getModelToken(OfflineLease.name),
+                useValue: new FakeModel(),
+            },
         ],
     }).compile();
 

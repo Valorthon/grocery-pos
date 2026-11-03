@@ -103,7 +103,11 @@ export function salesListFilter(
     }
 
     const createdAt = dateRangeFilter(dto.dateFrom, dto.dateTo, timeZone);
-    if (createdAt) filter.createdAt = createdAt;
+    if (createdAt)
+        filter.$or = [
+            { soldAt: createdAt },
+            { soldAt: { $exists: false }, createdAt },
+        ];
 
     return filter;
 }
@@ -316,7 +320,7 @@ export class SalesService {
     }
 
     /** Rebuilds a stored sale's receipt, the same shape `POST /sales` returns. */
-    private async receiptOf(
+    async receiptOf(
         sale: Sales & { _id: unknown },
         user: AuthUser,
         session?: ClientSession,
@@ -349,7 +353,7 @@ export class SalesService {
 
         return this.makeReceipt({
             saleId: String(sale._id),
-            createdAt: sale.createdAt,
+            createdAt: sale.soldAt ?? sale.createdAt,
             status: sale.status ?? SaleStatus.COMPLETED,
             paymentType: sale.paymentType,
             referenceNumber: sale.referenceNumber ?? null,

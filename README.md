@@ -273,6 +273,45 @@ can be parked. A storage failure leaves the original ticket intact. A ticket
 with an unresolved checkout attempt must be retried before it can be parked,
 so a lost sale response cannot become a second sale through parking.
 
+## Offline cash sales
+
+Open a shift online and wait for **Offline cash ready** before disconnecting.
+The browser prepares a server-signed product catalogue and a cashier/session/
+shift lease; KG/G/L prices retain their displayed-unit meaning. Install the
+app from the browser menu if desired, or use the ordinary browser tab. HTTPS
+(or localhost) is required for the offline shell. Catalogue refresh runs every
+30 seconds while connected; changing the app does not force-reload an active
+checkout.
+
+When disconnected, catalogued items can be scanned/searched and sold for
+**cash only**, at the cached verified price. Discounts, GCash, overrides,
+voids and refunds require reconnection. The local receipt says it is pending
+sync. The IndexedDB outbox survives reload and logout, and automatically
+uploads each receipt using its original idempotency key when connectivity
+returns. A sale whose online response was lost must be retried online first;
+it cannot be converted into another offline charge.
+
+Keep the terminal/browser data until pending sales are zero. Queueing must
+finish durably before the basket clears; storage failures refuse checkout.
+The browser is asked for persistent storage, but clearing site data removes
+its local outbox. A different cashier does not inherit queued sales. The
+cached authorization ends with the original login session, so reconnect and
+log in again before it expires.
+
+Normal shift close first syncs collected cash and releases offline mode on
+every terminal. A closed/force-closed shift or revoked cashier/session leaves
+sales pending for **admin reconciliation**. An admin logs in on the same
+terminal, opens **Review pending sales**, enters a reason and records the
+collected cash. Original Z-read totals remain unchanged; late cash appears as
+a separate addendum when that report is read again. Original sale time is
+stored as `soldAt`, separately from the server's `createdAt` ingestion time.
+
+Already-collected offline sales are recorded even if stock is now short.
+Negative stock remains visible in Inventory, and Sales Details flags the
+shortfall for an admin to reconcile. Normal online checkout still refuses
+overselling. Server price proofs and bounded upload validation prevent using
+this path to invent prices or arbitrary product units.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve

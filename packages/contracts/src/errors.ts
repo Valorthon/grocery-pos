@@ -65,6 +65,9 @@ export enum ErrorCode {
      * Generic 409 for a conflict with no more specific code (e.g. a Nest
      * `ConflictException`).
      */
+    OFFLINE_INVALID = 'OFFLINE_001',
+    OFFLINE_RECONCILIATION_REQUIRED = 'OFFLINE_002',
+    OFFLINE_PENDING = 'OFFLINE_003',
     CONFLICT = 'CONFLICT_001',
     /**
      * Any other 4xx the API refused with no more specific code (e.g. 405,

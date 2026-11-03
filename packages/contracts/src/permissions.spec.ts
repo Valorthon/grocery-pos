@@ -14,7 +14,11 @@ describe('permissionsOf', () => {
             (p) => p.label,
         );
         expect(own.sort()).toEqual(
-            ['Run own cash shift', 'Sell at the register'].sort(),
+            [
+                'Prepare and sync offline cash sales',
+                'Run own cash shift',
+                'Sell at the register',
+            ].sort(),
         );
         const admin = permissionsOf(Role.Admin).map((p) => p.label);
         const seller = permissionsOf(Role.Seller).map((p) => p.label);
