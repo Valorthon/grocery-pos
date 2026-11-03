@@ -1,4 +1,16 @@
 import type {
+    ManagerOverrideRequest,
+    OverrideContextRequest,
+    OverrideReversalRequest,
+    SetOverridePinRequest,
+} from '@grocery-pos/contracts';
+import {
+    ManagerOverrideDto,
+    OverrideContextDto,
+    OverrideReversalDto,
+    SetOverridePinDto,
+} from '../auth/override/override.dto';
+import type {
     AdjustmentLineRequest,
     AdjustmentRequest,
     ChangePasswordRequest,
@@ -74,6 +86,19 @@ function keysMatch<Dto, Contract>(ok: KeysMatch<Dto, Contract>) {
 type Line<T extends readonly unknown[]> = T[number];
 
 const checks = {
+    ManagerOverrideDto: keysMatch<ManagerOverrideDto, ManagerOverrideRequest>(
+        true,
+    ),
+    OverrideContextDto: keysMatch<OverrideContextDto, OverrideContextRequest>(
+        true,
+    ),
+    OverrideReversalDto: keysMatch<
+        OverrideReversalDto,
+        OverrideReversalRequest
+    >(true),
+    SetOverridePinDto: keysMatch<SetOverridePinDto, SetOverridePinRequest>(
+        true,
+    ),
     LoginDto: keysMatch<LoginDto, LoginRequest>(true),
     CreateBulkDto: keysMatch<CreateBulkDto, CreateUsersRequest>(true),
     CreateFields: keysMatch<Line<CreateBulkDto['users']>, CreateUserRequest>(

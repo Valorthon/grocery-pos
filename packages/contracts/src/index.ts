@@ -4,6 +4,7 @@ export * from './enums.js';
 export * from './errors.js';
 export * from './discount.js';
 export * from './sales.js';
+export * from './override.js';
 export * from './shift.js';
 export * from './barcode.js';
 export * from './permissions.js';

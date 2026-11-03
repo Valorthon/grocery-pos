@@ -36,6 +36,7 @@ export interface Caller {
     userId: string;
     username: string;
     roles: Role[];
+    sid?: string;
 }
 
 export function caller(username: string, ...roles: Role[]): Caller {
@@ -86,6 +87,7 @@ export interface DbApp {
         method: 'GET' | 'POST' | 'PATCH',
         path: string,
         body?: unknown,
+        headers?: Record<string, string>,
     ): Promise<Response>;
     model<T>(name: string): Model<T>;
     /** Closes the app and drops its database. */
@@ -130,12 +132,13 @@ export async function bootDbApp(): Promise<DbApp> {
     return {
         app,
         connection,
-        call(who, method, path, body) {
+        call(who, method, path, body, headers = {}) {
             const token = jwt.sign(
                 {
                     userId: who.userId,
                     username: who.username,
                     roles: who.roles,
+                    sid: who.sid ?? who.userId,
                 },
                 { secret: JWT_SECRET, expiresIn: 600 },
             );
@@ -144,6 +147,7 @@ export async function bootDbApp(): Promise<DbApp> {
                 headers: {
                     cookie: `jwt=${signCookie(token)}`,
                     'content-type': 'application/json',
+                    ...headers,
                 },
                 body: body === undefined ? undefined : JSON.stringify(body),
             });

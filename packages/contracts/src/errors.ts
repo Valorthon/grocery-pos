@@ -58,6 +58,9 @@ export enum ErrorCode {
 
     /** The caller is signed in but may not do this (generic 403). */
     FORBIDDEN = 'FORBIDDEN_001',
+    OVERRIDE_REQUIRED = 'OVERRIDE_001',
+    OVERRIDE_INVALID = 'OVERRIDE_002',
+    OVERRIDE_CREDENTIALS_INVALID = 'OVERRIDE_003',
     /**
      * Generic 409 for a conflict with no more specific code (e.g. a Nest
      * `ConflictException`).

@@ -176,11 +176,11 @@ describe('Roles page permissions (PERMISSIONS in contracts)', () => {
         );
         expect(admin).not.toContain('Sell at the register');
         expect(admin).not.toContain('Run own cash shift');
-        expect(admin).toContain('Void and refund sales');
+        expect(admin).toContain('Void and refund sales with manager approval');
         const seller = permissionsOf(Role.Seller).map((p) => p.label);
         expect(seller).toContain('Sell at the register');
         expect(seller).not.toContain('Stock dashboard');
-        expect(seller).not.toContain('Void and refund sales');
+        expect(seller).toContain('Void and refund sales with manager approval');
         expect(seller).not.toContain('View inventory');
     });
 });

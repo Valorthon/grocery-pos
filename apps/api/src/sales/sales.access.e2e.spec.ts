@@ -1,3 +1,4 @@
+import { MOCK_MANAGER_APPROVALS } from '../auth/override/testing/fake-override';
 /**
  * Cashier scoping of the sales history, over real HTTP (issues #13, #2). The
  * real SalesController and SalesService run behind the real guards and
@@ -175,6 +176,7 @@ describe('Sales history scoping (e2e)', () => {
             [SalesController],
             [
                 SalesService,
+                MOCK_MANAGER_APPROVALS,
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(Sales.name), useValue: salesModel },
                 {
@@ -364,24 +366,26 @@ describe('Sales history scoping (e2e)', () => {
         expect(res.status).toBe(200);
     });
 
-    it.each(ALL_ROLES.map((role) => [role, role === Role.Admin] as const))(
-        'void and refund as %s -> allowed: %s',
-        async (role, allowed) => {
-            const who = caller(role);
-            for (const action of ['void', 'refund']) {
-                const res = await harness.call(
-                    who,
-                    'POST',
-                    `/sales/${new Types.ObjectId().toString()}/${action}`,
-                    { reason: 'mis-ring' },
-                );
-                // An allowed caller reaches the service, which fails on the
-                // empty fake connection; a refused one never gets there.
-                if (allowed) expect(res.status).not.toBe(403);
-                else expect(res.status).toBe(403);
-            }
-        },
-    );
+    it.each(
+        ALL_ROLES.map(
+            (role) =>
+                [role, role === Role.Admin || role === Role.Seller] as const,
+        ),
+    )('void and refund as %s -> allowed: %s', async (role, allowed) => {
+        const who = caller(role);
+        for (const action of ['void', 'refund']) {
+            const res = await harness.call(
+                who,
+                'POST',
+                `/sales/${new Types.ObjectId().toString()}/${action}`,
+                { reason: 'mis-ring' },
+            );
+            // An allowed caller reaches the service, which fails on the
+            // empty fake connection; a refused one never gets there.
+            if (allowed) expect(res.status).not.toBe(403);
+            else expect(res.status).toBe(403);
+        }
+    });
 
     it.each([Role.Restocker, Role.Adjuster, Role.UserManager])(
         'refuses the sales history to %s without SELLER',

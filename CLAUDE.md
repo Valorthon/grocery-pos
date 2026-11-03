@@ -111,10 +111,14 @@ Rules:
 
 - The discount is computed on the server by `discountAmount` in
   `packages/contracts/src/discount.ts` and needs a reason. `Sales.discount`
-  records `approvedBy`. Any SELLER may apply one until the manager PIN (#34).
-- Void and refund cover the whole sale only, are ADMIN-only, put the stock back,
-  pay the cash back out of a shift's drawer (see Shifts), and record
-  `reversal`. Revenue excludes reversed sales.
+  records `approvedBy`. Every nonzero discount requires ADMIN approval via the
+  manager username + six-digit PIN dialog (#34, product decision 2026-11-03).
+  A configurable cashier allowance is deferred until the owner revisits it.
+- Void and refund cover the whole sale only and require an ADMIN or SUPERVISOR
+  manager approval. ADMIN may reverse any sale; a SELLER may reverse only their
+  own sale in their current open shift, paying from that shift only (#34).
+  They put stock back, pay cash out of a shift's drawer (see Shifts), and record
+  the manager in `reversal.approvedBy`. Revenue excludes reversed sales.
 - SPLIT tender stores `tenders`, `amountTendered` and `changeGiven`. A GCash
   `referenceNumber` is 13 digits, unique, and required for non-cash tenders.
 - `POST /sales` is idempotent through `idempotencyKey` plus a `requestHash`. A
@@ -271,8 +275,9 @@ requestId}`. A 5xx never carries details or internals.
   routes, where only the listed roles themselves count (#84): `POST /sales`
   and the cashier's own shift routes (open, current, drawer, close,
   last-closed) need SELLER itself, matching the client's `sellerOnly`.
-  Void/refund, force-close, the admin sales/shift views and the dashboard
-  stay ADMIN-only. Contracts `PERMISSIONS` marks those rows `ownRoleOnly`,
+  Force-close, the admin sales/shift views and dashboard money stay ADMIN-only.
+  Void/refund also allow SELLER for their own current-shift sales, with approval
+  enforced inside the monetary transaction (#34). Contracts `PERMISSIONS` marks those rows `ownRoleOnly`,
   and `role-permissions.spec.ts` checks it against the metadata.
 - Dashboard money is ADMIN-only and stripped on the server. A cashier sees only
   their own sales. Price changes are ADMIN-only.
@@ -282,6 +287,27 @@ requestId}`. A 5xx never carries details or internals.
 - Deactivating a user, changing their roles, or resetting or changing a password
   revokes that user's sessions. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.
+
+**Manager approvals** (#34)
+
+- Manager credentials are a username plus exactly six decimal PIN digits,
+  with leading zeroes preserved. Only an ADMIN can set/reset/remove a PIN,
+  from the Users list. PIN hashes and versions are never returned to clients.
+- Every discount requires an ADMIN PIN. ADMIN or SUPERVISOR may approve a
+  reversal. SUPERVISOR adds approval authority only, no selling, dashboard or
+  user-management access; combine it with another role for app access.
+- The cashier stays logged in. The modal issues a signed 60-second approval,
+  bound to the requesting session, action and exact monetary context. Tokens
+  live in memory only. MongoDB consumes the grant in the same transaction as
+  the sale/reversal, so rollback restores it and concurrent uses cannot both
+  succeed. An idempotent checkout replay needs no new approval.
+- Current requester/approver roles and activation are checked inside the
+  transaction. PIN reset/removal, role/activation edits and password changes
+  invalidate pending approvals. Every approved action records the manager's
+  `approvedBy`; audit-log presentation remains #46.
+- Unsold basket edits remain normal register actions. Partial/per-line refunds
+  remain deferred. The original configurable discount threshold proposal is
+  superseded by the owner's all-discounts-admin decision for now.
 
 **Sessions** (#21)
 

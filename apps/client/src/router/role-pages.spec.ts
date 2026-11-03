@@ -49,18 +49,23 @@ describe('Change own password (#88)', () => {
     const row = PERMISSIONS.find((p) => p.label === 'Change own password');
 
     it('is shown for every role', () => {
-        for (const role of ASSIGNABLE_ROLES) {
+        for (const role of ASSIGNABLE_ROLES.filter(
+            (r) => r !== Role.Supervisor,
+        )) {
             expect(appPermissionsOf(role), role).toContain(row);
         }
     });
 
     // The dialog is in the profile menu of both layouts, so on every page:
     // the row names each role's home page, which that role always has.
-    it.each(ASSIGNABLE_ROLES)("names %s's home page", (role) => {
-        const home = homeRouteFor([role]).name;
-        expect(home).not.toBe('Login');
-        expect(row?.pages).toContain(home);
-    });
+    it.each(ASSIGNABLE_ROLES.filter((r) => r !== Role.Supervisor))(
+        "names %s's home page",
+        (role) => {
+            const home = homeRouteFor([role]).name;
+            expect(home).not.toBe('Login');
+            expect(row?.pages).toContain(home);
+        },
+    );
 });
 
 describe('canOpenRoute', () => {

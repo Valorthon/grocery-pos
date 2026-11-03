@@ -209,6 +209,27 @@ Passwords must be at least 8 characters when set (new users, admin resets,
 self-service changes). Login does not check the length, so older, shorter
 passwords still work until they are changed.
 
+## Manager approvals
+
+Every nonzero sale discount requires an admin's approval. Voids and refunds
+require an admin or supervisor's approval; cashiers may reverse only their own
+sales in their current open shift. An admin retains access to other sales and
+existing payout-shift selection.
+
+An admin sets a manager's six-digit PIN from **Users → Manager PIN**. Only
+ADMIN or SUPERVISOR accounts can hold a PIN; SUPERVISOR grants approval
+capability without other app access. Add another role if that account also
+needs to use the app. No default PIN is seeded. Set an admin PIN before the
+first discounted checkout or reversal after deploying this change.
+
+At the cashier terminal, the manager enters their username and PIN without
+logging the cashier out. Each approval expires after 60 seconds and can approve
+only the action shown. Changing the ticket, prices, reversal reason or payout
+drawer requires approval again. A checkout retry of an already recorded sale
+remains safe and needs no new approval. Unsold ticket edits remain ordinary
+register actions; partial refunds and the sensitive-action audit-log screen
+remain future work.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve

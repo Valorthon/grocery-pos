@@ -1,3 +1,5 @@
+import { approvalHeaders } from './approval-fixtures';
+import { OverrideAction } from '@grocery-pos/contracts';
 /**
  * Sales against a real MongoDB replica set (issue #30). These are the checks
  * the #53/#54 reviewers ran by hand: unique partial indexes, concurrent
@@ -274,6 +276,16 @@ describe('void/refund under concurrency', () => {
         expect(await stockOf(db, product)).toBe(16);
         const saleId = sale.body._id as string;
 
+        const headers = await Promise.all(
+            Array.from({ length: 10 }, (_, i) =>
+                approvalHeaders(
+                    db,
+                    admin,
+                    i % 2 ? OverrideAction.REFUND : OverrideAction.VOID,
+                    { reversal: { saleId, reason: `attempt ${i}` } },
+                ),
+            ),
+        );
         const results = await Promise.all(
             Array.from({ length: 10 }, (_, i) =>
                 db
@@ -282,6 +294,7 @@ describe('void/refund under concurrency', () => {
                         'POST',
                         `/sales/${saleId}/${i % 2 ? 'refund' : 'void'}`,
                         { reason: `attempt ${i}` },
+                        headers[i],
                     )
                     .then(read),
             ),
@@ -342,9 +355,17 @@ describe('void/refund under concurrency', () => {
             );
 
         const res = await read(
-            await db.call(admin, 'POST', `/sales/${saleId}/void`, {
-                reason: 'mis-ring',
-            }),
+            await db.call(
+                admin,
+                'POST',
+                `/sales/${saleId}/void`,
+                {
+                    reason: 'mis-ring',
+                },
+                await approvalHeaders(db, admin, OverrideAction.VOID, {
+                    reversal: { saleId, reason: 'mis-ring' },
+                }),
+            ),
         );
         // An unexpected driver error: a generic 500, nothing leaked.
         expect(res.status).toBe(500);

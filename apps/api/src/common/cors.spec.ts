@@ -57,6 +57,25 @@ describe('corsOptions', () => {
         expect(res.headers.get(REQUEST_ID_HEADER)).toBeTruthy();
     });
 
+    it('allows the manager approval header in a credentialed frontend preflight', async () => {
+        const res = await fetch(`${base}/probe`, {
+            method: 'OPTIONS',
+            headers: {
+                origin: FRONTEND,
+                'access-control-request-method': 'POST',
+                'access-control-request-headers':
+                    'content-type,x-manager-approval',
+            },
+        });
+        expect(res.status).toBe(204);
+        expect(res.headers.get('access-control-allow-credentials')).toBe(
+            'true',
+        );
+        expect(
+            res.headers.get('access-control-allow-headers')?.toLowerCase(),
+        ).toContain('x-manager-approval');
+    });
+
     it('keeps the allowed methods', () => {
         expect(corsOptions(FRONTEND).methods).toEqual([
             'GET',

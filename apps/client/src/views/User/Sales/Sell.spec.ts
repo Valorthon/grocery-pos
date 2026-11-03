@@ -1447,6 +1447,102 @@ describe('Sell discount (#23)', () => {
         ).toBeNull();
     });
 
+    function approvalRequired() {
+        const config = { headers: new AxiosHeaders() };
+        return new AxiosError(
+            'Approval required',
+            'ERR_BAD_REQUEST',
+            config,
+            null,
+            {
+                status: 403,
+                statusText: '',
+                data: {
+                    statusCode: 403,
+                    error: ErrorCode.OVERRIDE_REQUIRED,
+                    message: 'Manager approval is required',
+                },
+                headers: {},
+                config,
+            },
+        );
+    }
+    async function beginApprovedDiscount() {
+        withTicket();
+        mount();
+        await typeText(await openFixed(), '15');
+        await typeText(
+            document.querySelector<HTMLInputElement>('#discount-reason')!,
+            'Promotion',
+        );
+        await press('F9');
+        const cash = document.activeElement as HTMLInputElement;
+        cash.value = '200';
+        cash.dispatchEvent(new Event('input'));
+        cash.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+    }
+    it('asks an admin at checkout and retries the identical sale with the one-use approval header', async () => {
+        let sales = 0;
+        post.mockImplementation((url) => {
+            if (url === '/auth/override')
+                return Promise.resolve({ data: { token: 'approval-token' } });
+            if (++sales === 1) return Promise.reject(approvalRequired());
+            return Promise.resolve({
+                data: { ...RECEIPT, subtotal: 21500, totalAmount: 20000 },
+            });
+        });
+        await beginApprovedDiscount();
+        expect(document.body.textContent).toContain(
+            'An admin must approve this discount',
+        );
+        const username = document.querySelector<HTMLInputElement>(
+            '#override-manager-name',
+        )!;
+        await typeText(username, 'boss');
+        await typeText(
+            document.querySelector<HTMLInputElement>('#override-manager-pin')!,
+            '012345',
+        );
+        await clickButton(buttonNamed('Approve action'));
+        await settleTransitions();
+        const saleCalls = post.mock.calls.filter(([url]) => url === '/sales');
+        expect(saleCalls).toHaveLength(2);
+        expect(saleCalls[1][1]).toEqual(saleCalls[0][1]);
+        expect(post).toHaveBeenCalledWith('/sales', saleCalls[0][1], {
+            headers: { 'X-Manager-Approval': 'approval-token' },
+        });
+        expect(post).toHaveBeenCalledWith(
+            '/auth/override',
+            expect.objectContaining({
+                username: 'boss',
+                pin: '012345',
+                context: { sale: saleCalls[0][1], expectedSubtotal: 21500 },
+            }),
+        );
+        expect(useCartStore().items).toHaveLength(0);
+        expect(
+            localStorage.getItem('grocery_pos_cart_v1:cashier') ?? '',
+        ).not.toContain('approval-token');
+    });
+    it('keeps the ticket without charging when the manager cancels', async () => {
+        post.mockRejectedValue(approvalRequired());
+        await beginApprovedDiscount();
+        await clickButton(
+            [...document.querySelectorAll<HTMLButtonElement>('button')]
+                .reverse()
+                .find((b) => b.textContent?.trim() === 'Cancel')!,
+        );
+        await settleTransitions();
+        expect(post).toHaveBeenCalledOnce();
+        expect(useCartStore().items).toHaveLength(2);
+        expect(document.body.textContent).toContain(
+            'Manager approval cancelled',
+        );
+    });
+
     it('refuses a fixed amount above the subtotal, as the server does', async () => {
         withTicket();
         mount();

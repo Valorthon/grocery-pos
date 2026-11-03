@@ -1,3 +1,4 @@
+import { MOCK_MANAGER_APPROVALS } from '../auth/override/testing/fake-override';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { ClientSession, Types } from 'mongoose';
@@ -143,6 +144,7 @@ describe('SalesService.sell', () => {
         const moduleRef = await Test.createTestingModule({
             providers: [
                 SalesService,
+                MOCK_MANAGER_APPROVALS,
                 {
                     provide: getConnectionToken(),
                     useValue: { startSession: () => Promise.resolve(session) },
@@ -1068,6 +1070,7 @@ describe('SalesService.reverse', () => {
         const moduleRef = await Test.createTestingModule({
             providers: [
                 SalesService,
+                MOCK_MANAGER_APPROVALS,
                 {
                     provide: getConnectionToken(),
                     useValue: { startSession: () => Promise.resolve(session) },
@@ -1393,6 +1396,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
         const moduleRef = await Test.createTestingModule({
             providers: [
                 SalesService,
+                MOCK_MANAGER_APPROVALS,
                 { provide: getConnectionToken(), useValue: {} },
                 {
                     provide: getModelToken(Sales.name),

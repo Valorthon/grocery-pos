@@ -101,11 +101,29 @@ function confirmButton() {
     )!;
 }
 
+async function approveManager() {
+    const name = document.querySelector<HTMLInputElement>(
+        '#override-manager-name',
+    )!;
+    name.value = 'boss';
+    name.dispatchEvent(new Event('input'));
+    const pin = document.querySelector<HTMLInputElement>(
+        '#override-manager-pin',
+    )!;
+    pin.value = '012345';
+    pin.dispatchEvent(new Event('input'));
+    await flush();
+    [...document.querySelectorAll<HTMLButtonElement>('button')]
+        .find((b) => b.textContent?.trim() === 'Approve action')!
+        .click();
+    await flush();
+}
+
 beforeEach(() => {
     pinia = createPinia();
     setActivePinia(pinia);
     api.get.mockReset();
-    api.post.mockReset().mockResolvedValue({ data: {} });
+    api.post.mockReset().mockResolvedValue({ data: { token: 'approved' } });
     useAuthStore().user = { username: 'boss', roles: [Role.Admin] };
 });
 
@@ -130,10 +148,15 @@ describe('admin void/refund cash payout (issue #2)', () => {
 
         confirmButton().click();
         await flush();
+        await approveManager();
 
-        expect(api.post).toHaveBeenCalledWith('/sales/sale1/void', {
-            reason: 'mis-ring',
-        });
+        expect(api.post).toHaveBeenCalledWith(
+            '/sales/sale1/void',
+            {
+                reason: 'mis-ring',
+            },
+            { headers: { 'X-Manager-Approval': 'approved' } },
+        );
     });
 
     it('makes the admin choose an open shift when the sale’s shift is closed', async () => {
@@ -154,11 +177,16 @@ describe('admin void/refund cash payout (issue #2)', () => {
         expect(confirmButton().disabled).toBe(false);
         confirmButton().click();
         await flush();
+        await approveManager();
 
-        expect(api.post).toHaveBeenCalledWith('/sales/sale1/void', {
-            reason: 'mis-ring',
-            payoutShiftId: OTHER_SHIFT,
-        });
+        expect(api.post).toHaveBeenCalledWith(
+            '/sales/sale1/void',
+            {
+                reason: 'mis-ring',
+                payoutShiftId: OTHER_SHIFT,
+            },
+            { headers: { 'X-Manager-Approval': 'approved' } },
+        );
     });
 
     it('asks for a shift for a sale from before shifts', async () => {
@@ -238,9 +266,14 @@ describe('admin void/refund cash payout (issue #2)', () => {
 
         confirmButton().click();
         await flush();
-        expect(api.post).toHaveBeenCalledWith('/sales/sale1/void', {
-            reason: 'mis-ring',
-        });
+        await approveManager();
+        expect(api.post).toHaveBeenCalledWith(
+            '/sales/sale1/void',
+            {
+                reason: 'mis-ring',
+            },
+            { headers: { 'X-Manager-Approval': 'approved' } },
+        );
     });
 });
 
@@ -392,10 +425,15 @@ describe('void/refund while reversing (issue #22)', () => {
         serve(CASH_SALE, [openShift(OWN_SHIFT, 'ana')]);
         await startVoid();
         let fail!: (e: Error) => void;
-        api.post.mockReturnValue(new Promise((_, reject) => (fail = reject)));
+        api.post.mockImplementation((url) =>
+            url === '/auth/override'
+                ? Promise.resolve({ data: { token: 'approved' } })
+                : new Promise((_, reject) => (fail = reject)),
+        );
         confirmButton().click();
         await flush();
 
+        await approveManager();
         expect(document.querySelector('[data-modal-close]')).toBeNull();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         document

@@ -130,10 +130,15 @@ export class LoginAttemptLimiter {
         @InjectThrottlerStorage() private readonly storage: ThrottlerStorage,
     ) {}
 
-    async hit(res: Response, ip: string, username: string): Promise<void> {
+    async hit(
+        res: Response,
+        ip: string,
+        username: string,
+        namespace = 'login',
+    ): Promise<void> {
         const { limit, ttl } = RATE_LIMITS.login.account;
         const { isBlocked, timeToBlockExpire } = await this.storage.increment(
-            `login-account|${ip}|${username}`,
+            `${namespace}-account|${ip}|${username}`,
             ttl,
             limit,
             ttl,

@@ -44,6 +44,7 @@ export const ALL_ROLES = [
     Role.Adjuster,
     Role.UserManager,
     Role.Admin,
+    Role.Supervisor,
 ];
 
 export interface Caller {

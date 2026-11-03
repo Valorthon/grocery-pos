@@ -9,6 +9,8 @@ export enum Role {
     Restocker = 'RESTOCKER',
     UserManager = 'USER_MANAGER',
     Admin = 'ADMIN',
+    /** Manager approvals only; does not imply selling or management access. */
+    Supervisor = 'SUPERVISOR',
     Unauthenticated = 'UNAUTHENTICATED',
 }
 
@@ -22,6 +24,7 @@ export const ASSIGNABLE_ROLES: readonly Role[] = [
     Role.Restocker,
     Role.UserManager,
     Role.Admin,
+    Role.Supervisor,
 ];
 
 /**

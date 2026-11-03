@@ -824,3 +824,43 @@ describe('renaming users (issue #106)', () => {
         expect(api.patch).not.toHaveBeenCalled();
     });
 });
+
+describe('manager PIN entry point (#34)', () => {
+    const managerRows = {
+        data: [
+            {
+                _id: 'mgr',
+                name: 'supervisor',
+                roles: [Role.Supervisor],
+                isActive: true,
+            },
+        ],
+        totalItems: 1,
+    };
+    it('lets an admin open PIN management for a supervisor and close without a write', async () => {
+        api.get.mockResolvedValue({ data: managerRows });
+        await mount();
+        const button = document.querySelector<HTMLButtonElement>(
+            '[aria-label="Manage PIN for supervisor"]',
+        )!;
+        expect(button).not.toBeNull();
+        button.click();
+        await flush();
+        expect(document.body.textContent).toContain(
+            'Set a new manager PIN for supervisor',
+        );
+        await click('Cancel');
+        expect(api.patch).not.toHaveBeenCalled();
+    });
+    it('does not offer manager PIN management to a user manager', async () => {
+        useAuthStore().user = {
+            username: 'users-manager',
+            roles: [Role.UserManager],
+        };
+        api.get.mockResolvedValue({ data: managerRows });
+        await mount();
+        expect(
+            document.querySelector('[aria-label="Manage PIN for supervisor"]'),
+        ).toBeNull();
+    });
+});

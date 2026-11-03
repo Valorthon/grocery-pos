@@ -60,7 +60,22 @@
                 }}</Badge>
             </template>
             <template #cell-actions="{ item }">
-                <div class="flex justify-end">
+                <div class="flex justify-end gap-2">
+                    <button
+                        v-if="
+                            authStore.isAdmin &&
+                            item.roles.some(
+                                (r) =>
+                                    r === Role.Admin || r === Role.Supervisor,
+                            )
+                        "
+                        type="button"
+                        class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-primary-600 focus-ring"
+                        :aria-label="`Manage PIN for ${item.name}`"
+                        @click="pinUser = item"
+                    >
+                        Manager PIN
+                    </button>
                     <button
                         type="button"
                         class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
@@ -222,6 +237,7 @@
         </template>
     </BaseModal>
 
+    <SetManagerPinDialog :user="pinUser" @close="pinUser = null" />
     <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
 </template>
 
@@ -237,6 +253,7 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import SetManagerPinDialog from '@/components/User/SetManagerPinDialog.vue';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     fieldErrors,
@@ -274,6 +291,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
     search,
 );
 const serverItems = ref<UserView[]>([]);
+const pinUser = ref<UserView | null>(null);
 
 const uiStore = useUIStore();
 const saving = ref(false);

@@ -15,6 +15,7 @@ import {
     ReceiptDiscount,
     ReceiptDto,
     ReceiptFields,
+    ReversalType,
     ReverseSaleInput,
     SaleStatus,
     SellDto,
@@ -24,6 +25,7 @@ import {
     type Paginated,
     REVERSAL_STATUS,
     saleNetCash,
+    OverrideAction,
 } from '@grocery-pos/contracts';
 import type { NameRef } from '../common/wire';
 import {
@@ -40,12 +42,14 @@ import {
     ErrorCode,
     NotFoundError,
     ValidationError,
+    ForbiddenError,
 } from '../common/errors';
 import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
 import { ShiftService } from '../shift/shift.service';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { dateRangeFilter } from '../common/utils/timezone';
+import { ManagerOverrideService } from '../auth/override/override.service';
 
 /**
  * Sale fields a non-admin never reads: which shift paid a reversal back and
@@ -114,6 +118,7 @@ export class SalesService {
         private inventoryService: InventoryService,
         private shiftService: ShiftService,
         private config: TypedConfigService,
+        private overrides: ManagerOverrideService,
     ) {}
 
     /** `saleScope` for the caller, looking up their open shift if needed. */
@@ -228,6 +233,7 @@ export class SalesService {
         user: AuthUser,
         dto: SellDto,
         session?: ClientSession,
+        approvalToken?: string,
     ): Promise<ReceiptDto> {
         const requestHash = saleRequestHash(user.userId, dto);
 
@@ -240,7 +246,13 @@ export class SalesService {
         if (replay) return replay;
 
         try {
-            return await this.recordSale(user, dto, requestHash, session);
+            return await this.recordSale(
+                user,
+                dto,
+                requestHash,
+                session,
+                approvalToken,
+            );
         } catch (err) {
             // Inside a caller's transaction the committed state cannot be
             // read past it; the caller owns the retry.
@@ -360,6 +372,7 @@ export class SalesService {
         dto: SellDto,
         requestHash: string,
         session?: ClientSession,
+        approvalToken?: string,
     ): Promise<ReceiptDto> {
         const { paymentType, referenceNumber, idempotencyKey } = dto;
 
@@ -389,6 +402,26 @@ export class SalesService {
                     dto,
                 );
 
+                const approvedBy =
+                    discount &&
+                    this.overrides.requiresDiscountApproval(discount.amount)
+                        ? await this.overrides.consume(
+                              approvalToken,
+                              user,
+                              OverrideAction.DISCOUNT,
+                              this.overrides.discountContext(
+                                  user,
+                                  dto,
+                                  fullSellDetails.map((line) => ({
+                                      product: String(line.product),
+                                      quantity: line.quantity,
+                                      unitPrice: line.unitPrice,
+                                  })),
+                              ),
+                              session,
+                          )
+                        : user.userId;
+
                 const settlement = settleTenders(
                     paymentType,
                     dto.tenders,
@@ -408,13 +441,11 @@ export class SalesService {
                         status: SaleStatus.COMPLETED,
                         idempotencyKey,
                         requestHash,
-                        // Until a manager override exists, any
-                        // authenticated seller may discount, so the
-                        // cashier is the approver.
+                        // Every nonzero discount requires ADMIN approval (#34).
                         ...(discount && {
                             discount: {
                                 ...discount,
-                                approvedBy: user.userId,
+                                approvedBy,
                             },
                         }),
                     },
@@ -517,9 +548,37 @@ export class SalesService {
         saleId: string,
         { type, reason, payoutShiftId }: ReverseSaleInput,
         session?: ClientSession,
+        approvalToken?: string,
     ) {
         return runInTransaction(
             async (session) => {
+                const visibleSale = await this.overrides.visibleReversalSale(
+                    user,
+                    saleId,
+                    session,
+                );
+                if (!user.roles.includes(Role.Admin) && payoutShiftId) {
+                    throw new ForbiddenError(
+                        ErrorCode.FORBIDDEN,
+                        "A cashier may pay only from the sale's own open shift",
+                    );
+                }
+                const action =
+                    type === ReversalType.VOID
+                        ? OverrideAction.VOID
+                        : OverrideAction.REFUND;
+                const approvedBy = await this.overrides.consume(
+                    approvalToken,
+                    user,
+                    action,
+                    this.overrides.reversalContext(
+                        action,
+                        visibleSale,
+                        reason,
+                        payoutShiftId,
+                    ),
+                    session,
+                );
                 // The status filter makes the reversal a single atomic claim:
                 // of two concurrent voids, only one can match.
                 const sale = await this.model
@@ -534,7 +593,7 @@ export class SalesService {
                                 reversal: {
                                     type,
                                     reason,
-                                    approvedBy: new Types.ObjectId(user.userId),
+                                    approvedBy: new Types.ObjectId(approvedBy),
                                     at: new Date(),
                                 },
                             },
@@ -615,7 +674,8 @@ export class SalesService {
                     ...sale,
                     reversal: {
                         ...sale.reversal!,
-                        ...(payoutShift && { payoutShift, payoutAmount }),
+                        ...(user.roles.includes(Role.Admin) &&
+                            payoutShift && { payoutShift, payoutAmount }),
                     },
                 };
             },

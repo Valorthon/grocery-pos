@@ -23,10 +23,10 @@ describe('RoleGuard on the sales routes', () => {
     const guard = new RoleGuard(new Reflector());
 
     it.each<Handler>(['voidSale', 'refundSale'])(
-        'lets only an admin reach %s',
+        'lets sellers and admins reach approval-protected %s',
         (handler) => {
             expect(guard.canActivate(contextFor(handler, [Role.Seller]))).toBe(
-                false,
+                true,
             );
             expect(
                 guard.canActivate(

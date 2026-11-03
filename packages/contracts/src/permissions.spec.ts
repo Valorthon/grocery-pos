@@ -25,7 +25,7 @@ describe('permissionsOf', () => {
         // ADMIN still voids, refunds and force-closes on its own.
         expect(admin).toEqual(
             expect.arrayContaining([
-                'Void and refund sales',
+                'Void and refund sales with manager approval',
                 'View and force-close shifts',
                 'View all sales',
             ]),

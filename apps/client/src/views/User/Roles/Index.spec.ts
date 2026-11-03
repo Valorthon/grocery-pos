@@ -58,7 +58,9 @@ describe('Roles page (issue #24)', () => {
             expect(shown).not.toContain('Change prices');
             expect(shown).not.toContain('Edit product details (not price)');
             // Every role has the profile menu's Change password (#88).
-            expect(shown).toContain('Change own password');
+            if (role === Role.Supervisor)
+                expect(shown).not.toContain('Change own password');
+            else expect(shown).toContain('Change own password');
         }
         // Adding products is Restocker and Admin only, on the page and the
         // API (#83).
@@ -73,7 +75,9 @@ describe('Roles page (issue #24)', () => {
         expect(permissionsShown(Role.Admin)).not.toContain(
             'Run own cash shift',
         );
-        expect(permissionsShown(Role.Admin)).toContain('Void and refund sales');
+        expect(permissionsShown(Role.Admin)).toContain(
+            'Void and refund sales with manager approval',
+        );
     });
 
     it('tells on the Admin card only that an admin needs SELLER to sell (#84)', async () => {
@@ -81,6 +85,7 @@ describe('Roles page (issue #24)', () => {
         const notes = [...document.querySelectorAll('[data-testid^="note-"]')];
         expect(notes.map((n) => n.getAttribute('data-testid'))).toEqual([
             `note-${Role.Admin}`,
+            `note-${Role.Supervisor}`,
         ]);
         expect(notes[0].textContent?.trim()).toBe(
             'To sell, an admin also needs the Seller role.',
@@ -96,8 +101,10 @@ describe('Roles page (issue #24)', () => {
         expect(permissionsShown(Role.UserManager)).toContain('Stock dashboard');
         for (const role of ASSIGNABLE_ROLES) {
             expect(
-                permissionsShown(role).includes('Void and refund sales'),
-            ).toBe(role === Role.Admin);
+                permissionsShown(role).includes(
+                    'Void and refund sales with manager approval',
+                ),
+            ).toBe(role === Role.Admin || role === Role.Seller);
         }
         expect(permissionsShown(Role.Adjuster)).toContain(
             'Create and view adjustments',

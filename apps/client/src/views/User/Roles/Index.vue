@@ -88,6 +88,12 @@ const LOOK: Record<
         // Selling and cash shifts are `ownRoleOnly` in PERMISSIONS (#84).
         note: 'To sell, an admin also needs the Seller role.',
     },
+    [Role.Supervisor]: {
+        label: 'Supervisor',
+        icon: Crown,
+        avatarClass: 'bg-indigo-50 text-indigo-600',
+        note: 'Approves reversals by PIN. Add another role to use the app.',
+    },
     [Role.Seller]: {
         label: 'Seller',
         icon: ShoppingCart,
