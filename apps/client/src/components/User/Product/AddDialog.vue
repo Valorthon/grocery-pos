@@ -31,9 +31,24 @@
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
             />
+            <label class="block text-sm font-medium"
+                >Unit of measure
+                <select
+                    v-model="formData.unit"
+                    class="w-full min-h-11 rounded-xl border border-slate-300 px-3"
+                >
+                    <option
+                        v-for="unit in Object.values(UnitOfMeasure)"
+                        :key="unit"
+                        :value="unit"
+                    >
+                        {{ unit }}
+                    </option>
+                </select>
+            </label>
             <BaseInput
                 v-model="formData.price"
-                label="Selling Price (₱)"
+                :label="`Selling Price (₱/${unitLabel(formData.unit)})`"
                 inputmode="decimal"
                 autocomplete="off"
                 placeholder="0.00"
@@ -63,7 +78,11 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import {
+    STRING_LIMITS,
+    UnitOfMeasure,
+    unitLabel,
+} from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { productErrors, type ProductFormInput } from './validation';
 import { apiErrorMessages } from '@/utils/api-error';
@@ -72,6 +91,7 @@ import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
 const props = defineProps<{
     modelValue: boolean;
     item?: {
+        unit?: UnitOfMeasure;
         EAN?: string;
         autoGenerateEAN?: boolean;
         /** Centavos. */
@@ -93,6 +113,7 @@ const model = computed({
 
 const uiStore = useUIStore();
 const formData = reactive<ProductFormInput>({
+    unit: UnitOfMeasure.PIECE,
     EAN: '',
     name: '',
     // Typed pesos; converted to centavos on submit.
@@ -108,6 +129,7 @@ watch(
     () => props.modelValue,
     (open) => {
         if (open) {
+            formData.unit = props.item?.unit ?? UnitOfMeasure.PIECE;
             formData.EAN = props.item?.EAN ?? '';
             formData.name = props.item?.name ?? '';
             formData.price =

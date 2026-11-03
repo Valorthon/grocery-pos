@@ -1,3 +1,4 @@
+import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { Transform, Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
@@ -67,6 +68,10 @@ export class EnsureValidDto {
 }
 
 export class NewProductFields implements NewProductRequest {
+    @IsOptional()
+    @IsEnum(UnitOfMeasure)
+    unit?: UnitOfMeasure;
+
     /**
      * The barcode as scanned: EAN-13, UPC-A or EAN-8 with a valid check
      * digit, outside the store's generated range (`IsBarcode`). Omitted or

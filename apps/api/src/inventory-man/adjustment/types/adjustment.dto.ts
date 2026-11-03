@@ -12,6 +12,7 @@ import {
     NotEquals,
     ValidateNested,
     Max,
+    Min,
     ArrayMaxSize,
 } from 'class-validator';
 import type {
@@ -77,6 +78,8 @@ export class AdjustFields implements AdjustmentLineRequest {
     @IsNotEmpty()
     @IsInt()
     @NotEquals(VALIDATION.CHANGE_NOT_ZERO, { message: 'Change must not be 0' })
+    @Max(Number.MAX_SAFE_INTEGER)
+    @Min(Number.MIN_SAFE_INTEGER)
     change!: number;
 
     @IsNotEmpty()

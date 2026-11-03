@@ -1,9 +1,15 @@
+import { ValidationError, ErrorCode } from '../../common/errors';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Restock, type RestockRowDoc } from './restock.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { RestockDetails, type RestockLineDoc } from './restock-details.schema';
-import type { Paginated } from '@grocery-pos/contracts';
+import {
+    quantityAmount,
+    maxQuantityForAmount,
+    NUMERIC_LIMITS,
+    type Paginated,
+} from '@grocery-pos/contracts';
 import type { NameRef } from '../../common/wire';
 import { GetAllDto, GetDetailsDto, RestockDto } from './types';
 import { InventoryService } from '../inventory/inventory.service';
@@ -35,16 +41,38 @@ export class RestockService {
     ): Promise<void> {
         const { description, restockDetails } = dto;
 
-        // unitCost is integer centavos, so the total is exact.
-        const totalCost = restockDetails.reduce((sum, detail) => {
-            return sum + detail.quantity * detail.unitCost;
-        }, 0);
-
         await runInTransaction(
             async (session) => {
                 const updatedRestockDetails =
                     await this.inventoryService.restock(user, dto, session);
 
+                const totalCost = restockDetails.reduce(
+                    (sum, detail, index) => {
+                        const unit = updatedRestockDetails[index]?.unit;
+                        if (
+                            detail.unitCost &&
+                            detail.quantity >
+                                maxQuantityForAmount(
+                                    NUMERIC_LIMITS.AMOUNT_MAX - sum,
+                                    detail.unitCost,
+                                    unit,
+                                )
+                        )
+                            throw new ValidationError(
+                                ErrorCode.VALIDATION_INVALID_INPUT,
+                                'Restock exceeds the maximum amount',
+                            );
+                        return (
+                            sum +
+                            quantityAmount(
+                                detail.unitCost,
+                                detail.quantity,
+                                unit,
+                            )
+                        );
+                    },
+                    0,
+                );
                 const [created] = await this.model.create(
                     [
                         {

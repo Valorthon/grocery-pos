@@ -14,7 +14,7 @@ import { PaymentType, SellDto } from '../../sales/types';
 import { AdjustDto } from '../adjustment/types';
 import { RestockDto } from '../restock/types';
 import { AuthUser } from '../../auth/types';
-import { Role } from '@grocery-pos/contracts';
+import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
 
 /** Chainable stand-in for `find().populate().session().lean()`. */
 function leanChain(rows: unknown[]) {
@@ -257,7 +257,42 @@ describe('InventoryService.adjust', () => {
         return ops.map((op) => op.updateOne);
     }
 
-    it('guards negative changes in the filter and leaves positive ones unguarded', async () => {
+    it('rejects a net change or resulting stock beyond the safe integer range', async () => {
+        stock({ p1: 1 });
+        await expect(
+            service.adjust(
+                ACTOR,
+                adjustDto([
+                    { product: 'p1', change: Number.MAX_SAFE_INTEGER },
+                    { product: 'p1', change: 1 },
+                ]),
+                session,
+            ),
+        ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_INVALID_INPUT });
+        await expect(
+            service.adjust(
+                ACTOR,
+                adjustDto([{ product: 'p1', change: Number.MAX_SAFE_INTEGER }]),
+                session,
+            ),
+        ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_INVALID_INPUT });
+        expect(bulkWrite).not.toHaveBeenCalled();
+    });
+    it.each([1.5, -1])(
+        'treats corrupt stored stock %s as an internal error',
+        async (value) => {
+            stock({ p1: value });
+            await expect(
+                service.adjust(
+                    ACTOR,
+                    adjustDto([{ product: 'p1', change: 1 }]),
+                    session,
+                ),
+            ).rejects.toMatchObject({ code: ErrorCode.INTERNAL_ERROR });
+        },
+    );
+
+    it('guards negative stock and positive safe-integer overflow', async () => {
         stock({ p1: 10, p2: 0 });
         bulkWrite.mockResolvedValue({ matchedCount: 2 });
 
@@ -272,7 +307,7 @@ describe('InventoryService.adjust', () => {
 
         expect(operations().map((op) => op.filter)).toEqual([
             { product: 'p1', stock: { $gte: 4 } },
-            { product: 'p2' },
+            { product: 'p2', stock: { $lte: Number.MAX_SAFE_INTEGER - 7 } },
         ]);
     });
 
@@ -384,7 +419,10 @@ describe('InventoryService.adjust', () => {
         ).resolves.toBeUndefined();
         expect(operations()).toEqual([
             {
-                filter: { product: 'p1' },
+                filter: {
+                    product: 'p1',
+                    stock: { $lte: Number.MAX_SAFE_INTEGER - 2 },
+                },
                 update: {
                     $inc: { stock: 2 },
                     $set: { updatedBy: ACTOR_ID },
@@ -452,14 +490,20 @@ describe('InventoryService.adjust', () => {
 
             expect(operations()).toEqual([
                 {
-                    filter: { product: 'p1' },
+                    filter: {
+                        product: 'p1',
+                        stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
+                    },
                     update: {
                         $inc: { stock: 3 },
                         $set: { updatedBy: ACTOR_ID },
                     },
                 },
                 {
-                    filter: { product: 'p2' },
+                    filter: {
+                        product: 'p2',
+                        stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
+                    },
                     update: {
                         $inc: { stock: 3 },
                         $set: { updatedBy: ACTOR_ID },
@@ -624,6 +668,40 @@ describe('InventoryService.restock', () => {
         });
     });
 
+    it('preserves the measured unit for an uppercase product id', async () => {
+        getMany.mockResolvedValue(
+            new Map([[EXISTING, { unit: UnitOfMeasure.KG }]]),
+        );
+        bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+
+        const lines = await service.restock(
+            user,
+            {
+                restockDetails: [
+                    {
+                        product: EXISTING.toUpperCase(),
+                        quantity: 450,
+                        unitCost: 18000,
+                    },
+                ],
+            } as RestockDto,
+            session,
+        );
+        expect(lines[0]).toMatchObject({
+            product: new Types.ObjectId(EXISTING),
+            quantity: 450,
+            unit: UnitOfMeasure.KG,
+        });
+    });
+
+    it('rejects a missing product document instead of treating it as pieces', async () => {
+        getMany.mockResolvedValue(new Map([[EXISTING, undefined]]));
+        await expect(
+            service.restock(user, dto, session),
+        ).rejects.toBeInstanceOf(InternalError);
+        expect(bulkWrite).not.toHaveBeenCalled();
+    });
+
     it('matches new products to their lines by position, not by EAN', async () => {
         const created = [new Types.ObjectId(), new Types.ObjectId()];
         createMany.mockResolvedValue(created);
@@ -677,7 +755,10 @@ describe('InventoryService.restock', () => {
         const product = new Types.ObjectId(EXISTING);
         expect(operations()).toEqual([
             {
-                filter: { product },
+                filter: {
+                    product,
+                    stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
+                },
                 update: {
                     $inc: { stock: 3 },
                     $set: { updatedBy: new Types.ObjectId(user.userId) },

@@ -203,6 +203,31 @@ contained `&`, `<`, `>` or leading/trailing spaces was hashed in its encoded,
 trimmed form; that user signs in with the encoded form or gets an admin
 reset.
 
+## Measured products (#36)
+
+Create products with unit `PIECE` (default), `KG`, `G`, or `L`. Price and
+restock unit cost are centavos per selected unit. The register, restock and
+adjustment forms accept whole pieces/grams or up to three decimals for kg/L.
+For example, `0.450 kg × ₱180.00/kg` costs `₱81.00`.
+
+Quantities and stock are **integer minor units throughout the API and DB**:
+`PIECE` = pieces, `KG`/`G` = grams, `L` = millilitres. A `KG` product's request
+`quantity: 450` means 0.450 kg, not 450 kg. Prices remain per displayed unit;
+line totals round half up once to integer centavos. The shared quantity helpers
+perform exact conversions and BigInt arithmetic. API requests reject fractional
+minor units and unsafe integer values.
+
+Existing products, stock, receipts and saved baskets without a unit remain
+pieces. No quantity migration is required. A product's unit is fixed on creation;
+changing it would reinterpret stock and historical quantities, so create a separate
+product for a different measure. New sale/restock details snapshot the unit, and
+receipts include their unit and per-unit price. Approval fingerprints include the
+measure; parked tickets keep it and refuse to resume with an incompatible measure.
+Low-stock and maximum-stock filters compare displayed units (10 kg = 10,000 g).
+
+Pack measures and embedded price/weight scale-label barcodes are deferred. The
+store's generated `200…` codes continue to follow the existing barcode rules.
+
 ## Passwords
 
 Passwords must be at least 8 characters when set (new users, admin resets,

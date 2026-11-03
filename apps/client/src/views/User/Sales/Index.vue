@@ -114,13 +114,25 @@
                         <td class="py-3 px-4">
                             {{ d.product?.name ?? 'N/A' }}
                         </td>
-                        <td class="py-3 px-4">{{ d.quantity }}</td>
+                        <td class="py-3 px-4">
+                            {{
+                                d.unit
+                                    ? formatQuantity(d.quantity, d.unit)
+                                    : d.quantity
+                            }}
+                        </td>
                         <td class="py-3 px-4 text-right">
                             {{ formatCurrency(d.unitPrice ?? 0) }}
                         </td>
                         <td class="py-3 px-4 text-right">
                             {{
-                                formatCurrency((d.unitPrice ?? 0) * d.quantity)
+                                formatCurrency(
+                                    quantityAmount(
+                                        d.unitPrice ?? 0,
+                                        d.quantity,
+                                        d.unit,
+                                    ),
+                                )
                             }}
                         </td>
                     </tr>
@@ -361,6 +373,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';

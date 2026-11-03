@@ -87,6 +87,7 @@ export class RestockFields implements RestockLineFields {
     @Type(() => Number)
     @Min(NUMERIC_LIMITS.QUANTITY_MIN)
     @IsInt()
+    @Max(Number.MAX_SAFE_INTEGER)
     quantity!: number;
 
     /** Centavos. ₱0 is accepted (the client confirms it first, #85). */

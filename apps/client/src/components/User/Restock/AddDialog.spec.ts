@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, ref } from 'vue';
 import { createPinia } from 'pinia';
+import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
 import {
     check,
@@ -309,5 +310,46 @@ describe('Restock AddDialog (#17)', () => {
             name: 'Pens',
             price: 2100,
         });
+    });
+});
+
+it('accepts a decimal kg delivery and emits integer grams at cost per kg', async () => {
+    api.get.mockImplementation(() =>
+        Promise.resolve({ data: [{ ...MILK, unit: UnitOfMeasure.KG }] }),
+    );
+    await open();
+    await searchAndPick('milk');
+    expect(field('Quantity').getAttribute('inputmode')).toBe('decimal');
+    expect(field('Quantity').getAttribute('min')).toBe('0.001');
+    await type('Quantity', '1.250');
+    await type('Unit Cost', '100.00');
+    await click('Restock');
+    expect(added[0]).toMatchObject({
+        quantity: 1250,
+        unit: UnitOfMeasure.KG,
+        unitCost: 10000,
+    });
+});
+
+it('offers one unit selector for a new measured product and uses it for the delivery', async () => {
+    await open();
+    await check('This is a new product', true);
+    const selectors = document.querySelectorAll('select');
+    expect(selectors).toHaveLength(1);
+    selectors[0].value = UnitOfMeasure.KG;
+    selectors[0].dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+    await check('Auto-generate EAN', true);
+    await type('Product Name', 'Rice');
+    await type('Selling Price', '180');
+    await type('Quantity', '0.450');
+    await type('Unit Cost', '100');
+    await click('Restock');
+    expect(added[0]).toMatchObject({
+        isNewProduct: true,
+        quantity: 450,
+        unit: UnitOfMeasure.KG,
+        unitCost: 10000,
+        price: 18000,
     });
 });

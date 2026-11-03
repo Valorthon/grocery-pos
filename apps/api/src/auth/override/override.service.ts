@@ -1,3 +1,9 @@
+import {
+    quantityAmount,
+    maxQuantityForAmount,
+    NUMERIC_LIMITS,
+    type UnitOfMeasure,
+} from '@grocery-pos/contracts';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
@@ -241,10 +247,28 @@ export class ManagerOverrideService implements OnModuleInit {
                         ErrorCode.VALIDATION_INVALID_INPUT,
                         'Unknown product',
                     );
-                return { product, quantity, unitPrice: found.price };
+                if (
+                    quantity >
+                    maxQuantityForAmount(
+                        NUMERIC_LIMITS.AMOUNT_MAX,
+                        found.price,
+                        found.unit,
+                    )
+                )
+                    throw new ValidationError(
+                        ErrorCode.VALIDATION_INVALID_INPUT,
+                        'Sale exceeds the maximum amount',
+                    );
+                return {
+                    product,
+                    quantity,
+                    unitPrice: found.price,
+                    ...(found.unit && { unit: found.unit }),
+                };
             });
             const subtotal = lines.reduce(
-                (sum, l) => sum + l.quantity * l.unitPrice,
+                (sum, l) =>
+                    sum + quantityAmount(l.unitPrice, l.quantity, l.unit),
                 0,
             );
             if (subtotal !== context.expectedSubtotal)
@@ -292,6 +316,7 @@ export class ManagerOverrideService implements OnModuleInit {
             product: string;
             quantity: number;
             unitPrice: number;
+            unit?: UnitOfMeasure;
         }[],
     ): string {
         return discountApprovalContext(

@@ -4,7 +4,7 @@ import { countOf } from '@/utils/plural';
 import {
     barcodeFieldError,
     fieldErrors,
-    integerError,
+    quantityError,
     moneyError,
     productPickError,
     textError,
@@ -29,9 +29,7 @@ export function restockLineErrors(form: AddFormInput): Errors {
             ? textError(form.name, STRING_LIMITS.PRODUCT_NAME)
             : '',
         price: form.isNewProduct ? moneyError(form.price) : '',
-        quantity: integerError(form.quantity, {
-            min: NUMERIC_LIMITS.QUANTITY_MIN,
-        }),
+        quantity: quantityError(form.quantity, form.unit),
         // ₱0 passes here; the page asks "Record at ₱0 cost?" on save (#85).
         unitCost: moneyError(form.unitCost, NUMERIC_LIMITS.UNIT_COST_MIN),
     });

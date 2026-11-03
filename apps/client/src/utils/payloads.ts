@@ -1,4 +1,5 @@
 import type {
+    UnitOfMeasure,
     AdjustmentRequest,
     ChangePasswordRequest,
     DiscountInput,
@@ -27,6 +28,7 @@ import type {
 
 /** A new product draft as the product dialogs hold it. Money in centavos. */
 export interface ProductDraft {
+    unit?: UnitOfMeasure;
     EAN: string;
     name: string;
     price: number;
@@ -68,6 +70,7 @@ export function toNewProduct(draft: ProductDraft): NewProductRequest {
         ...typedEAN(draft),
         name: draft.name,
         price: draft.price,
+        ...(draft.unit && { unit: draft.unit }),
     };
 }
 

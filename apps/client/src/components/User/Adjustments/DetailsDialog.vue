@@ -75,6 +75,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatQuantity } from '@grocery-pos/contracts';
 import { onMounted, ref } from 'vue';
 import { Search, X } from '@lucide/vue';
 import api from '@/axios';
@@ -113,7 +114,7 @@ const headers = [
 interface AdjustmentLineRow {
     id: string;
     name: string;
-    change: number;
+    change: string;
     reason: string;
 }
 
@@ -146,7 +147,7 @@ const {
         serverItems.value = result.data.data.map((details) => ({
             id: details._id,
             name: details.product.name,
-            change: details.change,
+            change: formatQuantity(details.change, details.product.unit),
             reason: details.reason,
         }));
 

@@ -4,6 +4,7 @@ import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
 import {
     ErrorCode,
+    UnitOfMeasure,
     PaymentType,
     type SaleRequest,
     SaleStatus,
@@ -2512,5 +2513,42 @@ describe('park and resume register tickets (#35)', () => {
         expect(
             useCartStore().parked[0].items.map((item) => item.product),
         ).toEqual(['p1']);
+    });
+});
+
+describe('weighed register quantities (#36)', () => {
+    it('scans kilograms, accepts decimal quantity, shows exact amount and persists minor units', async () => {
+        const rice = {
+            _id: 'rice',
+            EAN: MILK.EAN,
+            name: 'rice',
+            price: 18000,
+            unit: UnitOfMeasure.KG,
+        };
+        serve(
+            () => Promise.resolve([]),
+            () => Promise.resolve(rice),
+        );
+        mount();
+        await type(MILK.EAN);
+        await pressEnter();
+        const cart = useCartStore();
+        expect(cart.items[0]).toMatchObject({
+            product: 'rice',
+            quantity: 1000,
+            unit: 'KG',
+        });
+        expect(qtyInputs()[0].value).toBe('1.000');
+        expect(qtyInputs()[0].getAttribute('inputmode')).toBe('decimal');
+        await typeQty(qtyInputs()[0], '0.450');
+        expect(cart.items[0].quantity).toBe(450);
+        expect(cart.subtotal).toBe(8100);
+        expect(line(0).textContent).toContain('₱81.00');
+        expect(line(0).textContent).toContain('/kg');
+        await typeQty(qtyInputs()[0], '0.4501');
+        expect(cart.items[0].quantity).toBe(450);
+        expect(
+            document.querySelector('[data-testid="line-quantity-error"]'),
+        ).not.toBeNull();
     });
 });

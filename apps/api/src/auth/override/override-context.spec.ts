@@ -1,4 +1,4 @@
-import { OverrideAction } from '@grocery-pos/contracts';
+import { OverrideAction, UnitOfMeasure } from '@grocery-pos/contracts';
 import {
     discountApprovalContext,
     reversalApprovalContext,
@@ -33,6 +33,19 @@ describe('manager approval context', () => {
         );
         expect(discountApprovalContext('key', 'other', lines)).not.toBe(
             original,
+        );
+    });
+
+    it('binds the unit even if quantity and price remain numerically equal', () => {
+        const line = { product: 'rice', quantity: 450, unitPrice: 18000 };
+        expect(
+            discountApprovalContext('key', 'request', [
+                { ...line, unit: UnitOfMeasure.KG },
+            ]),
+        ).not.toBe(
+            discountApprovalContext('key', 'request', [
+                { ...line, unit: UnitOfMeasure.PIECE },
+            ]),
         );
     });
 

@@ -27,7 +27,16 @@
                 <p class="text-xs text-slate-600">
                     {{ new Date(ticket.parkedAt).toLocaleString() }} ·
                     {{ ticket.items.length }} lines ·
-                    {{ ticket.items.reduce((n, item) => n + item.quantity, 0) }}
+                    {{
+                        ticket.items.reduce(
+                            (n, item) =>
+                                n +
+                                (item.unit && item.unit !== UnitOfMeasure.PIECE
+                                    ? 1
+                                    : item.quantity),
+                            0,
+                        )
+                    }}
                     items
                 </p>
                 <p class="text-xs text-slate-600">
@@ -66,7 +75,11 @@
 <script setup lang="ts">
 import { isAxiosError } from 'axios';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import type { ProductView } from '@grocery-pos/contracts';
+import {
+    unitOf,
+    UnitOfMeasure,
+    type ProductView,
+} from '@grocery-pos/contracts';
 import api from '@/axios';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -116,7 +129,10 @@ async function resume(ticket: ParkedTicket) {
                 const { data: product } = await api.get<ProductView>(
                     `/products/${encodeURIComponent(item.EAN)}`,
                 );
-                if (product._id !== item.product)
+                if (
+                    product._id !== item.product ||
+                    unitOf(product.unit) !== unitOf(item.unit)
+                )
                     throw new Error(
                         `${item.name} is no longer available. The parked ticket is kept.`,
                     );

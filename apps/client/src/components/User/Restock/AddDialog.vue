@@ -8,6 +8,21 @@
     >
         <div class="space-y-4">
             <template v-if="formData.isNewProduct">
+                <label class="block text-sm font-medium"
+                    >Unit of measure
+                    <select
+                        v-model="formData.unit"
+                        class="w-full min-h-11 rounded-xl border border-slate-300 px-3"
+                    >
+                        <option
+                            v-for="unit in Object.values(UnitOfMeasure)"
+                            :key="unit"
+                            :value="unit"
+                        >
+                            {{ unit }}
+                        </option>
+                    </select>
+                </label>
                 <BaseInput
                     v-model="formData.EAN"
                     label="EAN"
@@ -38,17 +53,21 @@
 
             <div class="grid grid-cols-2 gap-4">
                 <BaseInput
-                    v-model.number="formData.quantity"
-                    label="Quantity"
+                    v-model="formData.quantity"
+                    :label="`Quantity (${unitLabel(picked?.unit ?? formData.unit)})`"
                     type="number"
-                    inputmode="numeric"
-                    :min="NUMERIC_LIMITS.QUANTITY_MIN"
-                    step="1"
+                    :inputmode="
+                        quantityScale(picked?.unit ?? formData.unit) === 1000
+                            ? 'decimal'
+                            : 'numeric'
+                    "
+                    :min="1 / quantityScale(picked?.unit ?? formData.unit)"
+                    :step="1 / quantityScale(picked?.unit ?? formData.unit)"
                     :error="errors.quantity"
                 />
                 <BaseInput
                     v-model="formData.unitCost"
-                    label="Unit Cost (₱)"
+                    :label="`Unit Cost (₱/${unitLabel(picked?.unit ?? formData.unit)})`"
                     inputmode="decimal"
                     autocomplete="off"
                     placeholder="0.00"
@@ -71,7 +90,7 @@
                 />
                 <BaseInput
                     v-model="formData.price"
-                    label="Selling Price (₱)"
+                    :label="`Selling Price (₱/${unitLabel(formData.unit)})`"
                     inputmode="decimal"
                     autocomplete="off"
                     placeholder="0.00"
@@ -94,6 +113,14 @@
 </template>
 
 <script setup lang="ts">
+import {
+    UnitOfMeasure,
+    unitOf,
+    quantityInput,
+    parseQuantity,
+    quantityScale,
+    unitLabel,
+} from '@grocery-pos/contracts';
 import { computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
 import api from '@/axios';
@@ -106,7 +133,7 @@ import type { ComboboxOption } from '@/components/ui/types';
 import { AddForm, AddFormInput } from './dto';
 import { restockLineErrors } from './validation';
 import { Color, useUIStore } from '@/stores/ui';
-import { NUMERIC_LIMITS, STRING_LIMITS } from '@grocery-pos/contracts';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toEnsureValidQuery } from '@/utils/payloads';
@@ -127,6 +154,7 @@ const model = computed({
 
 const uiStore = useUIStore();
 const formData = reactive<AddFormInput>({
+    unit: UnitOfMeasure.PIECE,
     autoGenerateEAN: false,
     EAN: '',
     quantity: '',
@@ -153,6 +181,7 @@ const {
 
 /** The existing product picked from the matches, as it was when picked. */
 interface PickedProduct {
+    unit?: UnitOfMeasure;
     product: string;
     name: string;
     EAN: string;
@@ -183,6 +212,7 @@ const selectedProduct = computed<ComboboxOption | null>({
                   product: opt.value,
                   name: opt.label,
                   EAN: match?.EAN ?? opt.display ?? '',
+                  unit: unitOf(match?.unit),
               }
             : null;
         clearError('EAN');
@@ -226,7 +256,8 @@ watch(
             ? (item?.autoGenerateEAN ?? false)
             : false;
         formData.EAN = item?.EAN ?? '';
-        formData.quantity = item?.quantity ?? '';
+        formData.unit = item?.unit ?? UnitOfMeasure.PIECE;
+        formData.quantity = item ? quantityInput(item.quantity, item.unit) : '';
         formData.unitCost =
             item?.unitCost != null ? centavosToPesoInput(item.unitCost) : '';
         formData.product = '';
@@ -239,6 +270,7 @@ watch(
                       product: item.product,
                       name: item.name,
                       EAN: item.EAN,
+                      unit: unitOf(item.unit),
                   }
                 : null;
         errors.value = {};
@@ -249,6 +281,7 @@ watch(
 const handleSubmit = async () => {
     errors.value = restockLineErrors({
         ...formData,
+        unit: picked.value?.unit ?? formData.unit,
         product: formData.isNewProduct ? '' : (picked.value?.product ?? ''),
     });
     if (Object.keys(errors.value).length) return;
@@ -268,7 +301,13 @@ const handleSubmit = async () => {
     }
 
     const amounts = {
-        quantity: Number(formData.quantity),
+        quantity: parseQuantity(
+            formData.quantity,
+            picked.value?.unit ?? formData.unit,
+        )!,
+        ...((picked.value?.unit ?? formData.unit) && {
+            unit: picked.value?.unit ?? formData.unit,
+        }),
         unitCost: pesosToCentavos(formData.unitCost),
     };
     // A new product never carries a product id; an existing one never

@@ -625,3 +625,48 @@ describe('cart remove and restore edges', () => {
         expect(cart.items.map((i) => i.product)).toEqual(['p2', 'p1', 'p3']);
     });
 });
+
+describe('measured cart minor units (#36)', () => {
+    it('rounds per-kg prices exactly while persisting unit and minor quantity', () => {
+        const cart = useCartStore();
+        cart.setOwner('weighed-cashier');
+        const rice = {
+            product: 'rice',
+            EAN: '1',
+            name: 'rice',
+            unitPrice: 18000,
+            unit: 'KG' as import('@grocery-pos/contracts').UnitOfMeasure,
+        };
+        expect(cart.add(rice, 450)).toBe(true);
+        expect(cart.subtotal).toBe(8100);
+        expect(cart.totalUnits).toBe(1);
+        const parsed = parseStoredCart(
+            localStorage.getItem(cartStorageKey('weighed-cashier')),
+        );
+        expect(parsed?.items[0]).toMatchObject({ quantity: 450, unit: 'KG' });
+        expect(cart.setQuantity('rice', 1250)).toBe(true);
+        expect(cart.subtotal).toBe(22500);
+        expect(cart.maxQuantity('rice', 18000)).toBeGreaterThan(1000);
+        const parked = cart.park('weighed ticket', 'shift');
+        expect(parked).toBeDefined();
+        expect(cart.parked[0].items[0]).toMatchObject({
+            quantity: 1250,
+            unit: 'KG',
+        });
+    });
+    it('restores legacy piece baskets without changing their quantities or idempotency keys', () => {
+        localStorage.setItem(
+            cartStorageKey('legacy'),
+            JSON.stringify({
+                version: CART_STORAGE_VERSION,
+                items: [{ ...MILK, quantity: 3 }],
+                discount: null,
+                attempt: null,
+            }),
+        );
+        const cart = useCartStore();
+        cart.setOwner('legacy');
+        expect(cart.items[0]).toEqual({ ...MILK, quantity: 3 });
+        expect(cart.subtotal).toBe(28500);
+    });
+});

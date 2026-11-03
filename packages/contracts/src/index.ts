@@ -1,6 +1,7 @@
 export * from './roles.js';
 export * from './limits.js';
 export * from './enums.js';
+export * from './quantity.js';
 export * from './errors.js';
 export * from './discount.js';
 export * from './sales.js';

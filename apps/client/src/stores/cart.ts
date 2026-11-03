@@ -2,6 +2,9 @@ import { computed, onScopeDispose, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import {
     DISCOUNT_LIMITS,
+    UnitOfMeasure,
+    quantityAmount,
+    maxQuantityForAmount,
     DiscountType,
     NUMERIC_LIMITS,
     STRING_LIMITS,
@@ -12,6 +15,7 @@ import { formatCurrency } from '@/utils/currency';
 import { Color, useUIStore } from './ui';
 
 export interface CartItem {
+    unit?: UnitOfMeasure;
     product: string;
     EAN: string;
     name: string;
@@ -103,7 +107,12 @@ export function isValidQuantity(quantity: unknown): quantity is number {
 
 function parseItem(raw: unknown): CartItem | null {
     if (!isObject(raw)) return null;
-    const { product, EAN, name, unitPrice, quantity } = raw;
+    const { product, EAN, name, unitPrice, quantity, unit } = raw;
+    if (
+        unit !== undefined &&
+        !Object.values(UnitOfMeasure).includes(unit as UnitOfMeasure)
+    )
+        return null;
     if (!isText(product, 64) || !isText(EAN, STRING_LIMITS.EAN)) return null;
     if (!isText(name, STRING_LIMITS.PRODUCT_NAME)) return null;
     if (
@@ -115,7 +124,14 @@ function parseItem(raw: unknown): CartItem | null {
         return null;
     }
     if (!isValidQuantity(quantity)) return null;
-    return { product, EAN, name, unitPrice, quantity };
+    return {
+        product,
+        EAN,
+        name,
+        unitPrice,
+        quantity,
+        ...(unit !== undefined ? { unit: unit as UnitOfMeasure } : {}),
+    };
 }
 
 function parseDiscount(raw: unknown): CartDiscount | null {
@@ -186,11 +202,18 @@ export function parseStoredCart(json: string | null): {
             dropped.unreadable++;
             continue;
         }
-        if (item.quantity > (TICKET_AMOUNT_MAX - total) / item.unitPrice) {
+        if (
+            item.quantity >
+            maxQuantityForAmount(
+                TICKET_AMOUNT_MAX - total,
+                item.unitPrice,
+                item.unit,
+            )
+        ) {
             dropped.overCap++;
             continue;
         }
-        total += item.unitPrice * item.quantity;
+        total += quantityAmount(item.unitPrice, item.quantity, item.unit);
         items.push(item);
     }
     const parked: ParkedTicket[] = [];
@@ -303,12 +326,20 @@ export const useCartStore = defineStore('cart', () => {
     const locked = ref(false);
 
     const totalUnits = computed(() =>
-        items.value.reduce((sum, item) => sum + item.quantity, 0),
+        items.value.reduce(
+            (sum, item) =>
+                sum +
+                (item.unit && item.unit !== UnitOfMeasure.PIECE
+                    ? 1
+                    : item.quantity),
+            0,
+        ),
     );
 
     const subtotal = computed(() =>
         items.value.reduce(
-            (sum, item) => sum + item.unitPrice * item.quantity,
+            (sum, item) =>
+                sum + quantityAmount(item.unitPrice, item.quantity, item.unit),
             0,
         ),
     );
@@ -356,12 +387,13 @@ export const useCartStore = defineStore('cart', () => {
         const stored: StoredCart = {
             version: CART_STORAGE_VERSION,
             items: items.value.map(
-                ({ product, EAN, name, unitPrice, quantity }) => ({
+                ({ product, EAN, name, unitPrice, quantity, unit }) => ({
                     product,
                     EAN,
                     name,
                     unitPrice,
                     quantity,
+                    ...(unit && { unit }),
                 }),
             ),
             discount: discount.value && { ...discount.value },
@@ -464,17 +496,23 @@ export const useCartStore = defineStore('cart', () => {
      * The most units of a line at `unitPrice` the ticket can hold, the
      * other lines as they are: the ticket may not exceed TICKET_AMOUNT_MAX.
      */
-    function maxQuantity(productId: string, unitPrice: number): number {
+    function maxQuantity(
+        productId: string,
+        unitPrice: number,
+        unit?: UnitOfMeasure,
+    ): number {
+        unit ??= items.value.find((i) => i.product === productId)?.unit;
         const others = items.value.reduce(
             (sum, item) =>
                 item.product === productId
                     ? sum
-                    : sum + item.unitPrice * item.quantity,
+                    : sum +
+                      quantityAmount(item.unitPrice, item.quantity, item.unit),
             0,
         );
         return Math.max(
             0,
-            Math.floor((TICKET_AMOUNT_MAX - others) / Math.max(unitPrice, 1)),
+            maxQuantityForAmount(TICKET_AMOUNT_MAX - others, unitPrice, unit),
         );
     }
 
@@ -489,6 +527,7 @@ export const useCartStore = defineStore('cart', () => {
             EAN: string;
             name: string;
             unitPrice: number;
+            unit?: UnitOfMeasure;
         },
         quantity = 1,
     ): boolean {
@@ -496,7 +535,15 @@ export const useCartStore = defineStore('cart', () => {
         const existing = items.value.find((c) => c.product === product.product);
         const already = existing?.quantity ?? 0;
         const unitPrice = existing?.unitPrice ?? product.unitPrice;
-        if (quantity > maxQuantity(product.product, unitPrice) - already) {
+        if (
+            quantity >
+            maxQuantity(
+                product.product,
+                unitPrice,
+                existing?.unit ?? product.unit,
+            ) -
+                already
+        ) {
             return false;
         }
         if (existing) {

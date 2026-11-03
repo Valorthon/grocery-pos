@@ -275,7 +275,7 @@ describe('DashboardService.getDashboard', () => {
 
             it('reads only rows at or below the threshold', () => {
                 expect(pipeline[0]).toEqual({
-                    $match: { stock: { $lte: LOW_STOCK_THRESHOLD } },
+                    $match: { stock: { $lte: LOW_STOCK_THRESHOLD * 1000 } },
                 });
             });
 
@@ -293,7 +293,7 @@ describe('DashboardService.getDashboard', () => {
             });
 
             it('splits 1..threshold (low) from 0 or below (out)', () => {
-                expect(pipeline[3]).toEqual({
+                expect(pipeline[4]).toEqual({
                     $group: {
                         _id: null,
                         lowStockCount: {
@@ -304,7 +304,7 @@ describe('DashboardService.getDashboard', () => {
                         },
                     },
                 });
-                expect(pipeline).toHaveLength(4);
+                expect(pipeline).toHaveLength(5);
             });
         });
     });

@@ -93,8 +93,23 @@
                                 {{ item.productName }}
                             </p>
                             <p class="text-xs text-slate-400">
-                                {{ item.quantity }} x
-                                {{ currency(item.amount / item.quantity) }}
+                                {{
+                                    item.unit
+                                        ? formatQuantity(
+                                              item.quantity,
+                                              item.unit,
+                                          )
+                                        : item.quantity
+                                }}
+                                x
+                                {{
+                                    currency(
+                                        item.unitPrice ??
+                                            item.amount / item.quantity,
+                                    )
+                                }}{{
+                                    item.unit ? `/${unitLabel(item.unit)}` : ''
+                                }}
                             </p>
                         </div>
                         <span class="font-bold text-slate-900">{{
@@ -190,6 +205,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+    formatQuantity,
+    UnitOfMeasure,
+    unitLabel,
+} from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, watch } from 'vue';
 import { CheckCircle2, RotateCcw } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -222,7 +242,13 @@ const model = computed({
 });
 
 const itemCount = computed(
-    () => props.receipt?.items.reduce((sum, i) => sum + i.quantity, 0) ?? 0,
+    () =>
+        props.receipt?.items.reduce(
+            (sum, i) =>
+                sum +
+                (i.unit && i.unit !== UnitOfMeasure.PIECE ? 1 : i.quantity),
+            0,
+        ) ?? 0,
 );
 
 const discountLabel = computed(() => {

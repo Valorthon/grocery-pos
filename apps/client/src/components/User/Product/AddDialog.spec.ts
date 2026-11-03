@@ -113,6 +113,7 @@ describe('Product AddDialog (#17)', () => {
         expect(added).toEqual([
             {
                 EAN: VALID.EAN,
+                unit: 'PIECE',
                 name: 'Pens',
                 price: 1999,
                 autoGenerateEAN: false,
