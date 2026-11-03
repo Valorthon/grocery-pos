@@ -7,7 +7,9 @@ import {
     PaymentType,
     type SaleRequest,
     SaleStatus,
+    ShiftStatus,
 } from '@grocery-pos/contracts';
+import { useShiftStore } from '@/stores/shift';
 import { type StoredAttempt, useCartStore } from '@/stores/cart';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
@@ -2398,5 +2400,117 @@ describe('Sell scan box on phones (#89)', () => {
                 expect.arrayContaining(['min-h-11', 'min-w-11']),
             );
         }
+    });
+});
+
+describe('park and resume register tickets (#35)', () => {
+    function ready() {
+        useCartStore().setOwner('ana');
+        withMilkOnTicket();
+        useShiftStore().activeShift = {
+            _id: 'shift1',
+            cashierName: 'ana',
+            status: ShiftStatus.OPEN,
+            terminal: 'Lane 1',
+            openedAt: new Date().toISOString(),
+            openingFloat: 10000,
+            movements: [],
+        };
+        serve(() => Promise.resolve([]));
+    }
+    async function parkCurrent() {
+        await clickButton(buttonNamed('Park Ticket'));
+        const note = document.querySelector<HTMLInputElement>('#park-note')!;
+        note.value = 'Customer A';
+        note.dispatchEvent(new Event('input'));
+        await flush();
+        const save = [
+            ...dialog('Park ticket')!.querySelectorAll('button'),
+        ].find((b) => b.textContent?.trim() === 'Park Ticket')!;
+        await clickButton(save);
+        await settleTransitions();
+    }
+    it('parks milk, completes another sale, then resumes the original ticket with server prices', async () => {
+        ready();
+        mount();
+        await parkCurrent();
+        expect(useCartStore().parked).toHaveLength(1);
+        expect(useCartStore().items).toEqual([]);
+        withMilkOnTicket();
+        post.mockResolvedValue({ data: RECEIPT });
+        await clickButton(buttonNamed('Tender & Charge'));
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '100';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+        expect(useCartStore().items).toEqual([]);
+        expect(useCartStore().parked).toHaveLength(1);
+        await clickButton(buttonNamed('Next Sale'));
+        await settleTransitions();
+        get.mockResolvedValue({
+            data: { ...PRODUCTS[MILK.EAN], price: 10_000 },
+        });
+        await clickButton(buttonNamed('Parked (1)'));
+        await clickButton(buttonNamed('Resume'));
+        await settleTransitions();
+        expect(useCartStore().items[0]).toMatchObject({
+            product: 'p1',
+            quantity: 1,
+            unitPrice: 10_000,
+        });
+        expect(useCartStore().parked).toEqual([]);
+        expect(useCartStore().attempt).toBeNull();
+    });
+    it('shows a failed save without clearing the current ticket', async () => {
+        ready();
+        mount();
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+            throw new Error('quota');
+        });
+        await parkCurrent();
+        expect(dialog('Park ticket')?.textContent).toContain(
+            'Nothing was changed',
+        );
+        expect(useCartStore().items).toHaveLength(1);
+        expect(useCartStore().parked).toEqual([]);
+    });
+    it('will not park an unresolved checkout attempt', async () => {
+        ready();
+        useCartStore().setAttempt({
+            idempotencyKey: 'pending',
+            ticketSignature: 'same',
+        });
+        mount();
+        await parkCurrent();
+        expect(dialog('Park ticket')?.textContent).toContain(
+            'may already be recorded',
+        );
+        expect(useCartStore().items).toHaveLength(1);
+    });
+    it('prevents a slow barcode result from adding to a different ticket after parking', async () => {
+        ready();
+        let finish!: (value: unknown) => void;
+        serve(
+            () => Promise.resolve([]),
+            () =>
+                new Promise((resolve) => {
+                    finish = resolve;
+                }),
+        );
+        mount();
+        await type(MINTS.EAN);
+        const lookup = pressEnter();
+        await flush();
+        await parkCurrent();
+        finish(PRODUCTS[MINTS.EAN]);
+        await lookup;
+        await flush();
+        expect(useCartStore().items).toEqual([]);
+        expect(
+            useCartStore().parked[0].items.map((item) => item.product),
+        ).toEqual(['p1']);
     });
 });

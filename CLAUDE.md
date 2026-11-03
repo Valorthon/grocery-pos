@@ -484,6 +484,28 @@ requestId}`. A 5xx never carries details or internals.
   effort, `LOGIN_HERO_URL`) or the README curl, over a gradient, gitignored,
   never committed.
 
+**Parked tickets** (#35)
+
+- First iteration is local to this browser and cashier; no server draft
+  collection or stock reservations. Up to 50 parked tickets include label,
+  timestamp, original shift, full lines and discount; never credentials,
+  approval tokens or checkout attempts.
+- Active and parked drafts share one atomic storage record. Parking/resuming
+  requires a successful durable write; quota failures keep the source intact.
+  Logout clears the active basket and in-memory drafts while preserving parked
+  drafts for that cashier's next login. Another cashier never inherits them.
+- Resume requires an empty active basket and open shift. Fetch every product
+  and current price; any missing/reused product or invalid/over-cap total
+  preserves the entire parked draft. A late answer after logout, shift close,
+  unmount or another tab's change cannot overwrite the current basket.
+- A checkout attempt that may already be recorded cannot be parked. Resumed
+  discounts need fresh ADMIN approval at checkout (#34).
+- Shift close warns about parked drafts and requires explicit discard or carry
+  to the cashier's next shift. Apply that choice only after server close
+  succeeds; a local persistence failure reports the closed shift accurately
+  and retains the drafts for review. Discarding one parked ticket asks first.
+- Cross-terminal drafts are deferred, as the optional second iteration in #35.
+
 **CI** (#28)
 
 - `ci.yml` runs on PRs and pushes to `develop`, `staging`, `production`,

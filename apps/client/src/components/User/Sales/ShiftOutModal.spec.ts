@@ -6,6 +6,7 @@ import {
     ShiftStatus,
     type ZReadReport,
 } from '@grocery-pos/contracts';
+import { useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import ShiftOutModal from './ShiftOutModal.vue';
 import ZReadReportView from './ZReadReportView.vue';
@@ -47,6 +48,7 @@ let app: App | null = null;
 let pinia: Pinia;
 
 beforeEach(() => {
+    localStorage.clear();
     pinia = createPinia();
     setActivePinia(pinia);
     api.get.mockReset();
@@ -105,6 +107,79 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
         await flush();
         return shift;
     }
+
+    it('warns about parked tickets and requires a carry or discard choice', async () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add({
+            product: 'p1',
+            EAN: '2000000000015',
+            name: 'milk',
+            unitPrice: 100,
+        });
+        cart.park('', 'shift1');
+        const shift = await openModal();
+        await countThousands(1);
+        expect(document.body.textContent).toContain(
+            '1 parked tickets are still open',
+        );
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="shift-out-confirm"]',
+            )!
+            .click();
+        await flush();
+        expect(api.post).not.toHaveBeenCalled();
+        expect(
+            document.querySelector('[data-testid="shift-out-error"]')
+                ?.textContent,
+        ).toContain('Choose');
+        const carry = document.querySelector<HTMLInputElement>(
+            'input[value="carry"]',
+        )!;
+        carry.checked = true;
+        carry.dispatchEvent(new Event('change'));
+        await flush();
+        api.post.mockResolvedValue({ data: REPORT });
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="shift-out-confirm"]',
+            )!
+            .click();
+        await flush();
+        expect(shift.activeShift).toBeNull();
+        expect(cart.parked[0].shiftId).toBeNull();
+    });
+    it('cancelling shift close preserves parked tickets and clears the choice on reopen', async () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add({
+            product: 'p1',
+            EAN: '2000000000015',
+            name: 'milk',
+            unitPrice: 100,
+        });
+        cart.park('', 'shift1');
+        const shift = await openModal();
+        const discard = document.querySelector<HTMLInputElement>(
+            'input[value="discard"]',
+        )!;
+        discard.checked = true;
+        discard.dispatchEvent(new Event('change'));
+        await flush();
+        [...document.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Cancel')!
+            .click();
+        await flush();
+        expect(cart.parked).toHaveLength(1);
+        expect(api.post).not.toHaveBeenCalled();
+        shift.shiftOutOpen = true;
+        await flush();
+        expect(
+            document.querySelector<HTMLInputElement>('input[value="discard"]')!
+                .checked,
+        ).toBe(false);
+    });
 
     it('shows only what was counted: no expected cash, no variance', async () => {
         await openModal();
