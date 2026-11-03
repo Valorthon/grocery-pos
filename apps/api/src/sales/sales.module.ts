@@ -31,6 +31,7 @@ import { ManagerOverrideModule } from '../auth/override/override.module';
         ManagerOverrideModule,
     ],
     providers: [SalesService],
+    exports: [SalesService],
     controllers: [SalesController],
 })
 export class SalesModule {}

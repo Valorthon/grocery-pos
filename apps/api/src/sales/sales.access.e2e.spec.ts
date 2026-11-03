@@ -101,8 +101,19 @@ function isRange(value: unknown): value is Range {
 /** Equality on ids and numbers, and `$gte`/`$lt` on dates, as Mongo would. */
 function matches(row: SaleRow, filter: Record<string, unknown>): boolean {
     return Object.entries(filter).every(([key, expected]) => {
+        if (key === '$or')
+            return (expected as Record<string, unknown>[]).some((f) =>
+                matches(row, f),
+            );
         const actual = row[key as keyof SaleRow];
+        if (
+            typeof expected === 'object' &&
+            expected !== null &&
+            '$exists' in expected
+        )
+            return (actual !== undefined) === expected.$exists;
         if (isRange(expected)) {
+            if (!(actual instanceof Date)) return false;
             const t = (actual as Date).getTime();
             return (
                 (!expected.$gte || t >= expected.$gte.getTime()) &&

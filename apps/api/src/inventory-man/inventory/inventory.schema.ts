@@ -28,6 +28,9 @@ export class Inventory {
     })
     stock!: number;
 
+    /** A recorded offline oversell is a known reconciliation deficit. */
+    @Prop({ type: Boolean, select: false }) offlineShortfall?: boolean;
+
     @Prop({
         type: mongoose.Schema.Types.ObjectId,
         ref: User.name,

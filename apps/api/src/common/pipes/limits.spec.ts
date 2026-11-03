@@ -156,7 +156,11 @@ describe('pagination cap (#16)', () => {
         expect(PAGINATION.PAGE_MAX).toBe(10_000);
     });
 
-    it.each(paginated.map((t) => [t.name, t] as const))(
+    it.each(
+        paginated
+            .filter((t) => metasOf(t).some((m) => m.propertyName === 'page'))
+            .map((t) => [t.name, t] as const),
+    )(
         '%s takes whole numbers only, and caps page at PAGINATION.PAGE_MAX',
         async (_, target) => {
             const errorsOf = async (

@@ -177,7 +177,13 @@ export class DashboardService {
             this.salesModel.aggregate<{ count: number; revenue?: number }>([
                 {
                     $match: {
-                        createdAt: { $gte: startOfDay, $lt: endOfDay },
+                        $or: [
+                            { soldAt: { $gte: startOfDay, $lt: endOfDay } },
+                            {
+                                soldAt: { $exists: false },
+                                createdAt: { $gte: startOfDay, $lt: endOfDay },
+                            },
+                        ],
                         // Voided and refunded sales are not revenue.
                         ...COUNTED_SALES_FILTER,
                     },

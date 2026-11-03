@@ -74,6 +74,16 @@
             scrollable
             :closable="!reversing"
         >
+            <p v-if="selectedSale?.offline" class="text-sm mb-3 text-amber-900">
+                Offline cash sale · occurred {{ selectedSale.soldAt }}.
+                <strong v-if="selectedSale.stockShortfall"
+                    >Stock shortfall — reconcile inventory.</strong
+                >
+                <span v-if="selectedSale.lateOffline"
+                    >Admin-recorded after shift close; shown as a separate
+                    closing-report addendum.</span
+                >
+            </p>
             <table class="w-full text-left border-collapse text-sm">
                 <thead>
                     <tr
@@ -378,6 +388,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';
 import api from '@/axios';
+import { useOfflineStore } from '@/stores/offline';
 import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog.vue';
 import { useManagerApproval } from '@/composables/useManagerApproval';
 
@@ -421,6 +432,10 @@ import { Color, useUIStore } from '@/stores/ui';
 
 /** The ledger fields of a sale that explain its total (centavos). */
 interface SaleTotals {
+    offline?: boolean;
+    soldAt?: string;
+    stockShortfall?: boolean;
+    lateOffline?: boolean;
     amount: number;
     discount: ReceiptDiscount | null;
     status: SaleStatus;
@@ -502,6 +517,10 @@ const {
             cashier: sale.cashier?.name ?? 'N/A',
             amount: formatCurrency(sale.amount ?? 0),
             totals: {
+                offline: sale.offline,
+                soldAt: sale.soldAt,
+                stockShortfall: sale.stockShortfall,
+                lateOffline: sale.lateOffline,
                 amount: sale.amount ?? 0,
                 discount: sale.discount ?? null,
                 // Sales from before statuses existed are completed.
@@ -515,7 +534,7 @@ const {
             } satisfies SaleTotals,
             paymentType: sale.paymentType,
             status: sale.status ?? SaleStatus.COMPLETED,
-            date: formatDate(sale.createdAt),
+            date: formatDate(sale.soldAt ?? sale.createdAt),
         }));
 
         totalItems.value = result.data.totalItems;
@@ -541,6 +560,7 @@ function discountLabel(discount: ReceiptDiscount): string {
 // Whole-sale reversals require manager approval; sellers see only their own current-shift sales.
 const canReverse = computed(
     () =>
+        !useOfflineStore().offline &&
         (authStore.isAdmin || authStore.user?.roles.includes(Role.Seller)) &&
         selectedSale.value?.status === SaleStatus.COMPLETED,
 );

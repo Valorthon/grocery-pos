@@ -2,6 +2,7 @@
     <div
         class="h-screen w-screen overflow-hidden flex flex-col bg-[#f8fafc] text-slate-900 antialiased"
     >
+        <OfflineStatus />
         <template v-if="isDashboard">
             <Navigation />
             <main class="flex-1 overflow-hidden">
@@ -67,6 +68,9 @@ import ShiftInModal from '@/components/User/Sales/ShiftInModal.vue';
 import DrawerActionModal from '@/components/User/Sales/DrawerActionModal.vue';
 import ShiftOutModal from '@/components/User/Sales/ShiftOutModal.vue';
 import ZReadModal from '@/components/User/Sales/ZReadModal.vue';
+import OfflineStatus from '@/components/User/Sales/OfflineStatus.vue';
+import { useOfflineStore } from '@/stores/offline';
+import { useAuthStore } from '@/stores/auth';
 import { useShiftStore } from '@/stores/shift';
 import { Color, useUIStore } from '@/stores/ui';
 
@@ -105,8 +109,14 @@ function requireShift() {
 
 // On every login and page load: resume the caller's open shift, if any.
 onMounted(async () => {
+    const auth = useAuthStore();
+    const offline = useOfflineStore();
+    if (auth.user?.userId)
+        await offline.restore(auth.user.userId, auth.user.roles);
     try {
         await shiftStore.fetchCurrent();
+        if (shiftStore.activeShift)
+            void offline.prepare(shiftStore.activeShift);
     } catch {
         uiStore.queueMessage(
             Color.ERROR,
@@ -122,6 +132,8 @@ watch(
     () => shiftStore.activeShift,
     (shift, previous) => {
         // `loaded` is cleared by a reset (logout): nothing to report then.
+        if (shift && shift._id !== previous?._id)
+            void useOfflineStore().prepare(shift);
         if (shift || !previous || !shiftStore.loaded) return;
         // Closed by the cashier: the Z-read is on screen. Otherwise it was
         // closed elsewhere (an admin force-closed it).

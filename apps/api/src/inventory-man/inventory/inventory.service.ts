@@ -75,6 +75,7 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
             $facet: {
                 metadata: [{ $count: 'total' }],
                 data: [
+                    { $project: { offlineShortfall: 0 } },
                     { $sort: { 'product.name': 1, _id: 1 } },
                     { $skip: (page - 1) * limit },
                     { $limit: limit },
@@ -406,7 +407,10 @@ export class InventoryService {
         session: ClientSession,
     ): Promise<Map<string, { name: string; stock: number }>> {
         const rows = await this.model
-            .find({ product: { $in: products } })
+            .find(
+                { product: { $in: products } },
+                { stock: 1, product: 1, offlineShortfall: 1 },
+            )
             .populate<{ product: { _id: Types.ObjectId; name: string } }>({
                 path: 'product',
                 select: 'name',
@@ -416,7 +420,9 @@ export class InventoryService {
 
         if (
             rows.some(
-                (row) => !Number.isSafeInteger(row.stock) || row.stock < 0,
+                (row) =>
+                    !Number.isSafeInteger(row.stock) ||
+                    (row.stock < 0 && !row.offlineShortfall),
             )
         )
             throw new InternalError('Invalid inventory stock');

@@ -1,7 +1,9 @@
+import { OfflineLease } from '../offline/offline-lease.schema';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
+    saleNetCash,
     type BillCounts,
     billCountTotal,
     type CurrentShiftView,
@@ -135,6 +137,8 @@ export class ShiftService {
         @InjectConnection() private connection: Connection,
         @InjectModel(Shift.name) private model: Model<Shift>,
         @InjectModel(Sales.name) private salesModel: Model<Sales>,
+        @InjectModel(OfflineLease.name)
+        private offlineLeases: Model<OfflineLease>,
     ) {}
 
     private openFilter(cashier: string) {
@@ -408,6 +412,15 @@ export class ShiftService {
                     .session(session)
                     .lean<ShiftDoc>();
                 if (!shift) throw this.notOpen();
+                if (
+                    await this.offlineLeases
+                        .exists({ shift: shift._id, active: true })
+                        .session(session)
+                )
+                    throw new ConflictError(
+                        ErrorCode.OFFLINE_PENDING,
+                        'Sync pending cash sales and release offline mode on every terminal before closing this shift. An admin may force-close if reconciliation is required.',
+                    );
                 return this.close(shift, user, counts, countedCash, session);
             },
             this.connection,
@@ -519,7 +532,7 @@ export class ShiftService {
             })
             .sort({ closedAt: -1 })
             .lean<ShiftDoc>();
-        return shift ? toReport(shift) : null;
+        return shift ? this.withOfflineAddendum(toReport(shift), shift) : null;
     }
 
     /** Every shift, newest first; ADMIN only. */
@@ -537,7 +550,15 @@ export class ShiftService {
             this.model.countDocuments(filter),
         ]);
 
-        return { data: rows.map(toListItem), totalItems };
+        return {
+            data: await Promise.all(
+                rows.map(async (row) => ({
+                    ...toListItem(row),
+                    report: await this.withOfflineAddendum(toReport(row), row),
+                })),
+            ),
+            totalItems,
+        };
     }
 
     /** One shift with its Z-read if closed; ADMIN only. */
@@ -548,6 +569,28 @@ export class ShiftService {
                 shift: id,
             });
         }
-        return toListItem(shift);
+        return {
+            ...toListItem(shift),
+            report: await this.withOfflineAddendum(toReport(shift), shift),
+        };
+    }
+    private async withOfflineAddendum(
+        report: ZReadReport | null,
+        shift: ShiftDoc,
+    ): Promise<ZReadReport | null> {
+        if (!report || !shift.lateOfflineCount) return report;
+        const sales = await this.salesModel
+            .find({ shift: shift._id, lateOffline: true })
+            .lean();
+        return {
+            ...report,
+            offlineAddendum: {
+                count: sales.length,
+                netCash: sales.reduce(
+                    (sum, sale) => sum + saleNetCash(sale),
+                    0,
+                ),
+            },
+        };
     }
 }

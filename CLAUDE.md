@@ -521,6 +521,33 @@ requestId}`. A 5xx never carries details or internals.
   and retains the drafts for review. Discarding one parked ticket asks first.
 - Cross-terminal drafts are deferred, as the optional second iteration in #35.
 
+**Offline cash** (#37, owner decisions 2026-11-03)
+
+- Preserve server-attested cached prices after collecting cash. A dedicated
+  signed-catalog/lease path records offline CASH only, never discounts, GCash,
+  overrides, voids or refunds. Ordinary `POST /sales` remains server-priced
+  and cannot oversell. Capabilities bind cashier/session/shift/product/unit/
+  price and expire no later than the login session.
+- Public shell assets are precached by the service worker; no API/auth response
+  or user data is cached there. IndexedDB holds per-cashier catalogue, lease
+  and atomic outbox. Cash receipts become durable before the basket clears.
+  Logout never deletes queued cash, and another cashier never inherits it.
+- Wait for “Offline cash ready” before disconnecting. An unresolved online
+  checkout cannot be silently converted into an offline receipt. Outbox retries
+  reuse one key, and delete only after an exact confirmed server receipt.
+- Completed offline cash may drive stock negative and flags stock reconciliation;
+  the private inventory marker distinguishes this from corrupt stored stock.
+  Original `soldAt` is separate from server `createdAt`; receipt/history and
+  daily reporting use occurrence time.
+- Each terminal registers a server lease. Normal close requires all terminal
+  queues drained and leases released, including cross-tab enqueue suspension.
+  ADMIN may force-close; revoked cashiers/sessions or closed shifts require
+  explicit ADMIN reconciliation on the terminal with a reason. Saved Z-read
+  figures never change; late uploads appear in a separate report addendum.
+- Native IndexedDB/service worker APIs add no runtime dependency. Fake IndexedDB
+  is test-only. Signed 200-line upload bodies have a scoped 256kb limit; other
+  API routes retain their existing 100kb JSON limit.
+
 **CI** (#28)
 
 - `ci.yml` runs on PRs and pushes to `develop`, `staging`, `production`,

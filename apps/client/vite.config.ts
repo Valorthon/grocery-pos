@@ -1,4 +1,6 @@
 import { fileURLToPath, URL } from 'node:url';
+import { createHash } from 'node:crypto';
+import { offlineWorkerSource } from './src/offline/pwa-source';
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
@@ -21,7 +23,42 @@ export default defineConfig(({ mode }) => {
     }
 
     return {
-        plugins: [vue(), tailwindcss()],
+        plugins: [
+            vue(),
+            tailwindcss(),
+            {
+                name: 'grocery-pos-offline-shell',
+                apply: 'build',
+                enforce: 'post',
+                generateBundle: {
+                    order: 'post',
+                    handler(_options, bundle) {
+                        const files = Object.keys(bundle)
+                            .filter((name) => !name.endsWith('.map'))
+                            .sort();
+                        const version = createHash('sha256')
+                            .update(JSON.stringify(files))
+                            .digest('hex')
+                            .slice(0, 16);
+                        this.emitFile({
+                            type: 'asset',
+                            fileName: 'sw.js',
+                            source: offlineWorkerSource(
+                                [
+                                    '/index.html',
+                                    '/manifest.webmanifest',
+                                    '/favicon.svg',
+                                    ...files
+                                        .filter((name) => name !== 'index.html')
+                                        .map((name) => '/' + name),
+                                ],
+                                version,
+                            ),
+                        });
+                    },
+                },
+            },
+        ],
         resolve: {
             alias: {
                 '@': fileURLToPath(new URL('./src', import.meta.url)),

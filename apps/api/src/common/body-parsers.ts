@@ -76,6 +76,12 @@ export function withSafeErrors(parser: RequestHandler): RequestHandler {
  */
 export function useBodyParsers(app: INestApplication): void {
     useCspReportLimit(app);
+    // Signed price proofs make the existing 200-line sale cap larger than 100kb.
+    // Scope the bounded exception to offline uploads; all other routes keep Nest defaults.
+    app.use(
+        ['/v1/offline/sync', '/v1/offline/reconcile'],
+        withSafeErrors(json({ limit: '256kb' })),
+    );
     app.use(withSafeErrors(json()));
     app.use(withSafeErrors(urlencoded({ extended: true })));
 }

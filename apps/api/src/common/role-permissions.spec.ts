@@ -110,6 +110,10 @@ describe('Roles page permissions (PERMISSIONS in contracts)', () => {
     it('finds the routes', () => {
         expect([...byKey.keys()]).toEqual(
             expect.arrayContaining([
+                'GET /offline/catalog',
+                'POST /offline/lease',
+                'POST /offline/leases/:id/release',
+                'POST /offline/sync',
                 'POST /sales',
                 'POST /sales/:id/void',
                 'GET /products/:EAN',
@@ -145,6 +149,10 @@ describe('Roles page permissions (PERMISSIONS in contracts)', () => {
                 .sort(),
         ).toEqual(
             [
+                'GET /offline/catalog',
+                'POST /offline/lease',
+                'POST /offline/leases/:id/release',
+                'POST /offline/sync',
                 'POST /sales',
                 'POST /shifts',
                 'GET /shifts/current',

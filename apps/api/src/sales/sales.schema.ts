@@ -147,6 +147,16 @@ export class Sales {
     /** Centavos: the charged total, after any discount. */
     amount!: number;
 
+    /** Original occurrence time for cash collected offline; createdAt remains receipt time. */
+    @Prop({ type: Date, index: true }) soldAt?: Date;
+    @Prop({ type: Boolean }) offline?: boolean;
+    @Prop({ type: Boolean }) stockShortfall?: boolean;
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name })
+    reconciledBy?: Types.ObjectId;
+    @Prop({ type: String, maxlength: STRING_LIMITS.REASON })
+    reconciliationReason?: string;
+    @Prop({ type: Boolean }) lateOffline?: boolean;
+
     @Prop({
         required: true,
         type: mongoose.Schema.Types.ObjectId,

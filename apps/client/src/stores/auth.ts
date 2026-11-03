@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import api, { refreshSession } from '@/axios';
 import { USER_STORAGE_KEY, useCartStore } from './cart';
 import { useShiftStore } from './shift';
+import { useOfflineStore } from './offline';
 import { Color, useUIStore } from './ui';
 import { hasSessionMarker } from '@/utils/session-cookie';
 
@@ -128,6 +129,7 @@ export const useAuthStore = defineStore('auth', () => {
      * The basket saved in this browser for the cashier goes as well (#23).
      */
     const resetRegister = (): void => {
+        useOfflineStore().reset();
         useShiftStore().reset();
         useCartStore().reset();
         useUIStore().clear();

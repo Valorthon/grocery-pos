@@ -1494,7 +1494,13 @@ describe('Sales history scoping (issues #13, #2)', () => {
                 dateTo: '2026-09-25',
             });
 
-            const filter = { cashier: OTHER, createdAt: SEP_25 };
+            const filter = {
+                cashier: OTHER,
+                $or: [
+                    { soldAt: SEP_25 },
+                    { soldAt: { $exists: false }, createdAt: SEP_25 },
+                ],
+            };
             expect(find).toHaveBeenCalledWith(filter, INTERNAL_SALE_FIELDS);
             expect(countDocuments).toHaveBeenCalledWith(filter);
         });
@@ -1507,7 +1513,16 @@ describe('Sales history scoping (issues #13, #2)', () => {
             });
 
             expect(find).toHaveBeenCalledWith(
-                { ...OWN_SCOPE, createdAt: { $gte: SEP_25.$gte } },
+                {
+                    ...OWN_SCOPE,
+                    $or: [
+                        { soldAt: { $gte: SEP_25.$gte } },
+                        {
+                            soldAt: { $exists: false },
+                            createdAt: { $gte: SEP_25.$gte },
+                        },
+                    ],
+                },
                 CASHIER_PROJECTION,
             );
         });
@@ -1542,7 +1557,15 @@ describe('Sales history scoping (issues #13, #2)', () => {
             expect(
                 salesListFilter({}, { dateTo: '2026-09-24' }, 'Asia/Manila'),
             ).toEqual({
-                createdAt: { $lt: new Date('2026-09-24T16:00:00.000Z') },
+                $or: [
+                    { soldAt: { $lt: new Date('2026-09-24T16:00:00.000Z') } },
+                    {
+                        soldAt: { $exists: false },
+                        createdAt: {
+                            $lt: new Date('2026-09-24T16:00:00.000Z'),
+                        },
+                    },
+                ],
             });
         });
     });

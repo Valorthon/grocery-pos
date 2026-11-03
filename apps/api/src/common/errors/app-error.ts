@@ -82,6 +82,9 @@ export class AppError extends Error {
             case ErrorCode.SHIFT_CLOSED:
             case ErrorCode.SHIFT_PAYOUT_REQUIRED:
             case ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT:
+            case ErrorCode.OFFLINE_INVALID:
+            case ErrorCode.OFFLINE_RECONCILIATION_REQUIRED:
+            case ErrorCode.OFFLINE_PENDING:
             case ErrorCode.CONFLICT:
                 return HttpStatus.CONFLICT;
             case ErrorCode.RATE_LIMITED:

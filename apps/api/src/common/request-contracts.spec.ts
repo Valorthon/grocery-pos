@@ -1,4 +1,16 @@
 import type {
+    OfflineLeaseRequest,
+    OfflineSaleRequest,
+    OfflineSaleLine,
+    ReconcileOfflineSaleRequest,
+} from '@grocery-pos/contracts';
+import type {
+    OfflineLeaseDto,
+    OfflineSaleDto,
+    OfflineLineDto,
+    ReconcileOfflineSaleDto,
+} from '../offline/offline.dto';
+import type {
     ManagerOverrideRequest,
     OverrideContextRequest,
     OverrideReversalRequest,
@@ -86,6 +98,13 @@ function keysMatch<Dto, Contract>(ok: KeysMatch<Dto, Contract>) {
 type Line<T extends readonly unknown[]> = T[number];
 
 const checks = {
+    OfflineLeaseDto: keysMatch<OfflineLeaseDto, OfflineLeaseRequest>(true),
+    OfflineSaleDto: keysMatch<OfflineSaleDto, OfflineSaleRequest>(true),
+    OfflineLineDto: keysMatch<OfflineLineDto, OfflineSaleLine>(true),
+    ReconcileOfflineSaleDto: keysMatch<
+        ReconcileOfflineSaleDto,
+        ReconcileOfflineSaleRequest
+    >(true),
     ManagerOverrideDto: keysMatch<ManagerOverrideDto, ManagerOverrideRequest>(
         true,
     ),

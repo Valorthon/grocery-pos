@@ -741,6 +741,7 @@
                                 :aria-expanded="showDiscount"
                                 aria-controls="discount-options"
                                 :aria-keyshortcuts="REGISTER_KEYS.DISCOUNT"
+                                :disabled="offline.offline"
                                 @click="showDiscount = !showDiscount"
                             >
                                 <Percent class="w-3.5 h-3.5 text-slate-500" />
@@ -981,6 +982,7 @@
             v-model="isCheckoutOpen"
             :total="total"
             :initial-method="checkoutMethod"
+            :cash-only="offline.offline || !offline.connected"
             :submit="submitSale"
         />
 
@@ -1043,6 +1045,8 @@ import {
     X,
 } from '@lucide/vue';
 import api from '@/axios';
+import { isAxiosError } from 'axios';
+import { useOfflineStore } from '@/stores/offline';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import ParkedTicketsDialog from '@/components/User/Sales/ParkedTicketsDialog.vue';
@@ -1137,16 +1141,27 @@ const sticky = useStickyFocus(() => scanInput.value, {
     keepOnClick: (el) => el.matches('[data-ticket-line]'),
     holdsFocus: (el) => tender.holdsFocus(el),
 });
+const offline = useOfflineStore();
 const searchQuery = ref('');
 const scanMultiplier = ref(1);
 const search = useProductSearch(
-    async (name, signal) =>
-        (
-            await api.get<Match[]>('/products/matches', {
-                params: { name },
-                signal,
-            })
-        ).data,
+    async (name, signal) => {
+        if (offline.offline || !navigator.onLine) return offline.matches(name);
+        try {
+            return (
+                await api.get<Match[]>('/products/matches', {
+                    params: { name },
+                    signal,
+                })
+            ).data;
+        } catch (cause) {
+            if (isAxiosError(cause) && !cause.response && !signal.aborted) {
+                offline.setConnection(false);
+                return offline.matches(name);
+            }
+            throw cause;
+        }
+    },
     () => searchTerm.value,
 );
 /** What the live search looks for: the input minus any `<qty>*` prefix. */
@@ -1696,14 +1711,29 @@ async function lookUpBarcode(
 ): Promise<'added' | 'missing' | 'failed'> {
     const basket = cartStore.items;
     try {
-        const res = await api.get<ProductView>(
-            `/products/${encodeURIComponent(EAN)}`,
-        );
+        const res =
+            offline.offline || !navigator.onLine
+                ? { data: await offline.product(EAN) }
+                : await api.get<ProductView>(
+                      `/products/${encodeURIComponent(EAN)}`,
+                  );
         if (basket !== cartStore.items) return 'failed';
         addProduct(res.data, qty, submitted);
         return 'added';
     } catch (error) {
         if (basket !== cartStore.items) return 'failed';
+        if (isAxiosError(error) && !error.response) {
+            offline.setConnection(false);
+            try {
+                const product = await offline.product(EAN);
+                if (basket === cartStore.items) {
+                    addProduct(product, qty, submitted);
+                    return 'added';
+                }
+            } catch {
+                /* No cached match; keep the ticket and explain below. */
+            }
+        }
         if (apiErrorCode(error) === ErrorCode.PRODUCT_NOT_FOUND) {
             return 'missing';
         }
@@ -1721,9 +1751,12 @@ async function selectMatch(
     const basket = cartStore.items;
     clearFeedback();
     try {
-        const res = await api.get<ProductView>(
-            `/products/${encodeURIComponent(match.EAN)}`,
-        );
+        const res =
+            offline.offline || !navigator.onLine
+                ? { data: await offline.product(match.EAN) }
+                : await api.get<ProductView>(
+                      `/products/${encodeURIComponent(match.EAN)}`,
+                  );
         if (basket !== cartStore.items) return;
         addProduct(res.data, qty, submitted);
     } catch {
@@ -1878,6 +1911,16 @@ async function voidTicket() {
 // ---- Checkout
 
 function openCheckout(method: PaymentType = PaymentType.CASH) {
+    if (
+        (offline.offline || !navigator.onLine) &&
+        (method !== PaymentType.CASH || discountRequest.value)
+    ) {
+        showFeedback(
+            'error',
+            'Offline sales allow cash only and no discounts. Remove the discount or reconnect.',
+        );
+        return;
+    }
     // A quantity still being typed (F9 from its field) counts first; the
     // checkout must tender the ticket as it will be sent.
     const typing = Object.keys(qtyDrafts);
@@ -1901,6 +1944,8 @@ const checkout = useSaleCheckout({
     cart: cartStore,
     ticket: () => toSaleTicket(cartStore.items, discountRequest.value),
     post: async (body) => {
+        if (offline.offline || !navigator.onLine)
+            return offline.queue(body, cartStore.items);
         try {
             return (await api.post<Receipt>('/sales', body)).data;
         } catch (error) {
@@ -1948,13 +1993,24 @@ watch(isTicketLocked, (locked) => {
 async function submitSale(payment: PaymentRequest) {
     // What the cashier tendered against, priced when the items were scanned.
     const previewTotal = total.value;
+    if (
+        (offline.offline || !navigator.onLine) &&
+        cartStore.attempt &&
+        !(await offline.hasQueued(cartStore.attempt.idempotencyKey))
+    )
+        throw new Error(
+            'This ticket may already be recorded online. Reconnect and retry it before using offline cash.',
+        );
     const outcome = await checkout.submit(payment).catch(explainFailure);
     receipt.value = outcome.receipt;
-    receiptNotice.value = outcome.alreadyRecorded
-        ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this receipt, not the amount just entered.`
-        : outcome.receipt.totalAmount !== previewTotal
-          ? PRICES_CHANGED_NOTICE
-          : null;
+    receiptNotice.value =
+        offline.offline || !navigator.onLine
+            ? 'Offline cash receipt — pending server sync. Keep this terminal and its browser data until all pending sales are confirmed.'
+            : outcome.alreadyRecorded
+              ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this receipt, not the amount just entered.`
+              : outcome.receipt.totalAmount !== previewTotal
+                ? PRICES_CHANGED_NOTICE
+                : null;
     resetDiscountUi();
     dismissUndo();
     for (const product of Object.keys(qtyDrafts)) delete qtyDrafts[product];

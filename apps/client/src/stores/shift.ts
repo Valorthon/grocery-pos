@@ -1,6 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import api from '@/axios';
+import { useOfflineStore } from './offline';
 import { useCartStore } from './cart';
 import { Color, useUIStore } from './ui';
 import { apiErrorCode, apiErrorText } from '@/utils/api-error';
@@ -90,8 +91,16 @@ export const useShiftStore = defineStore('shift', () => {
     /** Reads the caller's open shift from the server. */
     async function fetchCurrent(): Promise<CurrentShiftView | null> {
         const gen = generation;
-        const res = await api.get<CurrentShiftResponse>('/shifts/current');
-        if (gen === generation) setShift(res.data.shift);
+        try {
+            const res = await api.get<CurrentShiftResponse>('/shifts/current');
+            if (gen === generation) setShift(res.data.shift);
+        } catch (cause) {
+            const offline = useOfflineStore();
+            if (gen === generation && offline.ready && offline.state?.lease) {
+                offline.setConnection(false);
+                setShift(offline.state.lease.shift);
+            } else throw cause;
+        }
         return activeShift.value;
     }
 
@@ -157,6 +166,11 @@ export const useShiftStore = defineStore('shift', () => {
         counts: BillCounts,
         parkedChoice?: 'carry' | 'discard',
     ): Promise<ZReadReport> {
+        const closeGeneration = generation;
+        const offline = useOfflineStore();
+        if (offline.state?.lease || offline.pending.length)
+            await offline.beforeClose();
+        if (closeGeneration !== generation) throw new StaleResponseError();
         const cart = useCartStore();
         if (cart.parked.length && !parkedChoice)
             throw new Error(

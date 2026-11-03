@@ -52,6 +52,25 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'Prepare and sync offline cash sales',
+        roles: [Role.Seller],
+        ownRoleOnly: true,
+        routes: [
+            'POST /offline/lease',
+            'GET /offline/catalog',
+            'POST /offline/leases/:id/release',
+            'POST /offline/sync',
+        ],
+        pages: ['Sell'],
+        appRoles: [Role.Seller],
+    },
+    {
+        label: 'Reconcile collected offline cash',
+        roles: [Role.Admin],
+        routes: ['POST /offline/reconcile'],
+        pages: ['Dashboard'],
+    },
+    {
         label: 'Change own password',
         roles: ASSIGNABLE_ROLES,
         routes: ['GET /users/profile', 'PATCH /users/me/password'],
