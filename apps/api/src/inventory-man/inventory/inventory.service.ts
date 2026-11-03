@@ -26,9 +26,7 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
     const productFilter = productSearchFilter({ name, EAN }, 'product.');
 
     return [
-        ...(maxStock !== undefined && maxStock !== null
-            ? [{ $match: { stock: { $lte: maxStock } } }]
-            : []),
+        ...(maxStock === 0 ? [{ $match: { stock: { $lte: 0 } } }] : []),
         {
             $lookup: {
                 from: 'products',
@@ -40,6 +38,36 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
         // No preserveNullAndEmptyArrays: an orphan row (its product gone)
         // is dropped here, before both the count and the page.
         { $unwind: '$product' },
+        ...(maxStock !== undefined && maxStock !== null && maxStock !== 0
+            ? [
+                  {
+                      $match: {
+                          $expr: {
+                              $lte: [
+                                  '$stock',
+                                  {
+                                      $multiply: [
+                                          maxStock,
+                                          {
+                                              $cond: [
+                                                  {
+                                                      $in: [
+                                                          '$product.unit',
+                                                          ['KG', 'L'],
+                                                      ],
+                                                  },
+                                                  1000,
+                                                  1,
+                                              ],
+                                          },
+                                      ],
+                                  },
+                              ],
+                          },
+                      },
+                  },
+              ]
+            : []),
         ...(Object.keys(productFilter).length > 0
             ? [{ $match: productFilter }]
             : []),
@@ -144,11 +172,20 @@ export class InventoryService {
             quantity: details.quantity,
             updatedBy,
             unitCost: details.unitCost,
+            ...((details.newProduct?.unit ??
+                found.get(String(details.product))?.unit) && {
+                unit:
+                    details.newProduct?.unit ??
+                    found.get(String(details.product))?.unit,
+            }),
         }));
 
         const updates = updatedRestockDetails.map(({ product, quantity }) => ({
             updateOne: {
-                filter: { product },
+                filter: {
+                    product,
+                    stock: { $lte: Number.MAX_SAFE_INTEGER - quantity },
+                },
                 update: {
                     $inc: { stock: quantity },
                     $set: { updatedBy },
@@ -238,6 +275,19 @@ export class InventoryService {
             );
         }
 
+        if (
+            [...netByProduct].some(
+                ([product, change]) =>
+                    !Number.isSafeInteger(
+                        stockByProduct.get(product)!.stock + change,
+                    ),
+            )
+        )
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Quantity is too large',
+            );
+
         // One op per product with a non-zero net change. Lines that cancel
         // out (e.g. +3 and -3) leave stock unchanged and need no write.
         const updates = [...netByProduct]
@@ -250,7 +300,12 @@ export class InventoryService {
                     filter:
                         change < 0
                             ? { product, stock: { $gte: -change } }
-                            : { product },
+                            : {
+                                  product,
+                                  stock: {
+                                      $lte: Number.MAX_SAFE_INTEGER - change,
+                                  },
+                              },
                     update: { $inc: { stock: change }, $set: { updatedBy } },
                 },
             }));
@@ -351,6 +406,13 @@ export class InventoryService {
             .session(session)
             .lean();
 
+        if (
+            rows.some(
+                (row) => !Number.isSafeInteger(row.stock) || row.stock < 0,
+            )
+        )
+            throw new InternalError('Invalid inventory stock');
+
         return new Map(
             rows
                 .filter((row) => row.product?._id)
@@ -387,7 +449,13 @@ function sumByProduct(
     const totals = new Map<string, number>();
     for (const [product, amount] of entries) {
         const key = product.toString();
-        totals.set(key, (totals.get(key) ?? 0) + amount);
+        const next = (totals.get(key) ?? 0) + amount;
+        if (!Number.isSafeInteger(next))
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Quantity is too large',
+            );
+        totals.set(key, next);
     }
     return totals;
 }

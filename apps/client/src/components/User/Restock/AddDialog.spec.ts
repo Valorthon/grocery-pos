@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, ref } from 'vue';
 import { createPinia } from 'pinia';
+import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
 import {
     check,
@@ -309,5 +310,23 @@ describe('Restock AddDialog (#17)', () => {
             name: 'Pens',
             price: 2100,
         });
+    });
+});
+
+it('accepts a decimal kg delivery and emits integer grams at cost per kg', async () => {
+    api.get.mockImplementation(() =>
+        Promise.resolve({ data: [{ ...MILK, unit: UnitOfMeasure.KG }] }),
+    );
+    await open();
+    await searchAndPick('milk');
+    expect(field('Quantity').getAttribute('inputmode')).toBe('decimal');
+    expect(field('Quantity').getAttribute('min')).toBe('0.001');
+    await type('Quantity', '1.250');
+    await type('Unit Cost', '100.00');
+    await click('Restock');
+    expect(added[0]).toMatchObject({
+        quantity: 1250,
+        unit: UnitOfMeasure.KG,
+        unitCost: 10000,
     });
 });

@@ -22,10 +22,10 @@
             <!-- No inputmode: a numeric keypad has no minus key, and a
                  write-off is a negative change. -->
             <BaseInput
-                v-model.number="formData.change"
-                label="Change"
+                v-model="formData.change"
+                :label="`Change (${unitLabel(picked?.unit ?? formData.unit)})`"
                 type="number"
-                step="1"
+                :step="1 / quantityScale(picked?.unit ?? formData.unit)"
                 placeholder="e.g. 5 or -2"
                 :error="errors.change"
             />
@@ -61,6 +61,14 @@
 </template>
 
 <script setup lang="ts">
+import {
+    UnitOfMeasure,
+    unitOf,
+    quantityInput,
+    parseQuantity,
+    quantityScale,
+    unitLabel,
+} from '@grocery-pos/contracts';
 import { computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
 import { STRING_LIMITS } from '@grocery-pos/contracts';
@@ -87,6 +95,7 @@ const model = computed({
 });
 
 const formData = reactive<AddFormInput>({
+    unit: UnitOfMeasure.PIECE,
     EAN: '',
     name: '',
     change: '',
@@ -110,6 +119,7 @@ const {
 
 /** The product picked from the matches, as it was when picked. */
 interface PickedProduct {
+    unit?: UnitOfMeasure;
     product: string;
     name: string;
     EAN: string;
@@ -139,6 +149,7 @@ const selectedProduct = computed<ComboboxOption | null>({
                   product: opt.value,
                   name: opt.label,
                   EAN: match?.EAN ?? opt.display ?? '',
+                  unit: unitOf(match?.unit),
               }
             : null;
         clearError('EAN');
@@ -163,11 +174,17 @@ watch(
         const item = props.item;
         formData.EAN = item?.EAN ?? '';
         formData.name = '';
-        formData.change = item?.change ?? '';
+        formData.unit = item?.unit ?? UnitOfMeasure.PIECE;
+        formData.change = item ? quantityInput(item.change, item.unit) : '';
         formData.reason = item?.reason ?? '';
         formData.product = '';
         picked.value = item?.product
-            ? { product: item.product, name: item.name, EAN: item.EAN }
+            ? {
+                  product: item.product,
+                  name: item.name,
+                  EAN: item.EAN,
+                  unit: unitOf(item.unit),
+              }
             : null;
         errors.value = {};
         resetMatches();
@@ -177,6 +194,7 @@ watch(
 function handleSubmit() {
     errors.value = adjustmentLineErrors({
         ...formData,
+        unit: picked.value?.unit ?? formData.unit,
         product: picked.value?.product ?? '',
     });
     if (Object.keys(errors.value).length || !picked.value) return;
@@ -184,7 +202,8 @@ function handleSubmit() {
         EAN: picked.value.EAN,
         name: picked.value.name,
         product: picked.value.product,
-        change: Number(formData.change),
+        change: parseQuantity(formData.change, picked.value.unit)!,
+        ...(picked.value.unit && { unit: picked.value.unit }),
         reason: formData.reason,
     };
     if (isEditMode.value) emit('update', payload);

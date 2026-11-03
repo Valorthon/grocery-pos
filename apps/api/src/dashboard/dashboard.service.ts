@@ -81,17 +81,38 @@ export const RESTOCK_ACTIVITY_FIELDS = '_id description restockedBy createdAt';
  */
 export function stockAlertPipeline(): PipelineStage[] {
     return [
-        { $match: { stock: { $lte: LOW_STOCK_THRESHOLD } } },
+        { $match: { stock: { $lte: LOW_STOCK_THRESHOLD * 1000 } } },
         {
             $lookup: {
                 from: 'products',
                 localField: 'product',
                 foreignField: '_id',
-                pipeline: [{ $project: { _id: 1 } }],
+                pipeline: [{ $project: { _id: 1, unit: 1 } }],
                 as: 'product',
             },
         },
         { $unwind: '$product' },
+        {
+            $match: {
+                $expr: {
+                    $lte: [
+                        '$stock',
+                        {
+                            $multiply: [
+                                LOW_STOCK_THRESHOLD,
+                                {
+                                    $cond: [
+                                        { $in: ['$product.unit', ['KG', 'L']] },
+                                        1000,
+                                        1,
+                                    ],
+                                },
+                            ],
+                        },
+                    ],
+                },
+            },
+        },
         {
             $group: {
                 _id: null,

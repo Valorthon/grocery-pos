@@ -1,3 +1,4 @@
+import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Types } from 'mongoose';
 import { Product } from '../../product/product.schema';
@@ -7,6 +8,9 @@ import type { ProductDoc } from '../../product/product.schema';
 
 @Schema()
 export class RestockDetails {
+    @Prop({ type: String, enum: Object.values(UnitOfMeasure), required: false })
+    unit?: UnitOfMeasure;
+
     @Prop({
         required: true,
         type: mongoose.Schema.ObjectId,
@@ -28,7 +32,7 @@ export class RestockDetails {
         required: true,
         min: NUMERIC_LIMITS.STOCK_MIN,
         validate: {
-            validator: Number.isInteger,
+            validator: Number.isSafeInteger,
             message: 'quantity must be an integer',
         },
     })
@@ -39,7 +43,7 @@ export class RestockDetails {
         required: true,
         min: NUMERIC_LIMITS.UNIT_COST_MIN,
         validate: {
-            validator: Number.isInteger,
+            validator: Number.isSafeInteger,
             message: 'unitCost must be an integer number of centavos',
         },
     })

@@ -107,6 +107,21 @@ Rules:
   `apps/api/src/common/utils/timezone.ts`. Date filters are `dateFrom`/`dateTo`
   in `YYYY-MM-DD` format.
 
+**Measured quantities** (#36)
+
+- Units: PIECE (default), KG, G, L. Quantities/stock on wire and in the database
+  are safe integer minor units: pieces, grams for KG/G, millilitres for L.
+  Display input allows 3 decimals for KG/L, whole quantities for PIECE/G.
+- Price/cost remain centavos per selected display unit. Use shared quantity
+  parsing/formatting and BigInt `quantityAmount` (half up per line), never
+  float accumulation. 450 grams at 18,000 centavos/kg totals 8,100 centavos.
+- Missing unit means legacy PIECE; existing quantities need no migration.
+  Unit is immutable after product creation; sale/restock details snapshot it.
+  Approval context binds unit; parked tickets reject incompatible measures.
+- Stock filters and dashboard low-stock thresholds compare displayed units.
+  Optional PACK and embedded scale-label parsing are deferred; no generated
+  barcode-prefix reinterpretation.
+
 **Sales**
 
 - The discount is computed on the server by `discountAmount` in
@@ -233,8 +248,8 @@ requestId}`. A 5xx never carries details or internals.
   restock, adjustment or product batch; 50 users). `limits.spec.ts` walks the
   controllers and enforces both.
 - User-facing totals use `countDocuments`, never `estimatedDocumentCount`.
-- The dashboard's low stock is `1 ≤ stock ≤ LOW_STOCK_THRESHOLD` (10, in
-  contracts, until #40), and out of stock is `stock ≤ 0`. Neither counts
+- The dashboard's low stock is positive stock up to `LOW_STOCK_THRESHOLD` (10, in
+  contracts, until #40) in the displayed unit, and out of stock is `stock ≤ 0`. Neither counts
   orphan inventory rows. Every dashboard role sees both tiles.
 - `GET /sales` takes `cashier` and `dateFrom`/`dateTo`. For ADMIN they filter
   everything. For anyone else they only narrow the own-open-shift scope, and

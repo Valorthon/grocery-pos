@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, nextTick, ref } from 'vue';
 import {
     DEFAULT_TERMINAL,
+    UnitOfMeasure,
     DiscountType,
     PaymentType,
     SaleStatus,
@@ -154,4 +155,26 @@ describe('ReceiptModal (issue #24)', () => {
         );
         expect(text).toContain('Cashier: ana');
     });
+});
+
+it('renders the snapshotted weight and price per kg without treating grams as item count', async () => {
+    await mount({
+        ...RECEIPT,
+        items: [
+            {
+                productName: 'rice',
+                quantity: 450,
+                unit: UnitOfMeasure.KG,
+                unitPrice: 18000,
+                amount: 8100,
+            },
+        ],
+        subtotal: 8100,
+        totalAmount: 8100,
+    });
+    const text = plain(dialogText());
+    expect(text).toContain('0.450 kg');
+    expect(text).toContain('₱180.00/kg');
+    expect(text).toContain('₱81.00');
+    expect(text).toContain('Subtotal (1 Items)');
 });

@@ -257,7 +257,42 @@ describe('InventoryService.adjust', () => {
         return ops.map((op) => op.updateOne);
     }
 
-    it('guards negative changes in the filter and leaves positive ones unguarded', async () => {
+    it('rejects a net change or resulting stock beyond the safe integer range', async () => {
+        stock({ p1: 1 });
+        await expect(
+            service.adjust(
+                ACTOR,
+                adjustDto([
+                    { product: 'p1', change: Number.MAX_SAFE_INTEGER },
+                    { product: 'p1', change: 1 },
+                ]),
+                session,
+            ),
+        ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_INVALID_INPUT });
+        await expect(
+            service.adjust(
+                ACTOR,
+                adjustDto([{ product: 'p1', change: Number.MAX_SAFE_INTEGER }]),
+                session,
+            ),
+        ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_INVALID_INPUT });
+        expect(bulkWrite).not.toHaveBeenCalled();
+    });
+    it.each([1.5, -1])(
+        'treats corrupt stored stock %s as an internal error',
+        async (value) => {
+            stock({ p1: value });
+            await expect(
+                service.adjust(
+                    ACTOR,
+                    adjustDto([{ product: 'p1', change: 1 }]),
+                    session,
+                ),
+            ).rejects.toMatchObject({ code: ErrorCode.INTERNAL_ERROR });
+        },
+    );
+
+    it('guards negative stock and positive safe-integer overflow', async () => {
         stock({ p1: 10, p2: 0 });
         bulkWrite.mockResolvedValue({ matchedCount: 2 });
 
@@ -272,7 +307,7 @@ describe('InventoryService.adjust', () => {
 
         expect(operations().map((op) => op.filter)).toEqual([
             { product: 'p1', stock: { $gte: 4 } },
-            { product: 'p2' },
+            { product: 'p2', stock: { $lte: Number.MAX_SAFE_INTEGER - 7 } },
         ]);
     });
 
@@ -384,7 +419,10 @@ describe('InventoryService.adjust', () => {
         ).resolves.toBeUndefined();
         expect(operations()).toEqual([
             {
-                filter: { product: 'p1' },
+                filter: {
+                    product: 'p1',
+                    stock: { $lte: Number.MAX_SAFE_INTEGER - 2 },
+                },
                 update: {
                     $inc: { stock: 2 },
                     $set: { updatedBy: ACTOR_ID },
@@ -452,14 +490,20 @@ describe('InventoryService.adjust', () => {
 
             expect(operations()).toEqual([
                 {
-                    filter: { product: 'p1' },
+                    filter: {
+                        product: 'p1',
+                        stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
+                    },
                     update: {
                         $inc: { stock: 3 },
                         $set: { updatedBy: ACTOR_ID },
                     },
                 },
                 {
-                    filter: { product: 'p2' },
+                    filter: {
+                        product: 'p2',
+                        stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
+                    },
                     update: {
                         $inc: { stock: 3 },
                         $set: { updatedBy: ACTOR_ID },
@@ -677,7 +721,10 @@ describe('InventoryService.restock', () => {
         const product = new Types.ObjectId(EXISTING);
         expect(operations()).toEqual([
             {
-                filter: { product },
+                filter: {
+                    product,
+                    stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
+                },
                 update: {
                     $inc: { stock: 3 },
                     $set: { updatedBy: new Types.ObjectId(user.userId) },

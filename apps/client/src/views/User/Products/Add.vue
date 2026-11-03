@@ -72,7 +72,9 @@
                         </td>
                         <td class="py-3 px-5">{{ item.name }}</td>
                         <td class="py-3 px-5 text-right">
-                            {{ formatCurrency(item.price ?? 0) }}
+                            {{ formatCurrency(item.price ?? 0) }}/{{
+                                unitLabel(item.unit)
+                            }}
                         </td>
                         <td class="py-3 px-5">
                             <div class="flex justify-end gap-1">
@@ -113,6 +115,7 @@
 </template>
 
 <script setup lang="ts">
+import { unitLabel } from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Pencil, Plus, Save, Trash2 } from '@lucide/vue';

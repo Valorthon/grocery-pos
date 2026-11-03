@@ -1,3 +1,4 @@
+import type { UnitOfMeasure } from '@grocery-pos/contracts';
 import { Transform, Type } from 'class-transformer';
 import {
     ArrayMaxSize,
@@ -62,6 +63,7 @@ class SellDetailsFields implements SaleLineRequest {
     @IsNotEmpty()
     @IsInt()
     @Min(NUMERIC_LIMITS.QUANTITY_MIN)
+    @Max(Number.MAX_SAFE_INTEGER)
     quantity!: number;
 }
 
@@ -224,6 +226,8 @@ export class SellDto implements SaleRequest {
 }
 
 export class ReceiptFields {
+    unit?: UnitOfMeasure;
+    unitPrice?: number;
     productName!: string;
     quantity!: number;
     /** Centavos. */

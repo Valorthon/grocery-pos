@@ -325,7 +325,7 @@ describe('void/refund under concurrency', () => {
         ]);
     });
 
-    it('rolls the whole reversal back when returning the stock fails after writing part of it', async () => {
+    it('rolls the whole reversal back when returning stock detects corrupt inventory', async () => {
         const first = await seedProduct(db, PRICE, 10);
         const broken = await seedProduct(db, PRICE, 10);
         const sale = await read(
@@ -343,10 +343,9 @@ describe('void/refund under concurrency', () => {
 
         // The stock return is the last step of the reversal, after the
         // sale was marked voided and the payout pushed onto the shift.
-        // Its ordered bulkWrite gives `first` its unit back, then fails on
-        // `broken`, whose stock (written past the schema) is not a number:
-        // `$inc` refuses it. So by the time it throws, the transaction has
-        // written to the sale, the shift and `first`'s stock.
+        // `broken` stock was corrupted past schema validation. Returning stock
+        // rejects it as an internal error after the sale and shift writes,
+        // which must both roll back.
         await db.connection
             .db!.collection('inventories')
             .updateOne(

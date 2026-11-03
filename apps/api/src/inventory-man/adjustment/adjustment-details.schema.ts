@@ -28,7 +28,7 @@ export class AdjustmentDetails {
         required: true,
         validate: [
             {
-                validator: Number.isInteger,
+                validator: Number.isSafeInteger,
                 message: 'Change must be an integer',
             },
             {

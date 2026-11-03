@@ -16,6 +16,7 @@ import { containsRegex, prefixRegex } from '../common/utils/regex';
 import { productSearchFilter } from './product-search';
 import {
     barcodeError,
+    type UnitOfMeasure,
     type Paginated,
     type ProductMatch,
 } from '@grocery-pos/contracts';
@@ -121,7 +122,7 @@ export class ProductService {
 
         const found = await this.model
             .find({ _id: { $in: unique_ids } })
-            .select('price name')
+            .select('price name unit')
             .session(session ?? null)
             .lean();
 
@@ -307,19 +308,21 @@ export class ProductService {
         }
 
         const matches = (await this.model
-            .find(query, 'name EAN')
+            .find(query, 'name EAN unit')
             .sort({ name: 1 })
             .limit(MAX_MATCHES)
             .lean()) as Array<{
             EAN: string;
             name: string;
             _id: Types.ObjectId;
+            unit?: UnitOfMeasure;
         }>;
 
         return matches.map((match) => ({
             EAN: match.EAN,
             name: match.name,
             product: match._id.toString(),
+            ...(match.unit && { unit: match.unit }),
         }));
     }
 }

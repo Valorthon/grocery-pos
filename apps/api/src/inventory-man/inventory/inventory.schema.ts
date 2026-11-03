@@ -22,7 +22,7 @@ export class Inventory {
         min: NUMERIC_LIMITS.STOCK_MIN,
         default: NUMERIC_LIMITS.STOCK_MIN,
         validate: {
-            validator: Number.isInteger,
+            validator: Number.isSafeInteger,
             message: `Stock must be an integer`,
         },
     })

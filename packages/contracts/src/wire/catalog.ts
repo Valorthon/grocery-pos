@@ -1,4 +1,4 @@
-import type { Category } from '../enums.js';
+import type { Category, UnitOfMeasure } from '../enums.js';
 import type { WireShape } from '../wire-shape.js';
 import type { UserRef } from './users.js';
 
@@ -18,6 +18,8 @@ export const PRODUCT_REF_SHAPE: WireShape<ProductRef> = {
  * product joined into inventory, restock and adjustment rows.
  */
 export interface ProductView {
+    /** Missing on legacy piece records. Quantity/stock use integer minor units. */
+    unit?: UnitOfMeasure;
     _id: string;
     /** As scanned: EAN-13, UPC-A or EAN-8, or a generated 200… code. */
     EAN: string;
@@ -31,6 +33,7 @@ export interface ProductView {
 }
 
 export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
+    unit: 'optional',
     _id: 'required',
     EAN: 'required',
     name: 'required',
@@ -42,6 +45,8 @@ export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
 
 /** A row of `GET /products/matches` (the register and combobox search). */
 export interface ProductMatch {
+    /** Missing on legacy piece records. Quantity/stock use integer minor units. */
+    unit?: UnitOfMeasure;
     EAN: string;
     name: string;
     /** The product's id. */
@@ -49,6 +54,7 @@ export interface ProductMatch {
 }
 
 export const PRODUCT_MATCH_SHAPE: WireShape<ProductMatch> = {
+    unit: 'optional',
     EAN: 'required',
     name: 'required',
     product: 'required',
@@ -96,6 +102,8 @@ export const RESTOCK_ROW_SHAPE: WireShape<RestockRow> = {
 
 /** A line of `GET /restocks/details/:id`, with its product. */
 export interface RestockLine {
+    /** Missing on legacy piece records. Quantity/stock use integer minor units. */
+    unit?: UnitOfMeasure;
     _id: string;
     /** The restock's id. */
     restock: string;
@@ -106,6 +114,7 @@ export interface RestockLine {
 }
 
 export const RESTOCK_LINE_SHAPE: WireShape<RestockLine> = {
+    unit: 'optional',
     _id: 'required',
     restock: 'required',
     product: 'required',

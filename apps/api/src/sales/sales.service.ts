@@ -1,3 +1,4 @@
+import { quantityAmount, maxQuantityForAmount } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import {
@@ -330,10 +331,11 @@ export class SalesService {
             .session(session ?? null)
             .lean();
 
-        const items = lines.map(({ product, quantity, unitPrice }) => ({
+        const items = lines.map(({ product, quantity, unitPrice, unit }) => ({
             productName: product?.name ?? '',
             quantity,
-            amount: unitPrice * quantity,
+            amount: quantityAmount(unitPrice, quantity, unit),
+            ...(unit && { unit, unitPrice }),
         }));
 
         const discount: ReceiptDiscount | null = sale.discount
@@ -416,6 +418,7 @@ export class SalesService {
                                       product: String(line.product),
                                       quantity: line.quantity,
                                       unitPrice: line.unitPrice,
+                                      unit: line.unit,
                                   })),
                               ),
                               session,
@@ -453,12 +456,13 @@ export class SalesService {
                 );
 
                 const inserts = fullSellDetails.map(
-                    ({ product, quantity, unitPrice }) => ({
+                    ({ product, quantity, unitPrice, unit }) => ({
                         insertOne: {
                             document: {
                                 product,
                                 quantity,
                                 unitPrice,
+                                ...(unit && { unit }),
                                 sales: created._id,
                             },
                         },
@@ -771,10 +775,11 @@ export class SalesService {
         totalAmount: number;
     }): ReceiptDto {
         const items: ReceiptFields[] = itemsInfo.map(
-            ({ productName, quantity, amount }) => ({
+            ({ productName, quantity, amount, unit, unitPrice }) => ({
                 productName,
                 quantity,
                 amount,
+                ...(unit && { unit, unitPrice }),
             }),
         );
 
@@ -820,13 +825,27 @@ export class SalesService {
             const unitPrice = productDetails.price;
             const productName = productDetails.name;
 
-            const quantityAmount = unitPrice * quantity;
-            subtotal += quantityAmount;
+            const unit = productDetails.unit;
+            if (
+                quantity >
+                maxQuantityForAmount(
+                    NUMERIC_LIMITS.AMOUNT_MAX - subtotal,
+                    unitPrice,
+                    unit,
+                )
+            )
+                throw new ValidationError(
+                    ErrorCode.VALIDATION_INVALID_INPUT,
+                    'Sale exceeds the maximum amount',
+                );
+            const lineAmount = quantityAmount(unitPrice, quantity, unit);
+            subtotal += lineAmount;
 
             fullSellDetails.push({
                 product,
                 productName,
-                amount: quantityAmount,
+                amount: lineAmount,
+                ...(unit && { unit }),
                 quantity,
                 unitPrice,
             });

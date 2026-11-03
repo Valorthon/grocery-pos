@@ -60,7 +60,9 @@
                     <tr v-for="item in filteredItems" :key="item.draftId">
                         <td class="py-3 px-5">{{ item.EAN }}</td>
                         <td class="py-3 px-5 font-medium">{{ item.name }}</td>
-                        <td class="py-3 px-5 text-right">{{ item.change }}</td>
+                        <td class="py-3 px-5 text-right">
+                            {{ formatQuantity(item.change, item.unit) }}
+                        </td>
                         <td class="py-3 px-5 text-slate-500">
                             {{ item.reason }}
                         </td>
@@ -103,6 +105,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatQuantity } from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ClipboardEdit, Pencil, Plus, Save, Trash2 } from '@lucide/vue';

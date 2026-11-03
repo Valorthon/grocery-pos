@@ -479,7 +479,9 @@
                                     <td
                                         class="py-3 px-4 text-right font-medium text-slate-600"
                                     >
-                                        {{ currency(item.unitPrice) }}
+                                        {{ currency(item.unitPrice) }}/{{
+                                            unitLabel(item.unit)
+                                        }}
                                     </td>
                                     <td class="py-3 px-4 text-center">
                                         <div
@@ -506,11 +508,19 @@
                                                         )
                                                 "
                                                 type="text"
-                                                inputmode="numeric"
+                                                :inputmode="
+                                                    quantityScale(item.unit) ===
+                                                    1000
+                                                        ? 'decimal'
+                                                        : 'numeric'
+                                                "
                                                 autocomplete="off"
                                                 :value="
                                                     qtyDrafts[item.product] ??
-                                                    String(item.quantity)
+                                                    quantityInput(
+                                                        item.quantity,
+                                                        item.unit,
+                                                    )
                                                 "
                                                 :disabled="isTicketLocked"
                                                 :aria-label="`Quantity of ${item.name}`"
@@ -578,7 +588,11 @@
                                     >
                                         {{
                                             currency(
-                                                item.unitPrice * item.quantity,
+                                                quantityAmount(
+                                                    item.unitPrice,
+                                                    item.quantity,
+                                                    item.unit,
+                                                ),
                                             )
                                         }}
                                     </td>
@@ -990,6 +1004,14 @@
 </template>
 
 <script setup lang="ts">
+import { quantityError as quantityFieldError } from '@/utils/rules';
+import {
+    quantityInput,
+    quantityScale,
+    parseQuantity,
+    quantityAmount,
+    unitLabel,
+} from '@grocery-pos/contracts';
 import {
     computed,
     nextTick,
@@ -1062,7 +1084,6 @@ import {
     formatCurrency,
     parsePesos,
 } from '@/utils/currency';
-import { integerError } from '@/utils/rules';
 import { toSaleTicket } from '@/utils/payloads';
 import {
     isTextEntry,
@@ -1242,23 +1263,17 @@ const qtyDrafts = reactive<Record<string, string>>({});
 const lineEls = new Map<string, HTMLElement>();
 const qtyEls = new Map<string, HTMLInputElement>();
 
-/** The typed quantity as the rules see it: a number when it is one. */
-function typedQuantity(text: string): unknown {
-    const trimmed = text.trim();
-    return /^-?\d+$/.test(trimmed) ? Number(trimmed) : trimmed;
-}
-
 /** Why a typed quantity is refused (`@IsInt() @Min(1)`), or ''. */
 function quantityError(product: string, text: string): string {
-    const value = typedQuantity(text);
-    if (!cartStore.items.some((i) => i.product === product)) return '';
-    const error = integerError(value, { min: 1 });
-    if (error) return error;
     const item = cartStore.items.find((i) => i.product === product);
+    if (!item) return '';
+    const error = quantityFieldError(text, item.unit);
+    if (error) return error;
+    const value = parseQuantity(text, item.unit)!;
     // A line gone (e.g. removed in another tab) has nothing to check.
     if (!item) return '';
     const max = cartStore.maxQuantity(product, item.unitPrice);
-    return (value as number) > max
+    return value > max
         ? `At most ${max}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`
         : '';
 }
@@ -1321,7 +1336,13 @@ function commitQuantity(product: string): boolean {
     const text = qtyDrafts[product];
     if (text === undefined) return true;
     if (quantityError(product, text)) return false;
-    cartStore.setQuantity(product, Number(text.trim()));
+    cartStore.setQuantity(
+        product,
+        parseQuantity(
+            text,
+            cartStore.items.find((i) => i.product === product)?.unit,
+        )!,
+    );
     delete qtyDrafts[product];
     return true;
 }
@@ -1335,7 +1356,7 @@ function cancelQuantity(product: string) {
     delete qtyDrafts[product];
     const qty = qtyEls.get(product);
     const item = cartStore.items.find((i) => i.product === product);
-    if (qty && item) qty.value = String(item.quantity);
+    if (qty && item) qty.value = quantityInput(item.quantity, item.unit);
     lineEls.get(product)?.focus({ preventScroll: true });
 }
 
@@ -1355,14 +1376,21 @@ function focusLineQuantity() {
 function increment(item: CartItem) {
     selectedLine.value = item.product;
     delete qtyDrafts[item.product];
-    cartStore.setQuantity(item.product, item.quantity + 1);
+    cartStore.setQuantity(
+        item.product,
+        item.quantity + quantityScale(item.unit),
+    );
 }
 
 function decrement(item: CartItem) {
     selectedLine.value = item.product;
     delete qtyDrafts[item.product];
-    if (item.quantity <= 1) removeLine(item.product);
-    else cartStore.setQuantity(item.product, item.quantity - 1);
+    if (item.quantity <= quantityScale(item.unit)) removeLine(item.product);
+    else
+        cartStore.setQuantity(
+            item.product,
+            item.quantity - quantityScale(item.unit),
+        );
 }
 
 // ---- Line removal with Undo (decision 2026-09-25, #23)
@@ -1715,8 +1743,9 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
             EAN: product.EAN,
             name: product.name,
             unitPrice: product.price,
+            ...(product.unit && { unit: product.unit }),
         },
-        quantity,
+        quantity * quantityScale(product.unit),
     );
     if (!added) {
         // Nothing was added: the multiplier and the text stay for a retry.

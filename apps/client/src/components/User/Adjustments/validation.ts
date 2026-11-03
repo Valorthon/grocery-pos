@@ -1,7 +1,7 @@
 import { STRING_LIMITS } from '@grocery-pos/contracts';
 import {
     fieldErrors,
-    integerError,
+    quantityError,
     productPickError,
     textError,
 } from '@/utils/rules';
@@ -18,7 +18,7 @@ type Errors = Record<string, string>;
 export function adjustmentLineErrors(form: AddFormInput): Errors {
     return fieldErrors({
         EAN: productPickError(form.product),
-        change: integerError(form.change, { nonZero: true }),
+        change: quantityError(form.change, form.unit, true),
         reason: textError(form.reason, STRING_LIMITS.REASON),
     });
 }

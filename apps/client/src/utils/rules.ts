@@ -1,4 +1,10 @@
 import {
+    parseQuantity,
+    quantityDecimals,
+    quantityScale,
+    type UnitOfMeasure,
+} from '@grocery-pos/contracts';
+import {
     barcodeError,
     NUMERIC_LIMITS,
     STRING_LIMITS,
@@ -155,4 +161,34 @@ export function fieldErrors(
     return Object.fromEntries(
         Object.entries(checks).filter(([, message]) => message),
     );
+}
+
+export function quantityError(
+    value: string | number,
+    unit?: UnitOfMeasure,
+    signed = false,
+): string {
+    if (quantityScale(unit) === 1) {
+        const typed =
+            typeof value === 'string' && /^-?\d+$/.test(value.trim())
+                ? Number(value)
+                : value;
+        const error = integerError(
+            typed,
+            signed ? { nonZero: true } : { min: 1 },
+        );
+        return (
+            error ||
+            (typeof typed === 'number' && !Number.isSafeInteger(typed)
+                ? 'Quantity is too large'
+                : '')
+        );
+    }
+    const parsed = parseQuantity(value, unit);
+    if (String(value).trim() === '') return 'Required';
+    if (parsed === null)
+        return `Enter a quantity with up to ${quantityDecimals(unit)} decimals`;
+    if (signed ? parsed === 0 : parsed < 1)
+        return signed ? 'Must not be 0' : 'Enter a positive quantity';
+    return '';
 }

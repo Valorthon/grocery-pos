@@ -6,6 +6,14 @@ export enum PaymentType {
     SPLIT = 'SPLIT',
 }
 
+/** Prices are per this unit; quantities are integer minor units. */
+export enum UnitOfMeasure {
+    PIECE = 'PIECE',
+    KG = 'KG',
+    G = 'G',
+    L = 'L',
+}
+
 export enum Category {
     FOOD = 'FOOD',
     DRINKS = 'DRINKS',

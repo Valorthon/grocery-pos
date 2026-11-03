@@ -60,7 +60,7 @@
                     <tr v-for="item in filteredItems" :key="item.draftId">
                         <td class="py-3 px-5 font-medium">{{ item.name }}</td>
                         <td class="py-3 px-5 text-right">
-                            {{ item.quantity }}
+                            {{ formatQuantity(item.quantity, item.unit) }}
                         </td>
                         <td class="py-3 px-5 text-right">
                             {{ formatCurrency(item.unitCost ?? 0) }}
@@ -68,7 +68,11 @@
                         <td class="py-3 px-5 text-right font-bold">
                             {{
                                 formatCurrency(
-                                    (item.unitCost ?? 0) * (item.quantity ?? 0),
+                                    quantityAmount(
+                                        item.unitCost ?? 0,
+                                        item.quantity ?? 0,
+                                        item.unit,
+                                    ),
                                 )
                             }}
                         </td>
@@ -111,6 +115,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Pencil, Plus, Save, Trash2, Truck } from '@lucide/vue';
@@ -242,7 +247,11 @@ const openAddDialog = () => {
 };
 
 const handleNewItem = (newItem: AddForm) => {
-    const totalCost = newItem.quantity * newItem.unitCost;
+    const totalCost = quantityAmount(
+        newItem.unitCost,
+        newItem.quantity,
+        newItem.unit,
+    );
     add({ ...newItem, totalCost });
     isAddDialogOpen.value = false;
 };

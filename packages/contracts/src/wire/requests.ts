@@ -64,6 +64,7 @@ export interface ChangePasswordRequest {
 // --- Sales ---
 
 /** One ticket line of `POST /sales`: the server prices it. */
+/** Quantities are integer minor units: pieces, grams (KG/G), millilitres (L). */
 export interface SaleLineRequest {
     product: string;
     quantity: number;
@@ -122,6 +123,7 @@ export interface DrawerMovementRequest {
  * `newProduct`. Without an `EAN` the server generates one.
  */
 export interface NewProductRequest {
+    unit?: import('../enums.js').UnitOfMeasure;
     EAN?: string;
     name: string;
     category?: Category;

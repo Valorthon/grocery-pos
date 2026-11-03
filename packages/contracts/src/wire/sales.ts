@@ -1,5 +1,5 @@
 import type { DiscountType } from '../discount.js';
-import type { PaymentType } from '../enums.js';
+import type { PaymentType, UnitOfMeasure } from '../enums.js';
 import type { ReversalType, SaleStatus, Tender } from '../sales.js';
 import type { WireShape } from '../wire-shape.js';
 import type { ProductRef } from './catalog.js';
@@ -13,6 +13,9 @@ export const TENDER_SHAPE: WireShape<Tender> = {
 
 /** One line of a receipt. Centavos. */
 export interface ReceiptItem {
+    /** Centavos per displayed unit, present for weighed lines. */
+    unitPrice?: number;
+    unit?: UnitOfMeasure;
     productName: string;
     quantity: number;
     /** `unitPrice * quantity`, before the sale's discount. */
@@ -20,6 +23,8 @@ export interface ReceiptItem {
 }
 
 export const RECEIPT_ITEM_SHAPE: WireShape<ReceiptItem> = {
+    unit: 'optional',
+    unitPrice: 'optional',
     productName: 'required',
     quantity: 'required',
     amount: 'required',
@@ -183,6 +188,7 @@ export const SALE_ROW_SHAPE: WireShape<SaleRow> = SALE_VIEW_SHAPE;
 
 /** A line of `GET /sales/details/:id`. */
 export interface SaleLine {
+    unit?: UnitOfMeasure;
     _id: string;
     /** The sale's id. */
     sales: string;
@@ -194,6 +200,7 @@ export interface SaleLine {
 }
 
 export const SALE_LINE_SHAPE: WireShape<SaleLine> = {
+    unit: 'optional',
     _id: 'required',
     sales: 'required',
     product: 'required',

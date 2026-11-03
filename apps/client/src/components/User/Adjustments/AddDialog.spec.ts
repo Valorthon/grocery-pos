@@ -104,6 +104,7 @@ describe('Adjustments AddDialog (#17)', () => {
         expect(added).toEqual([
             {
                 EAN: MILK.EAN,
+                unit: 'PIECE',
                 name: MILK.name,
                 product: MILK.product,
                 change: -2,

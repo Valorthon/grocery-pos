@@ -85,6 +85,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
 import { onMounted, ref } from 'vue';
 import { Search, X } from '@lucide/vue';
 import api from '@/axios';
@@ -125,7 +126,7 @@ const headers = [
 interface RestockLineRow {
     id: string;
     name: string;
-    quantity: number;
+    quantity: string;
     unitCost: string;
     totalCost: string;
 }
@@ -156,9 +157,18 @@ const {
         serverItems.value = result.data.data.map((details) => ({
             id: details._id,
             name: details.product.name,
-            quantity: details.quantity,
+            quantity: formatQuantity(
+                details.quantity,
+                details.unit ?? details.product.unit,
+            ),
             unitCost: formatCurrency(details.unitCost),
-            totalCost: formatCurrency(details.unitCost * details.quantity),
+            totalCost: formatCurrency(
+                quantityAmount(
+                    details.unitCost,
+                    details.quantity,
+                    details.unit ?? details.product.unit,
+                ),
+            ),
         }));
 
         totalItems.value = result.data.totalItems;

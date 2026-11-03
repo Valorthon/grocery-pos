@@ -3,6 +3,8 @@ import * as argon from 'argon2';
 import { Types } from 'mongoose';
 import {
     OverrideAction,
+    quantityAmount,
+    type UnitOfMeasure,
     Role,
     type OverrideContextRequest,
     type SaleRequest,
@@ -70,12 +72,18 @@ export async function discountApprovalHeaders(
     sale: SaleRequest,
 ) {
     const products = await db
-        .model<{ price: number }>('Product')
+        .model<{ price: number; unit?: UnitOfMeasure }>('Product')
         .find({ _id: { $in: sale.sellDetails.map((l) => l.product) } })
         .lean();
-    const prices = new Map(products.map((p) => [String(p._id), p.price]));
+    const prices = new Map(products.map((p) => [String(p._id), p]));
     const subtotal = sale.sellDetails.reduce(
-        (sum, l) => sum + l.quantity * prices.get(l.product)!,
+        (sum, l) =>
+            sum +
+            quantityAmount(
+                prices.get(l.product)!.price,
+                l.quantity,
+                prices.get(l.product)!.unit,
+            ),
         0,
     );
     return approvalHeaders(db, requester, OverrideAction.DISCOUNT, {

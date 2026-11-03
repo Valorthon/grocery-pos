@@ -56,7 +56,7 @@
         >
             <template #cell-price="{ item }">
                 <span class="font-medium">{{
-                    formatCurrency(item.price)
+                    formatCurrency(item.price) + '/' + unitLabel(item.unit)
                 }}</span>
             </template>
         </BaseTable>
@@ -64,6 +64,7 @@
 </template>
 
 <script setup lang="ts">
+import { unitLabel, type UnitOfMeasure } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Plus, Search, X } from '@lucide/vue';
@@ -115,6 +116,7 @@ interface ProductListRow {
     name: string;
     /** Centavos. */
     price: number;
+    unit?: UnitOfMeasure;
 }
 
 const serverItems = ref<ProductListRow[]>([]);
@@ -145,6 +147,7 @@ const {
             EAN: product.EAN,
             name: product.name,
             price: product.price,
+            unit: product.unit,
         }));
 
         totalItems.value = result.data.totalItems;

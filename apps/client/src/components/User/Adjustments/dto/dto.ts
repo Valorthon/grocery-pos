@@ -1,8 +1,10 @@
+import type { UnitOfMeasure } from '@grocery-pos/contracts';
 export interface SaveForm {
     description: string;
 }
 
 export interface AddForm {
+    unit?: UnitOfMeasure;
     EAN: string;
     name: string;
     change: number;

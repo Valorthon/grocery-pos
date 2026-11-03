@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { OverrideAction } from '@grocery-pos/contracts';
+import { OverrideAction, type UnitOfMeasure } from '@grocery-pos/contracts';
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -19,6 +19,7 @@ export function discountApprovalContext(
         product: string;
         quantity: number;
         unitPrice: number;
+        unit?: UnitOfMeasure;
     }[],
 ): string {
     return fingerprint({
@@ -26,10 +27,11 @@ export function discountApprovalContext(
         idempotencyKey,
         requestHash,
         lines: pricedLines
-            .map(({ product, quantity, unitPrice }) => ({
+            .map(({ product, quantity, unitPrice, unit }) => ({
                 product,
                 quantity,
                 unitPrice,
+                ...(unit && { unit }),
             }))
             .sort(
                 (a, b) =>

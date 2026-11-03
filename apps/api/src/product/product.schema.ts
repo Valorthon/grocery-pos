@@ -1,3 +1,4 @@
+import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import type { Types } from 'mongoose';
 import { Category } from './types';
@@ -5,6 +6,14 @@ import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
 @Schema({ timestamps: true })
 export class Product {
+    @Prop({
+        type: String,
+        enum: Object.values(UnitOfMeasure),
+        default: UnitOfMeasure.PIECE,
+        immutable: true,
+    })
+    unit?: UnitOfMeasure;
+
     @Prop({
         type: String,
         required: true,

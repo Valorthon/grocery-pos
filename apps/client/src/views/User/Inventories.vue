@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatQuantity } from '@grocery-pos/contracts';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Package, Pencil, Search, X } from '@lucide/vue';
@@ -95,7 +96,7 @@ interface InventoryListRow {
     id: string;
     EAN: string;
     name: string;
-    stock: number;
+    stock: string;
 }
 
 const serverItems = ref<InventoryListRow[]>([]);
@@ -125,7 +126,7 @@ const {
             id: inventory.product._id,
             EAN: inventory.product.EAN,
             name: inventory.product.name,
-            stock: inventory.stock,
+            stock: formatQuantity(inventory.stock, inventory.product.unit),
         }));
 
         data.sort((a, b) => a.name.localeCompare(b.name));
