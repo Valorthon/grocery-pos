@@ -1,3 +1,9 @@
+import { approvalHeaders, discountApprovalHeaders } from './approval-fixtures';
+import {
+    OverrideAction,
+    type SaleRequest,
+    type ReverseSaleRequest,
+} from '@grocery-pos/contracts';
 /**
  * Wire drift (issue #27): real responses against the contracts wire types.
  *
@@ -244,7 +250,33 @@ async function send(
     body: unknown,
     status: number,
 ): Promise<Body> {
-    const res = await read<Body>(await db.call(who, method, path, body));
+    let headers: Record<string, string> = {};
+    if (
+        method === 'POST' &&
+        path === '/sales' &&
+        (body as SaleRequest)?.discount
+    ) {
+        headers = await discountApprovalHeaders(db, who, body as SaleRequest);
+    }
+    const reversal = /^\/sales\/([^/]+)\/(void|refund)$/.exec(path);
+    if (method === 'POST' && reversal) {
+        headers = await approvalHeaders(
+            db,
+            who,
+            reversal[2] === 'void'
+                ? OverrideAction.VOID
+                : OverrideAction.REFUND,
+            {
+                reversal: {
+                    ...(body as ReverseSaleRequest),
+                    saleId: reversal[1],
+                },
+            },
+        );
+    }
+    const res = await read<Body>(
+        await db.call(who, method, path, body, headers),
+    );
     // Thrown, not expected: a seed step that fails should say which one.
     if (res.status !== status) {
         throw new Error(

@@ -81,6 +81,8 @@ describe('POST /sales (e2e)', () => {
                 idempotencyKey: body.idempotencyKey,
                 tenders: [{ type: TenderType.CASH, amount: 5000 }],
             }),
+            undefined,
+            undefined,
         );
     });
 
@@ -102,6 +104,8 @@ describe('POST /sales (e2e)', () => {
                 idempotencyKey: key,
                 referenceNumber: '1234567890123',
             }),
+            undefined,
+            undefined,
         );
     });
 
@@ -181,6 +185,8 @@ describe('POST /sales (e2e)', () => {
         expect(service.sell).toHaveBeenCalledWith(
             expect.objectContaining({ userId: who.userId }),
             expect.anything(),
+            undefined,
+            undefined,
         );
     });
 
@@ -243,6 +249,8 @@ describe('POST /sales/:id/void and /refund (e2e)', () => {
                 expect.objectContaining({ userId: admin.userId }),
                 SALE,
                 { reason: 'mis-ring', payoutShiftId: SHIFT, type },
+                undefined,
+                undefined,
             );
         },
     );

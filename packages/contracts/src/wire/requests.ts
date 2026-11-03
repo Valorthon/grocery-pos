@@ -176,3 +176,26 @@ export interface AdjustmentRequest {
     adjustDetails: AdjustmentLineRequest[];
     description: string;
 }
+
+/** Sets or removes a manager PIN; only an ADMIN may call this endpoint. */
+export interface SetOverridePinRequest {
+    pin: string | null;
+}
+
+export interface OverrideReversalRequest extends ReverseSaleRequest {
+    saleId: string;
+}
+
+export interface OverrideContextRequest {
+    sale?: SaleRequest;
+    reversal?: OverrideReversalRequest;
+    /** What the manager sees. The API compares it to current server prices. */
+    expectedSubtotal?: number;
+}
+
+export interface ManagerOverrideRequest {
+    username: string;
+    pin: string;
+    action: import('../override.js').OverrideAction;
+    context: OverrideContextRequest;
+}

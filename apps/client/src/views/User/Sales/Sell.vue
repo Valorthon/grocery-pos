@@ -932,6 +932,13 @@
             @scan="onReceiptScan"
         />
     </div>
+    <ManagerOverrideDialog
+        v-model="isApprovalOpen"
+        :request="approvalRequest"
+        :summary="approvalSummary"
+        @approved="completeApproval"
+        @cancel="cancelApproval"
+    />
 </template>
 
 <script setup lang="ts">
@@ -966,6 +973,9 @@ import {
     X,
 } from '@lucide/vue';
 import api from '@/axios';
+import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog.vue';
+import { useManagerApproval } from '@/composables/useManagerApproval';
+
 import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import { apiErrorCode } from '@/utils/api-error';
@@ -1013,6 +1023,7 @@ import {
     type DiscountInput,
     DrawerMovementType,
     ErrorCode,
+    OverrideAction,
     type PaymentRequest,
     PaymentType,
     type ProductView,
@@ -1747,10 +1758,43 @@ function openCheckout(method: PaymentType = PaymentType.CASH) {
     isCheckoutOpen.value = true;
 }
 
+const {
+    isApprovalOpen,
+    approvalRequest,
+    approvalSummary,
+    requestApproval,
+    completeApproval,
+    cancelApproval,
+} = useManagerApproval();
+
 const checkout = useSaleCheckout({
     cart: cartStore,
     ticket: () => toSaleTicket(cartStore.items, discountRequest.value),
-    post: async (body) => (await api.post<Receipt>('/sales', body)).data,
+    post: async (body) => {
+        try {
+            return (await api.post<Receipt>('/sales', body)).data;
+        } catch (error) {
+            if (apiErrorCode(error) !== ErrorCode.OVERRIDE_REQUIRED)
+                throw error;
+        }
+        const token = await requestApproval(
+            {
+                action: OverrideAction.DISCOUNT,
+                context: {
+                    sale: body,
+                    expectedSubtotal: cartStore.subtotal,
+                },
+            },
+            `Approve discount of ${currency(discountAmount.value)} on subtotal ${currency(cartStore.subtotal)}. Reason: ${body.discount?.reason ?? ''}`,
+        );
+        if (!token)
+            throw new Error('Manager approval cancelled. Nothing was charged.');
+        return (
+            await api.post<Receipt>('/sales', body, {
+                headers: { 'X-Manager-Approval': token },
+            })
+        ).data;
+    },
     // Saved with the basket (#23 review): a retry after a refresh or crash
     // mid-sale reuses the key, so the server replays the recorded sale.
     attemptStore: {

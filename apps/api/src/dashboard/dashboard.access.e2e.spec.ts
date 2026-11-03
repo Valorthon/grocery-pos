@@ -134,13 +134,18 @@ describe('GET /dashboard access by role (e2e)', () => {
         return harness.call(caller(...roles), 'GET', '/dashboard');
     }
 
-    it.each(ALL_ROLES.map((role) => [role, role !== Role.Seller] as const))(
-        'as %s -> allowed: %s',
-        async (role, allowed) => {
-            const res = await get(role);
-            expect(res.status).toBe(allowed ? 200 : 403);
-        },
-    );
+    it.each(
+        ALL_ROLES.map(
+            (role) =>
+                [
+                    role,
+                    role !== Role.Seller && role !== Role.Supervisor,
+                ] as const,
+        ),
+    )('as %s -> allowed: %s', async (role, allowed) => {
+        const res = await get(role);
+        expect(res.status).toBe(allowed ? 200 : 403);
+    });
 
     it('gives an admin every money figure', async () => {
         const body = (await (await get(Role.Admin)).json()) as Row;

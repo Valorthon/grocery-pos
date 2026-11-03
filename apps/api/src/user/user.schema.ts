@@ -30,6 +30,16 @@ export class User {
     })
     passwordHash!: string;
 
+    @Prop({ type: String, select: false })
+    overridePinHash?: string;
+
+    @Prop({ type: String, select: false })
+    overridePinVersion?: string;
+
+    /** Serializes approval consumption with role, activation and PIN changes. */
+    @Prop({ type: Number, default: 0, select: false })
+    overrideApprovalLock?: number;
+
     @Prop({
         type: Boolean,
         required: true,
@@ -52,7 +62,14 @@ export const UserSchema = SchemaFactory.createForClass(User);
  * An account as `GET /users` reads it: never the password hash (nor
  * `adminLock`, which the schema never selects).
  */
-export type UserViewDoc = Omit<User, 'passwordHash' | 'adminLock'> & {
+export type UserViewDoc = Omit<
+    User,
+    | 'passwordHash'
+    | 'adminLock'
+    | 'overridePinHash'
+    | 'overridePinVersion'
+    | 'overrideApprovalLock'
+> & {
     _id: Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;

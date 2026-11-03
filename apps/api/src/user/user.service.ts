@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { User, type UserViewDoc } from './user.schema';
 import type { Paginated } from '@grocery-pos/contracts';
@@ -165,9 +165,26 @@ export class UserService implements OnModuleInit {
                     if (password !== undefined) {
                         set.passwordHash = await argon.hash(password);
                     }
+                    const invalidatesApproval =
+                        password !== undefined ||
+                        update.roles !== undefined ||
+                        update.isActive !== undefined;
+                    if (invalidatesApproval)
+                        set.overridePinVersion = randomUUID();
+                    const removePin =
+                        update.roles !== undefined &&
+                        !update.roles.some(
+                            (role) =>
+                                role === Role.Admin || role === Role.Supervisor,
+                        );
                     await this.model.updateOne(
                         { _id: target.id },
-                        { $set: set },
+                        {
+                            $set: set,
+                            ...(removePin && {
+                                $unset: { overridePinHash: 1 },
+                            }),
+                        },
                         { session, runValidators: true },
                     );
                 }
@@ -299,7 +316,12 @@ export class UserService implements OnModuleInit {
         // password lose instead of silently overwriting the winner.
         const result = await this.model.updateOne(
             { _id: user._id, passwordHash: user.passwordHash },
-            { $set: { passwordHash: await argon.hash(dto.newPassword) } },
+            {
+                $set: {
+                    passwordHash: await argon.hash(dto.newPassword),
+                    overridePinVersion: randomUUID(),
+                },
+            },
             { runValidators: true },
         );
 

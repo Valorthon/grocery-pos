@@ -351,6 +351,13 @@
             </template>
         </BaseModal>
     </div>
+    <ManagerOverrideDialog
+        v-model="isApprovalOpen"
+        :request="approvalRequest"
+        :summary="approvalSummary"
+        @approved="completeApproval"
+        @cancel="cancelApproval"
+    />
 </template>
 
 <script setup lang="ts">
@@ -358,6 +365,9 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';
 import api from '@/axios';
+import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog.vue';
+import { useManagerApproval } from '@/composables/useManagerApproval';
+
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -375,6 +385,7 @@ import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import {
     DiscountType,
     ErrorCode,
+    OverrideAction,
     type Paginated,
     PaymentType,
     type ReceiptDiscount,
@@ -424,6 +435,15 @@ interface SaleListRow {
 }
 
 const authStore = useAuthStore();
+const {
+    isApprovalOpen,
+    approvalRequest,
+    approvalSummary,
+    requestApproval,
+    completeApproval,
+    cancelApproval,
+} = useManagerApproval();
+
 const uiStore = useUIStore();
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
@@ -505,10 +525,10 @@ function discountLabel(discount: ReceiptDiscount): string {
         : 'fixed';
 }
 
-// Void / refund: admin only, whole sale only, and only while COMPLETED.
+// Whole-sale reversals require manager approval; sellers see only their own current-shift sales.
 const canReverse = computed(
     () =>
-        authStore.isAdmin &&
+        (authStore.isAdmin || authStore.user?.roles.includes(Role.Seller)) &&
         selectedSale.value?.status === SaleStatus.COMPLETED,
 );
 const pendingReversal = ref<ReversalType | null>(null);
@@ -557,7 +577,7 @@ const canConfirmReversal = computed(
 /** Loads the open shifts and works out whether one must be chosen. */
 async function loadPayoutShifts(forceChoice = false) {
     const sale = selectedSale.value;
-    if (!sale || reversalCash.value === 0) {
+    if (!sale || reversalCash.value === 0 || !authStore.isAdmin) {
         payoutRequired.value = false;
         return;
     }
@@ -616,12 +636,24 @@ async function confirmReversal() {
     reversing.value = true;
     const action = type === ReversalType.VOID ? 'void' : 'refund';
     try {
-        await api.post(`/sales/${selectedId.value}/${action}`, {
+        const body = {
             reason,
-            ...(payoutRequired.value && {
-                payoutShiftId: payoutShiftId.value,
-            }),
-        } satisfies ReverseSaleRequest);
+            ...(payoutRequired.value && { payoutShiftId: payoutShiftId.value }),
+        } satisfies ReverseSaleRequest;
+        const token = await requestApproval(
+            {
+                action:
+                    type === ReversalType.VOID
+                        ? OverrideAction.VOID
+                        : OverrideAction.REFUND,
+                context: { reversal: { saleId: selectedId.value, ...body } },
+            },
+            `${reversalLabel(type)} sale ${selectedId.value} for ${formatCurrency(selectedSale.value?.amount ?? 0)}. Reason: ${reason}`,
+        );
+        if (!token) return;
+        await api.post(`/sales/${selectedId.value}/${action}`, body, {
+            headers: { 'X-Manager-Approval': token },
+        });
         uiStore.queueMessage(
             Color.SUCCESS,
             `Sale ${type === ReversalType.VOID ? 'voided' : 'refunded'}; stock returned`,

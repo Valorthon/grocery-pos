@@ -59,8 +59,7 @@ export class SaleDiscount {
     amount!: number;
 
     /**
-     * Who authorized the discount. Today that is the cashier ringing the sale;
-     * a manager override (PIN) can later record a different user here.
+     * ADMIN who approved the discount through the one-use manager grant (#34).
      */
     @Prop({
         required: true,

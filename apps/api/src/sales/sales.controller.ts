@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+    Body,
+    Controller,
+    Get,
+    Headers,
+    Param,
+    Post,
+    Query,
+} from '@nestjs/common';
 import { SalesService } from './sales.service';
 import {
     GetAllDto,
@@ -38,8 +46,8 @@ import { asJson } from '../common/wire';
  *                                      their open shift (409 SHIFT_NOT_OPEN
  *                                      without one); SELLER itself, ADMIN
  *                                      alone is 403
- *   POST /sales/:id/void      Admin    pays the net cash back out of a
- *   POST /sales/:id/refund    Admin    shift's drawer (`payoutShiftId`)
+ *   POST /sales/:id/void      Seller   own current-shift sale with manager PIN;
+ *   POST /sales/:id/refund    Admin    any sale with PIN and payout-shift rules
  *
  * Scoping is `saleScope`. `GET /sales` also takes `cashier` and
  * `dateFrom`/`dateTo` (#16): for an Admin they filter every sale; for anyone
@@ -73,39 +81,56 @@ export class SalesController {
     async sell(
         @CurrentUser() user: AuthUser,
         @Body() dto: SellDto,
+        @Headers('x-manager-approval') approvalToken?: string,
     ): Promise<Receipt> {
-        return asJson(await this.service.sell(user, dto));
+        return asJson(
+            await this.service.sell(user, dto, undefined, approvalToken),
+        );
     }
 
-    /** Reverses a mis-rung sale. Admin only; returns the updated sale. */
-    @Roles(Role.Admin)
+    /** Reverses a mis-rung sale. Manager approval required; cashiers are scoped to their current shift. */
+    @Roles(Role.Seller, Role.Admin)
     @Post(':id/void')
     async voidSale(
         @CurrentUser() user: AuthUser,
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
+        @Headers('x-manager-approval') approvalToken?: string,
     ): Promise<SaleView> {
         return asJson(
-            await this.service.reverse(user, id, {
-                ...dto,
-                type: ReversalType.VOID,
-            }),
+            await this.service.reverse(
+                user,
+                id,
+                {
+                    ...dto,
+                    type: ReversalType.VOID,
+                },
+                undefined,
+                approvalToken,
+            ),
         );
     }
 
-    /** Reverses a sale the customer returned. Admin only; returns the updated sale. */
-    @Roles(Role.Admin)
+    /** Reverses a sale the customer returned. Manager approval required; cashiers are scoped to their current shift. */
+    @Roles(Role.Seller, Role.Admin)
     @Post(':id/refund')
     async refundSale(
         @CurrentUser() user: AuthUser,
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
+        @Headers('x-manager-approval') approvalToken?: string,
     ): Promise<SaleView> {
         return asJson(
-            await this.service.reverse(user, id, {
-                ...dto,
-                type: ReversalType.REFUND,
-            }),
+            await this.service.reverse(
+                user,
+                id,
+                {
+                    ...dto,
+                    type: ReversalType.REFUND,
+                },
+                undefined,
+                approvalToken,
+            ),
         );
     }
 }

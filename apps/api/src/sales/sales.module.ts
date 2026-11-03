@@ -8,6 +8,7 @@ import { ProductModule } from '../product/product.module';
 import { InventoryModule } from '../inventory-man/inventory/inventory.module';
 import { UserModule } from '../user/user.module';
 import { ShiftModule } from '../shift/shift.module';
+import { ManagerOverrideModule } from '../auth/override/override.module';
 
 @Module({
     imports: [
@@ -27,6 +28,7 @@ import { ShiftModule } from '../shift/shift.module';
         InventoryModule,
         UserModule,
         ShiftModule,
+        ManagerOverrideModule,
     ],
     providers: [SalesService],
     controllers: [SalesController],

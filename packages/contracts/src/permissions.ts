@@ -59,6 +59,7 @@ export const PERMISSIONS: readonly Permission[] = [
         // layouts, so on every signed-in page: listed here as each role's
         // home page (the admin dashboard, or the seller dashboard).
         pages: ['Dashboard', 'SellerDashboard'],
+        appRoles: ASSIGNABLE_ROLES.filter((r) => r !== Role.Supervisor),
     },
     {
         label: 'Stock dashboard',
@@ -117,10 +118,31 @@ export const PERMISSIONS: readonly Permission[] = [
         pages: ['SalesHistory'],
     },
     {
-        label: 'Void and refund sales',
-        roles: [Role.Admin],
+        label: 'Void and refund sales with manager approval',
+        roles: [Role.Seller, Role.Admin],
         routes: ['POST /sales/:id/void', 'POST /sales/:id/refund'],
-        pages: ['SalesHistory'],
+        pages: ['Sales', 'SalesHistory'],
+        appRoles: [Role.Seller, Role.Admin],
+    },
+    {
+        label: 'Request manager approval',
+        roles: [Role.Seller, Role.Admin],
+        routes: ['POST /auth/override'],
+        pages: ['Sell', 'Sales', 'SalesHistory'],
+        appRoles: [Role.Seller, Role.Admin],
+    },
+    {
+        label: 'Set or remove manager PINs',
+        roles: [Role.Admin],
+        routes: ['PATCH /users/:id/override-pin'],
+        pages: ['Users'],
+    },
+    {
+        label: 'Approve sale reversals (PIN)',
+        roles: [Role.Admin, Role.Supervisor],
+        routes: [],
+        enforcedBy: 'ManagerOverrideService.issue and consume',
+        appRoles: [],
     },
     {
         label: 'View and force-close shifts',

@@ -228,7 +228,12 @@ describe('createValidationPipe: passwords pass through verbatim (#15)', () => {
 const BODY_DTOS = routeDtos(RouteParamtypes.BODY);
 
 /** Secrets: never trimmed or otherwise transformed. */
-const VERBATIM_FIELDS = new Set(['password', 'currentPassword', 'newPassword']);
+const VERBATIM_FIELDS = new Set([
+    'password',
+    'currentPassword',
+    'newPassword',
+    'pin',
+]);
 
 /** `Class.field` of every `@IsString` field reachable from `roots`. */
 function stringFields(roots: Type<unknown>[]): [Type<unknown>, string][] {

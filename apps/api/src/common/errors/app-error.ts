@@ -49,6 +49,9 @@ export class AppError extends Error {
                 return HttpStatus.UNAUTHORIZED;
             // Signed in, but not allowed to do this. Never 401: the client
             // would treat it as an expired session and refresh.
+            case ErrorCode.OVERRIDE_REQUIRED:
+            case ErrorCode.OVERRIDE_INVALID:
+            case ErrorCode.OVERRIDE_CREDENTIALS_INVALID:
             case ErrorCode.FORBIDDEN:
             case ErrorCode.USER_ROLE_NOT_GRANTABLE:
             case ErrorCode.USER_SELF_ROLE_CHANGE:
