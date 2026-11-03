@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { Types } from 'mongoose';
 import {
     UnitOfMeasure,
     type Receipt,
@@ -150,6 +151,39 @@ it('restocks kilograms at per-kg cost, adjusts grams and restores the exact sold
         ).status,
     ).toBe(201);
     expect(await stockOf(db, id)).toBe(1200);
+});
+it('restocks uppercase and lowercase ids at the same per-kg cost and snapshots the measure', async () => {
+    const id = await product(UnitOfMeasure.KG, 18000, 0);
+    expect(id.toUpperCase()).not.toBe(id);
+    for (const [index, productId] of [id, id.toUpperCase()].entries()) {
+        const description = `case-insensitive weighed delivery ${id} ${index}`;
+        expect(
+            (
+                await db.call(admin, 'POST', '/restocks', {
+                    description,
+                    restockDetails: [
+                        { product: productId, quantity: 450, unitCost: 18000 },
+                    ],
+                })
+            ).status,
+        ).toBe(201);
+        const restock = await db
+            .model('Restock')
+            .findOne({ description })
+            .lean();
+        expect(restock).toMatchObject({ totalCost: 8100 });
+        const details = await db
+            .model<{ product: Types.ObjectId }>('RestockDetails')
+            .findOne({ restock: restock?._id })
+            .lean();
+        expect(details).toMatchObject({
+            quantity: 450,
+            unitCost: 18000,
+            unit: UnitOfMeasure.KG,
+        });
+        expect(String(details?.product)).toBe(id);
+        expect(await stockOf(db, id)).toBe(450 * (index + 1));
+    }
 });
 it('uses the same exact weighed subtotal for admin discount approval and checkout', async () => {
     const id = await product(UnitOfMeasure.L, 18000, 1000);

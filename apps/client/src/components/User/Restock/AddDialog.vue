@@ -82,21 +82,6 @@
             />
 
             <template v-if="formData.isNewProduct">
-                <label class="block text-sm font-medium"
-                    >Unit of measure
-                    <select
-                        v-model="formData.unit"
-                        class="w-full min-h-11 rounded-xl border border-slate-300 px-3"
-                    >
-                        <option
-                            v-for="unit in Object.values(UnitOfMeasure)"
-                            :key="unit"
-                            :value="unit"
-                        >
-                            {{ unit }}
-                        </option>
-                    </select>
-                </label>
                 <BaseInput
                     v-model="formData.name"
                     label="Product Name"

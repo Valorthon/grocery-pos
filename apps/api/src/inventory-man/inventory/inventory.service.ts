@@ -165,20 +165,28 @@ export class InventoryService {
         }
 
         let nextNew = 0;
-        const updatedRestockDetails = restockDetails.map((details) => ({
-            product: details.newProduct
+        const updatedRestockDetails = restockDetails.map((details) => {
+            const product = details.newProduct
                 ? newIds[nextNew++]
-                : new Types.ObjectId(details.product),
-            quantity: details.quantity,
-            updatedBy,
-            unitCost: details.unitCost,
-            ...((details.newProduct?.unit ??
-                found.get(String(details.product))?.unit) && {
-                unit:
-                    details.newProduct?.unit ??
-                    found.get(String(details.product))?.unit,
-            }),
-        }));
+                : new Types.ObjectId(details.product);
+            // MongoDB accepts either hex case, but getMany keys by the
+            // canonical ObjectId. A missing lookup must not price a measured
+            // product as legacy PIECE stock.
+            const existing = details.newProduct
+                ? undefined
+                : found.get(product.toString());
+            if (!details.newProduct && !existing) {
+                throw new InternalError('Restock product lookup was lost');
+            }
+            const unit = details.newProduct?.unit ?? existing?.unit;
+            return {
+                product,
+                quantity: details.quantity,
+                updatedBy,
+                unitCost: details.unitCost,
+                ...(unit && { unit }),
+            };
+        });
 
         const updates = updatedRestockDetails.map(({ product, quantity }) => ({
             updateOne: {

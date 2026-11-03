@@ -14,7 +14,7 @@ import { PaymentType, SellDto } from '../../sales/types';
 import { AdjustDto } from '../adjustment/types';
 import { RestockDto } from '../restock/types';
 import { AuthUser } from '../../auth/types';
-import { Role } from '@grocery-pos/contracts';
+import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
 
 /** Chainable stand-in for `find().populate().session().lean()`. */
 function leanChain(rows: unknown[]) {
@@ -666,6 +666,40 @@ describe('InventoryService.restock', () => {
                 ),
             ).resolves.toHaveLength(1);
         });
+    });
+
+    it('preserves the measured unit for an uppercase product id', async () => {
+        getMany.mockResolvedValue(
+            new Map([[EXISTING, { unit: UnitOfMeasure.KG }]]),
+        );
+        bulkWrite.mockResolvedValue({ matchedCount: 1, upsertedCount: 0 });
+
+        const lines = await service.restock(
+            user,
+            {
+                restockDetails: [
+                    {
+                        product: EXISTING.toUpperCase(),
+                        quantity: 450,
+                        unitCost: 18000,
+                    },
+                ],
+            } as RestockDto,
+            session,
+        );
+        expect(lines[0]).toMatchObject({
+            product: new Types.ObjectId(EXISTING),
+            quantity: 450,
+            unit: UnitOfMeasure.KG,
+        });
+    });
+
+    it('rejects a missing product document instead of treating it as pieces', async () => {
+        getMany.mockResolvedValue(new Map([[EXISTING, undefined]]));
+        await expect(
+            service.restock(user, dto, session),
+        ).rejects.toBeInstanceOf(InternalError);
+        expect(bulkWrite).not.toHaveBeenCalled();
     });
 
     it('matches new products to their lines by position, not by EAN', async () => {
