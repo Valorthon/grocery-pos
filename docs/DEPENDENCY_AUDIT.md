@@ -23,9 +23,16 @@ correspond to newly published vulnerabilities.
 ## Dependency changes
 
 Update body-parser, Zod, Vite, Vitest/coverage and Axios within their existing
-major versions. Refresh affected transitive dependencies within declared ranges:
-fast-uri, brace-expansion, source-map-js, handlebars, follow-redirects, Undici
-and qs.
+major versions. Refresh brace-expansion, source-map-js, handlebars,
+follow-redirects, Undici and qs within their declared ranges.
+
+The inherited broad fast-uri overrides resolve fast-uri 4.2.3, outside Ajv
+8.18.0/8.20.0's declared `^3.0.1` range. This fixes the current fast-uri
+advisories, but is an exception to the compatible-range updates above. The
+contracts build, lint, typecheck, full coverage tests, production build and
+real-database tests pass with this resolution; those checks do not establish
+compatibility for every Ajv URI case. Future override maintenance should prefer
+a patched compatible 3.x release or an Ajv-supported newer major.
 
 Nest's current 11.2.8 release still pins Multer 2.4.0. The scoped
 `@nestjs/platform-express>multer: 2.5.0` override fixes
@@ -59,8 +66,10 @@ reconciliation, and their schedule/grouping is a separate maintenance preference
 
 All rows refer to `pnpm-lock.yaml`. “Already patched” and “Absent” describe
 develop before this change; “Patched by PR” requires this PR to merge. Alert #31's
-advisory was withdrawn upstream. Alert #25 was already auto-dismissed. Do not
-dismiss still-vulnerable alerts as fixed.
+advisory was withdrawn upstream. Alert #25 was already auto-dismissed, but its
+`>=4.0.0, <5.0.10` vulnerable range still includes the pre-PR brace-expansion
+5.0.9; this PR upgrades it to 5.0.12. GitHub state and installed vulnerability
+are separate evidence. Do not dismiss still-vulnerable alerts as fixed.
 
 | Alert                                                                  | Package                 | GitHub state   | Develop versions before | Versions after        | Finding            |
 | ---------------------------------------------------------------------- | ----------------------- | -------------- | ----------------------- | --------------------- | ------------------ |
@@ -88,28 +97,28 @@ dismiss still-vulnerable alerts as fixed.
 | [#22](https://github.com/Valorthon/grocery-pos/security/dependabot/22) | axios                   | open           | 1.20.0                  | 1.21.0                | Already patched    |
 | [#23](https://github.com/Valorthon/grocery-pos/security/dependabot/23) | axios                   | open           | 1.20.0                  | 1.21.0                | Already patched    |
 | [#24](https://github.com/Valorthon/grocery-pos/security/dependabot/24) | axios                   | open           | 1.20.0                  | 1.21.0                | Already patched    |
-| [#25](https://github.com/Valorthon/grocery-pos/security/dependabot/25) | brace-expansion         | auto_dismissed | 1.1.18, 2.1.4, 5.0.9    | 1.1.21, 2.1.7, 5.0.12 | Already patched    |
+| [#25](https://github.com/Valorthon/grocery-pos/security/dependabot/25) | brace-expansion         | auto_dismissed | 1.1.18, 2.1.4, 5.0.9    | 1.1.21, 2.1.7, 5.0.12 | Patched by PR      |
 | [#26](https://github.com/Valorthon/grocery-pos/security/dependabot/26) | axios                   | open           | 1.20.0                  | 1.21.0                | Already patched    |
 | [#27](https://github.com/Valorthon/grocery-pos/security/dependabot/27) | proxy-addr              | open           | 2.0.8                   | 2.0.8                 | Already patched    |
-| [#28](https://github.com/Valorthon/grocery-pos/security/dependabot/28) | handlebars              | open           | 4.7.9                   | 4.7.10                | Already patched    |
-| [#29](https://github.com/Valorthon/grocery-pos/security/dependabot/29) | handlebars              | open           | 4.7.9                   | 4.7.10                | Already patched    |
+| [#28](https://github.com/Valorthon/grocery-pos/security/dependabot/28) | handlebars              | open           | 4.7.9                   | 4.7.10                | Patched by PR      |
+| [#29](https://github.com/Valorthon/grocery-pos/security/dependabot/29) | handlebars              | open           | 4.7.9                   | 4.7.10                | Patched by PR      |
 | [#30](https://github.com/Valorthon/grocery-pos/security/dependabot/30) | brace-expansion         | open           | 1.1.18, 2.1.4, 5.0.9    | 1.1.21, 2.1.7, 5.0.12 | Patched by PR      |
 | [#31](https://github.com/Valorthon/grocery-pos/security/dependabot/31) | sprintf-js              | open           | 1.0.3                   | 1.0.3                 | Withdrawn advisory |
-| [#32](https://github.com/Valorthon/grocery-pos/security/dependabot/32) | source-map-js           | open           | 1.2.1                   | 1.2.2                 | Already patched    |
-| [#33](https://github.com/Valorthon/grocery-pos/security/dependabot/33) | handlebars              | open           | 4.7.9                   | 4.7.10                | Already patched    |
+| [#32](https://github.com/Valorthon/grocery-pos/security/dependabot/32) | source-map-js           | open           | 1.2.1                   | 1.2.2                 | Patched by PR      |
+| [#33](https://github.com/Valorthon/grocery-pos/security/dependabot/33) | handlebars              | open           | 4.7.9                   | 4.7.10                | Patched by PR      |
 | [#35](https://github.com/Valorthon/grocery-pos/security/dependabot/35) | sanitize-html           | open           | —                       | —                     | Absent             |
 | [#36](https://github.com/Valorthon/grocery-pos/security/dependabot/36) | sanitize-html           | open           | —                       | —                     | Absent             |
-| [#37](https://github.com/Valorthon/grocery-pos/security/dependabot/37) | follow-redirects        | open           | 1.16.0                  | 1.16.2                | Already patched    |
-| [#38](https://github.com/Valorthon/grocery-pos/security/dependabot/38) | follow-redirects        | open           | 1.16.0                  | 1.16.2                | Already patched    |
-| [#39](https://github.com/Valorthon/grocery-pos/security/dependabot/39) | vite                    | open           | 7.3.6                   | 7.3.7                 | Already patched    |
-| [#40](https://github.com/Valorthon/grocery-pos/security/dependabot/40) | vite                    | open           | 7.3.6                   | 7.3.7                 | Already patched    |
-| [#41](https://github.com/Valorthon/grocery-pos/security/dependabot/41) | vite                    | open           | 7.3.6                   | 7.3.7                 | Already patched    |
-| [#42](https://github.com/Valorthon/grocery-pos/security/dependabot/42) | vite                    | open           | 7.3.6                   | 7.3.7                 | Already patched    |
-| [#43](https://github.com/Valorthon/grocery-pos/security/dependabot/43) | vite                    | open           | 7.3.6                   | 7.3.7                 | Already patched    |
-| [#44](https://github.com/Valorthon/grocery-pos/security/dependabot/44) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Already patched    |
-| [#45](https://github.com/Valorthon/grocery-pos/security/dependabot/45) | multer                  | open           | 2.4.0                   | 2.5.0                 | Already patched    |
-| [#46](https://github.com/Valorthon/grocery-pos/security/dependabot/46) | body-parser             | open           | 2.3.0                   | 2.4.0                 | Already patched    |
-| [#47](https://github.com/Valorthon/grocery-pos/security/dependabot/47) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Already patched    |
-| [#48](https://github.com/Valorthon/grocery-pos/security/dependabot/48) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Already patched    |
-| [#49](https://github.com/Valorthon/grocery-pos/security/dependabot/49) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Already patched    |
+| [#37](https://github.com/Valorthon/grocery-pos/security/dependabot/37) | follow-redirects        | open           | 1.16.0                  | 1.16.2                | Patched by PR      |
+| [#38](https://github.com/Valorthon/grocery-pos/security/dependabot/38) | follow-redirects        | open           | 1.16.0                  | 1.16.2                | Patched by PR      |
+| [#39](https://github.com/Valorthon/grocery-pos/security/dependabot/39) | vite                    | open           | 7.3.6                   | 7.3.7                 | Patched by PR      |
+| [#40](https://github.com/Valorthon/grocery-pos/security/dependabot/40) | vite                    | open           | 7.3.6                   | 7.3.7                 | Patched by PR      |
+| [#41](https://github.com/Valorthon/grocery-pos/security/dependabot/41) | vite                    | open           | 7.3.6                   | 7.3.7                 | Patched by PR      |
+| [#42](https://github.com/Valorthon/grocery-pos/security/dependabot/42) | vite                    | open           | 7.3.6                   | 7.3.7                 | Patched by PR      |
+| [#43](https://github.com/Valorthon/grocery-pos/security/dependabot/43) | vite                    | open           | 7.3.6                   | 7.3.7                 | Patched by PR      |
+| [#44](https://github.com/Valorthon/grocery-pos/security/dependabot/44) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Patched by PR      |
+| [#45](https://github.com/Valorthon/grocery-pos/security/dependabot/45) | multer                  | open           | 2.4.0                   | 2.5.0                 | Patched by PR      |
+| [#46](https://github.com/Valorthon/grocery-pos/security/dependabot/46) | body-parser             | open           | 2.3.0                   | 2.4.0                 | Patched by PR      |
+| [#47](https://github.com/Valorthon/grocery-pos/security/dependabot/47) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Patched by PR      |
+| [#48](https://github.com/Valorthon/grocery-pos/security/dependabot/48) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Patched by PR      |
+| [#49](https://github.com/Valorthon/grocery-pos/security/dependabot/49) | fast-uri                | open           | 3.1.7                   | 4.2.3                 | Patched by PR      |
 | [#50](https://github.com/Valorthon/grocery-pos/security/dependabot/50) | postcss-selector-parser | open           | 7.1.6                   | 7.1.7                 | Already patched    |
