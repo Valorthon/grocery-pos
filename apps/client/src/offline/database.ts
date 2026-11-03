@@ -72,6 +72,34 @@ export async function readOfflineState(
         >,
     );
 }
+/** A read/write transaction serializes first preparation across browser tabs.
+ * Commit the identity before issuing a lease so interrupted requests are retried
+ * using the same server identity, including after a reload or lost response.
+ */
+export async function getOrCreateOfflineState(
+    owner: string,
+    newTerminalId: () => string,
+): Promise<OfflineState> {
+    const db = await database();
+    const tx = db.transaction('state', 'readwrite');
+    const completed = done(tx);
+    const current = await result(
+        tx.objectStore('state').get(owner) as IDBRequest<
+            OfflineState | undefined
+        >,
+    );
+    const state = current ?? {
+        owner,
+        terminalId: newTerminalId(),
+        lease: null,
+        products: [],
+        cursor: null,
+        suspended: false,
+    };
+    if (!current) tx.objectStore('state').add(state);
+    await completed;
+    return state;
+}
 export async function saveOfflineState(state: OfflineState): Promise<void> {
     const db = await database();
     const tx = db.transaction('state', 'readwrite');

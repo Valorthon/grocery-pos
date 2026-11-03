@@ -25,6 +25,7 @@ import {
 } from '@grocery-pos/contracts';
 import {
     blockOffline,
+    getOrCreateOfflineState,
     pendingOffline,
     queueOffline,
     readOfflineState,
@@ -123,20 +124,14 @@ export const useOfflineStore = defineStore('offline', () => {
         const id = owner.value;
         const gen = generation;
         try {
-            const previous = await readOfflineState(id);
+            const previous = await getOrCreateOfflineState(
+                id,
+                newIdempotencyKey,
+            );
+            if (gen !== generation) return;
             if (previous?.suspended && previous.lease?.shift._id === shift._id)
                 return;
-            const terminalId = previous?.terminalId ?? newIdempotencyKey();
-            // Persist identity before any request, even if logout interrupts its answer.
-            if (!previous)
-                await saveOfflineState({
-                    owner: id,
-                    terminalId,
-                    lease: null,
-                    products: [],
-                    cursor: null,
-                    suspended: false,
-                });
+            const terminalId = previous.terminalId;
             const lease = (
                 await api.post<OfflineLeaseView>('/offline/lease', {
                     terminalId,

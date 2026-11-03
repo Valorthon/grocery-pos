@@ -382,3 +382,55 @@ it('does not expose an old cashier’s late sync failure after logout', async ()
     expect(store.pending).toEqual([]);
     expect(await pendingOffline(USER)).toHaveLength(1);
 });
+
+it('atomically prepares one durable terminal identity across fresh tabs', async () => {
+    closeOfflineDatabase();
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    const a = useOfflineStore(createPinia());
+    const b = useOfflineStore(createPinia());
+    await Promise.all([
+        a.restore(USER, [Role.Seller]),
+        b.restore(USER, [Role.Seller]),
+    ]);
+    const terminals = new Set<string>();
+    vi.mocked(api.post).mockImplementation(async (path, data: unknown) => {
+        if (path === '/offline/lease') {
+            const terminal = (data as { terminalId: string }).terminalId;
+            expect((await readOfflineState(USER))?.terminalId).toBe(terminal);
+            terminals.add(terminal);
+            return { data: lease() };
+        }
+        return { data: {} };
+    });
+    await Promise.all([a.prepare(lease().shift), b.prepare(lease().shift)]);
+    expect(terminals.size).toBe(1);
+    expect(a.state?.terminalId).toBe(b.state?.terminalId);
+    await a.beforeClose();
+    expect(api.post).toHaveBeenLastCalledWith(
+        `/offline/leases/${LEASE}/release`,
+        {
+            terminalId: (await readOfflineState(USER))?.terminalId,
+        },
+    );
+});
+it('reuses committed terminal identity after a lost first lease response and reload', async () => {
+    closeOfflineDatabase();
+    vi.stubGlobal('indexedDB', new IDBFactory());
+    const a = useOfflineStore(createPinia());
+    await a.restore(USER, [Role.Seller]);
+    vi.mocked(api.post).mockRejectedValueOnce(failure());
+    await a.prepare(lease().shift);
+    const first = (await readOfflineState(USER))!;
+    expect(first.lease).toBeNull();
+    closeOfflineDatabase();
+    const b = useOfflineStore(createPinia());
+    await b.restore(USER, [Role.Seller]);
+    await b.prepare(lease().shift);
+    expect(api.post).toHaveBeenNthCalledWith(1, '/offline/lease', {
+        terminalId: first.terminalId,
+    });
+    expect(api.post).toHaveBeenNthCalledWith(2, '/offline/lease', {
+        terminalId: first.terminalId,
+    });
+    expect(b.state?.lease?._id).toBe(LEASE);
+});

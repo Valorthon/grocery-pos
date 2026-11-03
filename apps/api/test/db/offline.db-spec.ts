@@ -26,6 +26,8 @@ import {
     type DbApp,
     type Caller,
 } from './db-app';
+import { OfflineLease } from '../../src/offline/offline-lease.schema';
+import { Product } from '../../src/product/product.schema';
 import { User } from '../../src/user/user.schema';
 import { RefreshToken } from '../../src/auth/refresh-token/refresh-token.schema';
 import { Shift } from '../../src/shift/shift.schema';
@@ -94,7 +96,22 @@ beforeEach(async () => {
             missing: [],
             unexpected: [],
         });
-    const item = catalogue.body.products.find((p) => p._id === product)!;
+    let item = catalogue.body.products.find((p) => p._id === product);
+    let next = catalogue.body.next;
+    while (!item && next) {
+        const page = await read<OfflineCatalogPage>(
+            await db.call(
+                seller,
+                'GET',
+                `/offline/catalog?lease=${lease._id}&after=${encodeURIComponent(next)}`,
+            ),
+        );
+        expect(page.status).toBe(200);
+        item = page.body.products.find((p) => p._id === product);
+        next = page.body.next;
+    }
+    if (!item)
+        throw new Error('Fixture product absent from complete catalogue');
     body = {
         lease: lease._id,
         idempotencyKey: randomUUID(),
@@ -363,4 +380,90 @@ it('accepts the full bounded signed-line batch without relaxing ordinary request
             })
         ).status,
     ).toBe(413);
+});
+
+it('recovers simultaneous or lost lease responses using the same durable terminal identity', async () => {
+    const responses = await Promise.all(
+        [1, 2].map(() =>
+            db
+                .call(seller, 'POST', '/offline/lease', { terminalId })
+                .then((r) => read<OfflineLeaseView>(r)),
+        ),
+    );
+    expect(responses.map((r) => r.status)).toEqual([201, 201]);
+    expect(responses.map((r) => r.body._id)).toEqual([lease._id, lease._id]);
+    expect(
+        await db
+            .model<OfflineLease>('OfflineLease')
+            .countDocuments({ cashier: seller.userId, active: true }),
+    ).toBe(1);
+    expect(
+        (
+            await db.call(
+                seller,
+                'POST',
+                `/offline/leases/${lease._id}/release`,
+                { terminalId },
+            )
+        ).status,
+    ).toBe(201);
+    expect(
+        await db
+            .model<OfflineLease>('OfflineLease')
+            .countDocuments({ cashier: seller.userId, active: true }),
+    ).toBe(0);
+});
+it('lets admins reconcile signed historical barcodes after a correction without remapping products', async () => {
+    await db
+        .model<Product>('Product')
+        .updateOne({ _id: product }, { $set: { EAN: '012345678905' } });
+    expect((await db.call(seller, 'POST', '/offline/sync', body)).status).toBe(
+        409,
+    );
+    expect(await stockOf(db, product)).toBe(450);
+    const changedProduct = {
+        ...body,
+        lines: body.lines.map((line) => ({
+            ...line,
+            product: String(new Types.ObjectId()),
+        })),
+    };
+    expect(
+        (
+            await db.call(admin, 'POST', '/offline/reconcile', {
+                ...changedProduct,
+                reason: 'Barcode corrected',
+            })
+        ).status,
+    ).toBe(409);
+    const reconciled = await read<Receipt>(
+        await db.call(admin, 'POST', '/offline/reconcile', {
+            ...body,
+            reason: 'Barcode corrected after cash sale',
+        }),
+    );
+    expect(reconciled.status).toBe(201);
+    expect(reconciled.body.totalAmount).toBe(8100);
+    expect(await stockOf(db, product)).toBe(0);
+    const replay = await read<Receipt>(
+        await db.call(admin, 'POST', '/offline/reconcile', {
+            ...body,
+            reason: 'Barcode corrected after cash sale',
+        }),
+    );
+    expect(replay.body._id).toBe(reconciled.body._id);
+    expect(await stockOf(db, product)).toBe(0);
+    expect(
+        await db
+            .model<Sales>('Sales')
+            .countDocuments({ idempotencyKey: body.idempotencyKey }),
+    ).toBe(1);
+    const recorded = await db
+        .model<Sales>('Sales')
+        .findById(reconciled.body._id)
+        .lean();
+    expect(String(recorded?.reconciledBy)).toBe(admin.userId);
+    expect(recorded?.reconciliationReason).toBe(
+        'Barcode corrected after cash sale',
+    );
 });

@@ -523,7 +523,7 @@ export class OfflineService {
                         !product ||
                         (product.unit ?? UnitOfMeasure.PIECE) !==
                             line.attested.unit ||
-                        product.EAN !== line.attested.EAN
+                        (!admin && product.EAN !== line.attested.EAN)
                     )
                         throw invalid();
                     const current = await this.inventory
