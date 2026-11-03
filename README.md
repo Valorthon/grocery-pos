@@ -230,6 +230,24 @@ remains safe and needs no new approval. Unsold ticket edits remain ordinary
 register actions; partial refunds and the sensitive-action audit-log screen
 remain future work.
 
+## Parked tickets
+
+At the register, **Park Ticket** saves the current basket with an optional note
+and clears it for the next customer. **Parked (n)** lists your drafts in this
+browser. Park or clear any active basket before resuming another ticket.
+Resuming refreshes every product and price from the server; if any product is
+unavailable or the refreshed basket exceeds the sale limit, the parked draft
+is kept intact. Stock is checked and deducted only at checkout. Discounts still
+need fresh admin approval at checkout.
+
+Parked drafts survive a reload and remain private to the original cashier after
+logout. They do not move between browsers or terminals. Ending a shift with
+parked tickets requires choosing **Move to my next shift** or **Discard**; the
+choice applies only after the shift closes successfully. At most 50 tickets
+can be parked. A storage failure leaves the original ticket intact. A ticket
+with an unresolved checkout attempt must be retried before it can be parked,
+so a lost sale response cannot become a second sale through parking.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve

@@ -38,7 +38,27 @@
                         </h1>
                     </div>
 
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            class="min-h-11 px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold focus-ring disabled:opacity-40"
+                            :disabled="
+                                isTicketLocked ||
+                                !cartStore.items.length ||
+                                !shiftStore.activeShift
+                            "
+                            @click="openPark"
+                        >
+                            Park Ticket
+                        </button>
+                        <button
+                            type="button"
+                            class="min-h-11 px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold focus-ring"
+                            :disabled="isTicketLocked"
+                            @click="parkedOpen = true"
+                        >
+                            Parked ({{ cartStore.parked.length }})
+                        </button>
                         <template v-if="shiftStore.activeShift">
                             <button
                                 type="button"
@@ -915,6 +935,34 @@
             </div>
         </Teleport>
 
+        <BaseModal
+            v-model="parkOpen"
+            title="Park ticket"
+            subtitle="Save this ticket while you serve another customer."
+        >
+            <label for="park-note" class="block text-sm font-bold mb-2"
+                >Label or customer note (optional)</label
+            >
+            <input
+                id="park-note"
+                v-model="parkNote"
+                :maxlength="PARKED_LABEL_MAX"
+                class="w-full min-h-11 border border-slate-300 rounded-xl px-3 text-sm focus-ring"
+                @keydown.enter.prevent="parkTicket"
+            />
+            <p v-if="parkError" role="alert" class="mt-3 text-sm text-red-700">
+                {{ parkError }}
+            </p>
+            <template #footer
+                ><BaseButton variant="outline" @click="parkOpen = false"
+                    >Keep Ticket</BaseButton
+                ><BaseButton @click="parkTicket"
+                    >Park Ticket</BaseButton
+                ></template
+            >
+        </BaseModal>
+        <ParkedTicketsDialog v-model="parkedOpen" @resumed="resetTicketUi" />
+
         <CheckoutModal
             v-model="isCheckoutOpen"
             :total="total"
@@ -973,10 +1021,18 @@ import {
     X,
 } from '@lucide/vue';
 import api from '@/axios';
+import BaseModal from '@/components/ui/BaseModal.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
+import ParkedTicketsDialog from '@/components/User/Sales/ParkedTicketsDialog.vue';
 import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog.vue';
 import { useManagerApproval } from '@/composables/useManagerApproval';
 
-import { type CartItem, TICKET_AMOUNT_MAX, useCartStore } from '@/stores/cart';
+import {
+    type CartItem,
+    PARKED_LABEL_MAX,
+    TICKET_AMOUNT_MAX,
+    useCartStore,
+} from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import { apiErrorCode } from '@/utils/api-error';
 import { Color, REGISTER_TOAST_IDLE, useUIStore } from '@/stores/ui';
@@ -1610,13 +1666,16 @@ async function lookUpBarcode(
     qty: number,
     submitted: string,
 ): Promise<'added' | 'missing' | 'failed'> {
+    const basket = cartStore.items;
     try {
         const res = await api.get<ProductView>(
             `/products/${encodeURIComponent(EAN)}`,
         );
+        if (basket !== cartStore.items) return 'failed';
         addProduct(res.data, qty, submitted);
         return 'added';
     } catch (error) {
+        if (basket !== cartStore.items) return 'failed';
         if (apiErrorCode(error) === ErrorCode.PRODUCT_NOT_FOUND) {
             return 'missing';
         }
@@ -1631,13 +1690,16 @@ async function selectMatch(
     submitted = searchQuery.value,
 ) {
     if (cartStore.locked) return;
+    const basket = cartStore.items;
     clearFeedback();
     try {
         const res = await api.get<ProductView>(
             `/products/${encodeURIComponent(match.EAN)}`,
         );
+        if (basket !== cartStore.items) return;
         addProduct(res.data, qty, submitted);
     } catch {
+        if (basket !== cartStore.items) return;
         showFeedback('error', `"${match.name}" could not be added`);
     }
 }
@@ -1712,6 +1774,45 @@ function applyDiscount(choice: number | DiscountType.FIXED) {
 async function focusField(field: typeof reasonInput) {
     await nextTick();
     field.value?.focus();
+}
+
+// ---- Parked tickets (#35)
+const parkOpen = ref(false);
+const parkedOpen = ref(false);
+const parkNote = ref('');
+const parkError = ref('');
+function openPark() {
+    if (cartStore.locked || !shiftStore.activeShift) return;
+    if (!Object.keys(qtyDrafts).map(commitQuantity).every(Boolean)) return;
+    parkNote.value = '';
+    parkError.value = '';
+    parkOpen.value = true;
+}
+function resetTicketUi() {
+    cancelPendingSearch();
+    clearFeedback();
+    scanMultiplier.value = 1;
+    dismissUndo();
+    selectedLine.value = null;
+    resetDiscountUi();
+    for (const id of Object.keys(qtyDrafts)) delete qtyDrafts[id];
+    searchQuery.value = '';
+    search.reset();
+}
+function parkTicket() {
+    if (!shiftStore.activeShift) return;
+    try {
+        cartStore.park(parkNote.value, shiftStore.activeShift._id);
+        parkOpen.value = false;
+        resetTicketUi();
+        uiStore.queueMessage(
+            Color.SUCCESS,
+            'Ticket parked. You can start the next sale.',
+        );
+    } catch (err) {
+        parkError.value =
+            err instanceof Error ? err.message : 'Could not park this ticket.';
+    }
 }
 
 // ---- Void Ticket (decision 2026-09-25, #23: it asks first)

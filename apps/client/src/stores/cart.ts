@@ -7,6 +7,7 @@ import {
     STRING_LIMITS,
     BATCH_LIMITS,
 } from '@grocery-pos/contracts';
+import { newIdempotencyKey } from '@/components/User/Sales/sale-submission';
 import { formatCurrency } from '@/utils/currency';
 import { Color, useUIStore } from './ui';
 
@@ -55,11 +56,25 @@ export interface StoredAttempt {
     ticketSignature: string;
 }
 
+export interface ParkedTicket {
+    id: string;
+    label: string;
+    parkedAt: string;
+    /** Null after the cashier explicitly carries the ticket to a later shift. */
+    shiftId: string | null;
+    items: CartItem[];
+    discount: CartDiscount | null;
+}
+
+export const PARKED_TICKETS_MAX = 50;
+export const PARKED_LABEL_MAX = STRING_LIMITS.REASON;
+
 interface StoredCart {
     version: typeof CART_STORAGE_VERSION;
     items: CartItem[];
     discount: CartDiscount | null;
     attempt: StoredAttempt | null;
+    parked?: ParkedTicket[];
 }
 
 /**
@@ -146,6 +161,8 @@ export function parseStoredCart(json: string | null): {
     attempt: StoredAttempt | null;
     /** Stored lines left out: unreadable, and past TICKET_AMOUNT_MAX. */
     dropped: { unreadable: number; overCap: number };
+    parked: ParkedTicket[];
+    droppedParked: number;
 } | null {
     if (!json) return null;
     let raw: unknown;
@@ -176,8 +193,56 @@ export function parseStoredCart(json: string | null): {
         total += item.unitPrice * item.quantity;
         items.push(item);
     }
+    const parked: ParkedTicket[] = [];
+    let droppedParked = 0;
+    if (Array.isArray(raw.parked)) {
+        for (const entry of raw.parked) {
+            if (
+                !isObject(entry) ||
+                parked.length >= PARKED_TICKETS_MAX ||
+                !isText(entry.id, 100) ||
+                parked.some((t) => t.id === entry.id) ||
+                typeof entry.label !== 'string' ||
+                entry.label.length > PARKED_LABEL_MAX ||
+                typeof entry.parkedAt !== 'string' ||
+                !Number.isFinite(Date.parse(entry.parkedAt)) ||
+                !(entry.shiftId === null || isText(entry.shiftId, 64))
+            ) {
+                droppedParked++;
+                continue;
+            }
+            // Parse only the ticket payload: parked drafts never carry attempts or approvals.
+            const draft = parseStoredCart(
+                JSON.stringify({
+                    version: CART_STORAGE_VERSION,
+                    items: entry.items,
+                    discount: entry.discount,
+                    attempt: null,
+                }),
+            );
+            if (
+                !draft ||
+                !draft.items.length ||
+                draft.dropped.unreadable ||
+                draft.dropped.overCap
+            ) {
+                droppedParked++;
+                continue;
+            }
+            parked.push({
+                id: entry.id,
+                label: entry.label,
+                parkedAt: entry.parkedAt,
+                shiftId: entry.shiftId,
+                items: draft.items,
+                discount: draft.discount,
+            });
+        }
+    }
     return {
         items,
+        parked,
+        droppedParked,
         discount: parseDiscount(raw.discount),
         attempt: parseAttempt(raw.attempt),
         dropped,
@@ -206,18 +271,22 @@ function readStorage(key: string): string | null {
     }
 }
 
-function writeStorage(key: string, value: string | null): void {
+function writeStorage(key: string, value: string | null): boolean {
     try {
         if (value === null) localStorage.removeItem(key);
         else localStorage.setItem(key, value);
+        return true;
     } catch {
-        // Storage full or blocked: the basket still works, unsaved.
+        // Ordinary basket edits still work unsaved; parking requires a durable write.
+        return false;
     }
 }
 
 export const useCartStore = defineStore('cart', () => {
     const items = ref<CartItem[]>([]);
     const discount = ref<CartDiscount | null>(null);
+    const parked = ref<ParkedTicket[]>([]);
+    let savedSnapshot: string | null = null;
     /** Whose basket this is: the key it is saved under. Null: not saved. */
     const owner = ref<string | null>(null);
     /** The idempotency key this ticket was sent with, saved with it. */
@@ -250,9 +319,10 @@ export const useCartStore = defineStore('cart', () => {
         if (
             items.value.length === 0 &&
             discount.value === null &&
-            attempt.value === null
+            attempt.value === null &&
+            parked.value.length === 0
         ) {
-            writeStorage(key, null);
+            if (writeStorage(key, null)) savedSnapshot = null;
             return;
         }
         const stored: StoredCart = {
@@ -268,13 +338,17 @@ export const useCartStore = defineStore('cart', () => {
             ),
             discount: discount.value && { ...discount.value },
             attempt: attempt.value && { ...attempt.value },
+            ...(parked.value.length
+                ? { parked: parked.value.map(copyParked) }
+                : {}),
         };
-        writeStorage(key, JSON.stringify(stored));
+        const json = JSON.stringify(stored);
+        if (writeStorage(key, json)) savedSnapshot = json;
     }
 
     // Saved on every change, synchronously, so a crash right after a scan
     // still has it.
-    watch([items, discount, attempt], persist, {
+    watch([items, discount, attempt, parked], persist, {
         deep: true,
         flush: 'sync',
     });
@@ -284,6 +358,7 @@ export const useCartStore = defineStore('cart', () => {
         items.value = saved?.items ?? [];
         discount.value = saved?.discount ?? null;
         attempt.value = saved?.attempt ?? null;
+        parked.value = saved?.parked ?? [];
     }
 
     /**
@@ -316,6 +391,7 @@ export const useCartStore = defineStore('cart', () => {
         if (locked.value) return;
         applyingRemote = true;
         try {
+            savedSnapshot = event.newValue;
             load(parseStoredCart(event.newValue));
         } finally {
             applyingRemote = false;
@@ -342,10 +418,16 @@ export const useCartStore = defineStore('cart', () => {
             ? parseStoredCart(readStorage(cartStorageKey(next)))
             : null;
         load(saved);
+        savedSnapshot = next ? readStorage(cartStorageKey(next)) : null;
         owner.value = next;
         // Said once, when the basket comes back without some of its lines.
         const notice = droppedNotice(saved?.dropped);
         if (notice) useUIStore().queueMessage(Color.ERROR, notice);
+        if (saved?.droppedParked)
+            useUIStore().queueMessage(
+                Color.ERROR,
+                'Some saved parked tickets could not be read and were removed.',
+            );
         // Rewrites a basket that lost malformed parts, or drops an empty one.
         persist();
     }
@@ -480,12 +562,199 @@ export const useCartStore = defineStore('cart', () => {
      * cashier never inherits this one's basket.
      */
     function reset() {
-        if (owner.value) writeStorage(cartStorageKey(owner.value), null);
+        // Parked drafts stay with this cashier, never with the next login.
+        if (owner.value) {
+            const saved: StoredCart = {
+                version: CART_STORAGE_VERSION,
+                items: [],
+                discount: null,
+                attempt: null,
+                ...(parked.value.length
+                    ? { parked: parked.value.map(copyParked) }
+                    : {}),
+            };
+            writeStorage(
+                cartStorageKey(owner.value),
+                parked.value.length ? JSON.stringify(saved) : null,
+            );
+        }
         owner.value = null;
+        savedSnapshot = null;
+        parked.value = [];
         items.value = [];
         discount.value = null;
         attempt.value = null;
         locked.value = false;
+    }
+
+    function copyParked(ticket: ParkedTicket): ParkedTicket {
+        return {
+            ...ticket,
+            items: ticket.items.map((item) => ({ ...item })),
+            discount: ticket.discount && { ...ticket.discount },
+        };
+    }
+
+    /** A newer tab wins; do not overwrite it with an async resume's stale snapshot. */
+    function assertCurrent() {
+        if (!owner.value)
+            throw new Error('Log in again before managing parked tickets.');
+        let latest: string | null;
+        try {
+            latest = localStorage.getItem(cartStorageKey(owner.value));
+        } catch {
+            throw new Error(
+                'Browser storage is unavailable. Nothing was changed.',
+            );
+        }
+        if (latest !== savedSnapshot) {
+            applyingRemote = true;
+            try {
+                load(parseStoredCart(latest));
+                savedSnapshot = latest;
+            } finally {
+                applyingRemote = false;
+            }
+            remoteChanges.value++;
+            throw new Error(
+                'The register changed in another tab. Review it and try again.',
+            );
+        }
+        if (locked.value)
+            throw new Error(
+                'Wait for the current register operation to finish.',
+            );
+    }
+
+    /** Save the entire move before clearing either source, including on quota failure. */
+    function commitDrafts(
+        nextItems: CartItem[],
+        nextDiscount: CartDiscount | null,
+        nextParked: ParkedTicket[],
+    ) {
+        const snapshot: StoredCart = {
+            version: CART_STORAGE_VERSION,
+            items: nextItems,
+            discount: nextDiscount,
+            attempt: null,
+            ...(nextParked.length
+                ? { parked: nextParked.map(copyParked) }
+                : {}),
+        };
+        const json = JSON.stringify(snapshot);
+        if (!writeStorage(cartStorageKey(owner.value!), json)) {
+            throw new Error(
+                'Parked tickets could not be saved in this browser. Nothing was changed.',
+            );
+        }
+        applyingRemote = true;
+        try {
+            savedSnapshot = json;
+            items.value = nextItems.map((item) => ({ ...item }));
+            discount.value = nextDiscount && { ...nextDiscount };
+            attempt.value = null;
+            parked.value = nextParked.map(copyParked);
+        } finally {
+            applyingRemote = false;
+        }
+    }
+
+    function park(label: string, shiftId: string): string {
+        assertCurrent();
+        if (attempt.value)
+            throw new Error(
+                'Finish retrying this checkout before parking it; it may already be recorded.',
+            );
+        if (!items.value.length)
+            throw new Error('Add items before parking a ticket.');
+        if (parked.value.length >= PARKED_TICKETS_MAX)
+            throw new Error(
+                `At most ${PARKED_TICKETS_MAX} tickets can be parked. Resume or discard one first.`,
+            );
+        if (label.trim().length > PARKED_LABEL_MAX)
+            throw new Error('The ticket note is too long.');
+        const id = newIdempotencyKey();
+        const ticket: ParkedTicket = {
+            id,
+            label: label.trim(),
+            parkedAt: new Date().toISOString(),
+            shiftId,
+            items: items.value.map((item) => ({ ...item })),
+            discount: discount.value && { ...discount.value },
+        };
+        commitDrafts([], null, [...parked.value, ticket]);
+        return id;
+    }
+
+    function discardParked(id: string) {
+        assertCurrent();
+        // Discarding a parked draft must not clear an active checkout attempt.
+        if (attempt.value)
+            throw new Error(
+                'Finish retrying this checkout before changing parked tickets.',
+            );
+        commitDrafts(
+            items.value,
+            discount.value,
+            parked.value.filter((ticket) => ticket.id !== id),
+        );
+    }
+
+    /** Fresh server products must match every parked product; a partial resume is refused. */
+    function resumeParked(id: string, refreshed: CartItem[], expected: string) {
+        assertCurrent();
+        if (attempt.value || items.value.length)
+            throw new Error(
+                'Park or clear the current ticket before resuming another.',
+            );
+        const ticket = parked.value.find((t) => t.id === id);
+        if (!ticket || JSON.stringify(ticket) !== expected)
+            throw new Error(
+                'This parked ticket changed. Reload the list and try again.',
+            );
+        const checked = parseStoredCart(
+            JSON.stringify({
+                version: CART_STORAGE_VERSION,
+                items: refreshed,
+                discount: ticket.discount,
+                attempt: null,
+            }),
+        );
+        if (
+            !checked ||
+            checked.dropped.unreadable ||
+            checked.dropped.overCap ||
+            checked.items.length !== ticket.items.length ||
+            checked.items.some(
+                (item, index) =>
+                    item.product !== ticket.items[index].product ||
+                    item.quantity !== ticket.items[index].quantity,
+            )
+        ) {
+            throw new Error(
+                'The refreshed ticket cannot be resumed. The parked ticket is kept.',
+            );
+        }
+        commitDrafts(
+            checked.items,
+            ticket.discount,
+            parked.value.filter((t) => t.id !== id),
+        );
+    }
+
+    function finishParkedShift(choice: 'carry' | 'discard') {
+        assertCurrent();
+        if (attempt.value)
+            throw new Error(
+                'Finish retrying the current checkout before ending the shift.',
+            );
+        commitDrafts(
+            items.value,
+            discount.value,
+            choice === 'discard'
+                ? []
+                : parked.value.map((ticket) => ({ ...ticket, shiftId: null })),
+        );
     }
 
     function lock() {
@@ -498,6 +767,11 @@ export const useCartStore = defineStore('cart', () => {
 
     return {
         items,
+        parked,
+        park,
+        discardParked,
+        resumeParked,
+        finishParkedShift,
         discount,
         attempt,
         owner,

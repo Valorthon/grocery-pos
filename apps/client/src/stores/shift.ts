@@ -1,6 +1,8 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import api from '@/axios';
+import { useCartStore } from './cart';
+import { Color, useUIStore } from './ui';
 import { apiErrorCode, apiErrorText } from '@/utils/api-error';
 import {
     type BillCounts,
@@ -151,7 +153,21 @@ export const useShiftStore = defineStore('shift', () => {
      * Submits the blind closing count. The server computes expected cash
      * and returns the Z-read it stored, which is then shown.
      */
-    async function closeShift(counts: BillCounts): Promise<ZReadReport> {
+    async function closeShift(
+        counts: BillCounts,
+        parkedChoice?: 'carry' | 'discard',
+    ): Promise<ZReadReport> {
+        const cart = useCartStore();
+        if (cart.parked.length && !parkedChoice)
+            throw new Error(
+                'Choose whether to discard parked tickets or move them to the next shift.',
+            );
+        if (cart.parked.length && (cart.locked || cart.attempt))
+            throw new Error(
+                'Finish the current checkout before closing a shift with parked tickets.',
+            );
+        const managingParked = cart.parked.length > 0;
+        if (managingParked) cart.lock();
         const gen = generation;
         let report: ZReadReport;
         try {
@@ -166,12 +182,25 @@ export const useShiftStore = defineStore('shift', () => {
                 shiftClosedElsewhere();
             }
             throw error;
+        } finally {
+            if (gen === generation && managingParked) cart.unlock();
         }
         // Logged out meanwhile: this report is not for whoever is here now.
         if (gen !== generation) throw new StaleResponseError();
         setShift(null);
         shiftOutOpen.value = false;
         zRead.value = report;
+        if (managingParked && parkedChoice) {
+            try {
+                cart.finishParkedShift(parkedChoice);
+            } catch {
+                // Closing the server shift succeeded. Never imply it failed or discard unsaved drafts.
+                useUIStore().queueMessage(
+                    Color.ERROR,
+                    'Shift closed, but parked tickets could not be updated. They are kept; review them before your next shift.',
+                );
+            }
+        }
         return report;
     }
 

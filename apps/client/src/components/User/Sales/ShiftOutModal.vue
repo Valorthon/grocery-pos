@@ -17,6 +17,34 @@
             >
         </div>
 
+        <fieldset
+            v-if="cart.parked.length"
+            class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3"
+        >
+            <legend class="text-sm font-bold">
+                {{ cart.parked.length }} parked tickets are still open
+            </legend>
+            <p class="text-xs text-slate-700">
+                Choose what happens to these drafts when this shift closes. They
+                have not reserved stock.
+            </p>
+            <label class="flex items-center gap-2 min-h-11 text-sm"
+                ><input
+                    v-model="parkedChoice"
+                    type="radio"
+                    value="carry"
+                    :disabled="submitting"
+                />Move to my next shift in this browser</label
+            >
+            <label class="flex items-center gap-2 min-h-11 text-sm"
+                ><input
+                    v-model="parkedChoice"
+                    type="radio"
+                    value="discard"
+                    :disabled="submitting"
+                />Discard all parked tickets</label
+            >
+        </fieldset>
         <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 
         <div
@@ -84,6 +112,7 @@ import type { BillCounts } from './shift';
 import { apiErrorMessage, useShiftStore } from '@/stores/shift';
 import { apiErrorCode } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
+import { useCartStore } from '@/stores/cart';
 import { formatCurrency } from '@/utils/currency';
 
 /**
@@ -92,6 +121,8 @@ import { formatCurrency } from '@/utils/currency';
  * and returns them in the Z-read after the count is submitted.
  */
 const shiftStore = useShiftStore();
+const cart = useCartStore();
+const parkedChoice = ref<'carry' | 'discard' | undefined>();
 const uiStore = useUIStore();
 
 const billCounts = ref<BillCounts>({});
@@ -120,6 +151,7 @@ watch(
     (val) => {
         if (val) {
             billCounts.value = {};
+            parkedChoice.value = undefined;
             error.value = '';
         }
     },
@@ -136,10 +168,15 @@ async function confirm() {
         error.value = refused;
         return;
     }
+    if (cart.parked.length && !parkedChoice.value) {
+        error.value =
+            'Choose whether to discard parked tickets or move them to your next shift.';
+        return;
+    }
     submitting.value = true;
     error.value = '';
     try {
-        await shiftStore.closeShift(billCounts.value);
+        await shiftStore.closeShift(billCounts.value, parkedChoice.value);
     } catch (err) {
         error.value = apiErrorMessage(err, 'Could not close the shift');
         if (apiErrorCode(err) === ErrorCode.SHIFT_NOT_OPEN) {
