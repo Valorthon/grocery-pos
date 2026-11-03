@@ -313,8 +313,36 @@ export const useCartStore = defineStore('cart', () => {
         ),
     );
 
+    /**
+     * Checkout keeps its active basket fixed, so it can miss another tab's
+     * parked-ticket changes. Before any ordinary write, take that tab's full
+     * parked list from storage. Replacing it (not merging by id) also preserves
+     * explicit discards and carry-to-next-shift updates. The active basket and
+     * its checkout attempt stay untouched.
+     */
+    function reconcileParked(): boolean {
+        if (!owner.value) return false;
+        let latest: string | null;
+        try {
+            latest = localStorage.getItem(cartStorageKey(owner.value));
+        } catch {
+            // Do not overwrite unseen drafts if reading storage is unavailable.
+            return false;
+        }
+        if (latest !== savedSnapshot) {
+            applyingRemote = true;
+            try {
+                parked.value = parseStoredCart(latest)?.parked ?? [];
+            } finally {
+                applyingRemote = false;
+            }
+        }
+        return true;
+    }
+
     function persist() {
         if (!owner.value || applyingRemote) return;
+        if (!reconcileParked()) return;
         const key = cartStorageKey(owner.value);
         if (
             items.value.length === 0 &&
@@ -563,7 +591,7 @@ export const useCartStore = defineStore('cart', () => {
      */
     function reset() {
         // Parked drafts stay with this cashier, never with the next login.
-        if (owner.value) {
+        if (owner.value && reconcileParked()) {
             const saved: StoredCart = {
                 version: CART_STORAGE_VERSION,
                 items: [],

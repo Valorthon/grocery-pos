@@ -20,6 +20,7 @@ const MILK = {
     quantity: 2,
 };
 let pinia = createPinia();
+const otherTabs: ReturnType<typeof createPinia>[] = [];
 beforeEach(() => {
     localStorage.clear();
     pinia = createPinia();
@@ -27,7 +28,18 @@ beforeEach(() => {
 });
 afterEach(() => {
     disposePinia(pinia);
+    for (const tab of otherTabs.splice(0)) disposePinia(tab);
 });
+function anotherTab() {
+    const tab = createPinia();
+    otherTabs.push(tab);
+    const cart = useCartStore(tab);
+    cart.setOwner('ana');
+    return cart;
+}
+function savedCart() {
+    return parseStoredCart(localStorage.getItem(cartStorageKey('ana')));
+}
 function start() {
     const cart = useCartStore();
     cart.setOwner('ana');
@@ -55,6 +67,101 @@ function resume(
 }
 
 describe('parked ticket durable moves (#35)', () => {
+    it('keeps a draft another tab parks while this tab is checking out', () => {
+        const cart = start();
+        const checkoutAttempt = {
+            idempotencyKey: 'sale-a',
+            ticketSignature: 'milk',
+        };
+        cart.setAttempt(checkoutAttempt);
+        cart.lock();
+
+        const other = anotherTab();
+        // The second cashier view explicitly clears the mirrored ticket,
+        // then parks a different customer while the first sale is in flight.
+        other.clear();
+        other.add({ ...MILK, product: 'bread', name: 'bread' });
+        const id = other.park('Customer B', 'shift1');
+        cart.onStorage(
+            new StorageEvent('storage', {
+                key: cartStorageKey('ana'),
+                newValue: localStorage.getItem(cartStorageKey('ana')),
+            }),
+        );
+        expect(cart.items).toEqual([MILK]);
+        expect(cart.attempt).toEqual(checkoutAttempt);
+
+        cart.unlock();
+        cart.clear();
+        expect(cart.items).toEqual([]);
+        expect(cart.attempt).toBeNull();
+        expect(cart.parked.map((ticket) => ticket.id)).toEqual([id]);
+        expect(savedCart()?.parked.map((ticket) => ticket.id)).toEqual([id]);
+    });
+    it('does not resurrect a draft discarded in another tab during checkout', () => {
+        const cart = start();
+        const id = cart.park('Already served', 'shift1');
+        cart.add(MILK, MILK.quantity);
+        cart.setAttempt({ idempotencyKey: 'sale-a', ticketSignature: 'milk' });
+        cart.lock();
+        const other = anotherTab();
+        other.clear();
+        other.discardParked(id);
+
+        cart.unlock();
+        cart.clear();
+        expect(cart.parked).toEqual([]);
+        expect(savedCart()).toBeNull();
+    });
+    it('keeps remote carry updates when an ordinary basket edit beats the storage event', () => {
+        const cart = start();
+        cart.park('Tomorrow', 'shift1');
+        const other = anotherTab();
+        other.finishParkedShift('carry');
+
+        // Browsers deliver storage events asynchronously; this edit happens
+        // before the first tab has received the carry operation's event.
+        cart.add(MILK);
+        expect(cart.parked[0].shiftId).toBeNull();
+        expect(savedCart()?.parked[0].shiftId).toBeNull();
+        expect(savedCart()?.items[0].product).toBe(MILK.product);
+    });
+    it('preserves new drafts on logout reset and keeps them private to the original cashier', () => {
+        const cart = start();
+        cart.lock();
+        const other = anotherTab();
+        other.clear();
+        other.add(MILK);
+        const id = other.park('Customer B', 'shift1');
+
+        cart.reset();
+        expect(savedCart()?.parked.map((ticket) => ticket.id)).toEqual([id]);
+        cart.setOwner('ben');
+        expect(cart.items).toEqual([]);
+        expect(cart.parked).toEqual([]);
+        cart.clear();
+        expect(savedCart()?.parked.map((ticket) => ticket.id)).toEqual([id]);
+        cart.setOwner('ana');
+        expect(cart.parked.map((ticket) => ticket.id)).toEqual([id]);
+    });
+    it('does not overwrite unseen remote drafts when storage cannot be read', () => {
+        const cart = start();
+        const other = anotherTab();
+        other.clear();
+        other.add(MILK);
+        other.park('Keep saved', 'shift1');
+        const latest = localStorage.getItem(cartStorageKey('ana'));
+        const getItem = vi
+            .spyOn(Storage.prototype, 'getItem')
+            .mockImplementation(() => {
+                throw new Error('storage unavailable');
+            });
+
+        cart.clear();
+        cart.reset();
+        getItem.mockRestore();
+        expect(localStorage.getItem(cartStorageKey('ana'))).toBe(latest);
+    });
     it('parks the full basket and discount, completes another basket, then resumes with fresh prices', () => {
         const cart = start();
         cart.setDiscount({
