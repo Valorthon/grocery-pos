@@ -3,6 +3,7 @@ export enum OverrideAction {
     DISCOUNT = 'DISCOUNT',
     VOID = 'VOID',
     REFUND = 'REFUND',
+    STOCK_COUNT = 'STOCK_COUNT',
 }
 
 /** Approvals expire independently of MongoDB's asynchronous TTL cleanup. */

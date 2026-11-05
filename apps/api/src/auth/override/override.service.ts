@@ -1,10 +1,13 @@
+import { StockCountStatus } from '@grocery-pos/contracts';
+import { StockCount } from '../../stock-count/stock-count.schema';
+import { stockCountContext } from '../../stock-count/stock-count.context';
 import {
     quantityAmount,
     maxQuantityForAmount,
     NUMERIC_LIMITS,
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -67,6 +70,9 @@ export class ManagerOverrideService implements OnModuleInit {
         private products: ProductService,
         private jwt: JwtService,
         private config: TypedConfigService,
+        @Optional()
+        @InjectModel(StockCount.name)
+        private stockCounts?: Model<StockCount>,
     ) {}
 
     onModuleInit(): void {
@@ -177,10 +183,12 @@ export class ManagerOverrideService implements OnModuleInit {
                 _id: actor.userId,
                 isActive: true,
                 roles:
-                    dto.action === OverrideAction.DISCOUNT ||
-                    !actor.roles.includes(Role.Admin)
-                        ? Role.Seller
-                        : Role.Admin,
+                    dto.action === OverrideAction.STOCK_COUNT
+                        ? { $in: [Role.Adjuster, Role.Admin] }
+                        : dto.action === OverrideAction.DISCOUNT ||
+                            !actor.roles.includes(Role.Admin)
+                          ? Role.Seller
+                          : Role.Admin,
             })
             .select('+overridePinVersion')
             .lean();
@@ -223,6 +231,34 @@ export class ManagerOverrideService implements OnModuleInit {
         dto: ManagerOverrideDto,
     ): Promise<string> {
         const { context, action } = dto;
+        if (action === OverrideAction.STOCK_COUNT) {
+            if (
+                !context.stockCount ||
+                context.sale ||
+                context.reversal ||
+                context.expectedSubtotal !== undefined ||
+                !actor.roles.some(
+                    (role) => role === Role.Adjuster || role === Role.Admin,
+                )
+            )
+                throw new ValidationError(
+                    ErrorCode.VALIDATION_INVALID_INPUT,
+                    'A stock count approval requires the submitted count and version',
+                );
+            const count = await this.stockCounts
+                ?.findById(context.stockCount.countId)
+                .lean();
+            if (
+                !count ||
+                count.status !== StockCountStatus.SUBMITTED ||
+                count.version !== context.stockCount.version
+            )
+                throw new ConflictError(
+                    ErrorCode.CONFLICT,
+                    'Stock count changed. Reload it before requesting approval',
+                );
+            return stockCountContext(count);
+        }
         if (action === OverrideAction.DISCOUNT) {
             if (
                 !actor.roles.includes(Role.Seller) ||
@@ -453,10 +489,12 @@ export class ManagerOverrideService implements OnModuleInit {
                 overridePinVersion: grant.requesterVersion ?? null,
                 roles: {
                     $in:
-                        action === OverrideAction.DISCOUNT ||
-                        !actor.roles.includes(Role.Admin)
-                            ? [Role.Seller]
-                            : [Role.Admin],
+                        action === OverrideAction.STOCK_COUNT
+                            ? [Role.Adjuster, Role.Admin]
+                            : action === OverrideAction.DISCOUNT ||
+                                !actor.roles.includes(Role.Admin)
+                              ? [Role.Seller]
+                              : [Role.Admin],
                 },
             },
             { $inc: { overrideApprovalLock: 1 } },

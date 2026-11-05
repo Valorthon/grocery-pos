@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Product, type ProductDoc } from './product.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -62,6 +62,7 @@ export class ProductService {
     constructor(
         @InjectConnection() private connection: Connection,
         @InjectModel(Product.name) private model: Model<Product>,
+        @Inject(forwardRef(() => InventoryService))
         private inventoryService: InventoryService,
         private EANCounterService: EanCounterService,
         @Optional() private categories?: CategoryService,

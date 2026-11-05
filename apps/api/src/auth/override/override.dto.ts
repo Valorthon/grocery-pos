@@ -24,6 +24,7 @@ import {
     type OverrideReversalRequest,
     type SetOverridePinRequest,
 } from '@grocery-pos/contracts';
+import { StockCountVersionDto } from '../../stock-count/stock-count.dto';
 import { SellDto, ReverseSaleDto } from '../../sales/types/sales.dto';
 
 export class OverrideReversalDto
@@ -34,7 +35,20 @@ export class OverrideReversalDto
     saleId!: string;
 }
 
+export class OverrideStockCountDto
+    extends StockCountVersionDto
+    implements NonNullable<OverrideContextRequest['stockCount']>
+{
+    @IsMongoId() countId!: string;
+}
+
 export class OverrideContextDto implements OverrideContextRequest {
+    @IsOptional()
+    @IsObject()
+    @ValidateNested()
+    @Type(() => OverrideStockCountDto)
+    stockCount?: OverrideStockCountDto;
+
     @IsOptional()
     @IsObject()
     @ValidateNested()

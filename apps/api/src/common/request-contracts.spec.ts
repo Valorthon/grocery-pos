@@ -1,4 +1,16 @@
 import type {
+    CreateStockCountRequest,
+    SaveStockCountRequest,
+    StockCountLineInput,
+    StockCountVersionRequest,
+} from '@grocery-pos/contracts';
+import type {
+    CreateStockCountDto,
+    SaveStockCountDto,
+    StockCountLineDto,
+    StockCountVersionDto,
+} from '../stock-count/stock-count.dto';
+import type {
     CreateSupplierRequest,
     UpdateSupplierRequest,
 } from '@grocery-pos/contracts';
@@ -221,4 +233,17 @@ it('category request contracts match DTOs', () => {
     expect(keysMatch<UpdateCategoryDto, UpdateCategoryRequest>(true)).toBe(
         true,
     );
+});
+
+it('stock count request contracts match their bounded DTOs', () => {
+    expect(keysMatch<CreateStockCountDto, CreateStockCountRequest>(true)).toBe(
+        true,
+    );
+    expect(keysMatch<SaveStockCountDto, SaveStockCountRequest>(true)).toBe(
+        true,
+    );
+    expect(keysMatch<StockCountLineDto, StockCountLineInput>(true)).toBe(true);
+    expect(
+        keysMatch<StockCountVersionDto, StockCountVersionRequest>(true),
+    ).toBe(true);
 });

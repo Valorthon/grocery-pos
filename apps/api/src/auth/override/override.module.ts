@@ -1,3 +1,7 @@
+import {
+    StockCount,
+    StockCountSchema,
+} from '../../stock-count/stock-count.schema';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -19,6 +23,7 @@ import { ManagerOverrideService } from './override.service';
         RateLimitModule,
         ProductModule,
         MongooseModule.forFeature([
+            { name: StockCount.name, schema: StockCountSchema },
             { name: User.name, schema: UserSchema },
             { name: Sales.name, schema: SalesSchema },
             { name: Shift.name, schema: ShiftSchema },
