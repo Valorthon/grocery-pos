@@ -92,7 +92,10 @@ export function saleScope(
  */
 export function salesListFilter(
     scope: SaleScope,
-    dto: Pick<GetAllDto, 'cashier' | 'dateFrom' | 'dateTo'>,
+    dto: Pick<
+        GetAllDto,
+        'cashier' | 'dateFrom' | 'dateTo' | 'paymentType' | 'saleNumber'
+    >,
     timeZone: string,
 ): Record<string, unknown> | null {
     const filter: Record<string, unknown> = { ...scope };
@@ -103,6 +106,16 @@ export function salesListFilter(
         filter.cashier = cashier;
     }
 
+    if (dto.paymentType) filter.paymentType = dto.paymentType;
+    if (dto.saleNumber?.length === 24)
+        filter._id = new Types.ObjectId(dto.saleNumber);
+    else if (dto.saleNumber)
+        filter.$expr = {
+            $regexMatch: {
+                input: { $toString: '$_id' },
+                regex: `${dto.saleNumber}$`,
+            },
+        };
     const createdAt = dateRangeFilter(dto.dateFrom, dto.dateTo, timeZone);
     if (createdAt)
         filter.$or = [
@@ -163,10 +176,89 @@ export class SalesService {
             ? INTERNAL_SALE_FIELDS
             : { ...INTERNAL_SALE_FIELDS, ...CASHIER_HIDDEN_SALE_FIELDS };
 
+        if (dto.category) {
+            const [pageResult] = await this.model.aggregate<{
+                data: SaleRowDoc[];
+                total: { count: number }[];
+            }>([
+                { $match: filter },
+                {
+                    $lookup: {
+                        from: 'salesdetails',
+                        localField: '_id',
+                        foreignField: 'sales',
+                        as: 'categoryMatch',
+                        pipeline: [
+                            {
+                                $lookup: {
+                                    from: 'products',
+                                    localField: 'product',
+                                    foreignField: '_id',
+                                    as: 'categoryProduct',
+                                    pipeline: [
+                                        {
+                                            $match: {
+                                                category: new Types.ObjectId(
+                                                    dto.category,
+                                                ),
+                                            },
+                                        },
+                                        { $project: { _id: 1 } },
+                                    ],
+                                },
+                            },
+                            {
+                                $match: {
+                                    'categoryProduct.0': { $exists: true },
+                                },
+                            },
+                            { $limit: 1 },
+                            { $project: { _id: 1 } },
+                        ],
+                    },
+                },
+                { $match: { 'categoryMatch.0': { $exists: true } } },
+                {
+                    $facet: {
+                        data: [
+                            { $sort: { createdAt: -1, _id: -1 } },
+                            { $skip: skip },
+                            { $limit: limit },
+                            {
+                                $lookup: {
+                                    from: 'users',
+                                    localField: 'cashier',
+                                    foreignField: '_id',
+                                    as: 'cashier',
+                                    pipeline: [{ $project: { name: 1 } }],
+                                },
+                            },
+                            {
+                                $set: {
+                                    cashier: {
+                                        $ifNull: [
+                                            { $arrayElemAt: ['$cashier', 0] },
+                                            null,
+                                        ],
+                                    },
+                                },
+                            },
+                            { $project: { ...projection, categoryMatch: 0 } },
+                        ],
+                        total: [{ $count: 'count' }],
+                    },
+                },
+            ]);
+            return {
+                data: pageResult?.data ?? [],
+                totalItems: pageResult?.total[0]?.count ?? 0,
+            };
+        }
+
         const [data, totalItems] = await Promise.all([
             this.model
                 .find(filter, projection)
-                .sort({ createdAt: -1 })
+                .sort({ createdAt: -1, _id: -1 })
                 .skip(skip)
                 .limit(limit)
                 .populate<{ cashier: NameRef | null }>({

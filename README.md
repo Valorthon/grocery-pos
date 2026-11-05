@@ -381,6 +381,53 @@ while corresponding queued receipts could still be reconciled.
 Purchase orders are a separate owner-approved follow-up: #123. No user database
 migration or historical cost/supplier backfill is required by this first phase.
 
+## Sales reports and CSV (#44)
+
+ADMIN accounts can open **Sales Reports** and **Sales History** without a
+SELLER role. Reports group by store calendar day, product, managed category,
+cashier or payment type; SPLIT stays its own payment-type group. Presets use
+`GET /reports/options`'s store timezone and calendar date, not the device zone.
+Weeks start Monday. Custom date ranges include both dates and may contain at
+most 366 days.
+
+Reports use **event dates**: a sale is recorded at original `soldAt` (or legacy
+`createdAt`), and a later void/refund affects `reversal.at`, with original price,
+discount and cost snapshots. Prior sale periods are not restated. The existing
+dashboard retains original-sale-day totals excluding currently reversed sales;
+its explanatory note distinguishes this from event-date reports.
+
+Gross sales are before discounts; charged sales are gross less discounts; net
+sales subtract reversal events. Product/category discounts are allocated in
+integer centavos by largest remainder before filtering. Quantities are separate
+per measure, never a sum of pieces and kilograms. A transaction touching multiple
+product/category groups counts in each such group, but totals count it once.
+Category groups use current product assignments, including archived categories.
+
+Known COGS/margins use the latest-receipt basis, an estimate rather than FIFO or
+weighted average. Explicit zero is known; missing historical/offline cost remains
+unknown. Complete gross margin is absent when coverage is incomplete; the report
+instead labels its known-cost portion and unknown event-line count. Costs never
+reach cashier receipts through these endpoints, which are ADMIN-only.
+
+Original Z-reads remain immutable closing snapshots. The reconciliation panel
+shows original charges, reversal events, reversals of prior-period sales, and
+late offline occurrences, with a link to original shift reports and addenda.
+Calendar-period net must not be compared to an unadjusted closing snapshot or
+its drawer total without reconciling those dates and payout movements.
+
+`GET /reports/sales` and `/reports/sales.csv` accept `from`, `to`, `groupBy`, and
+optional `cashier`, `paymentType`, `category`. Indexed date matching precedes
+lookups; source rows are reduced through a cursor with bounded group memory.
+More than 10,000 groups is rejected, never silently truncated. CSV streams the
+same filters, starts with a UTF-8 BOM, uses ISO calendar-day keys and exact plain
+peso decimals, leaves unknown complete-margin cells empty, and neutralizes
+spreadsheet formulas in user text.
+
+Sales history uses `dateFrom`/`dateTo`, `cashier`, `paymentType`, `category` and
+`saleNumber` filters. The latter accepts a full 24-hex ID or final 8-hex receipt
+number; suffix collisions return all scoped matches. Seller history still only
+sees that cashier's current open shift. History displays both short and full IDs.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve

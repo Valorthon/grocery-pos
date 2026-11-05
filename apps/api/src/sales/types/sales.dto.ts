@@ -47,6 +47,7 @@ import {
     type SaleLineRequest,
     type SaleRequest,
     type Tender,
+    REPORT_LIMITS,
 } from '@grocery-pos/contracts';
 import { IsCalendarDate, IsNotBefore } from '../../common/validators';
 
@@ -271,6 +272,25 @@ export class ReceiptDto {
  * open shift" (`saleScope`), so naming another cashier returns nothing.
  */
 export class GetAllDto {
+    @IsOptional()
+    @IsEnum(PaymentType)
+    paymentType?: PaymentType;
+
+    @IsOptional()
+    @IsMongoId()
+    category?: string;
+
+    /** Full sale id or receipt suffix; suffix collisions return every matching row. */
+    @IsOptional()
+    @IsString()
+    @Matches(REPORT_LIMITS.SALE_SEARCH)
+    @Transform(({ value }) =>
+        typeof value === 'string'
+            ? value.trim().toLowerCase()
+            : (value as unknown),
+    )
+    saleNumber?: string;
+
     /** Only sales rung up by this user. */
     @IsOptional()
     @IsMongoId()

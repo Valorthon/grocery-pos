@@ -20,3 +20,4 @@ export * from './supplier.js';
 export * from './expiry.js';
 
 export * from './stock-count.js';
+export * from './reports.js';

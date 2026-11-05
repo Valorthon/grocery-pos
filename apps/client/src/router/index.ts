@@ -68,6 +68,12 @@ const routes: RouteRecordRaw[] = [
                 meta: { roles: [...DASHBOARD_ROLES] },
             },
             {
+                path: 'reports',
+                name: 'Reports',
+                component: () => import('@/views/User/Reports/Index.vue'),
+                meta: { roles: [Role.Admin] },
+            },
+            {
                 // Admins void and refund sales from here; sellers see the
                 // same view under /seller/orders.
                 path: 'sales',

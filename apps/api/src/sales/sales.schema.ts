@@ -292,6 +292,8 @@ SalesSchema.index(
 //   `find({ shift })` at close, so the schema no longer declares the
 //   single-field `shift_1`. Mongoose builds new indexes but never drops
 //   old ones: the README deploy notes say when to drop it.
+SalesSchema.index({ 'reversal.at': -1 });
+SalesSchema.index({ cashier: 1, soldAt: -1 });
 SalesSchema.index({ createdAt: -1 });
 SalesSchema.index({ cashier: 1, createdAt: -1 });
 SalesSchema.index({ shift: 1, createdAt: -1 });

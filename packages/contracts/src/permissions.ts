@@ -52,6 +52,16 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'View sales reports and export CSV',
+        roles: [Role.Admin],
+        routes: [
+            'GET /reports/options',
+            'GET /reports/sales',
+            'GET /reports/sales.csv',
+        ],
+        pages: ['Reports'],
+    },
+    {
         label: 'Count stock with manager approval',
         roles: [Role.Adjuster],
         routes: [

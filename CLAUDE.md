@@ -305,6 +305,35 @@ requestId}`. A 5xx never carries details or internals.
 - `startOfDayInZone` returns the first of two repeated midnights on a
   fall-back day (Amman 2021-10-29), searching back up to 3h.
 
+**Sales reports** (#44, owner decision 2026-11-05)
+
+- ADMIN-only JSON/CSV reports use event-date accounting: original sale occurrence
+  (`soldAt`, else `createdAt`) for gross/discount/COGS, `reversal.at` for later
+  void/refund net and original COGS. Do not restate prior sale dates. Existing
+  dashboard original-sale-day exclusion remains visibly distinguished.
+- Store-calendar inclusive ranges cap at 366 days. Presets use server-provided
+  timezone/today; weeks start Monday. Group by day/product/category/cashier/payment
+  type; SPLIT is a group, not allocated tenders. Mixed quantities stay per unit.
+- Allocate sale-level discounts by exact largest-remainder cents, stable detail
+  order, before product/category filtering. Group transaction counts can overlap;
+  report totals count each event once. Category assignment is current, archived
+  category names remain readable, and uncategorized has a stable bucket.
+- COGS uses original private latest-receipt snapshots and quantityAmount. Zero is
+  known, absence/null unknown; corrupt costs fail. Missing costs never become zero
+  or a complete gross-margin claim. Show known/unknown event-line coverage and
+  known-cost portion alongside nullable complete margin.
+- Original Z-reads remain immutable; reports identify original charges, reversal
+  events, prior-period reversals and late offline occurrences for reconciliation
+  with original shifts, drawer payouts and closing addenda. Do not falsely claim
+  calendar event totals equal unadjusted immutable closing snapshots.
+- Match indexed occurrence/reversal dates before lookups and use a cursor with
+  bounded group memory. Reject >10,000 groups instead of truncating. CSV has BOM,
+  ISO day keys, plain exact peso decimals and formula-safe user text; numeric
+  negative money stays numeric. ADMIN permissions apply to all report endpoints.
+- Sales history adds payment/category/full-or-eight-suffix sale-number filters,
+  preserving seller own-open-shift scoping. Suffix collisions return all matches;
+  details show full IDs. Requests page/retry on applied, not unsearched, filters.
+
 **Access**
 
 - An expired or invalid JWT gets 401, and every `AUTH_*` code maps to 401. Routes
