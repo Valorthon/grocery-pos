@@ -8,6 +8,10 @@
     >
         <div class="space-y-4">
             <template v-if="formData.isNewProduct">
+                <CategorySelect
+                    v-model="formData.category"
+                    :refresh-key="model"
+                />
                 <label class="block text-sm font-medium"
                     >Unit of measure
                     <select
@@ -125,6 +129,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
 import api from '@/axios';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import CategorySelect from '@/components/User/Product/CategorySelect.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -239,6 +244,7 @@ function setNewProduct(isNew: boolean) {
     picked.value = null;
     formData.EAN = '';
     formData.name = '';
+    formData.category = undefined;
     formData.price = '';
     formData.autoGenerateEAN = false;
     clearError('EAN', 'name', 'price');
@@ -252,6 +258,7 @@ watch(
         const item = props.item;
         const isNew = item?.isNewProduct ?? false;
         formData.isNewProduct = isNew;
+        formData.category = isNew ? item?.category : undefined;
         formData.autoGenerateEAN = isNew
             ? (item?.autoGenerateEAN ?? false)
             : false;
@@ -316,6 +323,7 @@ const handleSubmit = async () => {
         formData.isNewProduct || !picked.value
             ? {
                   isNewProduct: true,
+                  ...(formData.category && { category: formData.category }),
                   autoGenerateEAN: formData.autoGenerateEAN,
                   EAN: formData.EAN,
                   name: formData.name,

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Product, type ProductDoc } from './product.schema';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -22,6 +22,7 @@ import {
 } from '@grocery-pos/contracts';
 import { InventoryService } from '../inventory-man/inventory/inventory.service';
 import { AuthUser, Role } from '../auth/types';
+import { CategoryService } from '../category/category.service';
 import { EanCounterService } from '../ean-counter/ean-counter.service';
 import {
     ErrorCode,
@@ -63,6 +64,7 @@ export class ProductService {
         @InjectModel(Product.name) private model: Model<Product>,
         private inventoryService: InventoryService,
         private EANCounterService: EanCounterService,
+        @Optional() private categories?: CategoryService,
     ) {}
 
     async getByBarcode(dto: GetDto): Promise<ProductDoc> {
@@ -117,10 +119,27 @@ export class ProductService {
                             ErrorCode.PRODUCT_NOT_FOUND,
                             'Product not found',
                         );
+                    if (
+                        update.category &&
+                        new Types.ObjectId(update.category).toString() !==
+                            before.category?.toString()
+                    )
+                        await this.categories!.assertAssignable(
+                            update.category,
+                            session,
+                        );
                     await this.model.updateOne(
                         { _id: product },
                         {
-                            $set: update,
+                            $set: Object.fromEntries(
+                                Object.entries(update).filter(
+                                    ([key, value]) =>
+                                        !(key === 'category' && value === null),
+                                ),
+                            ),
+                            ...(update.category === null && {
+                                $unset: { category: 1 },
+                            }),
                             ...(update.price !== undefined &&
                                 update.price !== before.price && {
                                     $push: {
@@ -168,6 +187,7 @@ export class ProductService {
 
         const query = {
             ...productSearchFilter({ name, EAN }),
+            ...(dto.category && { category: new Types.ObjectId(dto.category) }),
             ...(dto.status === 'all'
                 ? {}
                 : {
@@ -224,6 +244,11 @@ export class ProductService {
 
         const withEANs = [];
         for (const product of products) {
+            if (product.category)
+                await this.categories!.assertAssignable(
+                    product.category,
+                    session,
+                );
             withEANs.push({
                 ...product,
                 EAN:

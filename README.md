@@ -312,6 +312,47 @@ shortfall for an admin to reconcile. Normal online checkout still refuses
 overselling. Server price proofs and bounded upload validation prevent using
 this path to invent prices or arbitrary product units.
 
+## Categories (#39)
+
+Admins manage categories under **Categories**: names are unique without regard to
+case, sort order controls their presentation, and archive/restore controls new
+assignments. RESTOCKER/ADJUSTER can read the list for product forms and filters;
+only ADMIN can change categories. Product category remains optional. Selling-price
+changes remain ADMIN-only, and product units cannot be changed.
+
+Archiving a category does not archive its products or prevent their sale. Existing
+assignments remain visible and can be retained when editing another product field.
+New assignments require an active category. A category referenced by **any** product,
+including an archived product, cannot be deleted: archive it instead. This preserves
+history and avoids dangling references. An unreferenced category may be deleted.
+
+### Migrate legacy category enum values before deploying
+
+The new product category is an ObjectId reference instead of an enum string.
+Back up the database, stop the API, and keep it stopped while applying the
+migration and deploying the matching API/client. Build contracts first. Point
+`DATABASE_URL` at the intended database explicitly:
+
+```bash
+pnpm migrate:categories           # dry run; lists product counts per old label
+pnpm migrate:categories --apply   # one atomic transaction; requires replica set
+```
+
+The migration upserts FOOD, DRINKS, ELECTRONICS, HOUSEHOLD and CLOTHES by their
+case-insensitive name keys and replaces matching product strings with the category
+ids. Existing matching categories are reused without changing names or status.
+Uncategorized products and current references are untouched. Unknown legacy
+strings cause refusal before any write: resolve them and rerun. Category-name key
+collisions fail instead of overwriting a category. The transaction rolls back on
+failure or interruption; `--apply` can safely rerun and retains the same references.
+Verify that no legacy string categories remain before starting the API. Do not
+run the old and new API together against this database. `pnpm seed` creates the
+same category documents and ObjectId references for development.
+
+Category data does not change signed offline price/unit proofs or completed cash
+receipts; pending offline receipts still sync/reconcile. Category reporting will
+use these references in #44.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve

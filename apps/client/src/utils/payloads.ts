@@ -29,6 +29,7 @@ import type {
 /** A new product draft as the product dialogs hold it. Money in centavos. */
 export interface ProductDraft {
     unit?: UnitOfMeasure;
+    category?: string;
     EAN: string;
     name: string;
     price: number;
@@ -71,6 +72,7 @@ export function toNewProduct(draft: ProductDraft): NewProductRequest {
         name: draft.name,
         price: draft.price,
         ...(draft.unit && { unit: draft.unit }),
+        ...(draft.category && { category: draft.category }),
     };
 }
 

@@ -1,5 +1,5 @@
 import type { DiscountInput } from '../discount.js';
-import type { Category, PaymentType } from '../enums.js';
+import type { PaymentType } from '../enums.js';
 import type { Role } from '../roles.js';
 import type { Tender } from '../sales.js';
 import type { BillCounts, CashierDrawerMovement } from '../shift.js';
@@ -126,7 +126,7 @@ export interface NewProductRequest {
     unit?: import('../enums.js').UnitOfMeasure;
     EAN?: string;
     name: string;
-    category?: Category;
+    category?: string;
     /** Centavos. */
     price: number;
 }
@@ -206,7 +206,7 @@ export interface ManagerOverrideRequest {
 export interface ProductUpdateRequest {
     name?: string;
     price?: number;
-    category?: Category;
+    category?: string | null;
     isActive?: boolean;
 }
 export interface ProductUpdateLineRequest {

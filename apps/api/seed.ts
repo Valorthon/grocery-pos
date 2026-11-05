@@ -37,7 +37,15 @@ import {
     RefreshToken,
     RefreshTokenSchema,
 } from './src/auth/refresh-token/refresh-token.schema';
-import { Category } from './src/product/types';
+import { LEGACY_CATEGORY_NAMES } from '@grocery-pos/contracts';
+import {
+    Category as CategoryModel,
+    CategorySchema,
+} from './src/category/category.schema';
+const Category = Object.fromEntries(
+    LEGACY_CATEGORY_NAMES.map((name) => [name, name]),
+);
+const category = mongoose.model(CategoryModel.name, CategorySchema);
 import {
     assertSeedAllowed,
     describeDatabase,
@@ -158,6 +166,16 @@ async function seedUser() {
 }
 
 async function seedProduct() {
+    await category.deleteMany({});
+    const categoryRows = await category.insertMany(
+        LEGACY_CATEGORY_NAMES.map((name, sortOrder) => ({
+            name,
+            nameKey: name.toLowerCase(),
+            isActive: true,
+            sortOrder,
+        })),
+    );
+    const categoryIds = new Map(categoryRows.map((row) => [row.name, row._id]));
     const productData = [
         { name: 'BREAD', category: Category.FOOD },
         { name: 'APPLES', category: Category.FOOD },
@@ -190,7 +208,7 @@ async function seedProduct() {
     const products = productData.map((item) => ({
         EAN: (currentEAN++).toString(),
         name: item.name,
-        category: item.category,
+        category: categoryIds.get(item.category),
         price: randomInt(1_000, 100_000), // centavos: ₱10.00 to ₱999.99
     }));
 

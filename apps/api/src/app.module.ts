@@ -9,6 +9,7 @@ import { JWTAuthGuard } from './auth/guards/jwt.guard';
 import { RoleGuard } from './auth/guards/role.guard';
 import { RefreshTokenModule } from './auth/refresh-token/refresh-token.module';
 import { GlobalFilter } from './common/global/global.filter';
+import { CategoryModule } from './category/category.module';
 import { ProductModule } from './product/product.module';
 import { InventoryModule } from './inventory-man/inventory/inventory.module';
 import { RestockModule } from './inventory-man/restock/restock.module';
@@ -43,6 +44,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
         RefreshTokenModule,
         UserModule,
         ProductModule,
+        CategoryModule,
         InventoryModule,
         RestockModule,
         AdjustmentModule,

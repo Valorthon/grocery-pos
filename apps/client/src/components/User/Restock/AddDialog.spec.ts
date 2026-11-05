@@ -334,7 +334,12 @@ it('accepts a decimal kg delivery and emits integer grams at cost per kg', async
 it('offers one unit selector for a new measured product and uses it for the delivery', async () => {
     await open();
     await check('This is a new product', true);
-    const selectors = document.querySelectorAll('select');
+    const selectors = [...document.querySelectorAll('select')].filter(
+        (select) =>
+            [...select.options].some(
+                (option) => option.value === String(UnitOfMeasure.KG),
+            ),
+    );
     expect(selectors).toHaveLength(1);
     selectors[0].value = UnitOfMeasure.KG;
     selectors[0].dispatchEvent(new Event('change', { bubbles: true }));

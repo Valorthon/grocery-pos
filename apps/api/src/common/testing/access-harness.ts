@@ -57,7 +57,7 @@ export interface AccessHarness {
     /** Sends a request to `/v1${path}` signed in as `caller`. */
     call(
         caller: Caller,
-        method: 'GET' | 'POST' | 'PATCH',
+        method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
         path: string,
         body?: unknown,
         headers?: Record<string, string>,

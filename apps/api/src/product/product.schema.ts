@@ -1,7 +1,6 @@
 import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import type { Types } from 'mongoose';
-import { Category } from './types';
+import { Schema as MongooseSchema, Types } from 'mongoose';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
 @Schema({ timestamps: true })
@@ -64,10 +63,10 @@ export class Product {
 
     @Prop({
         required: false,
-        enum: Object.values(Category),
-        type: String,
+        type: MongooseSchema.Types.ObjectId,
+        ref: 'Category',
     })
-    category!: Category;
+    category?: Types.ObjectId;
 }
 
 export const ProductSchema = SchemaFactory.createForClass(Product);

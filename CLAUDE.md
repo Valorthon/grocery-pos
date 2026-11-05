@@ -663,3 +663,19 @@ the product owner picks.
   Offline catalog pages retain archived cursor entries as tombstones with empty
   proof; clients remove cached availability. Already-collected signed offline
   receipts still sync/reconcile under #37's policy.
+
+**Categories** (#39)
+
+- ADMIN manages category names, sort order and archive/restore. Product roles
+  can read bounded category lists for forms/filters; prices stay ADMIN-only.
+- Product category is an optional ObjectId. New assignment locks an active
+  category in the product transaction, serializing archive/delete with assignment.
+  Unchanged archived assignments and explicit clearing remain valid. Category
+  archival does not archive products or stop their sale. Referenced categories
+  cannot be deleted, including references from archived products.
+- Name keys are unique case-insensitively and private. Category wire responses
+  omit internal assignment counters. Product lists filter by category id.
+- Before deploy, stop the API, back up, dry-run/apply `migrate:categories`, then
+  deploy the matching API/client. Legacy enum strings map atomically to reusable
+  category documents; unknown strings fail before writes and reruns are safe.
+  See README. Category reporting integration stays #44.

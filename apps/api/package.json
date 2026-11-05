@@ -21,7 +21,8 @@
         "test:db": "jest --config jest.db.config.ts --runInBand",
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "dev": "nest start --watch",
-        "lint:fix": "eslint . --fix"
+        "lint:fix": "eslint . --fix",
+        "migrate:categories": "ts-node migrate-categories.ts"
     },
     "dependencies": {
         "@grocery-pos/contracts": "workspace:*",

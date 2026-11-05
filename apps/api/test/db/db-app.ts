@@ -84,7 +84,7 @@ export interface DbApp {
     /** Sends a request to `/v1${path}` signed in as `who`. */
     call(
         who: Caller,
-        method: 'GET' | 'POST' | 'PATCH',
+        method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
         path: string,
         body?: unknown,
         headers?: Record<string, string>,

@@ -1,4 +1,4 @@
-import type { Category, UnitOfMeasure } from '../enums.js';
+import type { UnitOfMeasure } from '../enums.js';
 import type { WireShape } from '../wire-shape.js';
 import type { UserRef } from './users.js';
 
@@ -28,7 +28,8 @@ export interface ProductView {
     name: string;
     /** Centavos. */
     price: number;
-    category?: Category;
+    /** Category ObjectId; absent means uncategorized. */
+    category?: string;
     createdAt: string;
     updatedAt: string;
 }

@@ -31,6 +31,7 @@
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
             />
+            <CategorySelect v-model="formData.category" :refresh-key="model" />
             <label class="block text-sm font-medium"
                 >Unit of measure
                 <select
@@ -74,6 +75,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
 import api from '@/axios';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import CategorySelect from '@/components/User/Product/CategorySelect.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -91,6 +93,7 @@ import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
 const props = defineProps<{
     modelValue: boolean;
     item?: {
+        category?: string;
         unit?: UnitOfMeasure;
         EAN?: string;
         autoGenerateEAN?: boolean;
@@ -129,6 +132,7 @@ watch(
     () => props.modelValue,
     (open) => {
         if (open) {
+            formData.category = props.item?.category;
             formData.unit = props.item?.unit ?? UnitOfMeasure.PIECE;
             formData.EAN = props.item?.EAN ?? '';
             formData.name = props.item?.name ?? '';

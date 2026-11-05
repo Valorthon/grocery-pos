@@ -52,6 +52,22 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'Manage categories',
+        roles: [Role.Admin],
+        routes: [
+            'POST /categories',
+            'PATCH /categories/:id',
+            'DELETE /categories/:id',
+        ],
+        pages: ['Categories'],
+    },
+    {
+        label: 'Look up categories',
+        roles: [Role.Restocker, Role.Adjuster],
+        routes: ['GET /categories'],
+        pages: ['Products'],
+    },
+    {
         label: 'Prepare and sync offline cash sales',
         roles: [Role.Seller],
         ownRoleOnly: true,
