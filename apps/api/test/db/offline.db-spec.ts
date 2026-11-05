@@ -145,6 +145,25 @@ it('preserves signed cached price after an online price edit, original time and 
     expect(stored?.soldAt?.toISOString()).toBe(body.soldAt);
     expect(stored?.offline).toBe(true);
 });
+
+it('preserves the server lease identity for delayed uploads after store identity changes', async () => {
+    expect(lease.storeIdentity?.storeName).toBeTruthy();
+    await db
+        .model('Settings')
+        .updateOne(
+            { key: 'store' },
+            { $set: { storeName: 'Changed after lease' } },
+        );
+    const result = await read<Receipt>(
+        await db.call(seller, 'POST', '/offline/sync', body),
+    );
+    expect(result.status).toBe(201);
+    expect(result.body.storeIdentity).toEqual(lease.storeIdentity);
+    const replay = await read<Receipt>(
+        await db.call(seller, 'POST', '/offline/sync', body),
+    );
+    expect(replay.body.storeIdentity).toEqual(lease.storeIdentity);
+});
 it('replays lost-response and simultaneous uploads exactly once', async () => {
     const results = await Promise.all(
         [1, 2, 3].map(() =>

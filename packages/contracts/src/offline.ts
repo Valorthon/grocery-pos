@@ -1,3 +1,4 @@
+import type { ReceiptStoreIdentity } from './settings.js';
 import type { UnitOfMeasure } from './enums.js';
 import type { CurrentShiftView } from './shift.js';
 import type { Receipt } from './wire/sales.js';
@@ -19,6 +20,7 @@ export interface OfflineLeaseRequest {
     terminalId: string;
 }
 export interface OfflineLeaseView {
+    storeIdentity?: ReceiptStoreIdentity;
     _id: string;
     cashier: string;
     cashierName: string;
@@ -62,6 +64,7 @@ export interface OfflineAddendum {
     netCash: number;
 }
 export const OFFLINE_LEASE_SHAPE: WireShape<OfflineLeaseView> = {
+    storeIdentity: 'optional',
     _id: 'required',
     cashier: 'required',
     cashierName: 'required',

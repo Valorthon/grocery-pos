@@ -1,3 +1,8 @@
+import { SettingsService } from '../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { StockMovementService } from '../stock-movement/stock-movement.service';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { receiptCost } from '../supplier/cost';
@@ -18,6 +23,7 @@ import {
     ShiftStatus,
     TenderType,
     UnitOfMeasure,
+    receiptStoreIdentity,
     maxQuantityForAmount,
     quantityAmount,
     type AuthUser,
@@ -119,6 +125,9 @@ export class OfflineService {
         @InjectModel(OfflineCost.name) private costQuotes: Model<OfflineCost>,
         @Optional() private batches?: InventoryBatchService,
         @Optional() private ledger?: StockMovementService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
 
     private async currentSession(actor: AuthUser, session?: ClientSession) {
@@ -146,6 +155,7 @@ export class OfflineService {
         dto: OfflineLeaseDto,
     ): Promise<OfflineLeaseView> {
         return runInTransaction(async (session) => {
+            const store = await this.settings?.lockContext(session);
             const user = await this.seller(actor, session);
             const auth = await this.currentSession(actor, session);
             if (!auth) throw reconcile();
@@ -190,6 +200,14 @@ export class OfflineService {
                                 issuedAt: new Date(),
                                 expiresAt: auth.expiry,
                                 securityVersion: user.overridePinVersion,
+                                ...(store
+                                    ? {
+                                          storeIdentity: receiptStoreIdentity(
+                                              store,
+                                              shift.terminal,
+                                          ),
+                                      }
+                                    : {}),
                             },
                         ],
                         { session },
@@ -197,6 +215,9 @@ export class OfflineService {
                 )[0];
             if (doc.expiresAt.getTime() <= Date.now()) throw reconcile();
             return {
+                ...(doc.storeIdentity
+                    ? { storeIdentity: doc.storeIdentity }
+                    : {}),
                 _id: String(doc._id),
                 cashier: actor.userId,
                 cashierName: user.name,
@@ -598,6 +619,9 @@ export class OfflineService {
                 const [sale] = await this.sales.create(
                     [
                         {
+                            ...(lease.storeIdentity
+                                ? { storeIdentity: lease.storeIdentity }
+                                : {}),
                             cashier: cashier._id,
                             shift: shift._id,
                             amount: subtotal,

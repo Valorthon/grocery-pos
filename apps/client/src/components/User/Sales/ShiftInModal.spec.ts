@@ -135,6 +135,7 @@ describe('ShiftInModal (issue #25)', () => {
         await submit();
 
         expect(api.post).toHaveBeenCalledWith('/shifts', {
+            terminal: 'Lane #1',
             counts: { '1000': 2, '500': 1, 'coin-25c': 1 },
         });
         expect(shift.shiftInOpen).toBe(false);

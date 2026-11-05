@@ -330,6 +330,9 @@ export const useOfflineStore = defineStore('offline', () => {
             throw new Error('Cash tender does not cover the cached total.');
         const soldAt = new Date().toISOString();
         const receipt: Receipt = {
+            ...(saved.lease.storeIdentity
+                ? { storeIdentity: saved.lease.storeIdentity }
+                : {}),
             _id: body.idempotencyKey,
             createdAt: soldAt,
             status: SaleStatus.COMPLETED,

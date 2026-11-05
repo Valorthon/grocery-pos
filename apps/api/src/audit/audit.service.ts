@@ -1,3 +1,8 @@
+import { SettingsService } from '../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
@@ -28,6 +33,9 @@ export class AuditService implements OnModuleInit {
     constructor(
         @InjectModel(AuditLog.name) private model: Model<AuditLog>,
         private config: TypedConfigService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
     async onModuleInit(): Promise<void> {
         await this.model.init();
@@ -63,7 +71,9 @@ export class AuditService implements OnModuleInit {
         const range = dateRangeFilter(
             dto.from,
             dto.to,
-            this.config.get('STORE_TIMEZONE'),
+            this.settings
+                ? await this.settings.timezone()
+                : this.config.get('STORE_TIMEZONE'),
         );
         if (range) filter.createdAt = range;
         const [rows, totalItems] = await Promise.all([

@@ -66,6 +66,8 @@ export const DrawerMovementSchema =
  */
 @Schema({ timestamps: true })
 export class Shift {
+    @Prop({ type: Object })
+    storeSettings?: import('@grocery-pos/contracts').StoreSettings;
     @Prop({ type: Number }) lateOfflineCount?: number;
     @Prop({ type: Number, default: 0, select: false })
     offlineLeaseLock?: number;

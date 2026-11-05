@@ -2,6 +2,7 @@ import type { WireShape } from './wire-shape.js';
 
 /** Business events only: credentials, session tokens and raw requests are never audit data. */
 export enum AuditAction {
+    SETTINGS_UPDATED = 'SETTINGS.UPDATED',
     USER_CREATED = 'USER.CREATED',
     USER_UPDATED = 'USER.UPDATED',
     USER_ROLE_CHANGED = 'USER.ROLE_CHANGED',

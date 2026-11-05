@@ -213,6 +213,7 @@ export interface ZReadDrawer {
  *   overShort   = countedCash - expectedCash
  */
 export interface ZReadReport {
+    storeIdentity?: import('./settings.js').ReceiptStoreIdentity;
     /** Supplemental late uploads; the stored closing figures stay unchanged. */
     offlineAddendum?: { count: number; netCash: number };
     shiftId: string;

@@ -52,6 +52,8 @@
 </template>
 
 <script setup lang="ts">
+import { useStoreSettings } from '@/composables/useStoreSettings';
+useStoreSettings();
 import {
     computed,
     onBeforeUnmount,

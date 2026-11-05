@@ -244,6 +244,7 @@ export class ReceiptDiscount {
 }
 
 export class ReceiptDto {
+    storeIdentity?: import('@grocery-pos/contracts').ReceiptStoreIdentity;
     /** The sale's id, to look it up later. */
     _id!: string;
     createdAt!: Date;

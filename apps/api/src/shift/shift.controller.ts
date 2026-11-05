@@ -50,7 +50,7 @@ export class ShiftController {
         @CurrentUser() user: AuthUser,
         @Body() dto: OpenShiftDto,
     ): Promise<CurrentShiftView> {
-        return await this.service.open(user, dto.counts);
+        return await this.service.open(user, dto.counts, dto.terminal);
     }
 
     @Get('current')

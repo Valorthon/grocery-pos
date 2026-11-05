@@ -1,3 +1,8 @@
+import { SettingsService } from '../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, type PipelineStage } from 'mongoose';
@@ -316,9 +321,14 @@ export class ReportsService {
     constructor(
         @InjectModel(Sales.name) private sales: Model<Sales>,
         private config: TypedConfigService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
-    options(): ReportOptions {
-        const timeZone = this.config.get('STORE_TIMEZONE');
+    async options(): Promise<ReportOptions> {
+        const timeZone = this.settings
+            ? await this.settings.timezone()
+            : this.config.get('STORE_TIMEZONE');
         return {
             timeZone,
             today: isoDay(new Date(), timeZone),
@@ -327,7 +337,9 @@ export class ReportsService {
     }
 
     async salesReport(dto: SalesReportQuery): Promise<SalesReport> {
-        const timeZone = this.config.get('STORE_TIMEZONE');
+        const timeZone = this.settings
+            ? await this.settings.timezone()
+            : this.config.get('STORE_TIMEZONE');
         const cursor = this.sales
             .aggregate<ReportSale>(reportPipeline(dto, timeZone))
             .allowDiskUse(true)

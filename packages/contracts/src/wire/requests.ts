@@ -101,6 +101,7 @@ export interface ReverseSaleRequest {
 
 /** `POST /shifts`: the counted opening float. */
 export interface OpenShiftRequest {
+    terminal?: string;
     counts: BillCounts;
 }
 

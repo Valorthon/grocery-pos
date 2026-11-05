@@ -1,3 +1,4 @@
+import { useSettingsStore } from './settings';
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { isAxiosError } from 'axios';
@@ -137,6 +138,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     const clearUser = (): void => {
         user.value = null;
+        useSettingsStore().setOwner(undefined);
         localStorage.removeItem(USER_STORAGE_KEY);
     };
 

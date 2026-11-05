@@ -1,3 +1,8 @@
+import { SettingsService } from '../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { InventoryBatchService } from '../inventory-man/batch/batch.service';
 import { Optional } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
@@ -124,6 +129,9 @@ export class DashboardService {
         private adjustmentModel: Model<Adjustment>,
         private config: TypedConfigService,
         @Optional() private batches?: InventoryBatchService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
 
     /**
@@ -135,7 +143,9 @@ export class DashboardService {
     async getDashboard({
         includeMoney,
     }: DashboardOptions): Promise<DashboardResponse> {
-        const timeZone = this.config.get('STORE_TIMEZONE');
+        const timeZone = this.settings
+            ? await this.settings.timezone()
+            : this.config.get('STORE_TIMEZONE');
         const { start: startOfDay, end: endOfDay } = dayRangeInZone(
             calendarDateInZone(new Date(), timeZone),
             timeZone,

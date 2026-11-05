@@ -1,3 +1,8 @@
+import { SettingsService } from '../../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
@@ -25,6 +30,9 @@ export class InventoryBatchService implements OnModuleInit {
         @InjectModel(Product.name) private products: Model<Product>,
         @InjectModel(Inventory.name) private inventories: Model<Inventory>,
         private config: TypedConfigService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
     async assertCanChangeTracking(
         product: Types.ObjectId,
@@ -42,9 +50,12 @@ export class InventoryBatchService implements OnModuleInit {
     async onModuleInit() {
         await this.batches.init();
     }
-    today(at = new Date()): string {
+    today(
+        at = new Date(),
+        timezone = this.config.get('STORE_TIMEZONE'),
+    ): string {
         const parts = new Intl.DateTimeFormat('en-CA', {
-            timeZone: this.config.get('STORE_TIMEZONE'),
+            timeZone: timezone,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -113,12 +124,18 @@ export class InventoryBatchService implements OnModuleInit {
         session: ClientSession,
     ): Promise<BatchAllocation[]> {
         if (!(await this.tracked(product, session))) return [];
+        const today = this.today(
+            new Date(),
+            this.settings
+                ? await this.settings.timezone(session)
+                : this.config.get('STORE_TIMEZONE'),
+        );
         const rows = await this.batches
             .find({
                 product,
                 remainingQty: { $gt: 0 },
                 reconciliation: { $ne: true },
-                expiryDate: { $gte: this.today() },
+                expiryDate: { $gte: today },
             })
             .sort({ expiryDate: 1, createdAt: 1, _id: 1 })
             .session(session)
@@ -294,10 +311,16 @@ export class InventoryBatchService implements OnModuleInit {
         product?: string;
         expiring?: boolean;
     }): Promise<Paginated<InventoryBatchView>> {
+        const today = this.today(
+            new Date(),
+            this.settings
+                ? await this.settings.timezone()
+                : this.config.get('STORE_TIMEZONE'),
+        );
         const query: Record<string, unknown> = { remainingQty: { $ne: 0 } };
         if (dto.product) query.product = id(dto.product);
         if (dto.expiring) {
-            const date = new Date(`${this.today()}T00:00:00Z`);
+            const date = new Date(`${today}T00:00:00Z`);
             date.setUTCDate(
                 date.getUTCDate() + (dto.days ?? EXPIRY_LIMITS.DEFAULT_DAYS),
             );
@@ -337,7 +360,7 @@ export class InventoryBatchService implements OnModuleInit {
                     expiryDate: row.expiryDate,
                     daysLeft: Math.round(
                         (Date.parse(`${row.expiryDate}T00:00:00Z`) -
-                            Date.parse(`${this.today()}T00:00:00Z`)) /
+                            Date.parse(`${today}T00:00:00Z`)) /
                             86400000,
                     ),
                 }),

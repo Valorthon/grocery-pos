@@ -16,6 +16,8 @@
 </template>
 
 <script setup lang="ts">
+import { useStoreSettings } from '@/composables/useStoreSettings';
+useStoreSettings();
 import { ref, onMounted } from 'vue';
 import OfflineStatus from '@/components/User/Sales/OfflineStatus.vue';
 import { useOfflineStore } from '@/stores/offline';

@@ -36,13 +36,19 @@
                     <div
                         class="w-8 h-8 rounded-lg bg-slate-900 text-white font-extrabold text-sm flex items-center justify-center mx-auto"
                     >
-                        G
+                        {{ identity.storeName.charAt(0) || 'G' }}
                     </div>
                     <h3
                         class="font-bold text-sm tracking-widest text-slate-900 uppercase"
                     >
-                        Grocery POS
+                        {{ identity.storeName }}
                     </h3>
+                    <p v-if="identity.branchName">{{ identity.branchName }}</p>
+                    <p v-if="identity.address">{{ identity.address }}</p>
+                    <p v-if="identity.contactNumber">
+                        {{ identity.contactNumber }}
+                    </p>
+                    <p v-if="identity.tin">TIN {{ identity.tin }}</p>
                 </div>
 
                 <div
@@ -55,7 +61,7 @@
                             >{{ formattedDate }}</time
                         >
                         <span data-testid="receipt-terminal">{{
-                            DEFAULT_TERMINAL
+                            identity.terminalLabel
                         }}</span>
                     </div>
                     <div class="flex justify-between gap-2">
@@ -189,7 +195,7 @@
                     class="border-t border-dashed border-slate-300 pt-3 text-center space-y-1.5"
                 >
                     <p class="text-xs text-slate-400">
-                        Thank you for shopping at Grocery POS!
+                        {{ identity.receiptFooter }}
                     </p>
                 </div>
             </div>
@@ -205,6 +211,7 @@
 </template>
 
 <script setup lang="ts">
+import { storePresentation, terminalLabel } from '@/settings/presentation';
 import {
     formatQuantity,
     UnitOfMeasure,
@@ -217,7 +224,7 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import type { Receipt } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
 import { paymentLabel, tenderLabel } from './checkout';
-import { DEFAULT_TERMINAL, DiscountType } from '@grocery-pos/contracts';
+import { DiscountType, receiptStoreIdentity } from '@grocery-pos/contracts';
 import { formatStoreDateTime } from '@/utils/datetime';
 import { hasCashTender, saleNumber } from './receipt';
 
@@ -265,8 +272,13 @@ const methodLabel = computed(() =>
 
 // The server's time for this sale, in the store's timezone: each receipt
 // shows its own sale's time, never the time it was opened (issue #24).
+const identity = computed(
+    () =>
+        props.receipt?.storeIdentity ??
+        receiptStoreIdentity(storePresentation.value, terminalLabel.value),
+);
 const formattedDate = computed(() =>
-    formatStoreDateTime(props.receipt?.createdAt),
+    formatStoreDateTime(props.receipt?.createdAt, identity.value.timezone),
 );
 
 const number = computed(() => saleNumber(props.receipt?._id));

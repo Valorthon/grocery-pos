@@ -1,3 +1,8 @@
+import { SettingsService } from '../../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { InventoryBatchService } from '../batch/batch.service';
 import { Optional } from '@nestjs/common';
@@ -38,6 +43,9 @@ export class RestockService {
         private productService: ProductService,
         private suppliers: SupplierService,
         @Optional() private batches?: InventoryBatchService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
 
     async restock(
@@ -156,7 +164,9 @@ export class RestockService {
         const createdAt = dateRangeFilter(
             dateFrom,
             dateTo,
-            this.config.get('STORE_TIMEZONE'),
+            this.settings
+                ? await this.settings.timezone()
+                : this.config.get('STORE_TIMEZONE'),
         );
         if (createdAt) {
             query.createdAt = createdAt;

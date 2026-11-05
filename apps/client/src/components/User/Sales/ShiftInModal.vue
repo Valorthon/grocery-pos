@@ -55,13 +55,10 @@
 </template>
 
 <script setup lang="ts">
+import { terminalLabel } from '@/settings/presentation';
 import { computed, ref, watch } from 'vue';
 import { ArrowRight, ShieldCheck } from '@lucide/vue';
-import {
-    billCountTotal,
-    DEFAULT_TERMINAL,
-    SHIFT_LIMITS,
-} from '@grocery-pos/contracts';
+import { billCountTotal, SHIFT_LIMITS } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
@@ -75,7 +72,7 @@ const shiftStore = useShiftStore();
 const authStore = useAuthStore();
 
 // A label until terminals get an identity of their own (#47).
-const terminal = DEFAULT_TERMINAL;
+const terminal = terminalLabel;
 const cashierName = computed(() => authStore.user?.username ?? 'cashier');
 
 const billCounts = ref<BillCounts>({});

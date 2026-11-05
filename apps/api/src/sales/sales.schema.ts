@@ -135,6 +135,8 @@ export const SaleReversalSchema = SchemaFactory.createForClass(SaleReversal);
 
 @Schema({ timestamps: true })
 export class Sales {
+    @Prop({ type: Object })
+    storeIdentity?: import('@grocery-pos/contracts').ReceiptStoreIdentity;
     @Prop({
         type: Number,
         min: NUMERIC_LIMITS.AMOUNT_MIN,

@@ -1,3 +1,4 @@
+import { SettingsModule } from './settings/settings.module';
 import { AuditModule } from './audit/audit.module';
 import { ReportsModule } from './reports/reports.module';
 import { StockCountModule } from './stock-count/stock-count.module';
@@ -32,6 +33,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
     imports: [
+        SettingsModule,
         AuditModule,
         ReportsModule,
         StockCountModule,
