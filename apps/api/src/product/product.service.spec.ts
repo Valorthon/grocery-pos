@@ -42,7 +42,14 @@ describe('ProductService.update', () => {
                 },
                 {
                     provide: getModelToken(Product.name),
-                    useValue: { updateOne },
+                    useValue: {
+                        updateOne,
+                        findById: () => ({
+                            session: () => ({
+                                lean: async () => ({ price: 1999 }),
+                            }),
+                        }),
+                    },
                 },
                 { provide: InventoryService, useValue: {} },
                 { provide: EanCounterService, useValue: {} },
@@ -177,18 +184,21 @@ describe('ProductService.getMatches', () => {
 
     it('matches a name fragment, with regex characters taken literally', async () => {
         expect(await queryFor({ name: 'c++ (1*' })).toEqual({
+            isActive: { $ne: false },
             name: { $regex: 'c\\+\\+ \\(1\\*' },
         });
     });
 
     it('matches a digits-only term against the name or part of the EAN', async () => {
         expect(await queryFor({ name: '0001' })).toEqual({
+            isActive: { $ne: false },
             $or: [{ name: { $regex: '0001' } }, { EAN: { $regex: '0001' } }],
         });
     });
 
     it('keeps the EAN prefix search for an explicit EAN', async () => {
         expect(await queryFor({ EAN: '200' })).toEqual({
+            isActive: { $ne: false },
             EAN: { $regex: '^200' },
         });
     });
@@ -537,7 +547,9 @@ describe('ProductService.getAll search (issue #14)', () => {
 
         const result = await service.getAll({ page: 1, limit: 5 } as GetAllDto);
 
-        expect(countDocuments).toHaveBeenCalledWith({});
+        expect(countDocuments).toHaveBeenCalledWith({
+            isActive: { $ne: false },
+        });
         expect(estimatedDocumentCount).not.toHaveBeenCalled();
         expect(result.totalItems).toBe(12);
     });
@@ -551,6 +563,7 @@ describe('ProductService.getAll search (issue #14)', () => {
         } as GetAllDto);
 
         expect(find.mock.calls[0][0]).toEqual({
+            isActive: { $ne: false },
             name: { $regex: 'c\\+\\+ milk' },
             EAN: { $regex: '^480' },
         });

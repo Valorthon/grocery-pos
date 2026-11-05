@@ -99,13 +99,14 @@ beforeEach(async () => {
     let item = catalogue.body.products.find((p) => p._id === product);
     let next = catalogue.body.next;
     while (!item && next) {
-        const page = await read<OfflineCatalogPage>(
-            await db.call(
-                seller,
-                'GET',
-                `/offline/catalog?lease=${lease._id}&after=${encodeURIComponent(next)}`,
-            ),
-        );
+        const page: { status: number; body: OfflineCatalogPage } =
+            await read<OfflineCatalogPage>(
+                await db.call(
+                    seller,
+                    'GET',
+                    `/offline/catalog?lease=${lease._id}&after=${encodeURIComponent(next)}`,
+                ),
+            );
         expect(page.status).toBe(200);
         item = page.body.products.find((p) => p._id === product);
         next = page.body.next;
@@ -466,4 +467,35 @@ it('lets admins reconcile signed historical barcodes after a correction without 
     expect(recorded?.reconciliationReason).toBe(
         'Barcode corrected after cash sale',
     );
+});
+it('sends archived product tombstones without new proofs and accepts already-collected cash', async () => {
+    expect(
+        (
+            await db.call(admin, 'PATCH', '/products', {
+                updates: [{ product, update: { isActive: false } }],
+            })
+        ).status,
+    ).toBe(200);
+    let after: string | null = null;
+    let archived: import('@grocery-pos/contracts').OfflineProduct | undefined;
+    do {
+        const page: { status: number; body: OfflineCatalogPage } =
+            await read<OfflineCatalogPage>(
+                await db.call(
+                    seller,
+                    'GET',
+                    `/offline/catalog?lease=${lease._id}${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+                ),
+            );
+        expect(page.status).toBe(200);
+        archived ??= page.body.products.find((p) => p._id === product);
+        after = page.body.next;
+    } while (after);
+    expect(archived).toMatchObject({ isActive: false, proof: '' });
+    const result = await read<Receipt>(
+        await db.call(seller, 'POST', '/offline/sync', body),
+    );
+    expect(result.status).toBe(201);
+    expect(result.body.totalAmount).toBe(8100);
+    expect(await stockOf(db, product)).toBe(0);
 });

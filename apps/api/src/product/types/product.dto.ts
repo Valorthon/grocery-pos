@@ -18,9 +18,13 @@ import {
     MaxLength,
     Min,
     ValidateNested,
+    ValidateIf,
     ArrayMaxSize,
 } from 'class-validator';
 import type {
+    ProductUpdateRequest,
+    ProductUpdateLineRequest,
+    UpdateProductsRequest,
     NewProductRequest,
     NewProductsRequest,
 } from '@grocery-pos/contracts';
@@ -123,8 +127,16 @@ export class GetDto {
     EAN!: string;
 }
 /** A product edit: at least one field, never an empty `$set` (issue #14). */
-@AtLeastOneOf(['name', 'price'])
-class UpdateFields {
+@AtLeastOneOf(['name', 'price', 'category', 'isActive'])
+export class UpdateFields implements ProductUpdateRequest {
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsBoolean()
+    isActive?: boolean;
+
+    @IsOptional()
+    @IsEnum(Category)
+    category?: Category;
+
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
@@ -139,7 +151,7 @@ class UpdateFields {
     @Max(NUMERIC_LIMITS.AMOUNT_MAX)
     price?: number;
 }
-class UpdateBulkFields {
+export class UpdateBulkFields implements ProductUpdateLineRequest {
     @IsNotEmpty()
     @IsMongoId()
     product!: string;
@@ -152,7 +164,7 @@ class UpdateBulkFields {
     @Type(() => UpdateFields)
     update!: UpdateFields;
 }
-export class UpdateBulkDto {
+export class UpdateBulkDto implements UpdateProductsRequest {
     @ValidateNested({ each: true })
     @Type(() => UpdateBulkFields)
     @IsArray()
@@ -162,6 +174,11 @@ export class UpdateBulkDto {
 }
 
 export class GetAllDto {
+    @IsOptional()
+    @IsEnum(['active', 'archived', 'all'])
+    @Trim()
+    status?: 'active' | 'archived' | 'all';
+
     /** Matched anywhere in the name. */
     @IsString()
     @IsOptional()

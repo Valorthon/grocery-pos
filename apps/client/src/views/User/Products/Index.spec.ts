@@ -8,7 +8,7 @@ import type { Router } from 'vue-router';
 import { Role } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
 
-const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
+const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 // The app's own route table answers `resolve`, so the Add button follows
 // the real Products/Add meta.
@@ -31,6 +31,7 @@ let app: App | null = null;
 
 beforeEach(() => {
     setActivePinia(createPinia());
+    api.patch.mockReset().mockResolvedValue({ data: null });
     api.get.mockReset().mockResolvedValue({
         data: {
             data: [
@@ -95,7 +96,9 @@ describe('product list search (issue #20)', () => {
         api.get.mockClear();
 
         await click('Next');
-        const size = document.querySelector('select')!;
+        const size = document
+            .querySelectorAll('select')
+            .item(document.querySelectorAll('select').length - 1)!;
         size.value = '25';
         size.dispatchEvent(new Event('change'));
         await flush();
@@ -128,7 +131,9 @@ describe('product list search (issue #20)', () => {
         await click('Next');
         api.get.mockClear();
 
-        const size = document.querySelector('select')!;
+        const size = document
+            .querySelectorAll('select')
+            .item(document.querySelectorAll('select').length - 1)!;
         size.value = '25';
         size.dispatchEvent(new Event('change'));
         await flush();
@@ -168,5 +173,171 @@ describe('Add Products button (issue #83)', () => {
     it('is hidden with no signed-in user', async () => {
         await mount();
         expect(addButton()).toBeUndefined();
+    });
+});
+
+describe('product editing and archival', () => {
+    beforeEach(() => {
+        useAuthStore().user = {
+            userId: 'admin',
+            username: 'admin',
+            roles: [Role.Admin],
+        };
+    });
+    it('sends changed prices in integer centavos and closes only after save', async () => {
+        await mount();
+        await click('Edit');
+        await type('Product name', 'new milk');
+        await type('Selling price (₱)', '65.25');
+        await click('Save');
+        expect(api.patch).toHaveBeenCalledWith('/products', {
+            updates: [
+                { product: 'p1', update: { name: 'new milk', price: 6525 } },
+            ],
+        });
+        expect(document.querySelector('[role=dialog]')).toBeNull();
+    });
+    it.each(['success', 'failure'] as const)(
+        'holds the editor open during a pending save and handles %s',
+        async (outcome) => {
+            let resolve!: (value: { data: null }) => void;
+            let reject!: (reason: Error) => void;
+            api.patch.mockImplementationOnce(
+                () =>
+                    new Promise((yes, no) => {
+                        resolve = yes;
+                        reject = no;
+                    }),
+            );
+            await mount();
+            await click('Edit');
+            await type('Selling price (₱)', '65.25');
+            await click('Save');
+            expect(api.patch).toHaveBeenCalledTimes(1);
+            expect(document.querySelector('[data-modal-close]')).toBeNull();
+            document.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+            );
+            await flush();
+            const dialog =
+                document.querySelector<HTMLElement>('[role=dialog]')!;
+            dialog.parentElement!.dispatchEvent(
+                new MouseEvent('mousedown', { bubbles: true }),
+            );
+            await flush();
+            await click('Cancel');
+            expect(document.querySelector('[role=dialog]')).not.toBeNull();
+            expect(api.patch).toHaveBeenCalledTimes(1);
+            if (outcome === 'success') {
+                resolve({ data: null });
+                await flush();
+                expect(document.querySelector('[role=dialog]')).toBeNull();
+            } else {
+                reject(new Error('network'));
+                await flush();
+                expect(document.querySelector('[role=dialog]')).not.toBeNull();
+                expect(document.querySelector('[role=alert]')).not.toBeNull();
+                expect(
+                    document.querySelector('[data-modal-close]'),
+                ).not.toBeNull();
+                await click('Save');
+                expect(api.patch).toHaveBeenCalledTimes(2);
+                expect(document.querySelector('[role=dialog]')).toBeNull();
+            }
+        },
+    );
+    it('restockers can edit names but are not offered price editing', async () => {
+        useAuthStore().user = {
+            userId: 'restock',
+            username: 'restock',
+            roles: [Role.Restocker],
+        };
+        await mount();
+        await click('Edit');
+        expect(document.body.textContent).not.toContain('Selling price (₱)');
+        await type('Product name', 'renamed milk');
+        await click('Save');
+        expect(api.patch).toHaveBeenCalledWith('/products', {
+            updates: [{ product: 'p1', update: { name: 'renamed milk' } }],
+        });
+    });
+    it('keeps failed edits open with an error', async () => {
+        api.patch.mockRejectedValue(new Error('network'));
+        await mount();
+        await click('Edit');
+        await click('Save');
+        expect(document.querySelector('[role=dialog]')).not.toBeNull();
+        expect(document.querySelector('[role=alert]')).not.toBeNull();
+    });
+    it('confirms archiving and cancellation does not write', async () => {
+        await mount();
+        await click('Archive');
+        await click('Cancel');
+        expect(api.patch).not.toHaveBeenCalled();
+        await click('Archive');
+        const buttons = [...document.querySelectorAll('[role=dialog] button')];
+        (
+            buttons.find(
+                (b) => b.textContent?.trim() === 'Archive',
+            ) as HTMLButtonElement
+        ).click();
+        await flush();
+        expect(api.patch).toHaveBeenCalledWith('/products', {
+            updates: [{ product: 'p1', update: { isActive: false } }],
+        });
+    });
+});
+
+it('validates product names and prices before saving', async () => {
+    useAuthStore().user = {
+        userId: 'admin',
+        username: 'admin',
+        roles: [Role.Admin],
+    };
+    await mount();
+    await click('Edit');
+    await type('Product name', ' ');
+    await click('Save');
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(document.querySelector('[role=alert]')?.textContent).toContain(
+        'name',
+    );
+    await type('Product name', 'milk');
+    await type('Selling price (₱)', '0');
+    await click('Save');
+    expect(api.patch).not.toHaveBeenCalled();
+    expect(document.querySelector('[role=alert]')?.textContent).toContain(
+        'price',
+    );
+});
+it('restores archived products after confirmation', async () => {
+    useAuthStore().user = {
+        userId: 'admin',
+        username: 'admin',
+        roles: [Role.Admin],
+    };
+    api.get.mockResolvedValue({
+        data: {
+            data: [
+                {
+                    _id: 'p1',
+                    EAN: '4006381333931',
+                    name: 'milk',
+                    price: 5000,
+                    isActive: false,
+                },
+            ],
+            totalItems: 1,
+        },
+    });
+    await mount();
+    await click('Restore');
+    const confirm = [...document.querySelectorAll('[role=dialog] button')].find(
+        (b) => b.textContent?.trim() === 'Restore',
+    ) as HTMLButtonElement;
+    confirm.click();
+    await flush();
+    expect(api.patch).toHaveBeenCalledWith('/products', {
+        updates: [{ product: 'p1', update: { isActive: true } }],
     });
 });

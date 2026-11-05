@@ -171,7 +171,10 @@ export const useOfflineStore = defineStore('offline', () => {
                 )
                     return;
                 const byId = new Map(current.products.map((p) => [p._id, p]));
-                for (const p of page.products) byId.set(p._id, p);
+                for (const p of page.products) {
+                    if (p.isActive === false) byId.delete(p._id);
+                    else byId.set(p._id, p);
+                }
                 const last = page.products[page.products.length - 1];
                 saved = {
                     ...current,

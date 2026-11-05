@@ -6,6 +6,25 @@ import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
 @Schema({ timestamps: true })
 export class Product {
+    @Prop({ type: Number, select: false })
+    saleVersion?: number;
+    @Prop({ type: Boolean, default: true })
+    isActive?: boolean;
+
+    @Prop({
+        type: [
+            { oldPrice: Number, newPrice: Number, changedBy: String, at: Date },
+        ],
+        default: undefined,
+        select: false,
+    })
+    priceHistory?: {
+        oldPrice: number;
+        newPrice: number;
+        changedBy: string;
+        at: Date;
+    }[];
+
     @Prop({
         type: String,
         enum: Object.values(UnitOfMeasure),

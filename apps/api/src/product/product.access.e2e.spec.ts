@@ -116,7 +116,12 @@ describe('Product route access by role (e2e)', () => {
                     endSession: () => undefined,
                 }),
         },
-        model: { updateOne },
+        model: {
+            updateOne,
+            findById: () => ({
+                session: () => ({ lean: async () => ({ price: 1999 }) }),
+            }),
+        },
     } as unknown as ProductService);
 
     const service = {

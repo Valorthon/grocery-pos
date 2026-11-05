@@ -31,7 +31,17 @@
                 @enter="applySearch"
                 @clear="applySearch"
             />
-            <div class="md:col-span-2 flex items-end gap-2">
+            <BaseSelect
+                v-model="status"
+                label="Status"
+                :options="[
+                    { value: 'active', label: 'Active' },
+                    { value: 'archived', label: 'Archived' },
+                    { value: 'all', label: 'All' },
+                ]"
+                @update:model-value="applySearch"
+            />
+            <div class="flex items-end gap-2">
                 <BaseButton size="sm" @click="applySearch">
                     <Search class="w-4 h-4" />
                     Search
@@ -59,17 +69,51 @@
                     formatCurrency(item.price) + '/' + unitLabel(item.unit)
                 }}</span>
             </template>
+            <template #cell-actions="{ item }">
+                <div v-if="canAddProducts" class="flex gap-2">
+                    <BaseButton size="sm" @click="editing = item"
+                        >Edit</BaseButton
+                    >
+                    <BaseButton
+                        size="sm"
+                        variant="outline"
+                        :disabled="saving"
+                        @click="archive(item)"
+                        >{{
+                            item.isActive === false ? 'Restore' : 'Archive'
+                        }}</BaseButton
+                    >
+                </div>
+            </template>
         </BaseTable>
+        <EditProductDialog
+            v-if="editing"
+            :product="editing"
+            :model-value="true"
+            @update:model-value="
+                (value) => {
+                    if (!value) editing = null;
+                }
+            "
+            @saved="fetchProducts"
+        />
+        <ConfirmDialog :request="request" @answer="answer" />
     </PageCard>
 </template>
 
 <script setup lang="ts">
-import { unitLabel, type UnitOfMeasure } from '@grocery-pos/contracts';
+import { unitLabel } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Plus, Search, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import EditProductDialog from '@/components/User/Product/EditProductDialog.vue';
+import BaseSelect from '@/components/ui/BaseSelect.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import { useConfirm } from '@/composables/useConfirm';
+import { useUIStore, Color } from '@/stores/ui';
+import { apiErrorText } from '@/utils/api-error';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -97,9 +141,44 @@ const { page, limit, search } = useListPaging(() => fetchProducts());
 const totalItems = ref(0);
 const searchName = ref('');
 const searchEAN = ref('');
+const status = ref<string | number | null>('active');
+const editing = ref<ProductListRow | null>(null);
+const saving = ref(false);
+const { request, confirm, answer } = useConfirm();
+async function archive(item: ProductListRow) {
+    if (saving.value) return;
+    const restore = item.isActive === false;
+    if (
+        !(await confirm({
+            title: restore ? 'Restore product?' : 'Archive product?',
+            message: restore
+                ? `Restore ${item.name} for sale?`
+                : `Discontinue ${item.name}? Past records will be retained.`,
+            confirmLabel: restore ? 'Restore' : 'Archive',
+            danger: !restore,
+        }))
+    )
+        return;
+    saving.value = true;
+    try {
+        await api.patch('/products', {
+            updates: [{ product: item._id, update: { isActive: restore } }],
+        });
+        await fetchProducts();
+    } catch (cause) {
+        useUIStore().queueMessage(Color.ERROR, apiErrorText(cause));
+    } finally {
+        saving.value = false;
+    }
+}
+
 // What the list was last searched for: paging and Retry reuse it.
 const { applied, apply: applySearch } = useAppliedFilters(
-    () => ({ name: searchName.value, EAN: searchEAN.value }),
+    () => ({
+        name: searchName.value,
+        EAN: searchEAN.value,
+        status: status.value,
+    }),
     search,
 );
 
@@ -107,22 +186,19 @@ const headers = [
     { key: 'EAN', title: 'EAN' },
     { key: 'name', title: 'Name' },
     { key: 'price', title: 'Price', align: 'right' as const },
+    { key: 'actions', title: 'Actions' },
 ];
 
 /** A row of the products table. */
-interface ProductListRow {
+interface ProductListRow extends ProductView {
     id: string;
-    EAN: string;
-    name: string;
-    /** Centavos. */
-    price: number;
-    unit?: UnitOfMeasure;
 }
 
 const serverItems = ref<ProductListRow[]>([]);
 
 const resetFilters = () => {
     searchEAN.value = '';
+    status.value = 'active';
     searchName.value = '';
     applySearch();
 };
@@ -139,10 +215,12 @@ const {
                 limit: limit.value,
                 name: applied.value.name?.toUpperCase(),
                 EAN: applied.value.EAN,
+                status: applied.value.status,
             },
         }),
     (result) => {
         serverItems.value = result.data.data.map((product) => ({
+            ...product,
             id: product._id,
             EAN: product.EAN,
             name: product.name,
