@@ -1,3 +1,4 @@
+import type { ReceiptStoreIdentity } from '../settings.js';
 import type { DiscountType } from '../discount.js';
 import type { PaymentType, UnitOfMeasure } from '../enums.js';
 import type { ReversalType, SaleStatus, Tender } from '../sales.js';
@@ -53,6 +54,7 @@ export const RECEIPT_DISCOUNT_SHAPE: WireShape<ReceiptDiscount> = {
  * `details.receipt` of a SALE_IDEMPOTENCY_MISMATCH from the same cashier.
  */
 export interface Receipt {
+    storeIdentity?: ReceiptStoreIdentity;
     /** The sale's id, for looking it up in Sales History. */
     _id: string;
     /** ISO timestamp. */
@@ -77,6 +79,7 @@ export interface Receipt {
 }
 
 export const RECEIPT_SHAPE: WireShape<Receipt> = {
+    storeIdentity: 'optional',
     _id: 'required',
     createdAt: 'required',
     status: 'required',
@@ -136,6 +139,7 @@ export const SALE_REVERSAL_VIEW_SHAPE: WireShape<SaleReversalView> = {
  * those for replays and no response carries them (#27).
  */
 export interface SaleView {
+    storeIdentity?: ReceiptStoreIdentity;
     soldAt?: string;
     offline?: boolean;
     stockShortfall?: boolean;
@@ -166,6 +170,7 @@ export interface SaleView {
 }
 
 export const SALE_VIEW_SHAPE: WireShape<SaleView> = {
+    storeIdentity: 'optional',
     soldAt: 'optional',
     offline: 'optional',
     stockShortfall: 'optional',

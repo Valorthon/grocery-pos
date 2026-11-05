@@ -52,6 +52,18 @@ export interface Permission {
 
 export const PERMISSIONS: Permission[] = [
     {
+        label: 'Read store identity and settings',
+        roles: ASSIGNABLE_ROLES,
+        routes: ['GET /settings'],
+        appRoles: [],
+    },
+    {
+        label: 'Manage store settings',
+        roles: [Role.Admin],
+        routes: ['PATCH /settings'],
+        pages: ['Settings'],
+    },
+    {
         label: 'View sensitive-action audit log',
         roles: [Role.Admin],
         routes: ['GET /audit'],

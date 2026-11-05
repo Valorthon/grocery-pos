@@ -68,6 +68,12 @@ const routes: RouteRecordRaw[] = [
                 meta: { roles: [...DASHBOARD_ROLES] },
             },
             {
+                path: 'settings',
+                name: 'Settings',
+                component: () => import('@/views/User/Settings/Index.vue'),
+                meta: { roles: [Role.Admin] },
+            },
+            {
                 path: 'audit',
                 name: 'AuditLog',
                 component: () => import('@/views/User/Audit/Index.vue'),

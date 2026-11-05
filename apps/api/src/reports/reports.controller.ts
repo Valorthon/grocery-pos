@@ -12,7 +12,7 @@ import { salesReportCsv } from './report-csv';
 export class ReportsController {
     constructor(private service: ReportsService) {}
     @Get('options')
-    options(): ReportOptions {
+    options(): Promise<ReportOptions> {
         return this.service.options();
     }
     @Get('sales')

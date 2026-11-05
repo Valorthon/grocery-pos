@@ -1,3 +1,5 @@
+import { UpdateSettingsDto } from '../settings/settings.dto';
+import type { UpdateStoreSettingsRequest } from '@grocery-pos/contracts';
 import type {
     CreateStockCountRequest,
     SaveStockCountRequest,
@@ -198,6 +200,9 @@ const checks = {
     ),
     ReverseSaleDto: keysMatch<ReverseSaleDto, ReverseSaleRequest>(true),
     OpenShiftDto: keysMatch<OpenShiftDto, OpenShiftRequest>(true),
+    UpdateSettingsDto: keysMatch<UpdateSettingsDto, UpdateStoreSettingsRequest>(
+        true,
+    ),
     CloseShiftDto: keysMatch<CloseShiftDto, CloseShiftRequest>(true),
     DrawerMovementDto: keysMatch<DrawerMovementDto, DrawerMovementRequest>(
         true,

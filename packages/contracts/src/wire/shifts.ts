@@ -69,6 +69,7 @@ export const Z_READ_DRAWER_SHAPE: WireShape<ZReadDrawer> = {
 };
 
 export const Z_READ_REPORT_SHAPE: WireShape<ZReadReport> = {
+    storeIdentity: 'optional',
     offlineAddendum: 'optional',
     shiftId: 'required',
     cashierName: 'required',

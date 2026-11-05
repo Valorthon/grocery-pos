@@ -1,3 +1,8 @@
+import { SettingsService } from '../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, Types } from 'mongoose';
@@ -48,6 +53,9 @@ export class StockMovementService implements OnModuleInit {
         @InjectModel(Inventory.name) private inventory: Model<Inventory>,
         @InjectModel(Product.name) private products: Model<Product>,
         private config: TypedConfigService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
     async onModuleInit() {
         const migration = await this.movements.db
@@ -156,7 +164,9 @@ export class StockMovementService implements OnModuleInit {
         const createdAt = dateRangeFilter(
             dto.from,
             dto.to,
-            this.config.get('STORE_TIMEZONE'),
+            this.settings
+                ? await this.settings.timezone()
+                : this.config.get('STORE_TIMEZONE'),
         );
         const filter = {
             product: new Types.ObjectId(id),

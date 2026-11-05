@@ -1,6 +1,18 @@
 import { AuditAction, type AuditValue } from '@grocery-pos/contracts';
 
 const FIELDS: Record<AuditAction, readonly string[]> = {
+    [AuditAction.SETTINGS_UPDATED]: [
+        'storeName',
+        'branchName',
+        'address',
+        'contactNumber',
+        'tin',
+        'receiptFooter',
+        'timezone',
+        'currency',
+        'defaultReorderLevel',
+        'version',
+    ],
     [AuditAction.USER_CREATED]: ['name', 'roles', 'isActive'],
     [AuditAction.USER_UPDATED]: ['name', 'roles', 'isActive'],
     [AuditAction.USER_ROLE_CHANGED]: ['roles'],

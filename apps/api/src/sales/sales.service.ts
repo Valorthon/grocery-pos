@@ -1,3 +1,12 @@
+import {
+    receiptStoreIdentity,
+    type ReceiptStoreIdentity,
+} from '@grocery-pos/contracts';
+import { SettingsService } from '../settings/settings.service';
+import {
+    Inject as InjectSettings,
+    Optional as OptionalSettings,
+} from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@grocery-pos/contracts';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
@@ -142,6 +151,9 @@ export class SalesService {
         private config: TypedConfigService,
         private overrides: ManagerOverrideService,
         private audit: AuditService,
+        @OptionalSettings()
+        @InjectSettings(SettingsService)
+        private settings?: SettingsService,
     ) {}
 
     /** `saleScope` for the caller, looking up their open shift if needed. */
@@ -172,7 +184,9 @@ export class SalesService {
         const filter = salesListFilter(
             scope,
             dto,
-            this.config.get('STORE_TIMEZONE'),
+            this.settings
+                ? await this.settings.timezone()
+                : this.config.get('STORE_TIMEZONE'),
         );
         if (!filter) return { data: [], totalItems: 0 };
 
@@ -451,6 +465,7 @@ export class SalesService {
 
         return this.makeReceipt({
             saleId: String(sale._id),
+            storeIdentity: sale.storeIdentity,
             createdAt: sale.soldAt ?? sale.createdAt,
             status: sale.status ?? SaleStatus.COMPLETED,
             paymentType: sale.paymentType,
@@ -488,6 +503,7 @@ export class SalesService {
             settlement,
             saleId,
             createdAt,
+            storeIdentity,
         } = await runInTransaction(
             async (session) => {
                 // First, so a cashier with no open shift is refused before
@@ -497,6 +513,12 @@ export class SalesService {
                     session,
                 );
 
+                const storeIdentity = this.settings
+                    ? receiptStoreIdentity(
+                          await this.settings.read(session),
+                          await this.shiftService.terminalOf(shift, session),
+                      )
+                    : undefined;
                 const { subtotal, fullSellDetails } = await this.prepareSell(
                     dto,
                     session,
@@ -536,6 +558,7 @@ export class SalesService {
                 const [created] = await this.createSale(
                     {
                         amount: totalAmount,
+                        ...(storeIdentity && { storeIdentity }),
                         cashier: user.userId,
                         shift,
                         paymentType,
@@ -619,6 +642,7 @@ export class SalesService {
                     settlement,
                     saleId: String(created._id),
                     createdAt: created.createdAt,
+                    storeIdentity,
                 };
             },
             this.connection,
@@ -628,6 +652,7 @@ export class SalesService {
         return this.makeReceipt({
             saleId,
             createdAt,
+            storeIdentity,
             status: SaleStatus.COMPLETED,
             paymentType,
             referenceNumber: referenceNumber ?? null,
@@ -925,6 +950,7 @@ export class SalesService {
     }
 
     private makeReceipt({
+        storeIdentity,
         saleId,
         createdAt,
         status,
@@ -937,6 +963,7 @@ export class SalesService {
         discount,
         totalAmount,
     }: {
+        storeIdentity?: ReceiptStoreIdentity;
         saleId: string;
         createdAt: Date;
         status: SaleStatus;
@@ -960,6 +987,7 @@ export class SalesService {
 
         return {
             _id: saleId,
+            ...(storeIdentity && { storeIdentity }),
             createdAt,
             status,
             paymentType,

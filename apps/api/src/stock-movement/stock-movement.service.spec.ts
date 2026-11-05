@@ -358,3 +358,23 @@ describe('stock ledger reads', () => {
         );
     });
 });
+it('uses the committed store timezone for movement history day filters', async () => {
+    const f = fixture();
+    const timezone = jest.fn().mockResolvedValue('America/Los_Angeles');
+    Reflect.set(f.service, 'settings', { timezone });
+    await f.service.list(id, {
+        page: 1,
+        limit: 10,
+        from: '2026-01-01',
+        to: '2026-01-01',
+    });
+    expect(f.movements.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+            createdAt: {
+                $gte: new Date('2026-01-01T08:00:00Z'),
+                $lt: new Date('2026-01-02T08:00:00Z'),
+            },
+        }),
+    );
+    expect(timezone).toHaveBeenCalledTimes(1);
+});

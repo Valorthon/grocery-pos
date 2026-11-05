@@ -24,3 +24,5 @@ export * from './reports.js';
 
 export * from './stock-movement.js';
 export * from './audit.js';
+
+export * from './settings.js';

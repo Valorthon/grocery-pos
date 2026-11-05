@@ -1,9 +1,11 @@
+import type { ReceiptStoreIdentity } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongoSchema, Types } from 'mongoose';
 
 /** Retained for verifying delayed cash uploads, including admin reconciliation. */
 @Schema({ timestamps: true })
 export class OfflineLease {
+    @Prop({ type: Object }) storeIdentity?: ReceiptStoreIdentity;
     @Prop({ type: MongoSchema.Types.ObjectId, required: true })
     cashier!: Types.ObjectId;
     @Prop({ type: MongoSchema.Types.ObjectId, required: true })

@@ -96,6 +96,7 @@ describe('shift store (server-backed, issue #2)', () => {
         await store.openShift({ '1000': 1 });
 
         expect(api.post).toHaveBeenCalledWith('/shifts', {
+            terminal: 'Lane #1',
             counts: { '1000': 1 },
         });
         expect(store.activeShift).toEqual(SHIFT);

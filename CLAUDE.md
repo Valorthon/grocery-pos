@@ -841,3 +841,22 @@ the product owner picks.
 - Inventory roles see quantities and permitted source links, never procurement costs
   or unrestricted sales finances. Integrity compares ledger sum to inventory in one
   snapshot and reports discrepancies without changing either side.
+
+**Store settings** (#47, owner decision 2026-11-05)
+
+- Currency remains PHP only; existing centavos are never relabelled as another currency.
+  Every nonzero discount continues to require ADMIN PIN approval.
+- Authenticated users read settings; ADMIN alone updates an optimistic version, with
+  the settings change and allowlisted audit entry committed together.
+- The database singleton initializes from the deployment STORE_TIMEZONE. All runtime
+  store-calendar reads use the committed database timezone without a process cache.
+  Timezone changes require no open shifts and no active offline leases; context
+  creation and updates serialize through the settings row.
+- New receipts, offline leases and closed Z-reads snapshot store identity and timezone.
+  Existing snapshots remain unchanged; legacy receipts without snapshots display
+  current last-known identity. Legal/BIR printing remains separate scope.
+- The default reorder level is whole displayed units for newly created products only;
+  explicit existing levels and the legacy default remain unchanged.
+- A bounded terminal label is device-local presentation only, with no permission
+  significance. Offline store identity uses last-known authenticated presentation;
+  API responses are never cached by the service worker.

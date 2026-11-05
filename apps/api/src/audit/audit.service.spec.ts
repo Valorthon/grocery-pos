@@ -204,3 +204,21 @@ it('bounds request metadata and isolates concurrent request contexts without cop
         ),
     );
 });
+it('uses the current database store timezone for audit date filters', async () => {
+    const { service, model } = setup();
+    const timezone = jest.fn().mockResolvedValue('America/Los_Angeles');
+    Reflect.set(service, 'settings', { timezone });
+    await service.list({
+        page: 1,
+        limit: 10,
+        from: '2026-01-01',
+        to: '2026-01-01',
+    });
+    expect(model.find).toHaveBeenCalledWith({
+        createdAt: {
+            $gte: new Date('2026-01-01T08:00:00Z'),
+            $lt: new Date('2026-01-02T08:00:00Z'),
+        },
+    });
+    expect(timezone).toHaveBeenCalledTimes(1);
+});

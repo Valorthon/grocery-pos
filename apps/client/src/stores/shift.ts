@@ -1,3 +1,4 @@
+import { terminalLabel } from '@/settings/presentation';
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 import api from '@/axios';
@@ -120,6 +121,7 @@ export const useShiftStore = defineStore('shift', () => {
         try {
             const res = await api.post<CurrentShiftView>('/shifts', {
                 counts,
+                terminal: terminalLabel.value,
             } satisfies OpenShiftRequest);
             if (gen !== generation) throw new StaleResponseError();
             setShift(res.data);

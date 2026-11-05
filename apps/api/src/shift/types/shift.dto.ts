@@ -63,6 +63,14 @@ export function IsBillCounts() {
 
 /** Body of `POST /shifts`: the opening float, counted. */
 export class OpenShiftDto implements OpenShiftRequest {
+    @IsOptional()
+    @IsString()
+    @MaxLength(80)
+    @IsNotEmpty()
+    @Transform(({ value }: { value: unknown }) =>
+        typeof value === 'string' ? value.trim() : value,
+    )
+    terminal?: string;
     @IsNotEmpty()
     @IsBillCounts()
     counts!: BillCounts;

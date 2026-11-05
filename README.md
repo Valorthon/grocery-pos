@@ -625,3 +625,29 @@ existing live ledger rows are refused rather than overwritten. Startup refuses a
 incomplete migration. Do not start the new API first: live writes establish opening
 balances and make historical backfill refuse that product. The history's integrity
 check reports discrepancies and never repairs stock automatically.
+
+### Store settings
+
+Administrators manage store name, branch, address, contact number, optional TIN,
+receipt footer, timezone and the default reorder level at **Settings**. Other
+logged-in users read the saved presentation settings. Changes use an optimistic
+version and share a transaction with their sensitive-action audit entry; reload
+before retrying a conflicting edit.
+
+Currency remains **PHP**. Every nonzero discount still requires ADMIN PIN
+approval. The reorder default is whole displayed units and applies only to new
+products without an explicit level; it does not change existing or legacy levels.
+
+The settings singleton initializes its timezone from `STORE_TIMEZONE` on first
+startup. Subsequent API calendar boundaries read the committed database value.
+Close all shifts and release every active offline terminal lease before changing
+timezone. Existing closed Z-reads and new receipt identity snapshots keep their
+original identity/timezone; legacy receipts without snapshots show the current
+last-known identity. Offline leases retain their server-issued identity snapshot
+for delayed uploads. Receipt printing and BIR compliance remain deferred to #48.
+
+The terminal/lane label is stored on the device and used for its next shift. It
+has no authorization significance. Clients retain validated last-known store
+presentation settings for offline display, refresh them when online, and clear
+the active presentation when the session changes. API responses are not cached
+by the service worker.

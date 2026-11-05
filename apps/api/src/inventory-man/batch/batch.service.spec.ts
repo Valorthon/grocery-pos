@@ -390,3 +390,19 @@ it('retains tracking once any batch history exists, including empty lots', async
         service.assertCanChangeTracking(product, session),
     ).rejects.toThrow('batch history exists');
 });
+it('uses the committed store timezone for expiry consumption and list boundaries', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-01-01T16:30:00Z'));
+    const timezone = jest.fn().mockResolvedValue('America/Los_Angeles');
+    Reflect.set(service, 'settings', { timezone });
+    batchModel.find.mockReturnValue(query([]));
+    await expect(service.consume(product, 1, session)).rejects.toThrow();
+    expect(batchModel.find).toHaveBeenCalledWith(
+        expect.objectContaining({ expiryDate: { $gte: '2026-01-01' } }),
+    );
+    await service.list({ page: 1, limit: 10, expiring: true, days: 0 });
+    expect(batchModel.find).toHaveBeenLastCalledWith(
+        expect.objectContaining({ expiryDate: { $lte: '2026-01-01' } }),
+    );
+    expect(timezone).toHaveBeenCalledWith(session);
+    jest.useRealTimers();
+});

@@ -40,11 +40,13 @@ describe('report delivery', () => {
             .spyOn(service, 'salesReport')
             .mockResolvedValue(report);
         const controller = new ReportsController(service);
-        expect(controller.options()).toMatchObject({
+        expect(await controller.options()).toMatchObject({
             timeZone: 'Pacific/Auckland',
             maxDays: 366,
         });
-        expect(controller.options().today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect((await controller.options()).today).toMatch(
+            /^\d{4}-\d{2}-\d{2}$/,
+        );
         expect(await controller.sales(query)).toBe(report);
         const stream = await controller.csv(query);
         expect(stream.getHeaders()).toMatchObject({
@@ -104,4 +106,27 @@ describe('report delivery', () => {
         );
         expect(close).toHaveBeenCalledTimes(2);
     });
+});
+it('reads one current database timezone for each report and its metadata', async () => {
+    const close = jest.fn().mockResolvedValue(undefined);
+    const cursor = {
+        close,
+        async *[Symbol.asyncIterator]() {
+            yield* [];
+        },
+    };
+    const option = jest.fn(() => ({ cursor: () => cursor }));
+    const aggregate = jest.fn(() => ({ allowDiskUse: () => ({ option }) }));
+    const service = new ReportsService(
+        { aggregate } as unknown as Model<Sales>,
+        { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
+    );
+    const timezone = jest.fn().mockResolvedValue('America/Los_Angeles');
+    Reflect.set(service, 'settings', { timezone });
+    expect((await service.options()).timeZone).toBe('America/Los_Angeles');
+    expect((await service.salesReport(query)).timeZone).toBe(
+        'America/Los_Angeles',
+    );
+    expect(timezone).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalled();
 });

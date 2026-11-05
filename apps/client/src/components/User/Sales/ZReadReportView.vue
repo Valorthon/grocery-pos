@@ -6,15 +6,19 @@
             <div
                 class="font-sans font-black text-sm uppercase tracking-wider text-slate-900"
             >
-                Grocery POS
+                {{ identity.storeName }}
             </div>
+            <p v-if="identity.branchName">{{ identity.branchName }}</p>
+            <p v-if="identity.address">{{ identity.address }}</p>
+            <p v-if="identity.contactNumber">{{ identity.contactNumber }}</p>
+            <p v-if="identity.tin">TIN {{ identity.tin }}</p>
             <div class="text-xs text-slate-500 font-sans mt-0.5">
                 <span data-testid="zread-terminal">{{ report.terminal }}</span>
                 • Shift Close Report (Z-Read)
             </div>
             <div class="text-xs text-slate-400 mt-1">
-                {{ formatStoreDateTime(report.openedAt) }} —
-                {{ formatStoreDateTime(report.closedAt) }}
+                {{ formatStoreDateTime(report.openedAt, identity.timezone) }} —
+                {{ formatStoreDateTime(report.closedAt, identity.timezone) }}
             </div>
             <div
                 class="text-xs font-bold text-slate-700 mt-1"
@@ -155,6 +159,8 @@
 </template>
 
 <script setup lang="ts">
+import { receiptStoreIdentity } from '@grocery-pos/contracts';
+import { storePresentation } from '@/settings/presentation';
 import { computed, defineComponent, h } from 'vue';
 import { DrawerMovementType, type ZReadReport } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
@@ -216,4 +222,9 @@ const MOVEMENT_LABELS: Record<DrawerMovementType, string> = {
 function movementLabel(type: DrawerMovementType): string {
     return MOVEMENT_LABELS[type] ?? type;
 }
+const identity = computed(
+    () =>
+        props.report.storeIdentity ??
+        receiptStoreIdentity(storePresentation.value, props.report.terminal),
+);
 </script>
