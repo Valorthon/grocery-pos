@@ -71,6 +71,18 @@ export class EnsureValidDto {
 }
 
 export class NewProductFields implements NewProductRequest {
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsInt()
+    @Min(0)
+    @Max(Number.MAX_SAFE_INTEGER)
+    reorderLevel?: number;
+
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsInt()
+    @Min(1)
+    @Max(Number.MAX_SAFE_INTEGER)
+    reorderQuantity?: number;
+
     @IsOptional()
     @IsEnum(UnitOfMeasure)
     unit?: UnitOfMeasure;
@@ -124,10 +136,31 @@ export class GetDto {
     EAN!: string;
 }
 /** A product edit: at least one field, never an empty `$set` (issue #14). */
-@AtLeastOneOf(['name', 'price', 'category', 'isActive'], undefined, [
-    'category',
-])
+@AtLeastOneOf(
+    [
+        'name',
+        'price',
+        'category',
+        'isActive',
+        'reorderLevel',
+        'reorderQuantity',
+    ],
+    undefined,
+    ['category'],
+)
 export class UpdateFields implements ProductUpdateRequest {
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsInt()
+    @Min(0)
+    @Max(Number.MAX_SAFE_INTEGER)
+    reorderLevel?: number;
+
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsInt()
+    @Min(1)
+    @Max(Number.MAX_SAFE_INTEGER)
+    reorderQuantity?: number;
+
     @ValidateIf((_object, value: unknown) => value !== undefined)
     @IsBoolean()
     isActive?: boolean;

@@ -272,15 +272,8 @@ describe('DashboardService.getDashboard', () => {
             const pipeline = stockAlertPipeline() as unknown as Array<
                 Record<string, unknown>
             >;
-
-            it('reads only rows at or below the threshold', () => {
-                expect(pipeline[0]).toEqual({
-                    $match: { stock: { $lte: LOW_STOCK_THRESHOLD * 1000 } },
-                });
-            });
-
-            it('drops orphan rows (product gone) before counting, like the inventory list', () => {
-                expect(pipeline[1]).toMatchObject({
+            it('joins all stock rows before applying product-specific levels', () => {
+                expect(pipeline[0]).toMatchObject({
                     $lookup: {
                         from: 'products',
                         localField: 'product',
@@ -288,23 +281,20 @@ describe('DashboardService.getDashboard', () => {
                         as: 'product',
                     },
                 });
-                // No preserveNullAndEmptyArrays: an empty join drops the row.
-                expect(pipeline[2]).toEqual({ $unwind: '$product' });
+                expect(pipeline[1]).toEqual({ $unwind: '$product' });
             });
-
-            it('splits 1..threshold (low) from 0 or below (out)', () => {
-                expect(pipeline[4]).toEqual({
+            it('excludes archived products and keeps zero/negative stock in alert counting', () => {
+                expect(pipeline[2]).toEqual({
+                    $match: { 'product.isActive': { $ne: false } },
+                });
+                expect(pipeline[3]).toMatchObject({
                     $group: {
-                        _id: null,
-                        lowStockCount: {
-                            $sum: { $cond: [{ $gte: ['$stock', 1] }, 1, 0] },
-                        },
                         outOfStockCount: {
                             $sum: { $cond: [{ $lte: ['$stock', 0] }, 1, 0] },
                         },
                     },
                 });
-                expect(pipeline).toHaveLength(5);
+                expect(JSON.stringify(pipeline[3])).toContain('reorderLevel');
             });
         });
     });

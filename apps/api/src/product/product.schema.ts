@@ -5,6 +5,22 @@ import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
 @Schema({ timestamps: true })
 export class Product {
+    @Prop({
+        type: Number,
+        min: 0,
+        max: Number.MAX_SAFE_INTEGER,
+        validate: Number.isSafeInteger,
+    })
+    reorderLevel?: number;
+
+    @Prop({
+        type: Number,
+        min: 1,
+        max: Number.MAX_SAFE_INTEGER,
+        validate: Number.isSafeInteger,
+    })
+    reorderQuantity?: number;
+
     @Prop({ type: Number, select: false })
     saleVersion?: number;
     @Prop({ type: Boolean, default: true })

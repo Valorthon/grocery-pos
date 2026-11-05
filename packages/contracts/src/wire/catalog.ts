@@ -18,6 +18,9 @@ export const PRODUCT_REF_SHAPE: WireShape<ProductRef> = {
  * product joined into inventory, restock and adjustment rows.
  */
 export interface ProductView {
+    /** Integer minor units; absent defaults to ten displayed units. */
+    reorderLevel?: number;
+    reorderQuantity?: number;
     isActive?: boolean;
     /** Missing on legacy piece records. Quantity/stock use integer minor units. */
     unit?: UnitOfMeasure;
@@ -35,6 +38,8 @@ export interface ProductView {
 }
 
 export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
+    reorderLevel: 'optional',
+    reorderQuantity: 'optional',
     isActive: 'optional',
     unit: 'optional',
     _id: 'required',

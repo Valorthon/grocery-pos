@@ -1,5 +1,7 @@
 import {
     IsString,
+    IsBoolean,
+    ValidateIf,
     IsOptional,
     IsPositive,
     IsNumber,
@@ -9,10 +11,19 @@ import {
     Min,
     Max,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { NUMERIC_LIMITS, STRING_LIMITS, PAGINATION } from '../../../constants';
 import { Trim, TrimLowercase } from '../../../common/validators';
 
 export class GetAllDto {
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsBoolean()
+    @Transform(({ obj, key }) => {
+        const raw = (obj as Record<string, unknown>)[key];
+        return raw === 'true' ? true : raw === 'false' ? false : raw;
+    })
+    lowStock?: boolean;
+
     /** Rows with stock at or below this; 0 lists what is out of stock. */
     @IsOptional()
     @IsInt()

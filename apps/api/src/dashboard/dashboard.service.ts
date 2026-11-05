@@ -19,7 +19,7 @@ import {
 } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { calendarDateInZone, dayRangeInZone } from '../common/utils/timezone';
-import { LOW_STOCK_THRESHOLD } from '../constants';
+import { reorderLevelExpression } from '../inventory-man/inventory/reorder-query';
 import type { NameRef } from '../common/wire';
 
 /**
@@ -35,7 +35,7 @@ export type RestockActivityDoc = Pick<
 /** What every dashboard role sees: stock and activity, no money. */
 export interface DashboardStats {
     totalProducts: number;
-    /** Products with 1 to LOW_STOCK_THRESHOLD units on hand. */
+    /** Active products at or below their per-product reorder level, including zero/negative stock. */
     lowStockCount: number;
     /** Products with 0 (or fewer) units on hand. */
     outOfStockCount: number;
@@ -67,57 +67,40 @@ export interface DashboardOptions {
  */
 export const RESTOCK_ACTIVITY_FIELDS = '_id description restockedBy createdAt';
 
-/**
- * Counts the dashboard's stock tiles in one pass over the inventory rows at
- * or below the threshold (product owner, 2026-09-25): low stock is
- * `1 <= stock <= LOW_STOCK_THRESHOLD`, out of stock is `stock <= 0`.
- *
- * Orphan rows (their product gone) count toward neither: the inner
- * `$unwind` drops them, as `inventoryListPipeline` does (issue #14). So the
- * out-of-stock tile matches the inventory list at `maxStock=0`, and the two
- * tiles together match `maxStock=LOW_STOCK_THRESHOLD` (0..10); the low tile
- * alone is 1..10. Exported so specs can pin its shape; its behaviour needs
- * a real MongoDB.
- */
+/** Alerts include zero/negative stock (owner #40); archived products and orphans are excluded. */
 export function stockAlertPipeline(): PipelineStage[] {
     return [
-        { $match: { stock: { $lte: LOW_STOCK_THRESHOLD * 1000 } } },
         {
             $lookup: {
                 from: 'products',
                 localField: 'product',
                 foreignField: '_id',
-                pipeline: [{ $project: { _id: 1, unit: 1 } }],
+                pipeline: [
+                    {
+                        $project: {
+                            _id: 1,
+                            unit: 1,
+                            isActive: 1,
+                            reorderLevel: 1,
+                        },
+                    },
+                ],
                 as: 'product',
             },
         },
         { $unwind: '$product' },
-        {
-            $match: {
-                $expr: {
-                    $lte: [
-                        '$stock',
-                        {
-                            $multiply: [
-                                LOW_STOCK_THRESHOLD,
-                                {
-                                    $cond: [
-                                        { $in: ['$product.unit', ['KG', 'L']] },
-                                        1000,
-                                        1,
-                                    ],
-                                },
-                            ],
-                        },
-                    ],
-                },
-            },
-        },
+        { $match: { 'product.isActive': { $ne: false } } },
         {
             $group: {
                 _id: null,
                 lowStockCount: {
-                    $sum: { $cond: [{ $gte: ['$stock', 1] }, 1, 0] },
+                    $sum: {
+                        $cond: [
+                            { $lte: ['$stock', reorderLevelExpression()] },
+                            1,
+                            0,
+                        ],
+                    },
                 },
                 outOfStockCount: {
                     $sum: { $cond: [{ $lte: ['$stock', 0] }, 1, 0] },

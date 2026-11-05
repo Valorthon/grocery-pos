@@ -5,7 +5,7 @@ import { click, field, flush, type } from '@/testing/form-dom';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
-import { Role } from '@grocery-pos/contracts';
+import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
 
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), patch: vi.fn() }));
@@ -340,4 +340,67 @@ it('restores archived products after confirmation', async () => {
     expect(api.patch).toHaveBeenCalledWith('/products', {
         updates: [{ product: 'p1', update: { isActive: true } }],
     });
+});
+
+it('restocker sets measured reorder settings without gaining price permission', async () => {
+    useAuthStore().user = {
+        userId: 'restocker',
+        username: 'restocker',
+        roles: [Role.Restocker],
+    };
+    api.get.mockResolvedValue({
+        data: {
+            data: [
+                {
+                    _id: 'rice',
+                    EAN: '4006381333931',
+                    name: 'rice',
+                    price: 18000,
+                    unit: UnitOfMeasure.KG,
+                },
+            ],
+            totalItems: 1,
+        },
+    });
+    await mount();
+    await click('Edit');
+    expect(document.body.textContent).not.toContain('Selling price (₱)');
+    await type('Reorder level (kg)', '0.450');
+    await type('Restock quantity (kg)', '2.500');
+    await click('Save');
+    expect(api.patch).toHaveBeenCalledWith('/products', {
+        updates: [
+            {
+                product: 'rice',
+                update: {
+                    name: 'rice',
+                    reorderLevel: 450,
+                    reorderQuantity: 2500,
+                },
+            },
+        ],
+    });
+});
+it('rejects fractional pieces, negative levels and blank reorder quantities before saving', async () => {
+    useAuthStore().user = {
+        userId: 'r',
+        username: 'r',
+        roles: [Role.Restocker],
+    };
+    await mount();
+    await click('Edit');
+    for (const [label, value] of [
+        ['Reorder level (pc)', '0.5'],
+        ['Reorder level (pc)', '-1'],
+        ['Restock quantity (pc)', ''],
+    ]) {
+        await type('Reorder level (pc)', '10');
+        await type('Restock quantity (pc)', '10');
+        await type(label!, value!);
+        await click('Save');
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(document.querySelector('[role=alert]')?.textContent).toContain(
+            'reorder',
+        );
+    }
 });

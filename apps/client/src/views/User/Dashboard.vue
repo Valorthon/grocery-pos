@@ -39,9 +39,19 @@
             class="grid grid-cols-1 sm:grid-cols-2 gap-4"
             :class="stats.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'"
         >
-            <div
+            <component
+                :is="
+                    stat.title === 'Low Stock Items' && canOpenInventory
+                        ? 'router-link'
+                        : 'div'
+                "
                 v-for="stat in stats"
                 :key="stat.title"
+                :to="
+                    stat.title === 'Low Stock Items' && canOpenInventory
+                        ? { name: 'Inventories', query: { lowStock: 'true' } }
+                        : undefined
+                "
                 class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs"
             >
                 <div class="flex items-center justify-between mb-4">
@@ -56,7 +66,7 @@
                     {{ stat.value }}
                 </div>
                 <div class="text-xs text-slate-500 mt-1">{{ stat.title }}</div>
-            </div>
+            </component>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -191,7 +201,7 @@ import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { useListFetch } from '@/composables/useListFetch';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, Role } from '@/stores/auth';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
 import {
@@ -201,6 +211,12 @@ import {
 } from '@grocery-pos/contracts';
 
 const authStore = useAuthStore();
+const canOpenInventory = computed(
+    () =>
+        authStore.isAdmin ||
+        authStore.hasRole(Role.Restocker) ||
+        authStore.hasRole(Role.Adjuster),
+);
 
 /**
  * GET /dashboard (contracts `DashboardView`). `todayRevenue` and
