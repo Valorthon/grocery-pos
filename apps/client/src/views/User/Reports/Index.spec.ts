@@ -244,6 +244,77 @@ describe('event-date reports UI', () => {
         await click('Retry report');
         expect(document.querySelector('[role="alert"]')).toBeNull();
     });
+    it('retries the failed query rather than the last success or unapplied edits', async () => {
+        await mount();
+        const original = api.get.getMockImplementation()!;
+        const failed = deferred<{ data: SalesReport }>();
+        const retried = deferred<{ data: SalesReport }>();
+        api.get.mockImplementation((url, config) =>
+            url === '/reports/sales' ? failed.promise : original(url, config),
+        );
+        await type('From', '2026-11-01');
+        for (const [id, value] of [
+            ['report-group', 'product'],
+            ['report-cashier', 'user'],
+            ['report-category', 'cat'],
+            ['report-payment', 'CASH'],
+        ]) {
+            const select = document.querySelector<HTMLSelectElement>(`#${id}`)!;
+            select.value = value;
+            select.dispatchEvent(new Event('change'));
+            await flush();
+        }
+        const query = {
+            from: '2026-11-01',
+            to: '2026-11-05',
+            groupBy: 'product',
+            cashier: 'user',
+            category: 'cat',
+            paymentType: 'CASH',
+        };
+        await click('Run report');
+        failed.reject(new Error('offline'));
+        await flush();
+        expect(document.body.textContent).toContain(
+            'Could not load sales report',
+        );
+        expect(
+            document.querySelector('[data-testid="report-applied"]')
+                ?.textContent,
+        ).toContain('2026-11-05 through 2026-11-05');
+        await click('Export CSV');
+        expect(api.get).toHaveBeenLastCalledWith('/reports/sales.csv', {
+            params: { from: '2026-11-05', to: '2026-11-05', groupBy: 'day' },
+            responseType: 'blob',
+        });
+        await type('From', '2026-10-01');
+        api.get.mockImplementation((url, config) =>
+            url === '/reports/sales' ? retried.promise : original(url, config),
+        );
+        await click('Retry report');
+        expect(api.get).toHaveBeenLastCalledWith('/reports/sales', {
+            params: query,
+        });
+        retried.resolve({
+            data: response({
+                from: query.from,
+                groupBy: SalesReportGroup.PRODUCT,
+            }),
+        });
+        await flush();
+        expect(document.body.textContent).not.toContain(
+            'Could not load sales report',
+        );
+        expect(
+            document.querySelector('[data-testid="report-applied"]')
+                ?.textContent,
+        ).toContain('2026-11-01 through 2026-11-05');
+        await click('Export CSV');
+        expect(api.get).toHaveBeenLastCalledWith('/reports/sales.csv', {
+            params: query,
+            responseType: 'blob',
+        });
+    });
     it('keeps errors visible when CSV export fails', async () => {
         await mount();
         const original = api.get.getMockImplementation()!;

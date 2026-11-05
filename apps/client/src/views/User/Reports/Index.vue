@@ -370,6 +370,7 @@ type Query = {
     paymentType?: string;
 };
 const applied = ref<Query | null>(null);
+const requested = ref<Query | null>(null);
 const report = ref<SalesReport | null>(null);
 const loading = ref(false);
 const exporting = ref(false);
@@ -394,6 +395,7 @@ function requestFilters(): Query {
     };
 }
 async function load(query: Query) {
+    requested.value = { ...query };
     const turn = ++generation;
     loading.value = true;
     error.value = '';
@@ -448,7 +450,7 @@ async function initialize() {
 }
 function retry() {
     if (!options.value) void initialize();
-    else if (applied.value) void load({ ...applied.value });
+    else if (requested.value) void load({ ...requested.value });
     else apply();
 }
 async function exportCsv() {
