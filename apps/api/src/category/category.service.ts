@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { Category, type CategoryDoc, categoryNameKey } from './category.schema';
@@ -12,12 +12,17 @@ import { ErrorCode, NotFoundError, ValidationError } from '../common/errors';
 import { runInTransaction } from '../common/utils/db';
 import { containsRegex } from '../common/utils/regex';
 @Injectable()
-export class CategoryService {
+export class CategoryService implements OnModuleInit {
     constructor(
         @InjectConnection() private connection: Connection,
         @InjectModel(Category.name) private model: Model<Category>,
         @InjectModel(Product.name) private products: Model<Product>,
     ) {}
+    /** Nest awaits this before listening: uniqueness must hold on the first request. */
+    async onModuleInit(): Promise<void> {
+        await this.model.init();
+    }
+
     async list(dto: CategoryQueryDto) {
         const filter = {
             ...(dto.status === 'all'
