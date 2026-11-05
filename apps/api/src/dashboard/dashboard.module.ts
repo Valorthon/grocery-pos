@@ -1,3 +1,4 @@
+import { InventoryBatchModule } from '../inventory-man/batch/batch.module';
 import { Module } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { DashboardController } from './dashboard.controller';
@@ -19,6 +20,7 @@ import {
 
 @Module({
     imports: [
+        InventoryBatchModule,
         MongooseModule.forFeature([
             { name: Sales.name, schema: SalesSchema },
             { name: Inventory.name, schema: InventorySchema },

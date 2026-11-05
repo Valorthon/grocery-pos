@@ -18,6 +18,7 @@ export const PRODUCT_REF_SHAPE: WireShape<ProductRef> = {
  * product joined into inventory, restock and adjustment rows.
  */
 export interface ProductView {
+    tracksExpiry?: boolean;
     /** Integer minor units; absent defaults to ten displayed units. */
     reorderLevel?: number;
     reorderQuantity?: number;
@@ -38,6 +39,7 @@ export interface ProductView {
 }
 
 export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
+    tracksExpiry: 'optional',
     reorderLevel: 'optional',
     reorderQuantity: 'optional',
     isActive: 'optional',
@@ -53,6 +55,7 @@ export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
 
 /** A row of `GET /products/matches` (the register and combobox search). */
 export interface ProductMatch {
+    tracksExpiry?: boolean;
     /** Missing on legacy piece records. Quantity/stock use integer minor units. */
     unit?: UnitOfMeasure;
     EAN: string;
@@ -62,6 +65,7 @@ export interface ProductMatch {
 }
 
 export const PRODUCT_MATCH_SHAPE: WireShape<ProductMatch> = {
+    tracksExpiry: 'optional',
     unit: 'optional',
     EAN: 'required',
     name: 'required',
@@ -114,6 +118,8 @@ export const RESTOCK_ROW_SHAPE: WireShape<RestockRow> = {
 
 /** A line of `GET /restocks/details/:id`, with its product. */
 export interface RestockLine {
+    expiryDate?: string;
+    batchNo?: string;
     /** Missing on legacy piece records. Quantity/stock use integer minor units. */
     unit?: UnitOfMeasure;
     _id: string;
@@ -126,6 +132,8 @@ export interface RestockLine {
 }
 
 export const RESTOCK_LINE_SHAPE: WireShape<RestockLine> = {
+    expiryDate: 'optional',
+    batchNo: 'optional',
     unit: 'optional',
     _id: 'required',
     restock: 'required',
@@ -153,6 +161,7 @@ export const ADJUSTMENT_ROW_SHAPE: WireShape<AdjustmentRow> = {
 
 /** A line of `GET /adjustments/details/:id`, with its product. */
 export interface AdjustmentLine {
+    batch?: string;
     _id: string;
     /** The adjustment's id. */
     adjustment: string;
@@ -163,6 +172,7 @@ export interface AdjustmentLine {
 }
 
 export const ADJUSTMENT_LINE_SHAPE: WireShape<AdjustmentLine> = {
+    batch: 'optional',
     _id: 'required',
     adjustment: 'required',
     product: 'required',

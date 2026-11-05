@@ -4,6 +4,7 @@ export interface SaveForm {
 }
 
 export interface AddForm {
+    batch?: string;
     unit?: UnitOfMeasure;
     EAN: string;
     name: string;

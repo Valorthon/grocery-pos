@@ -52,6 +52,12 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'Review inventory batches and expiry',
+        roles: [Role.Restocker, Role.Adjuster],
+        routes: ['GET /inventories/expiring', 'GET /inventories/batches'],
+        pages: ['Inventories'],
+    },
+    {
         label: 'Manage suppliers and receipt cost defaults',
         roles: [Role.Restocker],
         routes: [

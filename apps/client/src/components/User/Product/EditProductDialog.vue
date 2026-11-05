@@ -16,6 +16,10 @@
                 :product="product._id"
                 :unit="product.unit"
             />
+            <label class="flex items-center gap-2 text-sm"
+                ><input v-model="tracksExpiry" type="checkbox" />Track expiry
+                and batches (change only at zero stock)</label
+            >
             <CategorySelect
                 v-model="category"
                 :current="product.category"
@@ -87,6 +91,7 @@ const emit = defineEmits<{ saved: [] }>();
 const admin = useAuthStore().user?.roles.includes(Role.Admin) ?? false;
 const name = ref('');
 const category = ref<string | undefined>();
+const tracksExpiry = ref(false);
 const price = ref('');
 const reorderLevel = ref('');
 const reorderQuantity = ref('');
@@ -96,6 +101,7 @@ watch(
     () => [open.value, props.product] as const,
     () => {
         if (open.value) {
+            tracksExpiry.value = props.product.tracksExpiry ?? false;
             name.value = props.product.name;
             category.value = props.product.category;
             price.value = (props.product.price / 100).toFixed(2);
@@ -137,6 +143,9 @@ async function save() {
         return;
     }
     const update = {
+        ...(tracksExpiry.value !== (props.product.tracksExpiry ?? false) && {
+            tracksExpiry: tracksExpiry.value,
+        }),
         ...(level !== reorderLevelOf(props.product) && { reorderLevel: level }),
         ...(quantity !== reorderQuantityOf(props.product) && {
             reorderQuantity: quantity,

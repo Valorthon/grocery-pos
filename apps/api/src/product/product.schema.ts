@@ -5,6 +5,9 @@ import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 
 @Schema({ timestamps: true })
 export class Product {
+    @Prop({ type: Boolean, default: false })
+    tracksExpiry?: boolean;
+
     @Prop({
         type: Number,
         min: 0,

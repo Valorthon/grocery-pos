@@ -1,4 +1,5 @@
 import { OfflineCost, OfflineCostSchema } from './offline-cost.schema';
+import { InventoryBatchModule } from '../inventory-man/batch/batch.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
@@ -24,6 +25,7 @@ import {
 import { SalesModule } from '../sales/sales.module';
 @Module({
     imports: [
+        InventoryBatchModule,
         JwtModule.register({}),
         SalesModule,
         MongooseModule.forFeature([

@@ -287,6 +287,7 @@ describe('RestockService.restock (issue #30)', () => {
                 {
                     insertOne: {
                         document: {
+                            _id: expect.any(mongoose.Types.ObjectId),
                             restock: 'restock1',
                             product: P1,
                             quantity: 3,
@@ -297,6 +298,7 @@ describe('RestockService.restock (issue #30)', () => {
                 {
                     insertOne: {
                         document: {
+                            _id: expect.any(mongoose.Types.ObjectId),
                             restock: 'restock1',
                             product: P2,
                             quantity: 2,

@@ -71,6 +71,10 @@ export class EnsureValidDto {
 }
 
 export class NewProductFields implements NewProductRequest {
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsBoolean()
+    tracksExpiry?: boolean;
+
     @ValidateIf((_object, value: unknown) => value !== undefined)
     @IsInt()
     @Min(0)
@@ -144,11 +148,16 @@ export class GetDto {
         'isActive',
         'reorderLevel',
         'reorderQuantity',
+        'tracksExpiry',
     ],
     undefined,
     ['category'],
 )
 export class UpdateFields implements ProductUpdateRequest {
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsBoolean()
+    tracksExpiry?: boolean;
+
     @ValidateIf((_object, value: unknown) => value !== undefined)
     @IsInt()
     @Min(0)

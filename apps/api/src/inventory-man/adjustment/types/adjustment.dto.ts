@@ -71,6 +71,10 @@ export class GetDetailsQueryDto {
 export type GetDetailsDto = GetDetailsQueryDto & GetDetailsParamDto;
 
 export class AdjustFields implements AdjustmentLineRequest {
+    @IsOptional()
+    @IsMongoId()
+    batch?: string;
+
     @IsNotEmpty()
     @IsMongoId()
     product!: string;

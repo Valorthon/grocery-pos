@@ -1,3 +1,5 @@
+import { InventoryBatchService } from '../batch/batch.service';
+import { Optional } from '@nestjs/common';
 import { SupplierService } from '../../supplier/supplier.service';
 import { ValidationError, ErrorCode } from '../../common/errors';
 import { Injectable } from '@nestjs/common';
@@ -34,6 +36,7 @@ export class RestockService {
         private config: TypedConfigService,
         private productService: ProductService,
         private suppliers: SupplierService,
+        @Optional() private batches?: InventoryBatchService,
     ) {}
 
     async restock(
@@ -91,7 +94,21 @@ export class RestockService {
                     { session },
                 );
 
-                const inserts = updatedRestockDetails.map((detail) => ({
+                const batchLines = updatedRestockDetails.map(
+                    (detail, index) => ({
+                        ...detail,
+                        _id: new Types.ObjectId(),
+                        ...(dto.restockDetails[index]?.expiryDate !==
+                            undefined && {
+                            expiryDate: dto.restockDetails[index].expiryDate,
+                        }),
+                        ...(dto.restockDetails[index]?.batchNo !==
+                            undefined && {
+                            batchNo: dto.restockDetails[index].batchNo,
+                        }),
+                    }),
+                );
+                const inserts = batchLines.map((detail) => ({
                     insertOne: {
                         document: {
                             restock: created._id,
@@ -101,6 +118,7 @@ export class RestockService {
                 }));
 
                 await this.modelDetails.bulkWrite(inserts, { session });
+                await this.batches?.receive(batchLines, session);
                 await this.productService.recordReceiptCosts(
                     updatedRestockDetails,
                     session,

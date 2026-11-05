@@ -31,6 +31,10 @@
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
             />
+            <BaseCheckbox
+                v-model="formData.tracksExpiry"
+                label="Track expiry and batches (online sales only)"
+            />
             <CategorySelect v-model="formData.category" :refresh-key="model" />
             <label class="block text-sm font-medium"
                 >Unit of measure
@@ -93,6 +97,7 @@ import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
 const props = defineProps<{
     modelValue: boolean;
     item?: {
+        tracksExpiry?: boolean;
         category?: string;
         unit?: UnitOfMeasure;
         EAN?: string;
@@ -132,6 +137,7 @@ watch(
     () => props.modelValue,
     (open) => {
         if (open) {
+            formData.tracksExpiry = props.item?.tracksExpiry ?? false;
             formData.category = props.item?.category;
             formData.unit = props.item?.unit ?? UnitOfMeasure.PIECE;
             formData.EAN = props.item?.EAN ?? '';
@@ -162,7 +168,12 @@ const submitProduct = async () => {
         return;
     }
 
-    const payload = { ...formData, price: pesosToCentavos(formData.price) };
+    const { tracksExpiry, ...fields } = formData;
+    const payload = {
+        ...fields,
+        ...(tracksExpiry && { tracksExpiry }),
+        price: pesosToCentavos(formData.price),
+    };
     if (isEditMode.value) {
         emit('update', payload);
     } else {

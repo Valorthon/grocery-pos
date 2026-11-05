@@ -461,12 +461,23 @@ export class SalesService {
                     session,
                 );
 
+                const allocations = await this.inventoryService.sell(
+                    user.userId,
+                    dto,
+                    session,
+                );
                 const inserts = fullSellDetails.map(
-                    ({ product, quantity, unitPrice, unit, unitCost }) => ({
+                    (
+                        { product, quantity, unitPrice, unit, unitCost },
+                        index,
+                    ) => ({
                         insertOne: {
                             document: {
                                 product,
                                 quantity,
+                                ...(allocations?.[index]?.length && {
+                                    batchAllocations: allocations[index],
+                                }),
                                 unitPrice,
                                 ...(unitCost !== undefined && { unitCost }),
                                 ...(unit && { unit }),
@@ -477,7 +488,6 @@ export class SalesService {
                 );
 
                 await this.modelDetails.bulkWrite(inserts, { session });
-                await this.inventoryService.sell(user.userId, dto, session);
 
                 return {
                     fullSellDetails,
@@ -668,15 +678,19 @@ export class SalesService {
                 }
 
                 const lines = await this.modelDetails
-                    .find({ sales: saleId }, { product: 1, quantity: 1 })
+                    .find(
+                        { sales: saleId },
+                        { product: 1, quantity: 1, batchAllocations: 1 },
+                    )
                     .session(session)
                     .lean();
 
                 await this.inventoryService.returnStock(
                     user.userId,
-                    lines.map(({ product, quantity }) => ({
+                    lines.map(({ product, quantity, batchAllocations }) => ({
                         product: product as Types.ObjectId,
                         quantity,
+                        batchAllocations,
                     })),
                     session,
                 );

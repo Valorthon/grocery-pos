@@ -120,6 +120,14 @@ export class ProductService {
                             'Product not found',
                         );
                     if (
+                        update.tracksExpiry !== undefined &&
+                        update.tracksExpiry !== (before.tracksExpiry === true)
+                    )
+                        await this.inventoryService.assertTrackingChange(
+                            product,
+                            session,
+                        );
+                    if (
                         update.category &&
                         new Types.ObjectId(update.category).toString() !==
                             before.category?.toString()
@@ -193,7 +201,7 @@ export class ProductService {
 
         const found = await this.model
             .find({ _id: { $in: unique_ids } })
-            .select('price name unit isActive +lastCost')
+            .select('price name unit isActive tracksExpiry +lastCost')
             .session(session ?? null)
             .lean();
 
@@ -393,7 +401,10 @@ export class ProductService {
         }
 
         const matches = (await this.model
-            .find({ ...query, isActive: { $ne: false } }, 'name EAN unit')
+            .find(
+                { ...query, isActive: { $ne: false } },
+                'name EAN unit tracksExpiry',
+            )
             .sort({ name: 1 })
             .limit(MAX_MATCHES)
             .lean()) as Array<{
@@ -401,12 +412,16 @@ export class ProductService {
             name: string;
             _id: Types.ObjectId;
             unit?: UnitOfMeasure;
+            tracksExpiry?: boolean;
         }>;
 
         return matches.map((match) => ({
             EAN: match.EAN,
             name: match.name,
             product: match._id.toString(),
+            ...(match.tracksExpiry !== undefined && {
+                tracksExpiry: match.tracksExpiry,
+            }),
             ...(match.unit && { unit: match.unit }),
         }));
     }

@@ -17,3 +17,4 @@ export * from './offline.js';
 export * from './category.js';
 
 export * from './supplier.js';
+export * from './expiry.js';

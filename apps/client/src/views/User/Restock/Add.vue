@@ -140,6 +140,7 @@ import { zeroCostRequest } from '@/components/User/Restock/validation';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
+import { isExpiryDate } from '@grocery-pos/contracts';
 import { newProductLines, toRestockBody } from '@/utils/payloads';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import { useConfirm } from '@/composables/useConfirm';
@@ -276,6 +277,17 @@ const openSaveDialog = async () => {
 const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
     if (items.value.length === 0) {
         uiStore.queueMessage(Color.ERROR, NOTHING_TO_SAVE);
+        return false;
+    }
+    if (
+        items.value.some(
+            (line) => line.tracksExpiry && !isExpiryDate(line.expiryDate),
+        )
+    ) {
+        uiStore.queueMessage(
+            Color.ERROR,
+            'Edit each expiry-tracked line and choose its expiry date before saving.',
+        );
         return false;
     }
     // The API numbers insert errors among the new products only.

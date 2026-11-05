@@ -55,6 +55,36 @@
                 />
             </template>
 
+            <BaseCheckbox
+                v-if="formData.isNewProduct"
+                v-model="formData.tracksExpiry"
+                label="Track expiry and batches (online sales only)"
+            />
+            <div
+                v-if="
+                    picked?.tracksExpiry ||
+                    (formData.isNewProduct && formData.tracksExpiry)
+                "
+                class="space-y-3"
+            >
+                <BaseInput
+                    v-model="formData.expiryDate"
+                    label="Expiry date (required)"
+                    type="date"
+                />
+                <BaseInput
+                    v-model="formData.batchNo"
+                    label="Batch number (optional)"
+                    :maxlength="EXPIRY_LIMITS.BATCH_NO"
+                />
+                <p
+                    v-if="errors.expiryDate"
+                    role="alert"
+                    class="text-sm text-red-700"
+                >
+                    {{ errors.expiryDate }}
+                </p>
+            </div>
             <div class="grid grid-cols-2 gap-4">
                 <BaseInput
                     v-model="formData.quantity"
@@ -118,6 +148,8 @@
 
 <script setup lang="ts">
 import {
+    EXPIRY_LIMITS,
+    isExpiryDate,
     UnitOfMeasure,
     unitOf,
     quantityInput,
@@ -186,6 +218,7 @@ const {
 
 /** The existing product picked from the matches, as it was when picked. */
 interface PickedProduct {
+    tracksExpiry?: boolean;
     unit?: UnitOfMeasure;
     product: string;
     name: string;
@@ -214,11 +247,16 @@ const selectedProduct = computed<ComboboxOption | null>({
             : null,
     set: (opt) => {
         const generation = ++costGeneration;
+        if (opt?.value !== picked.value?.product) {
+            formData.expiryDate = undefined;
+            formData.batchNo = undefined;
+        }
         const match = opt
             ? matches.value.find((m) => m.product === opt.value)
             : undefined;
         picked.value = opt
             ? {
+                  tracksExpiry: match?.tracksExpiry,
                   product: opt.value,
                   name: opt.label,
                   EAN: match?.EAN ?? opt.display ?? '',
@@ -275,6 +313,9 @@ function onSearch(query: string) {
  */
 function setNewProduct(isNew: boolean) {
     formData.isNewProduct = isNew;
+    formData.tracksExpiry = false;
+    formData.expiryDate = undefined;
+    formData.batchNo = undefined;
     picked.value = null;
     formData.EAN = '';
     formData.name = '';
@@ -293,6 +334,9 @@ watch(
         const item = props.item;
         const isNew = item?.isNewProduct ?? false;
         formData.isNewProduct = isNew;
+        formData.tracksExpiry = item?.tracksExpiry ?? false;
+        formData.expiryDate = item?.expiryDate;
+        formData.batchNo = item?.batchNo;
         formData.category = isNew ? item?.category : undefined;
         formData.autoGenerateEAN = isNew
             ? (item?.autoGenerateEAN ?? false)
@@ -309,6 +353,7 @@ watch(
         picked.value =
             !isNew && item?.product
                 ? {
+                      tracksExpiry: item.tracksExpiry,
                       product: item.product,
                       name: item.name,
                       EAN: item.EAN,
@@ -326,6 +371,11 @@ const handleSubmit = async () => {
         unit: picked.value?.unit ?? formData.unit,
         product: formData.isNewProduct ? '' : (picked.value?.product ?? ''),
     });
+    const tracked = formData.isNewProduct
+        ? formData.tracksExpiry
+        : picked.value?.tracksExpiry;
+    if (tracked && !isExpiryDate(formData.expiryDate))
+        errors.value.expiryDate = 'Choose a valid expiry date.';
     if (Object.keys(errors.value).length) return;
 
     if (formData.isNewProduct) {
@@ -343,6 +393,13 @@ const handleSubmit = async () => {
     }
 
     const amounts = {
+        ...(tracked && {
+            tracksExpiry: true,
+            expiryDate: formData.expiryDate,
+            ...(formData.batchNo?.trim() && {
+                batchNo: formData.batchNo.trim(),
+            }),
+        }),
         quantity: parseQuantity(
             formData.quantity,
             picked.value?.unit ?? formData.unit,

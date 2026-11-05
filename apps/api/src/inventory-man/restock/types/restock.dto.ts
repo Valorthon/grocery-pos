@@ -22,7 +22,7 @@ import {
     Trim,
     TrimLowercase,
 } from '../../../common/validators';
-import { SUPPLIER_LIMITS } from '@grocery-pos/contracts';
+import { EXPIRY_LIMITS, SUPPLIER_LIMITS } from '@grocery-pos/contracts';
 import type { RestockLineFields, RestockRequest } from '@grocery-pos/contracts';
 import { NewProductFields } from '../../../product/types';
 import {
@@ -83,6 +83,16 @@ export class RestockFields implements RestockLineFields {
     @IsOptional()
     @IsMongoId()
     product?: string;
+
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsCalendarDate()
+    expiryDate?: string;
+
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsString()
+    @MaxLength(EXPIRY_LIMITS.BATCH_NO)
+    @Trim()
+    batchNo?: string;
 
     @IsNumber()
     @IsNotEmpty()
