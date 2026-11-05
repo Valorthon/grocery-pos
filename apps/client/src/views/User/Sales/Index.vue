@@ -39,6 +39,94 @@
         </header>
 
         <div class="flex-1 overflow-y-auto p-6">
+            <form
+                class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                @submit.prevent="applyFilters"
+            >
+                <BaseInput
+                    id="sales-number"
+                    v-model="filters.saleNumber"
+                    label="Sale number or full ID"
+                    :maxlength="24"
+                />
+                <BaseInput
+                    id="sales-from"
+                    v-model="filters.dateFrom"
+                    label="From"
+                    type="date"
+                    @change="applyFilters"
+                />
+                <BaseInput
+                    id="sales-to"
+                    v-model="filters.dateTo"
+                    label="To (inclusive)"
+                    type="date"
+                    @change="applyFilters"
+                />
+                <BaseSelect
+                    id="sales-payment"
+                    v-model="filters.paymentType"
+                    label="Payment"
+                    all-label="All payments"
+                    :options="
+                        Object.values(PaymentType).map((value) => ({
+                            label: value,
+                            value,
+                        }))
+                    "
+                    @update:model-value="applyFilters"
+                />
+                <BaseSelect
+                    v-if="authStore.isAdmin"
+                    id="sales-cashier"
+                    v-model="filters.cashier"
+                    label="Cashier"
+                    all-label="All cashiers"
+                    :options="
+                        cashiers.map((row) => ({
+                            label: row.name,
+                            value: row._id,
+                        }))
+                    "
+                    @update:model-value="applyFilters"
+                />
+                <BaseSelect
+                    v-if="authStore.isAdmin"
+                    id="sales-category"
+                    v-model="filters.category"
+                    label="Category"
+                    all-label="All categories"
+                    :options="
+                        categories.map((row) => ({
+                            label:
+                                row.name + (row.isActive ? '' : ' (archived)'),
+                            value: row._id,
+                        }))
+                    "
+                    @update:model-value="applyFilters"
+                />
+                <BaseButton type="submit">Search</BaseButton
+                ><BaseButton variant="outline" @click="clearFilters"
+                    >Clear filters</BaseButton
+                >
+            </form>
+            <p
+                v-if="filterError"
+                role="alert"
+                class="mb-3 text-sm text-red-700"
+            >
+                {{ filterError }}
+                <BaseButton variant="outline" @click="refreshLookups"
+                    >Retry filters</BaseButton
+                >
+            </p>
+            <p
+                v-if="searchError"
+                role="alert"
+                class="mb-3 text-sm text-red-700"
+            >
+                {{ searchError }}
+            </p>
             <BaseTable
                 v-model:page="page"
                 v-model:items-per-page="limit"
@@ -74,6 +162,9 @@
             scrollable
             :closable="!reversing"
         >
+            <p class="mb-3 text-sm font-bold" data-testid="sale-full-id">
+                Sale #{{ selectedId.slice(-8) }} · {{ selectedId }}
+            </p>
             <p v-if="selectedSale?.offline" class="text-sm mb-3 text-amber-900">
                 Offline cash sale · occurred {{ selectedSale.soldAt }}.
                 <strong v-if="selectedSale.stockShortfall"
@@ -384,7 +475,7 @@
 
 <script setup lang="ts">
 import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';
 import api from '@/axios';
@@ -393,6 +484,8 @@ import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog
 import { useManagerApproval } from '@/composables/useManagerApproval';
 
 import BaseTable from '@/components/ui/BaseTable.vue';
+import BaseInput from '@/components/ui/BaseInput.vue';
+import { useSalesLookups } from '@/composables/useSalesLookups';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
@@ -407,6 +500,7 @@ import {
 } from '@/utils/api-error';
 import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import {
+    REPORT_LIMITS,
     DiscountType,
     ErrorCode,
     OverrideAction,
@@ -452,6 +546,7 @@ interface SaleTotals {
 /** A row of the sales table. */
 interface SaleListRow {
     id: string;
+    saleNumber: string;
     cashier: string;
     /** Formatted. */
     amount: string;
@@ -476,11 +571,64 @@ const uiStore = useUIStore();
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
-const { page, limit } = useListPaging(() => fetchSales());
+const { page, limit, search } = useListPaging(() => fetchSales());
+const {
+    categories,
+    cashiers,
+    error: filterError,
+    refresh: refreshLookups,
+} = useSalesLookups(authStore.isAdmin);
+const filters = reactive({
+    saleNumber: '',
+    dateFrom: '',
+    dateTo: '',
+    paymentType: null as string | null,
+    cashier: null as string | null,
+    category: null as string | null,
+});
+const appliedFilters = ref<Record<string, string>>({});
+const searchError = ref('');
+function applyFilters() {
+    searchError.value = '';
+    if (
+        filters.saleNumber &&
+        !REPORT_LIMITS.SALE_SEARCH.test(filters.saleNumber.trim())
+    ) {
+        searchError.value =
+            'Enter a full sale ID or its final eight hexadecimal characters.';
+        return;
+    }
+    if (
+        filters.dateFrom &&
+        filters.dateTo &&
+        filters.dateFrom > filters.dateTo
+    ) {
+        searchError.value = 'The end date must not be before the start date.';
+        return;
+    }
+    appliedFilters.value = Object.fromEntries(
+        Object.entries(filters)
+            .filter(([, value]) => value)
+            .map(([key, value]) => [key, String(value).trim()]),
+    );
+    search();
+}
+function clearFilters() {
+    Object.assign(filters, {
+        saleNumber: '',
+        dateFrom: '',
+        dateTo: '',
+        paymentType: null,
+        cashier: null,
+        category: null,
+    });
+    applyFilters();
+}
 const totalItems = ref(0);
 const serverItems = ref<SaleListRow[]>([]);
 
 const headers = [
+    { key: 'saleNumber', title: 'Sale #' },
     { key: 'cashier', title: 'Cashier' },
     { key: 'amount', title: 'Amount' },
     { key: 'paymentType', title: 'Payment' },
@@ -509,11 +657,16 @@ const {
 } = useListFetch(
     () =>
         api.get<Paginated<SaleRow>>(`/sales`, {
-            params: { page: page.value, limit: limit.value },
+            params: {
+                page: page.value,
+                limit: limit.value,
+                ...appliedFilters.value,
+            },
         }),
     (result) => {
         serverItems.value = result.data.data.map((sale) => ({
             id: sale._id,
+            saleNumber: sale._id.slice(-8),
             cashier: sale.cashier?.name ?? 'N/A',
             amount: formatCurrency(sale.amount ?? 0),
             totals: {

@@ -57,6 +57,8 @@ function serve(sale: object, open: object[]) {
         if (url === '/sales') {
             return Promise.resolve({ data: { data: [sale], totalItems: 1 } });
         }
+        if (url === '/users' || url === '/categories')
+            return Promise.resolve({ data: { data: [], totalItems: 0 } });
         if (url === '/shifts') {
             return Promise.resolve({
                 data: { data: open, totalItems: open.length },
@@ -446,5 +448,130 @@ describe('void/refund while reversing (issue #22)', () => {
         fail(new Error('offline'));
         await flush();
         expect(document.querySelector('[data-modal-close]')).not.toBeNull();
+    });
+});
+
+describe('sales-history applied filters and receipt identity', () => {
+    async function history() {
+        const host = document.createElement('div');
+        document.body.append(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+    }
+    function input(id: string, value: string, event = 'input') {
+        const field = document.querySelector<HTMLInputElement>(`#${id}`)!;
+        field.value = value;
+        if (event === 'change') field.dispatchEvent(new Event('input'));
+        field.dispatchEvent(new Event(event));
+    }
+    function button(text: string) {
+        return [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+            (b) => b.textContent?.trim() === text,
+        )!;
+    }
+    function salesParams() {
+        const calls = api.get.mock.calls.filter(([url]) => url === '/sales');
+        return calls[calls.length - 1]?.[1]?.params;
+    }
+    it('searches suffix/full IDs, shows short number and full ID in details', async () => {
+        serve({ ...CASH_SALE, _id: '0123456789abcdefdeadbeef' }, []);
+        await history();
+        expect(document.body.textContent).toContain('deadbeef');
+        input('sales-number', 'deadbeef');
+        await flush();
+        button('Search').click();
+        await flush();
+        expect(salesParams()).toMatchObject({ saleNumber: 'deadbeef' });
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await flush();
+        expect(
+            document.querySelector('[data-testid="sale-full-id"]')?.textContent,
+        ).toContain('0123456789abcdefdeadbeef');
+    });
+    it('rejects malformed identity/date filters without replacing the current result', async () => {
+        serve(CASH_SALE, []);
+        await history();
+        const count = api.get.mock.calls.filter(
+            ([url]) => url === '/sales',
+        ).length;
+        input('sales-number', '.*');
+        await flush();
+        button('Search').click();
+        await flush();
+        expect(document.body.textContent).toContain('final eight hexadecimal');
+        input('sales-number', '');
+        input('sales-from', '2026-11-02');
+        input('sales-to', '2026-11-01');
+        await flush();
+        button('Search').click();
+        await flush();
+        expect(document.body.textContent).toContain('end date must not');
+        expect(
+            api.get.mock.calls.filter(([url]) => url === '/sales'),
+        ).toHaveLength(count);
+    });
+    it('keeps unapplied text out of paging, applies dates/payment and clears all filters', async () => {
+        serve(CASH_SALE, []);
+        await history();
+        input('sales-number', 'deadbeef');
+        await flush();
+        expect(salesParams()).not.toHaveProperty('saleNumber');
+        input('sales-from', '2026-11-01', 'change');
+        await flush();
+        expect(salesParams()).toMatchObject({
+            dateFrom: '2026-11-01',
+            saleNumber: 'deadbeef',
+        });
+        const payment =
+            document.querySelector<HTMLSelectElement>('#sales-payment')!;
+        payment.value = PaymentType.CASH;
+        payment.dispatchEvent(new Event('change'));
+        await flush();
+        expect(salesParams()).toMatchObject({ paymentType: 'CASH' });
+        button('Clear filters').click();
+        await flush();
+        expect(salesParams()).toEqual({ page: 1, limit: 5 });
+    });
+    it('uses managed cashier/category selectors for administrators', async () => {
+        serve(CASH_SALE, []);
+        const original = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/categories'
+                ? Promise.resolve({
+                      data: {
+                          data: [
+                              { _id: 'cat', name: 'Archived', isActive: false },
+                          ],
+                          totalItems: 1,
+                      },
+                  })
+                : url === '/users'
+                  ? Promise.resolve({
+                        data: {
+                            data: [{ _id: 'user', name: 'ana' }],
+                            totalItems: 1,
+                        },
+                    })
+                  : original(url, config),
+        );
+        await history();
+        const category =
+            document.querySelector<HTMLSelectElement>('#sales-category')!;
+        expect(category.textContent).toContain('Archived (archived)');
+        category.value = 'cat';
+        category.dispatchEvent(new Event('change'));
+        await flush();
+        expect(salesParams()).toMatchObject({ category: 'cat' });
+        const cashier =
+            document.querySelector<HTMLSelectElement>('#sales-cashier')!;
+        cashier.value = 'user';
+        cashier.dispatchEvent(new Event('change'));
+        await flush();
+        expect(salesParams()).toMatchObject({
+            cashier: 'user',
+            category: 'cat',
+        });
     });
 });

@@ -80,6 +80,11 @@
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <p v-if="showsMoney" class="text-sm text-slate-600">
+                Today's dashboard totals use original sale-day amounts and
+                exclude sales now reversed. Sales Reports use event dates: later
+                voids/refunds affect their own day.
+            </p>
             <!-- Recent sales: ADMIN only, absent from the API otherwise -->
             <div
                 v-if="showsMoney"

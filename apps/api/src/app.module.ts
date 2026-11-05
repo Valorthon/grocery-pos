@@ -1,3 +1,4 @@
+import { ReportsModule } from './reports/reports.module';
 import { StockCountModule } from './stock-count/stock-count.module';
 import { SupplierModule } from './supplier/supplier.module';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
@@ -30,6 +31,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
     imports: [
+        ReportsModule,
         StockCountModule,
         SupplierModule,
         // First, so the correlation id is set before any other middleware.
