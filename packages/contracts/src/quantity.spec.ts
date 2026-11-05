@@ -8,6 +8,8 @@ import {
     quantityDecimals,
     quantityInput,
     quantityScale,
+    reorderLevelOf,
+    reorderQuantityOf,
     unitLabel,
     unitOf,
 } from './quantity.js';
@@ -109,6 +111,23 @@ describe('fixed-precision measured quantities', () => {
         expect(maxQuantityForAmount(10, 0)).toBe(10);
         expect(maxQuantityForAmount(Number.MAX_SAFE_INTEGER, 1, U.KG)).toBe(
             Number.MAX_SAFE_INTEGER,
+        );
+    });
+});
+
+describe('per-product reorder defaults', () => {
+    it('keeps ten displayed units for legacy records and every measure', () => {
+        expect(reorderLevelOf({})).toBe(10);
+        expect(reorderQuantityOf({})).toBe(10);
+        for (const unit of Object.values(U)) {
+            expect(reorderLevelOf({ unit })).toBe(10 * quantityScale(unit));
+            expect(reorderQuantityOf({ unit })).toBe(10 * quantityScale(unit));
+        }
+    });
+    it('retains explicit zero levels and exact measured quantities', () => {
+        expect(reorderLevelOf({ unit: U.KG, reorderLevel: 0 })).toBe(0);
+        expect(reorderQuantityOf({ unit: U.KG, reorderQuantity: 450 })).toBe(
+            450,
         );
     });
 });

@@ -132,6 +132,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { newProductLines, toRestockBody } from '@/utils/payloads';
+import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     clearDraftsRequest,
@@ -154,6 +155,13 @@ const editingId = ref<string | null>(null);
 const saving = ref(false);
 
 const uiStore = useUIStore();
+const prefilled = useRestockPrefillStore().take();
+for (const line of prefilled) add(line);
+if (prefilled.length)
+    uiStore.queueMessage(
+        Color.INFO,
+        'Review restock quantities and enter the actual unit costs before saving.',
+    );
 const router = useRouter();
 
 const {

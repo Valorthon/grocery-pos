@@ -172,13 +172,13 @@ describe('UpdateBulkDto: no empty updates (issue #14)', () => {
 
     it('rejects an update with no fields, which would be an empty $set', async () => {
         expect(await messages({})).toEqual([
-            'At least one of the following must be provided: name, price, category, isActive',
+            'At least one of the following must be provided: name, price, category, isActive, reorderLevel, reorderQuantity',
         ]);
     });
 
     it('rejects an update whose only field is null', async () => {
         expect(await messages({ price: null })).toContain(
-            'At least one of the following must be provided: name, price, category, isActive',
+            'At least one of the following must be provided: name, price, category, isActive, reorderLevel, reorderQuantity',
         );
     });
 
@@ -208,5 +208,51 @@ describe('UpdateBulkDto: no empty updates (issue #14)', () => {
     it('accepts a name or a price', async () => {
         expect(await messages({ name: 'milk' })).toEqual([]);
         expect(await messages({ price: 1999 })).toEqual([]);
+    });
+});
+
+describe('reorder settings validation', () => {
+    it('allows zero reorder level and positive safe integer minor quantities', async () => {
+        for (const [property, value] of [
+            ['reorderLevel', 0],
+            ['reorderQuantity', 450],
+        ] as const) {
+            expect(
+                await propertyErrors(
+                    NewProductFields,
+                    { name: 'rice', price: 100, [property]: value },
+                    property,
+                ),
+            ).toHaveLength(0);
+        }
+    });
+    it('rejects null, fractions, unsafe integers and invalid quantity bounds', async () => {
+        for (const value of [null, 0.5, Number.MAX_SAFE_INTEGER + 1, -1]) {
+            expect(
+                await propertyErrors(
+                    NewProductFields,
+                    { name: 'rice', price: 100, reorderLevel: value },
+                    'reorderLevel',
+                ),
+            ).not.toHaveLength(0);
+        }
+        expect(
+            await propertyErrors(
+                NewProductFields,
+                { name: 'rice', price: 100, reorderQuantity: 0 },
+                'reorderQuantity',
+            ),
+        ).not.toHaveLength(0);
+    });
+    it('accepts an edit consisting only of reorder settings', async () => {
+        const dto = plainToInstance(UpdateBulkDto, {
+            updates: [
+                {
+                    product: '507f1f77bcf86cd799439011',
+                    update: { reorderLevel: 0, reorderQuantity: 5 },
+                },
+            ],
+        });
+        expect(await validate(dto)).toHaveLength(0);
     });
 });

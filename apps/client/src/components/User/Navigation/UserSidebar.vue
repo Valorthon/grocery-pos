@@ -144,10 +144,30 @@
                                         class="text-sm block truncate"
                                         >{{ item.title }}</span
                                     >
+                                    <span
+                                        v-if="item.name === 'LowStock' && !rail"
+                                        class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"
+                                        aria-label="Low stock count"
+                                        >{{ stockAlerts.count ?? '?' }}</span
+                                    >
                                 </div>
                             </button>
                         </template>
                     </nav>
+                    <div
+                        v-if="canViewInventory && stockAlerts.error && !rail"
+                        role="alert"
+                        class="px-3 text-xs text-red-700"
+                    >
+                        Stock alert count unavailable.
+                        <button
+                            type="button"
+                            class="min-h-11 underline"
+                            @click="stockAlerts.refresh"
+                        >
+                            Retry
+                        </button>
+                    </div>
                 </div>
 
                 <div class="p-3 border-t border-slate-200/80">
@@ -175,6 +195,7 @@ import {
     Users,
     X,
 } from '@lucide/vue';
+import { useStockAlertsStore } from '@/stores/stockAlerts';
 import { useAuthStore, Role } from '@/stores/auth';
 import { canViewDashboard } from '@/router/access';
 import UserProfileMenu from '@/components/User/Sales/UserProfileMenu.vue';
@@ -224,6 +245,15 @@ const canViewProducts = computed(
         authStore.isAdmin,
 );
 const canViewInventory = canViewProducts;
+const stockAlerts = useStockAlertsStore();
+watch(
+    () => [route.fullPath, authStore.user?.userId, canViewInventory.value],
+    () => {
+        stockAlerts.reset();
+        if (canViewInventory.value) void stockAlerts.refresh();
+    },
+    { immediate: true },
+);
 const canViewRestocks = computed(
     () => authStore.hasRole(Role.Restocker) || authStore.isAdmin,
 );
@@ -280,6 +310,12 @@ const sections = computed(() => [
                 visible: canViewInventory.value,
             },
             {
+                name: 'LowStock',
+                title: 'Low Stock',
+                icon: Package,
+                visible: canViewInventory.value,
+            },
+            {
                 name: 'Restocks',
                 title: 'Restock History',
                 icon: Truck,
@@ -313,11 +349,19 @@ const sections = computed(() => [
 ]);
 
 function isActive(name: string) {
+    if (name === 'LowStock')
+        return route.name === 'Inventories' && route.query.lowStock === 'true';
+    if (name === 'Inventories')
+        return route.name === name && route.query.lowStock !== 'true';
     return route.name === name;
 }
 
 function navigate(name: string) {
     closeDrawer();
-    void router.push({ name });
+    void router.push(
+        name === 'LowStock'
+            ? { name: 'Inventories', query: { lowStock: 'true' } }
+            : { name },
+    );
 }
 </script>

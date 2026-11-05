@@ -25,6 +25,16 @@
                 label="Selling price (₱)"
                 inputmode="decimal"
             />
+            <BaseInput
+                v-model="reorderLevel"
+                :label="`Reorder level (${unitLabel(product.unit)})`"
+                inputmode="decimal"
+            />
+            <BaseInput
+                v-model="reorderQuantity"
+                :label="`Restock quantity (${unitLabel(product.unit)})`"
+                inputmode="decimal"
+            />
             <p v-if="error" role="alert" class="text-sm text-red-700">
                 {{ error }}
             </p>
@@ -49,6 +59,10 @@ import {
     STRING_LIMITS,
     NUMERIC_LIMITS,
     unitLabel,
+    quantityInput,
+    parseQuantity,
+    reorderLevelOf,
+    reorderQuantityOf,
     type ProductView,
     type ProductUpdateRequest,
     type UpdateProductsRequest,
@@ -68,6 +82,8 @@ const admin = useAuthStore().user?.roles.includes(Role.Admin) ?? false;
 const name = ref('');
 const category = ref<string | undefined>();
 const price = ref('');
+const reorderLevel = ref('');
+const reorderQuantity = ref('');
 const error = ref('');
 const saving = ref(false);
 watch(
@@ -77,6 +93,14 @@ watch(
             name.value = props.product.name;
             category.value = props.product.category;
             price.value = (props.product.price / 100).toFixed(2);
+            reorderLevel.value = quantityInput(
+                reorderLevelOf(props.product),
+                props.product.unit,
+            );
+            reorderQuantity.value = quantityInput(
+                reorderQuantityOf(props.product),
+                props.product.unit,
+            );
             error.value = '';
         }
     },
@@ -99,7 +123,18 @@ async function save() {
         error.value = 'Enter a valid selling price.';
         return;
     }
+    const level = parseQuantity(reorderLevel.value, props.product.unit);
+    const quantity = parseQuantity(reorderQuantity.value, props.product.unit);
+    if (level === null || level < 0 || quantity === null || quantity < 1) {
+        error.value =
+            'Enter a valid reorder level and positive restock quantity.';
+        return;
+    }
     const update = {
+        ...(level !== reorderLevelOf(props.product) && { reorderLevel: level }),
+        ...(quantity !== reorderQuantityOf(props.product) && {
+            reorderQuantity: quantity,
+        }),
         name: normalized,
         ...(category.value !== props.product.category && {
             category: category.value ?? null,

@@ -443,4 +443,22 @@ A product's unit cannot be changed after creation.
 Archiving stops fresh online sales and register lookups without deleting stock or
 historical records. The next offline catalogue sync removes archived products
 from cached availability; cash already collected offline remains recoverable.
-Reorder levels and audit-log presentation follow in #40 and #46.
+Reorder levels are editable in the same dialog (#40); audit-log presentation remains #46.
+
+## Reorder planning (#40)
+
+Use **Products → Edit** to set each product's reorder level and restock quantity.
+Both are entered in the product's unit; KG/L allow three decimals. Products
+without settings default to ten displayed units. Restockers and admins can edit
+these settings; selling-price changes remain admin-only.
+
+**Inventory → Low stock** includes active products at or below their own level,
+including zero and recorded negative stock. The dashboard low-stock tile links to
+that list for inventory roles, and the sidebar shows its count. Out-of-stock
+counts may overlap. Largest displayed-unit shortages appear first.
+
+**Restock listed items** opens an unsaved restock draft for the current page, using
+each configured restock quantity. Review quantities and enter actual unit costs
+before saving. No stock changes until the normal confirmed restock is submitted.
+A zero unit cost still requires the existing explicit confirmation. Handoff never
+transfers drafts to another user or writes stock automatically.

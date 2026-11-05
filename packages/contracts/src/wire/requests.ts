@@ -123,6 +123,9 @@ export interface DrawerMovementRequest {
  * `newProduct`. Without an `EAN` the server generates one.
  */
 export interface NewProductRequest {
+    /** Integer minor units; absent defaults to ten displayed units. */
+    reorderLevel?: number;
+    reorderQuantity?: number;
     unit?: import('../enums.js').UnitOfMeasure;
     EAN?: string;
     name: string;
@@ -204,6 +207,9 @@ export interface ManagerOverrideRequest {
 
 /** Product editing never changes its immutable unit. */
 export interface ProductUpdateRequest {
+    /** Integer minor units; absent defaults to ten displayed units. */
+    reorderLevel?: number;
+    reorderQuantity?: number;
     name?: string;
     price?: number;
     category?: string | null;

@@ -230,3 +230,47 @@ describe('Dashboard recent activity (issue #20)', () => {
         expect(titles).not.toContain('Sale: ₱7.00');
     });
 });
+
+it('links the low-stock tile to the filtered inventory list for inventory roles', async () => {
+    const { createRouter, createMemoryHistory } = await import('vue-router');
+    const { useAuthStore } = await import('@/stores/auth');
+    const { Role } = await import('@grocery-pos/contracts');
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = {
+        userId: 'restocker',
+        username: 'restocker',
+        roles: [Role.Restocker],
+    };
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: '/', name: 'Dashboard', component: Dashboard },
+            {
+                path: '/inventory',
+                name: 'Inventories',
+                component: { template: '<div>Inventory</div>' },
+            },
+        ],
+    });
+    await router.push('/');
+    await router.isReady();
+    get.mockResolvedValue({ data: STATS });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    app = createApp(Dashboard);
+    app.use(pinia);
+    app.use(router);
+    app.mount(host);
+    for (let i = 0; i < 5; i++) await nextTick();
+    const link = document.querySelector<HTMLAnchorElement>(
+        'a[href="/inventory?lowStock=true"]',
+    );
+    expect(link?.textContent).toContain('Low Stock Items');
+    link!.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(router.currentRoute.value).toMatchObject({
+        name: 'Inventories',
+        query: { lowStock: 'true' },
+    });
+});

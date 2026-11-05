@@ -5,6 +5,13 @@
         </template>
         <template #actions>
             <BaseButton
+                v-if="canRestock && applied.lowStock"
+                size="sm"
+                :disabled="loading || !!loadError || sourceRows.length === 0"
+                @click="createRestock"
+                >Restock listed items</BaseButton
+            >
+            <BaseButton
                 size="sm"
                 @click="router.push({ name: 'Adjustments/Add' })"
             >
@@ -30,7 +37,14 @@
                 @enter="applySearch"
                 @clear="applySearch"
             />
-            <div class="md:col-span-2 flex items-end gap-2">
+            <label class="flex items-center gap-2 text-sm"
+                ><input
+                    v-model="lowStock"
+                    type="checkbox"
+                    @change="toggleLowStock"
+                />Low stock</label
+            >
+            <div class="flex items-end gap-2">
                 <BaseButton size="sm" @click="applySearch">
                     <Search class="w-4 h-4" />
                     Search
@@ -57,11 +71,13 @@
 </template>
 
 <script setup lang="ts">
-import { formatQuantity } from '@grocery-pos/contracts';
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { Package, Pencil, Search, X } from '@lucide/vue';
 import api from '@/axios';
+import { useAuthStore, Role } from '@/stores/auth';
+import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
@@ -74,13 +90,53 @@ import {
 import type { InventoryRow, Paginated } from '@grocery-pos/contracts';
 
 const router = useRouter();
+const route = useRoute();
+const auth = useAuthStore();
+const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
+const prefill = useRestockPrefillStore();
+const lowStock = ref(route?.query.lowStock === 'true');
+const sourceRows = ref<InventoryRow[]>([]);
+async function createRestock() {
+    if (
+        !canRestock.value ||
+        !sourceRows.value.length ||
+        loadError.value ||
+        loading.value
+    )
+        return;
+    if (prefill.prepare(sourceRows.value))
+        await router.push({ name: 'Restocks/Add' });
+}
+function toggleLowStock() {
+    applySearch();
+    void router.replace({
+        query: {
+            ...route?.query,
+            lowStock: lowStock.value ? 'true' : undefined,
+        },
+    });
+}
+watch(
+    () => route?.query.lowStock,
+    (value) => {
+        const next = value === 'true';
+        if (lowStock.value !== next) {
+            lowStock.value = next;
+            applySearch();
+        }
+    },
+);
 const { page, limit, search } = useListPaging(() => fetchInventory());
 const totalItems = ref(0);
 const searchName = ref('');
 const searchEAN = ref('');
 // What the list was last searched for: paging and Retry reuse it.
 const { applied, apply: applySearch } = useAppliedFilters(
-    () => ({ name: searchName.value, EAN: searchEAN.value }),
+    () => ({
+        name: searchName.value,
+        EAN: searchEAN.value,
+        lowStock: lowStock.value,
+    }),
     search,
 );
 
@@ -88,6 +144,7 @@ const headers = [
     { key: 'EAN', title: 'EAN' },
     { key: 'name', title: 'Name' },
     { key: 'stock', title: 'Stock', align: 'right' as const },
+    { key: 'reorderLevel', title: 'Reorder level', align: 'right' as const },
 ];
 
 /** A row of the inventory table. */
@@ -97,6 +154,7 @@ interface InventoryListRow {
     EAN: string;
     name: string;
     stock: string;
+    reorderLevel: string;
 }
 
 const serverItems = ref<InventoryListRow[]>([]);
@@ -104,7 +162,8 @@ const serverItems = ref<InventoryListRow[]>([]);
 const resetFilters = () => {
     searchEAN.value = '';
     searchName.value = '';
-    applySearch();
+    lowStock.value = false;
+    toggleLowStock();
 };
 
 const {
@@ -119,17 +178,21 @@ const {
                 limit: limit.value,
                 name: applied.value.name?.toUpperCase(),
                 EAN: applied.value.EAN,
+                lowStock: applied.value.lowStock || undefined,
             },
         }),
     (result) => {
+        sourceRows.value = result.data.data;
         const data = result.data.data.map((inventory) => ({
             id: inventory.product._id,
             EAN: inventory.product.EAN,
             name: inventory.product.name,
             stock: formatQuantity(inventory.stock, inventory.product.unit),
+            reorderLevel: formatQuantity(
+                reorderLevelOf(inventory.product),
+                inventory.product.unit,
+            ),
         }));
-
-        data.sort((a, b) => a.name.localeCompare(b.name));
 
         serverItems.value = data;
         totalItems.value = result.data.totalItems;

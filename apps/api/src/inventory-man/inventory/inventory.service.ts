@@ -1,3 +1,8 @@
+import {
+    reorderLevelExpression,
+    reorderMatchStage,
+    stockScaleExpression,
+} from './reorder-query';
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Inventory, type InventoryRowDoc } from './inventory.schema';
@@ -39,6 +44,29 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
         // No preserveNullAndEmptyArrays: an orphan row (its product gone)
         // is dropped here, before both the count and the page.
         { $unwind: '$product' },
+        ...(dto.lowStock
+            ? [
+                  reorderMatchStage(),
+                  {
+                      $addFields: {
+                          __reorderSeverity: {
+                              $divide: [
+                                  {
+                                      $subtract: [
+                                          {
+                                              $toDecimal:
+                                                  reorderLevelExpression(),
+                                          },
+                                          { $toDecimal: '$stock' },
+                                      ],
+                                  },
+                                  stockScaleExpression(),
+                              ],
+                          },
+                      },
+                  },
+              ]
+            : []),
         ...(maxStock !== undefined && maxStock !== null && maxStock !== 0
             ? [
                   {
@@ -76,8 +104,16 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
             $facet: {
                 metadata: [{ $count: 'total' }],
                 data: [
-                    { $project: { offlineShortfall: 0 } },
-                    { $sort: { 'product.name': 1, _id: 1 } },
+                    {
+                        $sort: dto.lowStock
+                            ? {
+                                  __reorderSeverity: -1,
+                                  'product.name': 1,
+                                  _id: 1,
+                              }
+                            : { 'product.name': 1, _id: 1 },
+                    },
+                    { $project: { offlineShortfall: 0, __reorderSeverity: 0 } },
                     { $skip: (page - 1) * limit },
                     { $limit: limit },
                 ],

@@ -248,9 +248,11 @@ requestId}`. A 5xx never carries details or internals.
   restock, adjustment or product batch; 50 users). `limits.spec.ts` walks the
   controllers and enforces both.
 - User-facing totals use `countDocuments`, never `estimatedDocumentCount`.
-- The dashboard's low stock is positive stock up to `LOW_STOCK_THRESHOLD` (10, in
-  contracts, until #40) in the displayed unit, and out of stock is `stock ≤ 0`. Neither counts
-  orphan inventory rows. Every dashboard role sees both tiles.
+- Low stock is any active product at or below its own reorder level, including
+  zero and negative stock (#40, owner decision 2026-11-05). The matching dashboard
+  tile and reorder list share this predicate; out-of-stock (`stock ≤ 0`) may overlap.
+  Both ignore archived products and orphan inventory rows. Every dashboard role
+  sees stock counts; only inventory roles can follow the list link.
 - `GET /sales` takes `cashier` and `dateFrom`/`dateTo`. For ADMIN they filter
   everything. For anyone else they only narrow the own-open-shift scope, and
   naming another cashier returns nothing. Sales are indexed on `{createdAt}`,
@@ -679,3 +681,19 @@ the product owner picks.
   deploy the matching API/client. Legacy enum strings map atomically to reusable
   category documents; unknown strings fail before writes and reruns are safe.
   See README. Category reporting integration stays #44.
+
+**Reorder planning** (#40)
+
+- `reorderLevel` and `reorderQuantity` use safe integer minor units, like stock.
+  Legacy missing settings default to ten displayed units (10,000 grams for KG,
+  10,000 mL for L, ten pieces/grams otherwise). Level may be zero; restock
+  quantity must be positive. RESTOCKER/ADMIN may edit these without gaining
+  ADMIN-only selling-price permissions. No migration or stock write is needed.
+- Low-stock list includes zero/negative levels and sorts by displayed-unit
+  shortfall descending, then product name and row id. Paging preserves that order.
+  Dashboard counts, sidebar badge and list use the same per-product thresholds.
+- Restock listed items transfers the current page into an unsaved draft with the
+  configured quantities. It never reserves/writes stock and cannot replace an
+  existing draft silently. Handoff is in memory, consumed once and cleared on
+  account change. Review actual unit costs before saving; zero-cost lines retain
+  the existing explicit confirmation. Supplier pricing belongs to #41.

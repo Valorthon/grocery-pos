@@ -84,3 +84,17 @@ export function maxQuantityForAmount(
         ),
     );
 }
+
+/** Legacy reorder settings are ten displayed units, stored as minor units. */
+export function reorderLevelOf(product: {
+    unit?: UnitOfMeasure;
+    reorderLevel?: number;
+}): number {
+    return product.reorderLevel ?? 10 * quantityScale(product.unit);
+}
+export function reorderQuantityOf(product: {
+    unit?: UnitOfMeasure;
+    reorderQuantity?: number;
+}): number {
+    return product.reorderQuantity ?? 10 * quantityScale(product.unit);
+}
