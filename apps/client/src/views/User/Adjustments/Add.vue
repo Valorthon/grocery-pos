@@ -105,6 +105,7 @@
 </template>
 
 <script setup lang="ts">
+import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 import { formatQuantity } from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -136,6 +137,8 @@ const isAddDialogOpen = ref(false);
 const isSaveDialogOpen = ref(false);
 const search = ref('');
 const { items, add, replace, remove, clear } = useDraftList<AddForm>();
+const pendingWriteOff = useAdjustmentPrefillStore().take();
+if (pendingWriteOff) add(pendingWriteOff);
 const editItem = ref<AddForm>();
 const editingId = ref<string | null>(null);
 /** True while the save request is in flight (the save dialog is busy). */

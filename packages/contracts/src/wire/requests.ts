@@ -123,6 +123,7 @@ export interface DrawerMovementRequest {
  * `newProduct`. Without an `EAN` the server generates one.
  */
 export interface NewProductRequest {
+    tracksExpiry?: boolean;
     /** Integer minor units; absent defaults to ten displayed units. */
     reorderLevel?: number;
     reorderQuantity?: number;
@@ -146,6 +147,8 @@ export interface NewProductsRequest {
  * says so in the type.
  */
 export interface RestockLineFields {
+    expiryDate?: string;
+    batchNo?: string;
     newProduct?: NewProductRequest;
     product?: string;
     quantity: number;
@@ -173,6 +176,7 @@ export interface RestockRequest {
 
 /** One `adjustDetails` line: a signed, non-zero stock change. */
 export interface AdjustmentLineRequest {
+    batch?: string;
     product: string;
     change: number;
     reason: string;
@@ -209,6 +213,7 @@ export interface ManagerOverrideRequest {
 
 /** Product editing never changes its immutable unit. */
 export interface ProductUpdateRequest {
+    tracksExpiry?: boolean;
     /** Integer minor units; absent defaults to ten displayed units. */
     reorderLevel?: number;
     reorderQuantity?: number;

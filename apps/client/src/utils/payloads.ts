@@ -28,6 +28,7 @@ import type {
 
 /** A new product draft as the product dialogs hold it. Money in centavos. */
 export interface ProductDraft {
+    tracksExpiry?: boolean;
     unit?: UnitOfMeasure;
     category?: string;
     EAN: string;
@@ -69,6 +70,9 @@ export function toEnsureValidQuery(
 export function toNewProduct(draft: ProductDraft): NewProductRequest {
     return {
         ...typedEAN(draft),
+        ...(draft.tracksExpiry !== undefined && {
+            tracksExpiry: draft.tracksExpiry,
+        }),
         name: draft.name,
         price: draft.price,
         ...(draft.unit && { unit: draft.unit }),
@@ -88,6 +92,8 @@ export function toNewProductsBody(drafts: ProductDraft[]): NewProductsRequest {
 export type RestockDraft = Omit<ProductDraft, 'price'> & {
     quantity: number;
     unitCost: number;
+    expiryDate?: string;
+    batchNo?: string;
 } & (
         | { isNewProduct: true; price: number; product?: string }
         | { isNewProduct: false; product: string; price?: number }
@@ -113,6 +119,8 @@ export function toRestockBody(
                 : { product: d.product }),
             quantity: d.quantity,
             unitCost: d.unitCost,
+            ...(d.expiryDate && { expiryDate: d.expiryDate }),
+            ...(d.batchNo && { batchNo: d.batchNo }),
         })),
         description,
     };
@@ -131,6 +139,7 @@ export function newProductLines(
 
 /** An adjustment draft line; EAN and name are for display only. */
 export interface AdjustmentDraft {
+    batch?: string;
     product: string;
     change: number;
     reason: string;
@@ -144,6 +153,7 @@ export function toAdjustmentBody(
     return {
         adjustDetails: drafts.map((d) => ({
             product: d.product,
+            ...(d.batch && { batch: d.batch }),
             change: d.change,
             reason: d.reason,
         })),

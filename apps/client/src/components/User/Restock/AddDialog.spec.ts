@@ -358,3 +358,75 @@ it('offers one unit selector for a new measured product and uses it for the deli
         price: 18000,
     });
 });
+
+it('requires a real expiry date for tracked stock and preserves batch metadata on edit', async () => {
+    await open({
+        isNewProduct: false,
+        product: MILK.product,
+        EAN: MILK.EAN,
+        name: MILK.name,
+        autoGenerateEAN: false,
+        quantity: 2,
+        unitCost: 100,
+        tracksExpiry: true,
+        expiryDate: '2026-02-28',
+        batchNo: 'LOT-A',
+    });
+    expect(field('Expiry date').value).toBe('2026-02-28');
+    expect(field('Batch number').value).toBe('LOT-A');
+    await type('Expiry date', '');
+    await click('Update Restock');
+    expect(updated).toEqual([]);
+    expect(document.body.textContent).toContain('Choose a valid expiry date.');
+    await type('Expiry date', '2026-03-01');
+    await click('Update Restock');
+    expect(updated[0]).toMatchObject({
+        tracksExpiry: true,
+        expiryDate: '2026-03-01',
+        batchNo: 'LOT-A',
+        quantity: 2,
+    });
+});
+it('creates a new tracked receipt line with required expiry and no stale metadata when switching modes', async () => {
+    await open();
+    await check('This is a new product', true);
+    await check('Track expiry and batches', true);
+    await check('Auto-generate EAN', true);
+    await type('Product Name', 'Yoghurt');
+    await type('Selling Price', '20');
+    await type('Quantity', '1');
+    await type('Unit Cost', '10');
+    await click('Restock');
+    expect(added).toHaveLength(0);
+    await type('Expiry date', '2026-12-31');
+    await type('Batch number', ' A ');
+    await click('Restock');
+    expect(added[0]).toMatchObject({
+        tracksExpiry: true,
+        expiryDate: '2026-12-31',
+        batchNo: 'A',
+        isNewProduct: true,
+    });
+});
+it('requires expiry for a freshly picked tracked product from the catalogue', async () => {
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === 'products/matches'
+                    ? [{ ...MILK, tracksExpiry: true }]
+                    : [],
+        }),
+    );
+    await open();
+    await searchAndPick('Milk');
+    await type('Quantity', '2');
+    await type('Unit Cost', '5');
+    await click('Restock');
+    expect(added).toHaveLength(0);
+    await type('Expiry date', '2026-11-01');
+    await click('Restock');
+    expect(added[0]).toMatchObject({
+        tracksExpiry: true,
+        expiryDate: '2026-11-01',
+    });
+});

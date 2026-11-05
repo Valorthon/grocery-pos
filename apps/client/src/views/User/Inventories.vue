@@ -5,6 +5,14 @@
         </template>
         <template #actions>
             <BaseButton
+                size="sm"
+                variant="outline"
+                @click="showBatches = !showBatches"
+                >{{
+                    showBatches ? 'Hide batches' : 'Expiry and batches'
+                }}</BaseButton
+            >
+            <BaseButton
                 v-if="canRestock && applied.lowStock"
                 size="sm"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
@@ -68,9 +76,11 @@
             @retry="fetchInventory"
         />
     </PageCard>
+    <InventoryBatches v-if="showBatches" />
 </template>
 
 <script setup lang="ts">
+import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -91,6 +101,7 @@ import type { InventoryRow, Paginated } from '@grocery-pos/contracts';
 
 const router = useRouter();
 const route = useRoute();
+const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
 const prefill = useRestockPrefillStore();

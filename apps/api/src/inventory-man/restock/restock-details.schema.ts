@@ -1,3 +1,4 @@
+import { EXPIRY_LIMITS } from '@grocery-pos/contracts';
 import { UnitOfMeasure } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Types } from 'mongoose';
@@ -8,6 +9,11 @@ import type { ProductDoc } from '../../product/product.schema';
 
 @Schema()
 export class RestockDetails {
+    @Prop({ type: String })
+    expiryDate?: string;
+    @Prop({ type: String, maxlength: EXPIRY_LIMITS.BATCH_NO })
+    batchNo?: string;
+
     @Prop({ type: String, enum: Object.values(UnitOfMeasure), required: false })
     unit?: UnitOfMeasure;
 

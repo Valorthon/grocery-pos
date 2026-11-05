@@ -7,6 +7,9 @@ import type { ProductDoc } from '../../product/product.schema';
 
 @Schema()
 export class AdjustmentDetails {
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'InventoryBatch' })
+    batch?: Types.ObjectId;
+
     @Prop({
         required: true,
         type: mongoose.Schema.ObjectId,

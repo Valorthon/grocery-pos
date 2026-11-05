@@ -1,5 +1,7 @@
 import { receiptCost } from '../supplier/cost';
 import { OfflineCost } from './offline-cost.schema';
+import { InventoryBatchService } from '../inventory-man/batch/batch.service';
+import { Optional } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
@@ -113,6 +115,7 @@ export class OfflineService {
         private jwt: JwtService,
         private config: TypedConfigService,
         @InjectModel(OfflineCost.name) private costQuotes: Model<OfflineCost>,
+        @Optional() private batches?: InventoryBatchService,
     ) {}
 
     private async currentSession(actor: AuthUser, session?: ClientSession) {
@@ -265,7 +268,7 @@ export class OfflineService {
             const costBasis = receiptCost(product.lastCost);
             // Store the confidential procurement basis only on the server.
             const costQuote =
-                product.isActive === false
+                product.isActive === false || product.tracksExpiry === true
                     ? undefined
                     : await this.costQuotes.create({
                           lease: lease._id,
@@ -276,7 +279,7 @@ export class OfflineService {
                           }),
                       });
             const proof =
-                product.isActive === false
+                product.isActive === false || product.tracksExpiry === true
                     ? ''
                     : this.jwt.sign(
                           {
@@ -303,7 +306,8 @@ export class OfflineService {
                           },
                       );
             products.push({
-                ...(product.isActive === false && { isActive: false }),
+                ...((product.isActive === false ||
+                    product.tracksExpiry === true) && { isActive: false }),
                 _id: String(product._id),
                 EAN: product.EAN,
                 name: product.name,
@@ -540,6 +544,11 @@ export class OfflineService {
                     );
                 let shortfall = false;
                 for (const line of lines) {
+                    await this.products.updateOne(
+                        { _id: line.product },
+                        { $inc: { saleVersion: 1 } },
+                        { session },
+                    );
                     const product = await this.products
                         .findById(line.product)
                         .session(session)
@@ -551,6 +560,7 @@ export class OfflineService {
                         (!admin && product.EAN !== line.attested.EAN)
                     )
                         throw invalid();
+                    if (product.tracksExpiry && !admin) throw reconcile();
                     const current = await this.inventory
                         .findOne({ product: line.product })
                         .session(session)
@@ -575,6 +585,12 @@ export class OfflineService {
                         },
                         { session, upsert: true },
                     );
+                    if (product.tracksExpiry)
+                        await this.batches!.reconcileOffline(
+                            new Types.ObjectId(line.product),
+                            line.quantity,
+                            session,
+                        );
                 }
                 const [sale] = await this.sales.create(
                     [

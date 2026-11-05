@@ -140,6 +140,7 @@ function fixture() {
         updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
     };
     const products = {
+        updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
         find: jest.fn(() => new Query([product])),
         findById: jest.fn(() => new Query<typeof product | null>(product)),
     };

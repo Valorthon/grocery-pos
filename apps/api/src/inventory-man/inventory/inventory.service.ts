@@ -3,7 +3,9 @@ import {
     reorderMatchStage,
     stockScaleExpression,
 } from './reorder-query';
-import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import { InventoryBatchService } from '../batch/batch.service';
+import type { BatchAllocation } from '@grocery-pos/contracts';
+import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Inventory, type InventoryRowDoc } from './inventory.schema';
 import type { Paginated } from '@grocery-pos/contracts';
@@ -137,6 +139,7 @@ export class InventoryService {
         @InjectModel(Inventory.name) private model: Model<Inventory>,
         @Inject(forwardRef(() => ProductService))
         private productService: ProductService,
+        @Optional() private batches?: InventoryBatchService,
     ) {}
 
     /**
@@ -151,6 +154,25 @@ export class InventoryService {
      *   a product with no inventory row never appears, so the `$facet` count
      *   and the page agree (issue #14).
      */
+    async assertTrackingChange(
+        product: string,
+        session: ClientSession,
+    ): Promise<void> {
+        const inventory = await this.model
+            .findOne({ product })
+            .session(session)
+            .lean();
+        if (inventory && inventory.stock !== 0)
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Expiry tracking can change only when stock is zero',
+            );
+        await this.batches?.assertCanChangeTracking(
+            new Types.ObjectId(product),
+            session,
+        );
+    }
+
     async getAll(dto: GetAllDto): Promise<Paginated<InventoryRowDoc>> {
         const [result] = await this.model.aggregate<{
             data: InventoryRowDoc[];
@@ -279,11 +301,17 @@ export class InventoryService {
         dto: AdjustDto,
         session: ClientSession,
     ): Promise<void> {
+        if (this.batches)
+            await this.productService.getMany(
+                dto.adjustDetails.map((line) => line.product),
+                session,
+            );
         await this.applyChanges(
             dto.adjustDetails.map(({ product, change }) => [product, change]),
             userId,
             session,
         );
+        await this.batches?.adjust(dto.adjustDetails, session);
     }
 
     /**
@@ -294,7 +322,11 @@ export class InventoryService {
      */
     async returnStock(
         userId: string,
-        lines: { product: { toString(): string }; quantity: number }[],
+        lines: {
+            product: { toString(): string };
+            quantity: number;
+            batchAllocations?: BatchAllocation[];
+        }[],
         session: ClientSession,
     ): Promise<void> {
         await this.applyChanges(
@@ -302,6 +334,27 @@ export class InventoryService {
             userId,
             session,
         );
+        for (const line of lines)
+            await this.batches?.restore(
+                new Types.ObjectId(line.product.toString()),
+                line.quantity,
+                line.batchAllocations,
+                session,
+            );
+        if (this.batches)
+            for (const product of new Set(
+                lines.map((line) => line.product.toString()),
+            )) {
+                const found = await this.productService.getMany(
+                    [product],
+                    session,
+                );
+                if (found.get(product)?.tracksExpiry)
+                    await this.batches?.assertInvariant(
+                        new Types.ObjectId(product),
+                        session,
+                    );
+            }
     }
 
     private async applyChanges(
@@ -400,7 +453,7 @@ export class InventoryService {
         userId: string,
         dto: SellDto,
         session: ClientSession,
-    ): Promise<void> {
+    ): Promise<BatchAllocation[][]> {
         const updatedBy = new Types.ObjectId(userId);
         const quantityByProduct = sumByProduct(
             dto.sellDetails.map(({ product, quantity }) => [product, quantity]),
@@ -421,6 +474,15 @@ export class InventoryService {
             },
         }));
 
+        const allocations: BatchAllocation[][] = [];
+        for (const line of dto.sellDetails)
+            allocations.push(
+                (await this.batches?.consume(
+                    new Types.ObjectId(line.product),
+                    line.quantity,
+                    session,
+                )) ?? [],
+            );
         const result = await this.model.bulkWrite(updates, { session });
 
         if (result.matchedCount !== updates.length) {
@@ -442,6 +504,19 @@ export class InventoryService {
                 shortfalls,
             );
         }
+        if (this.batches) {
+            const products = await this.productService.getMany(
+                [...quantityByProduct.keys()],
+                session,
+            );
+            for (const [product, value] of products)
+                if (value.tracksExpiry)
+                    await this.batches.assertInvariant(
+                        new Types.ObjectId(product),
+                        session,
+                    );
+        }
+        return allocations;
     }
 
     /**

@@ -41,15 +41,25 @@
         >
             <component
                 :is="
-                    stat.title === 'Low Stock Items' && canOpenInventory
+                    (stat.title === 'Low Stock Items' ||
+                        stat.title === 'Expiring / expired batches') &&
+                    canOpenInventory
                         ? 'router-link'
                         : 'div'
                 "
                 v-for="stat in stats"
                 :key="stat.title"
                 :to="
-                    stat.title === 'Low Stock Items' && canOpenInventory
-                        ? { name: 'Inventories', query: { lowStock: 'true' } }
+                    (stat.title === 'Low Stock Items' ||
+                        stat.title === 'Expiring / expired batches') &&
+                    canOpenInventory
+                        ? {
+                              name: 'Inventories',
+                              query:
+                                  stat.title === 'Low Stock Items'
+                                      ? { lowStock: 'true' }
+                                      : { expiring: 'true' },
+                          }
                         : undefined
                 "
                 class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs"
@@ -230,6 +240,12 @@ const data = ref<DashboardView | null>(null);
 const showsMoney = computed(() => data.value?.todayRevenue !== undefined);
 
 const stats = computed(() => [
+    {
+        title: 'Expiring / expired batches',
+        value: data.value?.expiringBatchCount?.toLocaleString() ?? '-',
+        icon: AlertCircle,
+        avatarClass: 'bg-amber-50 text-amber-600',
+    },
     {
         title: 'Total Products',
         value: data.value?.totalProducts?.toLocaleString() ?? '-',

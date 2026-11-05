@@ -490,3 +490,25 @@ each configured restock quantity. Review quantities and enter actual unit costs
 before saving. No stock changes until the normal confirmed restock is submitted.
 A zero unit cost still requires the existing explicit confirmation. Handoff never
 transfers drafts to another user or writes stock automatically.
+
+## Expiry tracking and batches
+
+Choose **Track expiry and batches** when creating a perishable product, or in its
+editor after stock reaches zero. Once any batch history exists, tracking stays
+enabled: switching it off could make a later expired return sellable. Existing products stay untracked; no opening expiry is invented.
+
+Every tracked restock line needs an expiry date and can include a batch number.
+The register uses earliest unexpired lots first. The expiry date remains usable
+through that store calendar day, and expired stock is blocked from online sales.
+Measured quantities keep their usual integer gram/millilitre precision.
+
+Open Inventory → Expiry and batches to review lots, expiry days and reconciliation
+balances. **Write off** creates a batch-specific unsaved adjustment for review; it
+never changes stock until that adjustment is saved. Returns restore their original
+lots, so an expired return does not become sellable again.
+
+Tracked products require an online register. They are removed from new offline
+catalogues. Previously collected cash is retained and requires an ADMIN to
+reconcile it; explicit deficit lots keep stock totals accountable without inventing
+expiry dates. Undated reconciliation lots cannot be sold. Review and reconcile those balances through batch-specific adjustments. Cost/margin continues to use the latest-receipt basis,
+not batch valuation.

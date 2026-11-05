@@ -19,6 +19,14 @@
                 @search="onSearch"
             />
 
+            <BatchSelect
+                v-if="picked?.tracksExpiry || formData.batch"
+                v-model="formData.batch"
+                :product="picked?.product ?? ''"
+            />
+            <p v-if="errors.batch" role="alert" class="text-sm text-red-700">
+                {{ errors.batch }}
+            </p>
             <!-- No inputmode: a numeric keypad has no minus key, and a
                  write-off is a negative change. -->
             <BaseInput
@@ -69,6 +77,7 @@ import {
     quantityScale,
     unitLabel,
 } from '@grocery-pos/contracts';
+import BatchSelect from '@/components/User/Inventory/BatchSelect.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
 import { STRING_LIMITS } from '@grocery-pos/contracts';
@@ -119,6 +128,7 @@ const {
 
 /** The product picked from the matches, as it was when picked. */
 interface PickedProduct {
+    tracksExpiry?: boolean;
     unit?: UnitOfMeasure;
     product: string;
     name: string;
@@ -146,12 +156,14 @@ const selectedProduct = computed<ComboboxOption | null>({
             : undefined;
         picked.value = opt
             ? {
+                  tracksExpiry: match?.tracksExpiry,
                   product: opt.value,
                   name: opt.label,
                   EAN: match?.EAN ?? opt.display ?? '',
                   unit: unitOf(match?.unit),
               }
             : null;
+        formData.batch = undefined;
         clearError('EAN');
     },
 });
@@ -177,9 +189,11 @@ watch(
         formData.unit = item?.unit ?? UnitOfMeasure.PIECE;
         formData.change = item ? quantityInput(item.change, item.unit) : '';
         formData.reason = item?.reason ?? '';
+        formData.batch = item?.batch;
         formData.product = '';
         picked.value = item?.product
             ? {
+                  tracksExpiry: !!item.batch,
                   product: item.product,
                   name: item.name,
                   EAN: item.EAN,
@@ -197,8 +211,11 @@ function handleSubmit() {
         unit: picked.value?.unit ?? formData.unit,
         product: picked.value?.product ?? '',
     });
+    if (picked.value?.tracksExpiry && !formData.batch)
+        errors.value.batch = 'Choose a batch.';
     if (Object.keys(errors.value).length || !picked.value) return;
     const payload: AddForm = {
+        ...(formData.batch && { batch: formData.batch }),
         EAN: picked.value.EAN,
         name: picked.value.name,
         product: picked.value.product,

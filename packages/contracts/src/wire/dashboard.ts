@@ -28,6 +28,7 @@ export const RESTOCK_ACTIVITY_SHAPE: WireShape<RestockActivity> = {
  * absent, and `recentRestocks` carry no `totalCost`.
  */
 export interface DashboardView {
+    expiringBatchCount?: number;
     totalProducts: number;
     /** Products with 1 to LOW_STOCK_THRESHOLD units on hand. */
     lowStockCount: number;
@@ -46,6 +47,7 @@ export interface DashboardView {
 }
 
 export const DASHBOARD_VIEW_SHAPE: WireShape<DashboardView> = {
+    expiringBatchCount: 'optional',
     totalProducts: 'required',
     lowStockCount: 'required',
     outOfStockCount: 'required',

@@ -8,6 +8,13 @@ import type { NameRef } from '../common/wire';
 
 @Schema()
 export class SalesDetails {
+    @Prop({
+        type: [{ _id: false, batch: String, quantity: Number }],
+        select: false,
+        default: undefined,
+    })
+    batchAllocations?: import('@grocery-pos/contracts').BatchAllocation[];
+
     /** Latest-receipt basis captured by the server. Absent means unknown. */
     @Prop({
         type: Number,

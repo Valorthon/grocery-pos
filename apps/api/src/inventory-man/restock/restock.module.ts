@@ -1,4 +1,5 @@
 import { SupplierModule } from '../../supplier/supplier.module';
+import { InventoryBatchModule } from '../batch/batch.module';
 import { Module } from '@nestjs/common';
 import { RestockService } from './restock.service';
 import { RestockController } from './restock.controller';
@@ -10,6 +11,7 @@ import { ProductModule } from '../../product/product.module';
 
 @Module({
     imports: [
+        InventoryBatchModule,
         MongooseModule.forFeature([
             {
                 name: Restock.name,

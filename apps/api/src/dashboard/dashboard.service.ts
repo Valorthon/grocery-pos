@@ -1,3 +1,5 @@
+import { InventoryBatchService } from '../inventory-man/batch/batch.service';
+import { Optional } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
@@ -35,6 +37,7 @@ export type RestockActivityDoc = Pick<
 /** What every dashboard role sees: stock and activity, no money. */
 export interface DashboardStats {
     totalProducts: number;
+    expiringBatchCount?: number;
     /** Active products at or below their per-product reorder level, including zero/negative stock. */
     lowStockCount: number;
     /** Products with 0 (or fewer) units on hand. */
@@ -120,6 +123,7 @@ export class DashboardService {
         @InjectModel(Adjustment.name)
         private adjustmentModel: Model<Adjustment>,
         private config: TypedConfigService,
+        @Optional() private batches?: InventoryBatchService,
     ) {}
 
     /**
@@ -215,6 +219,9 @@ export class DashboardService {
 
         const stats: DashboardStats = {
             totalProducts,
+            ...(this.batches && {
+                expiringBatchCount: await this.batches.expiringCount(),
+            }),
             lowStockCount: stockAlerts?.lowStockCount ?? 0,
             outOfStockCount: stockAlerts?.outOfStockCount ?? 0,
             todaySalesCount: todaySales?.count ?? 0,

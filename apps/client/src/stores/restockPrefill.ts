@@ -22,6 +22,7 @@ export const useRestockPrefillStore = defineStore('restock-prefill', () => {
         owner.value = auth.user.userId;
         lines.value = rows.map(({ product }) => ({
             isNewProduct: false,
+            tracksExpiry: product.tracksExpiry,
             product: product._id,
             EAN: product.EAN,
             name: product.name,

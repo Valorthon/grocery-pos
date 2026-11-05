@@ -1,5 +1,8 @@
 import type { UnitOfMeasure } from '@grocery-pos/contracts';
 interface AddFormFields {
+    tracksExpiry?: boolean;
+    expiryDate?: string;
+    batchNo?: string;
     autoGenerateEAN: boolean;
     unit?: UnitOfMeasure;
     category?: string;

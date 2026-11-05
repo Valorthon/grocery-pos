@@ -721,3 +721,28 @@ the product owner picks.
   existing draft silently. Handoff is in memory, consumed once and cleared on
   account change. Review actual unit costs before saving; zero-cost lines retain
   the existing explicit confirmation. Supplier pricing belongs to #41.
+
+**Expiry and batches** (#42, owner decisions)
+
+- Expiry tracking is optional and legacy products remain untracked. Enable or
+  disable it only at zero aggregate stock before any batch history exists. Once
+  lots exist, keep tracking enabled so an expired return cannot become sellable;
+  retain all historical lots. New tracked receipts require a real calendar expiry
+  date; batch number is optional. Quantities remain integer minor units.
+- Online sale consumes unexpired lots FEFO (date, received time, id), recording
+  private allocations in the sale transaction. A printed expiry day remains usable
+  through the end of that day in STORE_TIMEZONE. Expired and undated reconciliation
+  lots are never online sellable. Aggregate stock still has its guarded decrement.
+- Returns restore original lot allocations, including expired lots which stay
+  blocked. A legacy unallocated return is quarantined without inventing expiry.
+  Batch adjustments require an explicit lot, including write-offs; the prefilled
+  adjustment is reviewed and saved through the ordinary draft flow.
+- Expiry-tracked products are online-only for new cash sales. Catalogue cursor
+  entries remove their offline availability. Previously collected signed offline
+  cash remains recoverable through ADMIN reconciliation, creating an explicit
+  undated negative reconciliation batch; its retries remain idempotent.
+- Every tracked stock transaction verifies sum(batch.remainingQty) equals the
+  aggregate Inventory.stock, including deficit/reconciliation balances. Batches
+  and aggregate changes roll back together. Costing remains latest receipt (#41),
+  not lot/FIFO valuation. Expiring view includes already-expired lots; dashboard
+  alerts count remaining lots expired or expiring within seven store days.

@@ -8,6 +8,7 @@ import {
 
 /** The product dialog's form state; `price` is the pesos as typed. */
 export interface ProductFormInput {
+    tracksExpiry?: boolean;
     unit?: import('@grocery-pos/contracts').UnitOfMeasure;
     category?: string;
     EAN: string;

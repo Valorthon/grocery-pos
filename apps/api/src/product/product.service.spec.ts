@@ -569,3 +569,57 @@ describe('ProductService.getAll search (issue #14)', () => {
         });
     });
 });
+
+describe('ProductService expiry tracking transitions', () => {
+    it('checks zero-stock invariant only when tracking actually changes', async () => {
+        const connection = {
+            startSession: () =>
+                Promise.resolve({
+                    withTransaction: async (
+                        fn: (s: ClientSession) => unknown,
+                    ) => fn({} as ClientSession),
+                    endSession: jest.fn(),
+                }),
+        };
+        const model = {
+            findById: () => ({
+                session: () => ({
+                    lean: async () => ({ price: 100, tracksExpiry: false }),
+                }),
+            }),
+            updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+        };
+        const inventory = {
+            assertTrackingChange: jest.fn().mockResolvedValue(undefined),
+        };
+        const service = new ProductService(
+            connection as unknown as mongoose.Connection,
+            model as unknown as mongoose.Model<Product>,
+            inventory as unknown as InventoryService,
+            {} as EanCounterService,
+        );
+        const user = {
+            userId: '507f1f77bcf86cd799439011',
+            username: 'restocker',
+            roles: [Role.Restocker],
+        };
+        await service.update(user, {
+            updates: [
+                {
+                    product: '507f1f77bcf86cd799439012',
+                    update: { tracksExpiry: true },
+                },
+            ],
+        });
+        expect(inventory.assertTrackingChange).toHaveBeenCalledTimes(1);
+        await service.update(user, {
+            updates: [
+                {
+                    product: '507f1f77bcf86cd799439012',
+                    update: { tracksExpiry: false },
+                },
+            ],
+        });
+        expect(inventory.assertTrackingChange).toHaveBeenCalledTimes(1);
+    });
+});
