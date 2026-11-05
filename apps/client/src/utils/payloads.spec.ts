@@ -114,6 +114,7 @@ describe('toRestockBody (POST /restocks)', () => {
 
     it('sends a new product line as newProduct, without a stale EAN', () => {
         expect(toRestockBody([created], 'delivery')).toEqual({
+            supplier: '',
             restockDetails: [
                 {
                     newProduct: { name: 'Milk', price: 5000 },

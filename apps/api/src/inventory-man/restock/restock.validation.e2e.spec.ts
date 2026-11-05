@@ -54,6 +54,7 @@ describe('Restock and inventory validation (e2e, issue #14)', () => {
     function restock(line: Record<string, unknown>) {
         return harness.call(caller(Role.Restocker), 'POST', '/restocks', {
             description: 'delivery',
+            supplier: '507f1f77bcf86cd799439011',
             restockDetails: [{ quantity: 3, unitCost: 1000, ...line }],
         });
     }
@@ -127,6 +128,7 @@ describe('Restock and inventory validation (e2e, issue #14)', () => {
         expect(restockService.restock).toHaveBeenCalledWith(
             expect.anything(),
             expect.objectContaining({
+                supplier: '507f1f77bcf86cd799439011',
                 restockDetails: [
                     expect.objectContaining({ product: PRODUCT, unitCost: 0 }),
                 ],

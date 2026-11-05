@@ -1,3 +1,4 @@
+import { OfflineCost, OfflineCostSchema } from './offline-cost.schema';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
@@ -27,6 +28,7 @@ import { SalesModule } from '../sales/sales.module';
         SalesModule,
         MongooseModule.forFeature([
             { name: OfflineLease.name, schema: OfflineLeaseSchema },
+            { name: OfflineCost.name, schema: OfflineCostSchema },
             { name: Product.name, schema: ProductSchema },
             { name: User.name, schema: UserSchema },
             { name: Shift.name, schema: ShiftSchema },

@@ -276,6 +276,7 @@ describe('body list caps (#16)', () => {
             BATCH_LIMITS.RESTOCK_LINES,
             (n) => ({
                 description: 'delivery',
+                supplier: '507f1f77bcf86cd799439011',
                 restockDetails: times(n, () => ({
                     product: ID(),
                     quantity: 1,

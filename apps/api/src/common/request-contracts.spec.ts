@@ -1,4 +1,12 @@
 import type {
+    CreateSupplierRequest,
+    UpdateSupplierRequest,
+} from '@grocery-pos/contracts';
+import type {
+    SupplierFieldsDto,
+    UpdateSupplierDto,
+} from '../supplier/supplier.dto';
+import type {
     CreateCategoryRequest,
     UpdateCategoryRequest,
 } from '@grocery-pos/contracts';
@@ -116,6 +124,12 @@ function keysMatch<Dto, Contract>(ok: KeysMatch<Dto, Contract>) {
 type Line<T extends readonly unknown[]> = T[number];
 
 const checks = {
+    SupplierFieldsDto: keysMatch<SupplierFieldsDto, CreateSupplierRequest>(
+        true,
+    ),
+    UpdateSupplierDto: keysMatch<UpdateSupplierDto, UpdateSupplierRequest>(
+        true,
+    ),
     ProductUpdatesDto: keysMatch<ProductUpdatesDto, UpdateProductsRequest>(
         true,
     ),

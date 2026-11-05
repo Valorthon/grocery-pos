@@ -1,3 +1,4 @@
+import { SupplierModule } from './supplier/supplier.module';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypedConfigModule } from './common/typed-config/typed-config.module';
 import { CookieModule } from './common/utils/cookie/cookie.module';
@@ -28,6 +29,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
     imports: [
+        SupplierModule,
         // First, so the correlation id is set before any other middleware.
         RequestIdModule,
         TypedConfigModule,

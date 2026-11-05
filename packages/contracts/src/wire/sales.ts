@@ -200,6 +200,8 @@ export const SALE_ROW_SHAPE: WireShape<SaleRow> = SALE_VIEW_SHAPE;
 
 /** A line of `GET /sales/details/:id`. */
 export interface SaleLine {
+    /** Latest receipt cost, admin-only; absence means unknown. */
+    unitCost?: number;
     unit?: UnitOfMeasure;
     _id: string;
     /** The sale's id. */
@@ -212,6 +214,7 @@ export interface SaleLine {
 }
 
 export const SALE_LINE_SHAPE: WireShape<SaleLine> = {
+    unitCost: 'optional',
     unit: 'optional',
     _id: 'required',
     sales: 'required',

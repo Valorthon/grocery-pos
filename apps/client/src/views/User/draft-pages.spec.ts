@@ -14,7 +14,7 @@ import {
 } from 'vue-router';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { flush, type } from '@/testing/form-dom';
+import { flush, type, field } from '@/testing/form-dom';
 import { nextDraft } from '@/testing/stub-add-dialog';
 import { Color, useUIStore } from '@/stores/ui';
 import { Role, useAuthStore } from '@/stores/auth';
@@ -147,6 +147,15 @@ beforeEach(() => {
     pinia = createPinia();
     setActivePinia(pinia);
     api.post.mockReset();
+    api.get.mockImplementation(async (url: string) => ({
+        data:
+            url === '/suppliers'
+                ? {
+                      data: [{ _id: PRODUCT, name: 'Farm', isActive: true }],
+                      totalItems: 1,
+                  }
+                : [],
+    }));
     nextDraft.value = {};
     // Signed in: a user and the session marker cookie.
     Object.defineProperty(document, 'cookie', {
@@ -231,6 +240,7 @@ async function save(c: PageCase) {
     await press(c.saveLabel);
     if (!c.dialogTitle) return;
     await type('Description', 'weekly delivery');
+    await chooseSupplier();
     const saves = buttons().filter((b) => b.textContent?.trim() === 'Save');
     saves[saves.length - 1].click();
     await flush();
@@ -709,6 +719,7 @@ describe('a confirmation over the save dialog (issue #19)', () => {
         await addDraft(c, 'First');
         await press(c.saveLabel);
         await type('Description', 'weekly delivery');
+        await chooseSupplier();
 
         // The back button while the save dialog is open.
         const leaving = router.push('/other');
@@ -727,10 +738,7 @@ describe('a confirmation over the save dialog (issue #19)', () => {
             t.textContent?.trim(),
         );
         expect(titles).toContain(c.dialogTitle);
-        expect(
-            document.body.querySelector<HTMLInputElement>('input[maxlength]')
-                ?.value,
-        ).toBe('weekly delivery');
+        expect(field('Description').value).toBe('weekly delivery');
         expect(document.body.style.overflow).toBe('hidden');
     });
 });
@@ -785,6 +793,7 @@ describe('restock at a ₱0 unit cost (#85)', () => {
         await press('Record at ₱0');
         expect(dialogTitles()).toContain(restockCase.dialogTitle);
         await type('Description', 'free samples');
+        await chooseSupplier();
         const saves = buttons().filter((b) => b.textContent?.trim() === 'Save');
         saves[saves.length - 1].click();
         await flush();
@@ -809,3 +818,14 @@ describe('restock at a ₱0 unit cost (#85)', () => {
         expect(dialogTitles()).toContain(restockCase.dialogTitle);
     });
 });
+
+async function chooseSupplier() {
+    const select = [
+        ...document.querySelectorAll<HTMLSelectElement>('select'),
+    ].find((el) => [...el.options].some((option) => option.value === PRODUCT));
+    if (select) {
+        select.value = PRODUCT;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await flush();
+    }
+}

@@ -44,5 +44,7 @@ export interface AddFormInput extends Omit<
 }
 
 export interface SaveForm {
+    supplier?: string;
+    invoiceNumber?: string;
     description: string;
 }

@@ -15,3 +15,5 @@ export * from './wire/index.js';
 export * from './offline.js';
 
 export * from './category.js';
+
+export * from './supplier.js';

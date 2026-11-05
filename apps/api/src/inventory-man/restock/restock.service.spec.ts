@@ -1,3 +1,4 @@
+import { SupplierService } from '../../supplier/supplier.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { RestockService } from './restock.service';
@@ -29,6 +30,10 @@ describe('RestockService.getAll date filter', () => {
         const moduleRef = await Test.createTestingModule({
             providers: [
                 RestockService,
+                {
+                    provide: SupplierService,
+                    useValue: { assertActive: jest.fn() },
+                },
                 { provide: getConnectionToken(), useValue: {} },
                 {
                     provide: getModelToken(Restock.name),
@@ -36,7 +41,10 @@ describe('RestockService.getAll date filter', () => {
                 },
                 { provide: getModelToken(RestockDetails.name), useValue: {} },
                 { provide: InventoryService, useValue: {} },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: { recordReceiptCosts: jest.fn() },
+                },
                 {
                     provide: TypedConfigService,
                     useValue: { get: () => 'Asia/Manila' },
@@ -217,6 +225,10 @@ describe('RestockService.restock (issue #30)', () => {
             providers: [
                 RestockService,
                 {
+                    provide: SupplierService,
+                    useValue: { assertActive: jest.fn() },
+                },
+                {
                     provide: getConnectionToken(),
                     useValue: { startSession: () => Promise.resolve(session) },
                 },
@@ -229,7 +241,10 @@ describe('RestockService.restock (issue #30)', () => {
                     provide: InventoryService,
                     useValue: { restock: inventoryRestock },
                 },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: { recordReceiptCosts: jest.fn() },
+                },
                 { provide: TypedConfigService, useValue: { get: () => '' } },
             ],
         }).compile();
@@ -238,6 +253,7 @@ describe('RestockService.restock (issue #30)', () => {
 
     const DTO = {
         description: 'delivery',
+        supplier: P1,
         restockDetails: [
             { product: P1, quantity: 3, unitCost: 1999 },
             { product: P2, quantity: 2, unitCost: 3505 },
@@ -252,6 +268,7 @@ describe('RestockService.restock (issue #30)', () => {
             [
                 {
                     description: 'delivery',
+                    supplier: new mongoose.Types.ObjectId(P1),
                     restockedBy: USER.userId,
                     totalCost: 13_007,
                 },
@@ -346,6 +363,10 @@ describe('RestockService.getDetails (issue #30)', () => {
         const moduleRef = await Test.createTestingModule({
             providers: [
                 RestockService,
+                {
+                    provide: SupplierService,
+                    useValue: { assertActive: jest.fn() },
+                },
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(Restock.name), useValue: {} },
                 {
@@ -353,7 +374,10 @@ describe('RestockService.getDetails (issue #30)', () => {
                     useValue: { aggregate },
                 },
                 { provide: InventoryService, useValue: {} },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: { recordReceiptCosts: jest.fn() },
+                },
                 { provide: TypedConfigService, useValue: { get: () => '' } },
             ],
         }).compile();

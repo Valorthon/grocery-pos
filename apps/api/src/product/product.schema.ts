@@ -8,6 +8,17 @@ export class Product {
     @Prop({
         type: Number,
         min: 0,
+        max: NUMERIC_LIMITS.AMOUNT_MAX,
+        validate: Number.isSafeInteger,
+        select: false,
+    })
+    lastCost?: number;
+    @Prop({ type: Date, select: false })
+    costUpdatedAt?: Date;
+
+    @Prop({
+        type: Number,
+        min: 0,
         max: Number.MAX_SAFE_INTEGER,
         validate: Number.isSafeInteger,
     })

@@ -194,6 +194,12 @@ function fixture() {
     };
     const connection = { startSession: jest.fn().mockResolvedValue(session) };
     const config = { get: jest.fn().mockReturnValue(SECRET) };
+    const costQuotes = {
+        create: jest.fn(async () => ({ _id: id() })),
+        findOne: jest.fn(
+            () => new Query<{ unitCost?: number } | null>({ unitCost: 6000 }),
+        ),
+    };
     const service = new OfflineService(
         connection as never,
         leases as never,
@@ -207,9 +213,11 @@ function fixture() {
         receipts as never,
         jwt,
         config as never,
+        costQuotes as never,
     );
     return {
         service,
+        costQuotes,
         actor,
         admin,
         user,
@@ -632,4 +640,65 @@ describe('offline cash synchronization', () => {
             }),
         );
     });
+});
+
+describe('confidential offline cost evidence', () => {
+    it.each([0, 6000, undefined])(
+        'copies the server-held known/unknown cost %s without exposing it in the proof',
+        async (cost) => {
+            Object.assign(f.product, { lastCost: cost });
+            const page = await f.service.catalog(f.actor, {
+                lease: String(f.lease._id),
+            });
+            const payload = f.jwt.decode<Record<string, unknown>>(
+                page.products[0].proof,
+            );
+            expect(payload).toHaveProperty('costRef');
+            expect(payload).not.toHaveProperty('unitCost');
+            expect(payload).not.toHaveProperty('lastCost');
+            expect(f.costQuotes.create).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    product: f.product._id,
+                    lease: f.lease._id,
+                    ...(cost !== undefined && { unitCost: cost }),
+                }),
+            );
+        },
+    );
+    it.each([0, 6000, undefined])(
+        'records immutable evidence cost %s when consuming a price proof',
+        async (cost) => {
+            const ref = String(id());
+            f.costQuotes.findOne.mockReturnValue(
+                new Query({ ...(cost !== undefined && { unitCost: cost }) }),
+            );
+            f.body.lines[0].proof = f.proof({ costRef: ref });
+            await f.service.sync(f.actor, f.body);
+            expect(f.costQuotes.findOne).toHaveBeenCalledWith({
+                _id: ref,
+                lease: f.lease._id,
+                product: f.body.lines[0].product,
+                unit: UnitOfMeasure.KG,
+            });
+            const lines = f.details.insertMany.mock.calls[0][0] as {
+                unitCost?: number;
+            }[];
+            if (cost === undefined)
+                expect(lines[0]).not.toHaveProperty('unitCost');
+            else expect(lines[0].unitCost).toBe(cost);
+        },
+    );
+    it.each(['missing', 'malformed'])(
+        'refuses %s evidence rather than guessing a later cost',
+        async (mode) => {
+            f.costQuotes.findOne.mockReturnValue(new Query(null));
+            f.body.lines[0].proof = f.proof({
+                costRef: mode === 'missing' ? String(id()) : 'invalid',
+            });
+            await expect(f.service.sync(f.actor, f.body)).rejects.toMatchObject(
+                { code: ErrorCode.OFFLINE_INVALID },
+            );
+            expect(f.details.insertMany).not.toHaveBeenCalled();
+        },
+    );
 });

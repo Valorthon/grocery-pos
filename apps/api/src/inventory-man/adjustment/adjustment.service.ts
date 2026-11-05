@@ -131,7 +131,14 @@ export class AdjustmentService {
                 $lookup: {
                     from: 'products',
                     pipeline: [
-                        { $project: { saleVersion: 0, priceHistory: 0 } },
+                        {
+                            $project: {
+                                saleVersion: 0,
+                                priceHistory: 0,
+                                lastCost: 0,
+                                costUpdatedAt: 0,
+                            },
+                        },
                     ],
                     localField: 'product',
                     foreignField: '_id',

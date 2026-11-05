@@ -180,7 +180,9 @@ describe('DashboardService.getDashboard', () => {
             // Never the checkout internals (#27).
             expect(salesFind).toHaveBeenCalledWith({}, INTERNAL_SALE_FIELDS);
             expect(groupStage()).toHaveProperty('revenue');
-            expect(restockQuery.select).not.toHaveBeenCalled();
+            expect(restockQuery.select).toHaveBeenCalledWith(
+                RESTOCK_ACTIVITY_FIELDS + ' totalCost updatedAt',
+            );
         });
 
         it('leaves every money field out for other roles', async () => {

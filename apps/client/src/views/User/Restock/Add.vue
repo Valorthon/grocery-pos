@@ -8,7 +8,12 @@
                 <Plus class="w-4 h-4" />
                 Add Product
             </BaseButton>
-            <BaseButton size="sm" variant="outline" @click="openSaveDialog">
+            <BaseButton
+                size="sm"
+                variant="outline"
+                :disabled="costDefaultsPending"
+                @click="openSaveDialog"
+            >
                 <Save class="w-4 h-4" />
                 Save
             </BaseButton>
@@ -115,7 +120,11 @@
 </template>
 
 <script setup lang="ts">
-import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
+import {
+    formatQuantity,
+    quantityAmount,
+    type ProductCostView,
+} from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Pencil, Plus, Save, Trash2, Truck } from '@lucide/vue';
@@ -156,6 +165,7 @@ const saving = ref(false);
 
 const uiStore = useUIStore();
 const prefilled = useRestockPrefillStore().take();
+const costDefaultsPending = ref(prefilled.length > 0);
 for (const line of prefilled) add(line);
 if (prefilled.length)
     uiStore.queueMessage(
@@ -182,6 +192,60 @@ onBeforeUnmount(() => {
     unmounted = true;
 });
 
+// Only untouched imported drafts receive a procurement default; no selling price fallback.
+if (prefilled.length) {
+    const snapshots = items.value.map((line) => ({ ...line }));
+    void api
+        .get<ProductCostView[]>('/suppliers/costs', {
+            params: {
+                products: prefilled
+                    .filter((line) => !line.isNewProduct)
+                    .map((line) => line.product)
+                    .join(','),
+            },
+        })
+        .then((response) => {
+            if (unmounted) return;
+            for (const snapshot of snapshots) {
+                const current = items.value.find(
+                    (line) => line.draftId === snapshot.draftId,
+                );
+                if (
+                    !current ||
+                    JSON.stringify(current) !== JSON.stringify(snapshot) ||
+                    current.isNewProduct
+                )
+                    continue;
+                const cost = response.data.find(
+                    (row) => row.product === current.product,
+                )?.lastCost;
+                if (cost !== undefined)
+                    replace(current.draftId, {
+                        ...current,
+                        unitCost: cost,
+                        totalCost: quantityAmount(
+                            cost,
+                            current.quantity,
+                            current.unit,
+                        ),
+                    });
+            }
+        })
+        .catch((cause) => {
+            if (!unmounted)
+                uiStore.queueMessage(
+                    Color.ERROR,
+                    apiErrorMessages(
+                        cause,
+                        'Cost defaults unavailable. Review actual unit costs before saving.',
+                    ),
+                );
+        })
+        .finally(() => {
+            costDefaultsPending.value = false;
+        });
+}
+
 const filteredItems = computed(() => {
     const q = search.value.trim().toLowerCase();
     if (!q) return items.value;
@@ -198,6 +262,7 @@ const filteredItems = computed(() => {
  * keeps every draft as it is.
  */
 const openSaveDialog = async () => {
+    if (costDefaultsPending.value) return;
     if (items.value.length === 0) {
         uiStore.queueMessage(Color.ERROR, NOTHING_TO_SAVE);
         return;
@@ -219,7 +284,12 @@ const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
     try {
         await api.post(
             '/restocks',
-            toRestockBody(items.value, saveForm.description),
+            toRestockBody(
+                items.value,
+                saveForm.description,
+                saveForm.supplier,
+                saveForm.invoiceNumber,
+            ),
         );
     } catch (error) {
         if (unmounted) return false;

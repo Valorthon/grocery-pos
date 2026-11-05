@@ -359,3 +359,38 @@ describe('restock history dates (issue #24)', () => {
         );
     });
 });
+
+describe('supplier receipt history', () => {
+    it('shows receipt supplier and invoice while retaining unknown legacy history', async () => {
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/restocks/users'
+                        ? []
+                        : {
+                              data: [
+                                  {
+                                      ...RESTOCK,
+                                      supplier: {
+                                          _id: 'supplier',
+                                          name: 'Dairy Farm',
+                                      },
+                                      invoiceNumber: 'DR-7',
+                                  },
+                                  {
+                                      ...RESTOCK,
+                                      _id: 'legacy',
+                                      description: 'Old receipt',
+                                  },
+                              ],
+                              totalItems: 2,
+                          },
+            }),
+        );
+        const host = await mount();
+        expect(host.textContent).toContain('Dairy Farm');
+        expect(host.textContent).toContain('DR-7');
+        expect(host.textContent).toContain('Unknown supplier');
+        expect(host.textContent).toContain('Old receipt');
+    });
+});

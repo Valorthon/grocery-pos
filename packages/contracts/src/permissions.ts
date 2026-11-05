@@ -52,6 +52,19 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'Manage suppliers and receipt cost defaults',
+        roles: [Role.Restocker],
+        routes: [
+            'GET /suppliers',
+            'GET /suppliers/costs',
+            'POST /suppliers',
+            'PATCH /suppliers/:id',
+            'DELETE /suppliers/:id',
+        ],
+        pages: ['Suppliers'],
+    },
+
+    {
         label: 'Manage categories',
         roles: [Role.Admin],
         routes: [

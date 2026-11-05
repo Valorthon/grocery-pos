@@ -25,6 +25,7 @@ const PRODUCT = '507f1f77bcf86cd799439011';
 
 // toRestockBody([existing, created with a typed EAN, created auto], ...)
 const RESTOCK = {
+    supplier: '507f1f77bcf86cd799439011',
     restockDetails: [
         { product: PRODUCT, quantity: 3, unitCost: 1000 },
         {
@@ -86,6 +87,7 @@ describe('Restock and adjustment payloads from the client (e2e, issue #33)', () 
             expect(restockService.restock).toHaveBeenCalledWith(
                 expect.anything(),
                 {
+                    supplier: '507f1f77bcf86cd799439011',
                     restockDetails: [
                         { product: PRODUCT, quantity: 3, unitCost: 1000 },
                         {

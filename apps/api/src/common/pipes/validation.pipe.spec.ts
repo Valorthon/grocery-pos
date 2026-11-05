@@ -100,6 +100,7 @@ describe('createValidationPipe: text is stored as typed (#15)', () => {
     it('trims the restock description, which had no DTO trim before', async () => {
         const dto = await body(RestockDto, {
             description: `  ${TYPED}  `,
+            supplier: ID,
             restockDetails: [{ product: ID, quantity: 1, unitCost: 100 }],
         });
 

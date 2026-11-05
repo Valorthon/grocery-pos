@@ -8,6 +8,16 @@ import type { NameRef } from '../common/wire';
 
 @Schema()
 export class SalesDetails {
+    /** Latest-receipt basis captured by the server. Absent means unknown. */
+    @Prop({
+        type: Number,
+        min: 0,
+        max: NUMERIC_LIMITS.AMOUNT_MAX,
+        validate: Number.isSafeInteger,
+        select: false,
+    })
+    unitCost?: number;
+
     @Prop({ type: String, enum: Object.values(UnitOfMeasure), required: false })
     unit?: UnitOfMeasure;
 

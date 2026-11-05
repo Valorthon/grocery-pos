@@ -141,7 +141,10 @@ export class DashboardService {
             .find()
             .sort({ createdAt: -1 })
             .limit(5);
-        if (!includeMoney) restocks.select(RESTOCK_ACTIVITY_FIELDS);
+        restocks.select(
+            RESTOCK_ACTIVITY_FIELDS +
+                (includeMoney ? ' totalCost updatedAt' : ''),
+        );
 
         const [
             totalProducts,

@@ -5,6 +5,12 @@
         title="Save Restock Info"
         max-width="28rem"
     >
+        <SupplierSelect v-model="supplier" :disabled="saving" />
+        <BaseInput
+            v-model="formData.invoiceNumber"
+            label="Supplier invoice / DR number (optional)"
+            :maxlength="SUPPLIER_LIMITS.INVOICE"
+        />
         <BaseInput
             v-model="formData.description"
             label="Description"
@@ -27,6 +33,7 @@
 </template>
 
 <script setup lang="ts">
+import SupplierSelect from '@/components/User/Supplier/SupplierSelect.vue';
 import { computed, reactive, ref } from 'vue';
 import { Save } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -34,7 +41,7 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { STRING_LIMITS, SUPPLIER_LIMITS } from '@grocery-pos/contracts';
 import { SaveForm } from './dto';
 import { restockSaveErrors } from './validation';
 
@@ -63,18 +70,27 @@ const model = computed({
     },
 });
 
-const formData = reactive<SaveForm>({ description: '' });
+const formData = reactive<SaveForm>({ description: '', invoiceNumber: '' });
+const supplier = ref<string | number | null>('');
 const errors = ref<Record<string, string>>({});
 
 async function handleSubmit() {
     if (saving.value) return;
-    errors.value = restockSaveErrors(formData);
+    errors.value = restockSaveErrors({
+        ...formData,
+        supplier: String(supplier.value ?? ''),
+    });
+    if (!supplier.value)
+        errors.value.description = 'Choose an active supplier.';
     if (Object.keys(errors.value).length) return;
 
     saving.value = true;
     let saved = false;
     try {
-        saved = await props.save({ ...formData });
+        saved = await props.save({
+            ...formData,
+            supplier: String(supplier.value),
+        });
     } catch (error) {
         // A save that threw instead of reporting: never fail silently.
         uiStore.queueMessage(
@@ -86,6 +102,8 @@ async function handleSubmit() {
     }
     if (!saved) return;
     formData.description = '';
+    formData.invoiceNumber = '';
+    supplier.value = '';
     model.value = false;
 }
 </script>

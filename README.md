@@ -353,6 +353,34 @@ Category data does not change signed offline price/unit proofs or completed cash
 receipts; pending offline receipts still sync/reconcile. Category reporting will
 use these references in #44.
 
+## Suppliers and cost basis (#41)
+
+Manage suppliers from **Suppliers** as an admin or restocker. Every new restock
+requires an active supplier; an invoice/DR number is optional. Historical receipts
+without supplier data remain intact. Suppliers referenced by receipts can be
+archived, not deleted. Deploy the matching API and client before entering new
+receipts, since older clients do not send the required supplier.
+
+Receiving updates the product's latest receipt cost in the same transaction as
+stock and receipt details. Costs remain centavos per displayed unit (for example
+per kg); each sale captures that basis. Product-list/editor margin estimates are
+admin-only and based on the latest receipt, not FIFO or weighted average. Unknown
+cost remains unknown and historical margins are not invented. Only an explicit
+zero-cost receipt means free stock. Report coverage for unknown-cost sales is #44.
+
+Restock drafts created from low stock load procurement-cost defaults, preserve
+user edits, and still require review of actual receipt costs. Unknown costs keep
+the existing zero-cost confirmation. Never use selling price as purchase cost.
+
+Queued offline sales reference confidential server-side cost evidence captured
+with their catalogue. Customer/cashier caches do not carry readable cost values.
+Later sync uses that basis even if another receipt changed current cost; old
+proofs without cost evidence stay unknown. Cost evidence must not be removed
+while corresponding queued receipts could still be reconciled.
+
+Purchase orders are a separate owner-approved follow-up: #123. No user database
+migration or historical cost/supplier backfill is required by this first phase.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve
