@@ -77,6 +77,11 @@ export class ProductService {
             );
         }
 
+        if (product.isActive === false)
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Product discontinued',
+            );
         return product;
     }
 
@@ -96,8 +101,6 @@ export class ProductService {
     ): Promise<void> {
         assertMayChangePrices(user, dto);
 
-        // TODO(#46): record each price change (product, old and new price,
-        // who) in the audit log inside this transaction.
         await runInTransaction(
             async (session) => {
                 // Not bulkWrite: Mongoose never runs schema validators on
@@ -105,9 +108,31 @@ export class ProductService {
                 // checks would be skipped. Sequential because operations
                 // sharing a transaction session must not run concurrently.
                 for (const { product, update } of dto.updates) {
+                    const before = await this.model
+                        .findById(product)
+                        .session(session)
+                        .lean<ProductDoc>();
+                    if (!before)
+                        throw new NotFoundError(
+                            ErrorCode.PRODUCT_NOT_FOUND,
+                            'Product not found',
+                        );
                     await this.model.updateOne(
                         { _id: product },
-                        { $set: update },
+                        {
+                            $set: update,
+                            ...(update.price !== undefined &&
+                                update.price !== before.price && {
+                                    $push: {
+                                        priceHistory: {
+                                            oldPrice: before.price,
+                                            newPrice: update.price,
+                                            changedBy: user.userId,
+                                            at: new Date(),
+                                        },
+                                    },
+                                }),
+                        },
                         { session, runValidators: true },
                     );
                 }
@@ -119,10 +144,17 @@ export class ProductService {
 
     async getMany(products: string[], session?: ClientSession) {
         const unique_ids = [...new Set(products)];
+        // Serialize checkout pricing against edits/archival in the same transaction.
+        if (session)
+            await this.model.updateMany(
+                { _id: { $in: unique_ids } },
+                { $inc: { saleVersion: 1 } },
+                { session },
+            );
 
         const found = await this.model
             .find({ _id: { $in: unique_ids } })
-            .select('price name unit')
+            .select('price name unit isActive')
             .session(session ?? null)
             .lean();
 
@@ -134,7 +166,15 @@ export class ProductService {
 
         const skip = (page - 1) * limit;
 
-        const query = productSearchFilter({ name, EAN });
+        const query = {
+            ...productSearchFilter({ name, EAN }),
+            ...(dto.status === 'all'
+                ? {}
+                : {
+                      isActive:
+                          dto.status === 'archived' ? false : { $ne: false },
+                  }),
+        };
 
         const [data, totalItems] = await Promise.all([
             this.model
@@ -308,7 +348,7 @@ export class ProductService {
         }
 
         const matches = (await this.model
-            .find(query, 'name EAN unit')
+            .find({ ...query, isActive: { $ne: false } }, 'name EAN unit')
             .sort({ name: 1 })
             .limit(MAX_MATCHES)
             .lean()) as Array<{

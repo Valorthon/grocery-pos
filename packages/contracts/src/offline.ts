@@ -5,6 +5,8 @@ import type { WireShape } from './wire-shape.js';
 
 /** Server-attested, cashier/shift-bound cached price. Never an auth token. */
 export interface OfflineProduct {
+    /** Inactive entry is a tombstone; proof is empty. */
+    isActive?: boolean;
     _id: string;
     EAN: string;
     name: string;
@@ -68,6 +70,7 @@ export const OFFLINE_LEASE_SHAPE: WireShape<OfflineLeaseView> = {
     shift: 'required',
 };
 export const OFFLINE_PRODUCT_SHAPE: WireShape<OfflineProduct> = {
+    isActive: 'optional',
     _id: 'required',
     EAN: 'required',
     name: 'required',

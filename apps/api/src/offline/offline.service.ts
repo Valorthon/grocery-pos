@@ -256,29 +256,34 @@ export class OfflineService {
             )
                 throw new InternalError('Invalid cached product price');
             const unit = product.unit ?? UnitOfMeasure.PIECE;
-            const proof = this.jwt.sign(
-                {
-                    purpose: 'offline-price-v1',
-                    lease: String(lease._id),
-                    cashier: actor.userId,
-                    shift: String(lease.shift),
-                    product: String(product._id),
-                    EAN: product.EAN,
-                    price: product.price,
-                    unit,
-                },
-                {
-                    secret: this.config.get('JWT_SECRET'),
-                    audience: AUDIENCE,
-                    expiresIn: Math.max(
-                        1,
-                        Math.floor(
-                            (lease.expiresAt.getTime() - Date.now()) / 1000,
-                        ),
-                    ),
-                },
-            );
+            const proof =
+                product.isActive === false
+                    ? ''
+                    : this.jwt.sign(
+                          {
+                              purpose: 'offline-price-v1',
+                              lease: String(lease._id),
+                              cashier: actor.userId,
+                              shift: String(lease.shift),
+                              product: String(product._id),
+                              EAN: product.EAN,
+                              price: product.price,
+                              unit,
+                          },
+                          {
+                              secret: this.config.get('JWT_SECRET'),
+                              audience: AUDIENCE,
+                              expiresIn: Math.max(
+                                  1,
+                                  Math.floor(
+                                      (lease.expiresAt.getTime() - Date.now()) /
+                                          1000,
+                                  ),
+                              ),
+                          },
+                      );
             return {
+                ...(product.isActive === false && { isActive: false }),
                 _id: String(product._id),
                 EAN: product.EAN,
                 name: product.name,

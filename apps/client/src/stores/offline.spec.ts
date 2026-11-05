@@ -434,3 +434,16 @@ it('reuses committed terminal identity after a lost first lease response and rel
     });
     expect(b.state?.lease?._id).toBe(LEASE);
 });
+
+it('applies archived tombstones without losing pending cash receipts', async () => {
+    await store.queue(body(), items());
+    vi.mocked(api.get).mockResolvedValue({
+        data: {
+            products: [{ ...product(), isActive: false, proof: '' }],
+            next: null,
+        },
+    });
+    await store.prepare(lease().shift);
+    expect(store.state?.products).toEqual([]);
+    expect(store.state?.cursor).not.toBeNull();
+});

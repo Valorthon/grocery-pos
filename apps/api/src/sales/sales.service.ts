@@ -825,6 +825,11 @@ export class SalesService {
                 continue;
             }
 
+            if (productDetails.isActive === false)
+                throw new ValidationError(
+                    ErrorCode.VALIDATION_INVALID_INPUT,
+                    'Product discontinued',
+                );
             // Integer centavos throughout, so the subtotal is exact.
             const unitPrice = productDetails.price;
             const productName = productDetails.name;

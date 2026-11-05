@@ -18,6 +18,7 @@ export const PRODUCT_REF_SHAPE: WireShape<ProductRef> = {
  * product joined into inventory, restock and adjustment rows.
  */
 export interface ProductView {
+    isActive?: boolean;
     /** Missing on legacy piece records. Quantity/stock use integer minor units. */
     unit?: UnitOfMeasure;
     _id: string;
@@ -33,6 +34,7 @@ export interface ProductView {
 }
 
 export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
+    isActive: 'optional',
     unit: 'optional',
     _id: 'required',
     EAN: 'required',

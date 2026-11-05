@@ -218,8 +218,8 @@ requestId}`. A 5xx never carries details or internals.
   `implements` its type, and `common/request-contracts.spec.ts` fails
   `tsc` on a key, or a required key, on one side only. The client's
   `payloads.ts` mappers return them and other bodies use `satisfies`; the
-  client defines no request types of its own. The product `UpdateBulkDto`
-  (`PATCH /products`) has none yet: the client doesn't send it (#38).
+  client defines no request types of its own. Product edit requests share
+  `UpdateProductsRequest` and nested types too (#38).
 - Contracts' relative imports end in `.js`; the build fails otherwise, so
   plain Node can load the ESM build.
 
@@ -636,7 +636,7 @@ requestId}`. A 5xx never carries details or internals.
 
 - Receipts are shown on screen only, with no printing. BIR compliance (VAT,
   official receipts, SC/PWD) is deferred to #48.
-- Editing and archiving products is #38, not part of the list views.
+- Product editing and archival are implemented in #38; unit remains immutable.
 - Open decisions and follow-ups are listed in #31.
 
 ## Status
@@ -645,3 +645,21 @@ Phases 1–7 of #31 are complete. Phase 7 (#28, #30, #27, #29) laid
 foundations: CI that gates, coverage and a real-DB suite, wire contracts, and
 deploy hardening. Next is the feature roadmap in #31 (#34–#48), in an order
 the product owner picks.
+
+**Product editing and archival** (#38)
+
+- RESTOCKER/ADMIN may edit names/categories and archive/restore products. Selling
+  price changes remain ADMIN-only, including API enforcement. Immutable units
+  remain #36's rule; reorder levels stay #40.
+- Active is the default; a missing legacy isActive field means active. Archived
+  products remain in historical records and stock; no hard delete exists. New
+  online checkout and scan reject discontinued products, while register matches
+  hide them. Management lists expose active/archived/all filters.
+- Product edits are transactional. Actual price changes append private old/new
+  centavos, actor and timestamp history in the same transaction. Internal history
+  and checkout conflict versions are excluded from every response, including raw
+  inventory/restock/adjustment aggregation joins; audit-log presentation is #46.
+- Transactional product writes serialize checkout pricing with archival/edits.
+  Offline catalog pages retain archived cursor entries as tombstones with empty
+  proof; clients remove cached availability. Already-collected signed offline
+  receipts still sync/reconcile under #37's policy.

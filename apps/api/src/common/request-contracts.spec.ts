@@ -1,4 +1,14 @@
 import type {
+    ProductUpdateRequest,
+    ProductUpdateLineRequest,
+    UpdateProductsRequest,
+} from '@grocery-pos/contracts';
+import type {
+    UpdateFields as ProductUpdateFields,
+    UpdateBulkFields as ProductUpdateLine,
+    UpdateBulkDto as ProductUpdatesDto,
+} from '../product/types/product.dto';
+import type {
     OfflineLeaseRequest,
     OfflineSaleRequest,
     OfflineSaleLine,
@@ -98,6 +108,15 @@ function keysMatch<Dto, Contract>(ok: KeysMatch<Dto, Contract>) {
 type Line<T extends readonly unknown[]> = T[number];
 
 const checks = {
+    ProductUpdatesDto: keysMatch<ProductUpdatesDto, UpdateProductsRequest>(
+        true,
+    ),
+    ProductUpdateLine: keysMatch<ProductUpdateLine, ProductUpdateLineRequest>(
+        true,
+    ),
+    ProductUpdateFields: keysMatch<ProductUpdateFields, ProductUpdateRequest>(
+        true,
+    ),
     OfflineLeaseDto: keysMatch<OfflineLeaseDto, OfflineLeaseRequest>(true),
     OfflineSaleDto: keysMatch<OfflineSaleDto, OfflineSaleRequest>(true),
     OfflineLineDto: keysMatch<OfflineLineDto, OfflineSaleLine>(true),

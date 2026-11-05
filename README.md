@@ -391,3 +391,15 @@ each other.
 Railway rebuilds a service only when its `build.watchPatterns` match: the
 app's own folder, `packages/contracts`, the lockfile, the root
 `package.json`, `pnpm-workspace.yaml` and `.dockerignore`.
+
+## Product editing and archival
+
+Products has Edit and Archive/Restore controls for restockers and admins, with
+active/archived/all filtering. Selling price edits are admin-only. Prices remain
+integer centavos and actual changes retain private actor/time/old/new history.
+A product's unit cannot be changed after creation.
+
+Archiving stops fresh online sales and register lookups without deleting stock or
+historical records. The next offline catalogue sync removes archived products
+from cached availability; cash already collected offline remains recoverable.
+Reorder levels and audit-log presentation follow in #40 and #46.

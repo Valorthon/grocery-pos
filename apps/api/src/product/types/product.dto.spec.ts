@@ -172,13 +172,13 @@ describe('UpdateBulkDto: no empty updates (issue #14)', () => {
 
     it('rejects an update with no fields, which would be an empty $set', async () => {
         expect(await messages({})).toEqual([
-            'At least one of the following must be provided: name, price',
+            'At least one of the following must be provided: name, price, category, isActive',
         ]);
     });
 
     it('rejects an update whose only field is null', async () => {
         expect(await messages({ price: null })).toContain(
-            'At least one of the following must be provided: name, price',
+            'At least one of the following must be provided: name, price, category, isActive',
         );
     });
 

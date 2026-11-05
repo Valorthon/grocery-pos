@@ -201,3 +201,18 @@ export interface ManagerOverrideRequest {
     action: import('../override.js').OverrideAction;
     context: OverrideContextRequest;
 }
+
+/** Product editing never changes its immutable unit. */
+export interface ProductUpdateRequest {
+    name?: string;
+    price?: number;
+    category?: Category;
+    isActive?: boolean;
+}
+export interface ProductUpdateLineRequest {
+    product: string;
+    update: ProductUpdateRequest;
+}
+export interface UpdateProductsRequest {
+    updates: ProductUpdateLineRequest[];
+}
