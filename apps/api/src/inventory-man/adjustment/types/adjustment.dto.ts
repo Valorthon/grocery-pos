@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+    ValidateIf,
     ArrayNotEmpty,
     IsInt,
     IsMongoId,
@@ -112,6 +113,9 @@ export class AdjustDto implements AdjustmentRequest {
 }
 
 export class GetAllDto {
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsMongoId()
+    source?: string;
     @IsMongoId()
     @IsOptional()
     adjustedBy!: string;

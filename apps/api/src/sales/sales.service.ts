@@ -1,3 +1,4 @@
+import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { receiptCost } from '../supplier/cost';
 import { quantityAmount, maxQuantityForAmount } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
@@ -557,6 +558,13 @@ export class SalesService {
                     user.userId,
                     dto,
                     session,
+                    {
+                        type: StockMovementType.SALE,
+                        refModel: StockMovementSource.SALE,
+                        refId: String(created._id),
+                        user: user.userId,
+                        occurredAt: created.createdAt,
+                    },
                 );
                 const inserts = fullSellDetails.map(
                     (
@@ -785,6 +793,16 @@ export class SalesService {
                         batchAllocations,
                     })),
                     session,
+                    {
+                        type:
+                            type === ReversalType.VOID
+                                ? StockMovementType.VOID
+                                : StockMovementType.REFUND,
+                        refModel: StockMovementSource.SALE,
+                        refId: saleId,
+                        user: user.userId,
+                        occurredAt: sale.reversal?.at,
+                    },
                 );
 
                 return {

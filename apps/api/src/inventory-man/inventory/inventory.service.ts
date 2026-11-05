@@ -1,4 +1,8 @@
 import {
+    StockMovementService,
+    type MovementContext,
+} from '../../stock-movement/stock-movement.service';
+import {
     reorderLevelExpression,
     reorderMatchStage,
     stockScaleExpression,
@@ -140,6 +144,7 @@ export class InventoryService {
         @Inject(forwardRef(() => ProductService))
         private productService: ProductService,
         @Optional() private batches?: InventoryBatchService,
+        @Optional() private ledger?: StockMovementService,
     ) {}
 
     /**
@@ -154,6 +159,14 @@ export class InventoryService {
      *   a product with no inventory row never appears, so the `$facet` count
      *   and the page agree (issue #14).
      */
+    async recordMovements(
+        entries: { product: string; quantity: number }[],
+        context: MovementContext,
+        session: ClientSession,
+    ): Promise<void> {
+        await this.ledger?.record(entries, context, session);
+    }
+
     async assertTrackingChange(
         product: string,
         session: ClientSession,
@@ -300,6 +313,7 @@ export class InventoryService {
         userId: string,
         dto: AdjustDto,
         session: ClientSession,
+        movement?: MovementContext,
     ): Promise<void> {
         if (this.batches)
             await this.productService.getMany(
@@ -312,6 +326,15 @@ export class InventoryService {
             session,
         );
         await this.batches?.adjust(dto.adjustDetails, session);
+        if (movement)
+            await this.recordMovements(
+                dto.adjustDetails.map((line) => ({
+                    product: line.product,
+                    quantity: line.change,
+                })),
+                movement,
+                session,
+            );
     }
 
     /**
@@ -328,6 +351,7 @@ export class InventoryService {
             batchAllocations?: BatchAllocation[];
         }[],
         session: ClientSession,
+        movement?: MovementContext,
     ): Promise<void> {
         await this.applyChanges(
             lines.map(({ product, quantity }) => [product, quantity]),
@@ -355,6 +379,15 @@ export class InventoryService {
                         session,
                     );
             }
+        if (movement)
+            await this.recordMovements(
+                lines.map((line) => ({
+                    product: line.product.toString(),
+                    quantity: line.quantity,
+                })),
+                movement,
+                session,
+            );
     }
 
     private async applyChanges(
@@ -453,6 +486,7 @@ export class InventoryService {
         userId: string,
         dto: SellDto,
         session: ClientSession,
+        movement?: MovementContext,
     ): Promise<BatchAllocation[][]> {
         const updatedBy = new Types.ObjectId(userId);
         const quantityByProduct = sumByProduct(
@@ -516,6 +550,15 @@ export class InventoryService {
                         session,
                     );
         }
+        if (movement)
+            await this.recordMovements(
+                dto.sellDetails.map((line) => ({
+                    product: line.product,
+                    quantity: -line.quantity,
+                })),
+                movement,
+                session,
+            );
         return allocations;
     }
 

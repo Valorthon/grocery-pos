@@ -371,6 +371,11 @@ it('posts exact fixed variances and manager identity once, skips zero changes, a
             ],
         }),
         expect.anything(),
+        expect.objectContaining({
+            type: 'COUNT',
+            refId: String(id),
+            user: actor.userId,
+        }),
     );
     row.lines[0].countedQty = 1000;
     stock.adjust.mockClear();

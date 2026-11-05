@@ -136,6 +136,9 @@ export class RestockDto implements RestockRequest {
 }
 
 export class GetAllDto {
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsMongoId()
+    source?: string;
     @IsMongoId()
     @IsOptional()
     restockedBy!: string;

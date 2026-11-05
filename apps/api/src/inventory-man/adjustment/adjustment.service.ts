@@ -1,3 +1,4 @@
+import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Adjustment, type AdjustmentRowDoc } from './adjustment.schema';
@@ -35,6 +36,7 @@ export class AdjustmentService {
         const skip = (page - 1) * limit;
 
         const query: Record<string, unknown> = {};
+        if (dto.source) query._id = new Types.ObjectId(dto.source);
         if (adjustedBy) {
             query.adjustedBy = new Types.ObjectId(adjustedBy);
         }
@@ -91,7 +93,12 @@ export class AdjustmentService {
                 // Apply the stock change before recording it. adjust() throws
                 // for a missing inventory row or negative stock, so a rejected
                 // adjustment never leaves an AdjustmentDetails row.
-                await this.inventoryService.adjust(user.userId, dto, session);
+                await this.inventoryService.adjust(user.userId, dto, session, {
+                    type: StockMovementType.ADJUSTMENT,
+                    refModel: StockMovementSource.ADJUSTMENT,
+                    refId: String(adjustment._id),
+                    user: user.userId,
+                });
 
                 const inserts = adjustDetails.map((detail) => ({
                     insertOne: {

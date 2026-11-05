@@ -17,6 +17,7 @@ const routing = vi.hoisted(() => ({ guard: vi.fn() }));
 vi.mock('vue-router', async (importOriginal) => ({
     ...(await importOriginal<typeof import('vue-router')>()),
     onBeforeRouteLeave: routing.guard,
+    useRouter: () => ({ currentRoute: { value: { query: {} } } }),
 }));
 const id = '507f1f77bcf86cd799439011',
     product = '507f1f77bcf86cd799439012',

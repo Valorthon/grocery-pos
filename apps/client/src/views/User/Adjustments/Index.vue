@@ -92,6 +92,11 @@ import type { AdjustmentListRow } from '@/components/User/Adjustments/rows';
 import AdjustDetails from '@/components/User/Adjustments/DetailsDialog.vue';
 
 const router = useRouter();
+const candidate = router.currentRoute?.value.query.source;
+const sourceId =
+    typeof candidate === 'string' && /^[a-f0-9]{24}$/i.test(candidate)
+        ? candidate
+        : undefined;
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchAdjust());
 const totalItems = ref(0);
@@ -182,6 +187,7 @@ const {
     () =>
         api.get<Paginated<AdjustmentRow>>(`/adjustments`, {
             params: {
+                source: sourceId,
                 page: page.value,
                 limit: limit.value,
                 ...applied.value,

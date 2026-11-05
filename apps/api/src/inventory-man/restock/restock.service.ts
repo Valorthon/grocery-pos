@@ -1,3 +1,4 @@
+import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { InventoryBatchService } from '../batch/batch.service';
 import { Optional } from '@nestjs/common';
 import { SupplierService } from '../../supplier/supplier.service';
@@ -123,6 +124,19 @@ export class RestockService {
                     updatedRestockDetails,
                     session,
                 );
+                await this.inventoryService.recordMovements(
+                    updatedRestockDetails.map((line) => ({
+                        product: line.product.toString(),
+                        quantity: line.quantity,
+                    })),
+                    {
+                        type: StockMovementType.RESTOCK,
+                        refModel: StockMovementSource.RESTOCK,
+                        refId: String(created._id),
+                        user: user.userId,
+                    },
+                    session,
+                );
             },
             this.connection,
             session,
@@ -135,6 +149,7 @@ export class RestockService {
         const skip = (page - 1) * limit;
 
         const query: Record<string, unknown> = {};
+        if (dto.source) query._id = new Types.ObjectId(dto.source);
         if (restockedBy) {
             query.restockedBy = new Types.ObjectId(restockedBy);
         }

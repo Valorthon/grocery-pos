@@ -94,6 +94,11 @@
                 categories.find((row) => row._id === item.category)?.name ??
                 (item.category ? 'Unavailable category' : 'Uncategorized')
             }}</template>
+            <template #cell-history="{ item }"
+                ><BaseButton size="sm" variant="outline" @click="history = item"
+                    >Stock history</BaseButton
+                ></template
+            >
             <template #cell-actions="{ item }">
                 <div v-if="canAddProducts" class="flex gap-2">
                     <BaseButton size="sm" @click="editing = item"
@@ -111,6 +116,12 @@
                 </div>
             </template>
         </BaseTable>
+        <StockHistory
+            v-if="history"
+            :key="history._id"
+            :product="history"
+            @close="history = null"
+        />
         <EditProductDialog
             v-if="editing"
             :product="editing"
@@ -135,6 +146,7 @@ import { useRouter } from 'vue-router';
 import { List, Plus, Search, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import StockHistory from '@/components/User/Inventory/StockHistory.vue';
 import EditProductDialog from '@/components/User/Product/EditProductDialog.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -162,6 +174,7 @@ const {
 const categoryFilter = ref<string | number | null>(null);
 const router = useRouter();
 const authStore = useAuthStore();
+const history = ref<ProductView | null>(null);
 // Offered only to whoever the router lets onto Products/Add (#83): an
 // Adjuster can list products but not add them.
 const canAddProducts = computed(() =>
@@ -220,6 +233,7 @@ const headers = [
     ...(authStore.user?.roles.includes(Role.Admin)
         ? [{ key: 'cost', title: 'Latest cost / margin estimate' }]
         : []),
+    { key: 'history', title: 'History' },
     { key: 'EAN', title: 'EAN' },
     { key: 'name', title: 'Name' },
     { key: 'category', title: 'Category' },

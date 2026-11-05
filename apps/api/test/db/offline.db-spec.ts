@@ -32,6 +32,7 @@ import { User } from '../../src/user/user.schema';
 import { RefreshToken } from '../../src/auth/refresh-token/refresh-token.schema';
 import { Shift } from '../../src/shift/shift.schema';
 import { Sales } from '../../src/sales/sales.schema';
+import { StockMovement } from '../../src/stock-movement/stock-movement.schema';
 let db: DbApp;
 let seller: Caller;
 let admin: Caller;
@@ -159,6 +160,26 @@ it('replays lost-response and simultaneous uploads exactly once', async () => {
         await db.call(seller, 'POST', '/offline/sync', body),
     );
     expect(replay.body).toEqual(results[0].body);
+    const movements = await db
+        .model<StockMovement>('StockMovement')
+        .find({ product })
+        .sort({ sequence: 1 })
+        .lean();
+    expect(
+        movements.map((row) => [row.type, row.quantity, row.balanceAfter]),
+    ).toEqual([
+        ['OPENING', 450, 450],
+        ['SALE', -450, 0],
+    ]);
+    expect(String(movements[1].refId)).toBe(replay.body._id);
+    expect(movements[1].occurredAt.toISOString()).toBe(body.soldAt);
+    expect(movements[1].createdAt.getTime()).toBeGreaterThanOrEqual(
+        new Date(body.soldAt).getTime(),
+    );
+    expect(movements[1].unit).toBe(UnitOfMeasure.KG);
+    expect(movements.reduce((sum, row) => sum + row.quantity, 0)).toBe(
+        await stockOf(db, product),
+    );
 });
 it('records completed cash despite an oversell and keeps normal online oversell guarded', async () => {
     body.lines[0].quantity = 900;
@@ -173,6 +194,19 @@ it('records completed cash despite an oversell and keeps normal online oversell 
         .findById(result.body._id)
         .lean();
     expect(sale?.stockShortfall).toBe(true);
+    const movements = await db
+        .model<StockMovement>('StockMovement')
+        .find({ product })
+        .sort({ sequence: 1 })
+        .lean();
+    expect(
+        movements.map((row) => [row.type, row.quantity, row.balanceAfter]),
+    ).toEqual([
+        ['OPENING', 450, 450],
+        ['SALE', -900, -450],
+    ]);
+    expect(String(movements[1].refId)).toBe(result.body._id);
+    expect(movements.reduce((sum, row) => sum + row.quantity, 0)).toBe(-450);
     const online = await db.call(seller, 'POST', '/sales', {
         paymentType: 'CASH',
         idempotencyKey: randomUUID(),

@@ -1,3 +1,4 @@
+import { StockMovementModule } from '../stock-movement/stock-movement.module';
 import { OfflineCost, OfflineCostSchema } from './offline-cost.schema';
 import { InventoryBatchModule } from '../inventory-man/batch/batch.module';
 import { Module } from '@nestjs/common';
@@ -26,6 +27,7 @@ import { SalesModule } from '../sales/sales.module';
 @Module({
     imports: [
         InventoryBatchModule,
+        StockMovementModule,
         JwtModule.register({}),
         SalesModule,
         MongooseModule.forFeature([

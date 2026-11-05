@@ -21,3 +21,5 @@ export * from './expiry.js';
 
 export * from './stock-count.js';
 export * from './reports.js';
+
+export * from './stock-movement.js';

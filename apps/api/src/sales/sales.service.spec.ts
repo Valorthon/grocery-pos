@@ -300,6 +300,11 @@ describe('SalesService.sell', () => {
             'u1',
             expect.anything(),
             expect.anything(),
+            expect.objectContaining({
+                type: 'SALE',
+                refId: 'sale1',
+                user: 'u1',
+            }),
         );
         expect(detailsBulkWrite).toHaveBeenCalledTimes(1);
     });
@@ -327,6 +332,11 @@ describe('SalesService.sell', () => {
             'u1',
             expect.objectContaining({ sellDetails: dto.sellDetails }),
             expect.anything(),
+            expect.objectContaining({
+                type: 'SALE',
+                refId: 'sale1',
+                user: 'u1',
+            }),
         );
     });
 
@@ -1137,6 +1147,11 @@ describe('SalesService.reverse', () => {
                 { product: P2, quantity: 5 },
             ],
             expect.anything(),
+            expect.objectContaining({
+                type: 'VOID',
+                refId: SALE,
+                user: ADMIN.userId,
+            }),
         );
     });
 

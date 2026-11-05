@@ -52,6 +52,15 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'View stock movement history',
+        roles: [Role.Restocker, Role.Adjuster],
+        routes: [
+            'GET /products/:id/movements',
+            'GET /products/:id/movements/integrity',
+        ],
+        pages: ['Inventories', 'Products'],
+    },
+    {
         label: 'View sales reports and export CSV',
         roles: [Role.Admin],
         routes: [

@@ -93,6 +93,11 @@ import type { Paginated, RestockRow, UserRef } from '@grocery-pos/contracts';
 import type { RestockListRow } from '@/components/User/Restock/rows';
 
 const router = useRouter();
+const candidate = router.currentRoute?.value.query.source;
+const sourceId =
+    typeof candidate === 'string' && /^[a-f0-9]{24}$/i.test(candidate)
+        ? candidate
+        : undefined;
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchRestock());
 const totalItems = ref(0);
@@ -186,6 +191,7 @@ const {
     () =>
         api.get<Paginated<RestockRow>>(`/restocks`, {
             params: {
+                source: sourceId,
                 page: page.value,
                 limit: limit.value,
                 ...applied.value,
