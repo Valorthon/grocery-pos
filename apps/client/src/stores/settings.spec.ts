@@ -92,3 +92,85 @@ it.each([
 ])('rejects untrusted settings cache %j', (value) => {
     expect(validSettings(value)).toBe(false);
 });
+it('keeps a successful save and its durable timezone when an older refresh resolves', async () => {
+    let resolve!: (value: { data: typeof initialSettings }) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((done) => {
+            resolve = done;
+        }),
+    );
+    const store = useSettingsStore();
+    store.setOwner('a');
+    const refreshing = store.refresh();
+    const saved = {
+        ...initialSettings,
+        storeName: 'New Shop',
+        timezone: 'UTC',
+        version: 1,
+    };
+    vi.mocked(api.patch).mockResolvedValueOnce({ data: saved });
+    expect(await store.save({ version: 0, storeName: saved.storeName })).toBe(
+        true,
+    );
+    resolve({ data: { ...initialSettings, storeName: 'Old Shop' } });
+    await refreshing;
+    expect(store.settings).toEqual(saved);
+    expect(storePresentation.value.timezone).toBe('UTC');
+    expect(
+        JSON.parse(localStorage.getItem('grocery_pos_settings_v1:a') ?? 'null'),
+    ).toEqual(saved);
+    expect(store.loading).toBe(false);
+    expect(store.error).toBe('');
+    vi.mocked(api.get).mockResolvedValueOnce({
+        data: { ...saved, version: 2, storeName: 'Newest' },
+    });
+    await store.refresh();
+    expect(store.settings.storeName).toBe('Newest');
+});
+it('does not apply an older version than the cached settings and suppresses pre-save refresh errors', async () => {
+    const store = useSettingsStore();
+    localStorage.setItem(
+        'grocery_pos_settings_v1:a',
+        JSON.stringify({
+            ...initialSettings,
+            version: 3,
+            storeName: 'Cached newer',
+        }),
+    );
+    store.setOwner('a');
+    vi.mocked(api.get).mockResolvedValueOnce({ data: initialSettings });
+    await store.refresh();
+    expect(store.settings.storeName).toBe('Cached newer');
+    let reject!: (cause: Error) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((_done, fail) => {
+            reject = fail;
+        }),
+    );
+    const refreshing = store.refresh();
+    vi.mocked(api.patch).mockResolvedValueOnce({
+        data: { ...initialSettings, version: 4 },
+    });
+    await store.save({ version: 3, storeName: 'Grocery POS' });
+    reject(new Error('obsolete GET failure'));
+    await refreshing;
+    expect(store.error).toBe('');
+    expect(store.settings.version).toBe(4);
+});
+it('ignores a pending save after changing owners without touching either owner cache', async () => {
+    let resolve!: (value: { data: typeof initialSettings }) => void;
+    vi.mocked(api.patch).mockReturnValueOnce(
+        new Promise((done) => {
+            resolve = done;
+        }),
+    );
+    const store = useSettingsStore();
+    store.setOwner('a');
+    const saving = store.save({ version: 0, storeName: 'A' });
+    store.setOwner('b');
+    resolve({ data: { ...initialSettings, storeName: 'A', version: 1 } });
+    expect(await saving).toBe(false);
+    expect(store.settings.storeName).toBe('Grocery POS');
+    expect(localStorage.getItem('grocery_pos_settings_v1:a')).toBeNull();
+    expect(localStorage.getItem('grocery_pos_settings_v1:b')).toBeNull();
+});

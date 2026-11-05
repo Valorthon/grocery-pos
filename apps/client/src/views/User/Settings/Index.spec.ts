@@ -112,3 +112,41 @@ it('holds duplicate saves while the first save remains pending', async () => {
     await flush();
     expect(field('Store name').disabled).toBe(false);
 });
+it('locks settings edits until initial load settles, then saves with the loaded version', async () => {
+    let resolve!: (value: { data: typeof initialSettings }) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((done) => {
+            resolve = done;
+        }),
+    );
+    await mount();
+    expect(field('Store name').disabled).toBe(true);
+    expect(field('Store timezone (IANA)').disabled).toBe(true);
+    expect(
+        field('Default reorder level for new products (display units)')
+            .disabled,
+    ).toBe(true);
+    expect(
+        Array.from(document.querySelectorAll('button')).find(
+            (button) => button.textContent?.trim() === 'Save store settings',
+        )?.disabled,
+    ).toBe(true);
+    expect(api.patch).not.toHaveBeenCalled();
+    resolve({
+        data: { ...initialSettings, storeName: 'Loaded Shop', version: 7 },
+    });
+    await flush();
+    expect(field('Store name').disabled).toBe(false);
+    expect(field('Store name').value).toBe('Loaded Shop');
+    input('Store name', 'My edits');
+    await flush();
+    vi.mocked(api.patch).mockResolvedValueOnce({
+        data: { ...initialSettings, storeName: 'My edits', version: 8 },
+    });
+    await click('Save store settings');
+    await flush();
+    expect(api.patch).toHaveBeenLastCalledWith(
+        '/settings',
+        expect.objectContaining({ version: 7, storeName: 'My edits' }),
+    );
+});

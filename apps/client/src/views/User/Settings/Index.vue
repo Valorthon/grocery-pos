@@ -14,7 +14,7 @@
                     {{ settings.error }}
                 </p>
                 <BaseButton
-                    :disabled="saving || settings.loading"
+                    :disabled="saving || loadingForm || settings.loading"
                     @click="reload"
                     >Reload settings</BaseButton
                 >
@@ -26,14 +26,14 @@
                         v-model="form[field.key]"
                         :label="field.label"
                         :maxlength="field.max"
-                        :disabled="saving"
+                        :disabled="saving || loadingForm"
                     />
                     <BaseInput
                         id="settings-timezone"
                         v-model="form.timezone"
                         label="Store timezone (IANA)"
                         :maxlength="SETTINGS_LIMITS.TIMEZONE"
-                        :disabled="saving"
+                        :disabled="saving || loadingForm"
                     />
                     <p class="text-xs text-slate-600">
                         Close all shifts and release all offline terminals
@@ -55,7 +55,7 @@
                         v-model="reorderInput"
                         label="Default reorder level for new products (display units)"
                         inputmode="numeric"
-                        :disabled="saving"
+                        :disabled="saving || loadingForm"
                     />
                     <p class="text-xs text-slate-600">
                         Existing product levels, including legacy defaults,
@@ -77,7 +77,7 @@
                     </p>
                     <BaseButton
                         type="submit"
-                        :disabled="saving || !settingsDirty"
+                        :disabled="saving || loadingForm || !settingsDirty"
                         >{{
                             saving ? 'Saving…' : 'Save store settings'
                         }}</BaseButton
@@ -92,14 +92,18 @@
                     v-model="laneInput"
                     label="Terminal / lane label"
                     :maxlength="SETTINGS_LIMITS.TERMINAL"
-                    :disabled="saving"
+                    :disabled="saving || loadingForm"
                 />
                 <p class="text-xs text-slate-600">
                     Saved on this device. New shifts use this label; it does not
                     grant access or change an open shift.
                 </p>
                 <BaseButton
-                    :disabled="saving || laneInput.trim() === terminalLabel"
+                    :disabled="
+                        saving ||
+                        loadingForm ||
+                        laneInput.trim() === terminalLabel
+                    "
                     @click="saveLane"
                     >Save device label</BaseButton
                 >
@@ -133,6 +137,7 @@ const form = ref({ ...initialSettings });
 const baseline = ref(JSON.stringify(form.value));
 const reorderInput = ref<string | number>(10);
 const laneInput = ref(terminalLabel.value);
+const loadingForm = ref(true);
 const saving = ref(false),
     saveError = ref(''),
     notice = ref('');
@@ -185,7 +190,10 @@ function resetForm() {
 }
 onMounted(async () => {
     await settings.refresh();
-    if (active) resetForm();
+    if (active) {
+        resetForm();
+        loadingForm.value = false;
+    }
 });
 async function reload() {
     if (saving.value || settings.loading) return;
@@ -198,7 +206,9 @@ async function reload() {
         }))
     )
         return;
+    loadingForm.value = true;
     await settings.refresh();
+    if (active) loadingForm.value = false;
     if (active && !settings.error) {
         resetForm();
         saveError.value = '';
@@ -206,7 +216,7 @@ async function reload() {
     }
 }
 async function save() {
-    if (saving.value || !settingsDirty.value) return;
+    if (saving.value || loadingForm.value || !settingsDirty.value) return;
     saveError.value = '';
     notice.value = '';
     const level = Number(reorderInput.value);

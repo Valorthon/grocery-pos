@@ -18,6 +18,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const loading = ref(false),
         error = ref('');
     let generation = 0;
+    let savedRevision = 0;
     let inFlight: Promise<void> | undefined;
     function setOwner(id?: string) {
         if (id === owner.value) return;
@@ -41,6 +42,9 @@ export const useSettingsStore = defineStore('settings', () => {
     function apply(data: StoreSettings) {
         if (!validSettings(data))
             throw new Error('Invalid store settings response');
+        // Versions are monotonic within the active owner's singleton snapshot.
+        // A delayed GET (or PATCH) must never roll back a newer accepted save.
+        if (data.version < storePresentation.value.version) return;
         storePresentation.value = data;
         if (owner.value) {
             try {
@@ -54,6 +58,7 @@ export const useSettingsStore = defineStore('settings', () => {
         if (!owner.value) return;
         if (inFlight) return inFlight;
         const gen = generation;
+        const revision = savedRevision;
         loading.value = true;
         error.value = '';
         const task = (async () => {
@@ -61,7 +66,7 @@ export const useSettingsStore = defineStore('settings', () => {
                 const response = await api.get<StoreSettings>('/settings');
                 if (gen === generation) apply(response.data);
             } catch (cause) {
-                if (gen === generation)
+                if (gen === generation && revision === savedRevision)
                     error.value = apiErrorText(
                         cause,
                         'Could not refresh store settings. Showing last-known settings.',
@@ -85,6 +90,8 @@ export const useSettingsStore = defineStore('settings', () => {
         const response = await api.patch<StoreSettings>('/settings', body);
         if (gen !== generation || !owner.value) return false;
         apply(response.data);
+        savedRevision += 1;
+        error.value = '';
         return true;
     }
     return {
