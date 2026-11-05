@@ -12,6 +12,7 @@
  * after `listen`.
  */
 import { Types } from 'mongoose';
+import { randomUUID } from 'node:crypto';
 import { DEFAULT_TERMINAL, ShiftStatus } from '@grocery-pos/contracts';
 import { Role } from '../../src/auth/types';
 import {
@@ -88,5 +89,43 @@ describe('cold database: concurrent first sales (e2e, real MongoDB)', () => {
         expect(await db.model('Sales').countDocuments()).toBe(CASHIERS);
         expect(await db.model('SalesDetails').countDocuments()).toBe(CASHIERS);
         expect(await stockOf(db, productId)).toBe(STOCK - CASHIERS);
+    });
+});
+
+describe('cold database: category uniqueness is ready before HTTP', () => {
+    let db: DbApp | null = null;
+    afterEach(async () => {
+        await db?.close();
+        db = null;
+    });
+    it('creates the name-key index before concurrent first categories arrive', async () => {
+        await withRawDb(async (raw) => {
+            expect(
+                await raw.listCollections({ name: 'categories' }).toArray(),
+            ).toEqual([]);
+        });
+        db = await bootDbApp();
+        // Inspect the actual index immediately after production app startup,
+        // without calling Model.init() in the harness or warming up a category.
+        const indexes = await db.connection
+            .db!.collection('categories')
+            .indexes();
+        expect(indexes).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ key: { nameKey: 1 }, unique: true }),
+            ]),
+        );
+        const admin = caller('cold-category-admin', Role.Admin);
+        const name = `first-${randomUUID()}`;
+        const responses = await Promise.all(
+            Array.from({ length: 8 }, (_, i) =>
+                db!.call(admin, 'POST', '/categories', {
+                    name: i % 2 ? name.toUpperCase() : name,
+                }),
+            ),
+        );
+        expect(responses.filter((r) => r.status === 201)).toHaveLength(1);
+        expect(responses.filter((r) => r.status === 400)).toHaveLength(7);
+        expect(await db.model('Category').countDocuments()).toBe(1);
     });
 });

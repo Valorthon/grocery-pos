@@ -9,6 +9,7 @@ import {
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { Types } from 'mongoose';
+import { Test } from '@nestjs/testing';
 
 function fixture() {
     const row = {
@@ -25,6 +26,7 @@ function fixture() {
         lean: jest.fn().mockResolvedValue(row),
     };
     const model = {
+        init: jest.fn().mockResolvedValue(undefined),
         find: jest.fn((filter: unknown) => {
             void filter;
             return { ...query, lean: jest.fn().mockResolvedValue([row]) };
@@ -52,6 +54,46 @@ function fixture() {
     );
     return { service, model, query, row, exists, session };
 }
+describe('category startup readiness', () => {
+    it('holds Nest startup until the unique index is ready', async () => {
+        const f = fixture();
+        let ready!: () => void;
+        const indexes = new Promise<void>((resolve) => {
+            ready = resolve;
+        });
+        f.model.init.mockReturnValue(indexes);
+        const moduleRef = await Test.createTestingModule({
+            providers: [{ provide: CategoryService, useValue: f.service }],
+        }).compile();
+        const app = moduleRef.createNestApplication({ logger: false });
+        let started = false;
+        const startup = app.init().then(() => {
+            started = true;
+        });
+        try {
+            // Give Nest's lifecycle hook a full turn; the unresolved index build
+            // must prevent readiness even though the database is connected.
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(f.model.init).toHaveBeenCalledTimes(1);
+            expect(started).toBe(false);
+            ready();
+            await startup;
+            expect(started).toBe(true);
+        } finally {
+            ready();
+            await startup;
+            await app.close();
+        }
+    });
+    it('fails startup when a unique index cannot be built', async () => {
+        const f = fixture();
+        const failure = new Error(
+            'duplicate category names prevent index creation',
+        );
+        f.model.init.mockRejectedValue(failure);
+        await expect(f.service.onModuleInit()).rejects.toBe(failure);
+    });
+});
 describe('category lifecycle', () => {
     it.each([undefined, 'active', 'archived', 'all'] as const)(
         'lists bounded sorted %s categories with safe name search',
