@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '@grocery-pos/contracts';
 import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Product, type ProductDoc } from './product.schema';
@@ -65,7 +67,10 @@ export class ProductService {
         @Inject(forwardRef(() => InventoryService))
         private inventoryService: InventoryService,
         private EANCounterService: EanCounterService,
-        @Optional() private categories?: CategoryService,
+        @Optional()
+        @Inject(CategoryService)
+        private categories: CategoryService | undefined = undefined,
+        private audit: AuditService,
     ) {}
 
     async getByBarcode(dto: GetDto): Promise<ProductDoc> {
@@ -163,6 +168,27 @@ export class ProductService {
                         },
                         { session, runValidators: true },
                     );
+                    if (
+                        update.price !== undefined &&
+                        update.price !== before.price
+                    )
+                        await this.audit.record(
+                            {
+                                actor: user,
+                                action: AuditAction.PRODUCT_PRICE_CHANGED,
+                                targetModel: 'Product',
+                                targetId: product,
+                                before: {
+                                    price: before.price,
+                                    unit: before.unit,
+                                },
+                                after: {
+                                    price: update.price,
+                                    unit: before.unit,
+                                },
+                            },
+                            session,
+                        );
                 }
             },
             this.connection,

@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service';
 /**
  * A real Nest app for per-role access e2e specs, over HTTP with `fetch`.
  * Test-only: excluded from the build (tsconfig.build.json).
@@ -96,6 +97,10 @@ export async function bootAccessHarness(
         imports: [JwtModule.register({}), RequestIdModule],
         controllers,
         providers: [
+            {
+                provide: AuditService,
+                useValue: { record: () => Promise.resolve(undefined) },
+            },
             JWTStrategy,
             ...providers,
             {

@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '@grocery-pos/contracts';
 import { OfflineLease } from '../offline/offline-lease.schema';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -139,6 +141,7 @@ export class ShiftService {
         @InjectModel(Sales.name) private salesModel: Model<Sales>,
         @InjectModel(OfflineLease.name)
         private offlineLeases: Model<OfflineLease>,
+        private audit: AuditService,
     ) {}
 
     private openFilter(cashier: string) {
@@ -165,18 +168,44 @@ export class ShiftService {
         if (existing) throw this.alreadyOpen();
 
         try {
-            const created = await this.model.create({
-                cashier: new Types.ObjectId(user.userId),
-                cashierName: user.username,
-                terminal: DEFAULT_TERMINAL,
-                status: ShiftStatus.OPEN,
-                openedAt: new Date(),
-                openingFloat,
-                openingCounts: counts,
-                movements: [],
-                saleCount: 0,
-            });
-            return toCurrentView(created.toObject());
+            return await runInTransaction(async (session) => {
+                const [created] = await this.model
+                    .create(
+                        [
+                            {
+                                cashier: new Types.ObjectId(user.userId),
+                                cashierName: user.username,
+                                terminal: DEFAULT_TERMINAL,
+                                status: ShiftStatus.OPEN,
+                                openedAt: new Date(),
+                                openingFloat,
+                                openingCounts: counts,
+                                movements: [],
+                                saleCount: 0,
+                            },
+                        ],
+                        { session },
+                    )
+                    .catch((err: unknown) => {
+                        if (isDuplicateKey(err, 'cashier'))
+                            throw this.alreadyOpen();
+                        throw err;
+                    });
+                await this.audit.record(
+                    {
+                        actor: user,
+                        action: AuditAction.SHIFT_OPENED,
+                        targetModel: 'Shift',
+                        targetId: String(created._id),
+                        after: {
+                            status: ShiftStatus.OPEN,
+                            float: openingFloat,
+                        },
+                    },
+                    session,
+                );
+                return toCurrentView(created.toObject());
+            }, this.connection);
         } catch (err) {
             // A concurrent open by the same cashier won the unique index.
             if (isDuplicateKey(err, 'cashier')) throw this.alreadyOpen();
@@ -232,16 +261,31 @@ export class ShiftService {
             byName: user.username,
         };
 
-        const shift = await this.model
-            .findOneAndUpdate(
-                this.openFilter(user.userId),
-                { $push: { movements: movement } },
-                { new: true, runValidators: true },
-            )
-            .lean<ShiftDoc>();
+        return runInTransaction(async (session) => {
+            const shift = await this.model
+                .findOneAndUpdate(
+                    this.openFilter(user.userId),
+                    { $push: { movements: movement } },
+                    { new: true, runValidators: true, session },
+                )
+                .lean<ShiftDoc>();
 
-        if (!shift) throw this.notOpen();
-        return toCurrentView(shift);
+            if (!shift) throw this.notOpen();
+            await this.audit.record(
+                {
+                    actor: user,
+                    action:
+                        dto.type === DrawerMovementType.CASH_IN
+                            ? AuditAction.SHIFT_CASH_IN
+                            : AuditAction.SHIFT_CASH_DROPPED,
+                    targetModel: 'Shift',
+                    targetId: String(shift._id),
+                    after: { amount: dto.amount, reason: dto.reason },
+                },
+                session,
+            );
+            return toCurrentView(shift);
+        }, this.connection);
     }
 
     /**
@@ -453,7 +497,14 @@ export class ShiftService {
                     );
                 }
                 if (shift.status !== ShiftStatus.OPEN) throw this.closed(id);
-                return this.close(shift, admin, counts, countedCash, session);
+                return this.close(
+                    shift,
+                    admin,
+                    counts,
+                    countedCash,
+                    session,
+                    true,
+                );
             },
             this.connection,
             session,
@@ -481,6 +532,7 @@ export class ShiftService {
         counts: BillCounts,
         countedCash: number,
         session: ClientSession,
+        forced = false,
     ): Promise<ZReadReport> {
         const sales = await this.salesModel
             .find({ shift: shift._id }, SALE_FIELDS)
@@ -520,6 +572,24 @@ export class ShiftService {
                 ? this.notOpen()
                 : this.closed(String(shift._id));
         }
+        await this.audit.record(
+            {
+                actor: closer,
+                action: forced
+                    ? AuditAction.SHIFT_FORCE_CLOSED
+                    : AuditAction.SHIFT_CLOSED,
+                targetModel: 'Shift',
+                targetId: String(shift._id),
+                before: { status: ShiftStatus.OPEN },
+                after: {
+                    status: ShiftStatus.CLOSED,
+                    counted: countedCash,
+                    expected: zRead.drawer.expectedCash,
+                    variance: zRead.drawer.overShort,
+                },
+            },
+            session,
+        );
         return toReport(closed)!;
     }
 

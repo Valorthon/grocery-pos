@@ -159,7 +159,11 @@ export class FakeModel {
         );
     }
 
-    create(doc: Record<string, unknown>) {
+    async create(
+        doc: Record<string, unknown> | Record<string, unknown>[],
+    ): Promise<unknown> {
+        if (Array.isArray(doc))
+            return Promise.all(doc.map((row) => this.create(row)));
         const row = { _id: new Types.ObjectId(), ...clone(doc) } as Row;
         this.onCreate?.(row, this.rows);
         this.rows.push(row);

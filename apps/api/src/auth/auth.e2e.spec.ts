@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 /**
  * End-to-end session flow over real HTTP (issue #32).
  *
@@ -220,6 +221,12 @@ describe('Auth session flow (e2e)', () => {
             imports: [JwtModule.register({}), RateLimitModule],
             controllers: [AuthController, ProbeController],
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 AuthService,
                 JWTStrategy,
                 CookieService,

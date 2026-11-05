@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '@grocery-pos/contracts';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { receiptCost } from '../supplier/cost';
 import { quantityAmount, maxQuantityForAmount } from '@grocery-pos/contracts';
@@ -139,6 +141,7 @@ export class SalesService {
         private shiftService: ShiftService,
         private config: TypedConfigService,
         private overrides: ManagerOverrideService,
+        private audit: AuditService,
     ) {}
 
     /** `saleScope` for the caller, looking up their open shift if needed. */
@@ -588,6 +591,25 @@ export class SalesService {
                 );
 
                 await this.modelDetails.bulkWrite(inserts, { session });
+                if (discount)
+                    await this.audit.record(
+                        {
+                            actor: user,
+                            action: AuditAction.SALE_DISCOUNTED,
+                            targetModel: 'Sales',
+                            targetId: String(created._id),
+                            approvedBy,
+                            after: {
+                                subtotal,
+                                amount: discount.amount,
+                                total: totalAmount,
+                                type: discount.type,
+                                value: discount.value,
+                                reason: discount.reason,
+                            },
+                        },
+                        session,
+                    );
 
                 return {
                     fullSellDetails,
@@ -805,6 +827,28 @@ export class SalesService {
                     },
                 );
 
+                await this.audit.record(
+                    {
+                        actor: user,
+                        action:
+                            type === ReversalType.VOID
+                                ? AuditAction.SALE_VOIDED
+                                : AuditAction.SALE_REFUNDED,
+                        targetModel: 'Sales',
+                        targetId: saleId,
+                        approvedBy,
+                        before: { status: visibleSale.status },
+                        after: {
+                            status: sale.status,
+                            amount: sale.amount,
+                            reason,
+                            payoutShift: payoutShift
+                                ? String(payoutShift)
+                                : null,
+                        },
+                    },
+                    session,
+                );
                 return {
                     ...sale,
                     reversal: {

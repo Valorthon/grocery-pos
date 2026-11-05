@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
 import { LoginDto } from './types';
 import { UserService } from '../user/user.service';
@@ -17,6 +19,7 @@ export class AuthService {
         private userService: UserService,
         private jwtService: JwtService,
         private refreshTokenService: RefreshTokenService,
+        private audit: AuditService,
     ) {}
 
     async login(dto: LoginDto): Promise<{
@@ -41,6 +44,12 @@ export class AuthService {
         // verify in every case, so the timing does not tell them apart
         // either.
         if (!userInfo || !userInfo.isActive) {
+            await this.audit.record({
+                actor: null,
+                action: AuditAction.AUTH_LOGIN_FAILED,
+                targetModel: 'User',
+                after: { name: username },
+            });
             throw new AuthError(
                 ErrorCode.AUTH_INVALID_CREDENTIALS,
                 INVALID_CREDENTIALS_MESSAGE,
@@ -49,6 +58,14 @@ export class AuthService {
 
         const { refreshId, sid, expiry } =
             await this.refreshTokenService.create(userInfo._id.toString());
+
+        await this.audit.record({
+            actor: { userId: userInfo._id.toString(), username: userInfo.name },
+            action: AuditAction.AUTH_LOGIN,
+            targetModel: 'User',
+            targetId: userInfo._id.toString(),
+            after: { name: userInfo.name },
+        });
 
         const jwtPayload = {
             userId: userInfo._id.toString(),

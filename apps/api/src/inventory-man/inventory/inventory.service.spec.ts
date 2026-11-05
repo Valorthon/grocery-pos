@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { ClientSession, PipelineStage, Types } from 'mongoose';
@@ -50,6 +51,12 @@ describe('InventoryService.sell', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 InventoryService,
                 {
                     provide: getModelToken(Inventory.name),
@@ -221,6 +228,12 @@ describe('InventoryService.adjust', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 InventoryService,
                 {
                     provide: getModelToken(Inventory.name),
@@ -557,6 +570,12 @@ describe('InventoryService.restock', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 InventoryService,
                 {
                     provide: getModelToken(Inventory.name),
@@ -789,6 +808,12 @@ describe('InventoryService stock writes record updatedBy (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 InventoryService,
                 {
                     provide: getModelToken(Inventory.name),
@@ -854,6 +879,12 @@ describe('InventoryService.getAll (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 InventoryService,
                 {
                     provide: getModelToken(Inventory.name),

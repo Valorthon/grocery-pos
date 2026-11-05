@@ -428,6 +428,20 @@ Sales history uses `dateFrom`/`dateTo`, `cashier`, `paymentType`, `category` and
 number; suffix collisions return all scoped matches. Seller history still only
 sees that cashier's current open shift. History displays both short and full IDs.
 
+## Sensitive-action audit log
+
+Admins can open **Audit Log** to filter events by actor ID, action and store-calendar
+dates, and inspect the allowed before/after changes. Users, prices, manager-approved
+discounts/reversals, shifts/drawer movements and credential logins are recorded
+from this deployment onward. Existing history is not fabricated or backfilled.
+
+No automatic retention expiry is configured yet. The app exposes no audit editing,
+deletion or archive action. Guards protect writes through application models;
+privileged database administrators remain able to operate on the database directly.
+Passwords, PINs, hashes and session credentials are never audit diff fields.
+Failed logins retain generic client responses; only handled credential attempts
+are recorded, with bounded attempted names and request metadata.
+
 ## Checks
 
 Build the contracts first: their `dist` is gitignored, and the apps resolve

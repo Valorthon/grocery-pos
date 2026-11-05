@@ -400,6 +400,33 @@ requestId}`. A 5xx never carries details or internals.
   remain deferred. The original configurable discount threshold proposal is
   superseded by the owner's all-discounts-admin decision for now.
 
+**Sensitive-action audit log** (#46, owner decision 2026-11-05)
+
+- ADMIN alone reads `/audit` and the Audit Log screen. USER_MANAGER has no audit
+  access. Pagination and actor/action/store-day filters are validated; the UI
+  pages and retries applied filters and ignores stale responses after access changes.
+- No automatic deletion or TTL is configured initially. Future retention or archive
+  work requires an owner decision; this feature adds no archive/export/delete action.
+- Explicit service calls record user creation/name/roles/activation/password/PIN
+  changes, product price changes, discounts, voids/refunds, shift open/close/force-close,
+  cash in/drop, and handled successful/failed credential logins. Replays do not
+  duplicate completed-sale events. Existing history is not backfilled or invented.
+- Where state is transactional, the audit entry shares that transaction; opening
+  shifts, drawer movements and own-password writes also use a transaction so an
+  audit failure cannot leave those state changes unaudited. Index initialization is
+  awaited at startup. Failed/throttled requests that never reach credential checking
+  are not successful business changes; credential failures retain generic responses.
+- Before/after fields are positively allowlisted per action. Password/PIN changes
+  record only boolean facts, never values, hashes, session IDs, tokens, cookies,
+  raw documents or request bodies. Actor names are signed-request snapshots;
+  unknown login actors remain null, with only bounded attempted username text.
+- Request metadata contains only bounded user-agent and Express-resolved client IP,
+  honoring existing deployed trust-proxy configuration. It never retains headers
+  or credential bodies. Manager approval identity is separate from the acting user.
+- Append-only guards reject model/document update, delete, replace, save-existing
+  and bulk-write operations. This is application/model-level immutability, not
+  protection against a privileged direct MongoDB administrator.
+
 **Sessions** (#21)
 
 - A session lasts `REFRESH_EXPIRY_S` (7 days in `.env.example`) from login,

@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 /**
  * `/v1/users` over real HTTP (issue #3), in the style of auth.e2e.spec.ts.
  *
@@ -127,6 +128,12 @@ describe('Users (e2e)', () => {
             imports: [JwtModule.register({}), RateLimitModule],
             controllers: [UserController],
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 UserService,
                 RefreshTokenService,
                 { provide: getModelToken(RefreshToken.name), useValue: tokens },

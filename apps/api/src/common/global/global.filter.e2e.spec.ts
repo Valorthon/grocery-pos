@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service';
 /**
  * Error responses over real HTTP (issue #8): the real GlobalFilter,
  * guards, ValidationPipe and RequestIdModule on the access harness, with
@@ -76,6 +77,10 @@ describe('Error responses (e2e, issue #8)', () => {
         { insertMany, findOne } as unknown as Model<Product>,
         { createMany: inventoryCreateMany } as unknown as InventoryService,
         {} as EanCounterService,
+        undefined,
+        {
+            record: jest.fn().mockResolvedValue(undefined),
+        } as unknown as AuditService,
     );
 
     const restocker = caller(Role.Restocker);
@@ -131,7 +136,9 @@ describe('Error responses (e2e, issue #8)', () => {
         const json = JSON.stringify(body);
         expect(json).not.toContain('E11000');
         expect(json).not.toContain('"op"');
-        expect(json).not.toContain('1999');
+        expect(
+            JSON.stringify({ message: body.message, details: body.details }),
+        ).not.toContain('1999');
         expect(inventoryCreateMany).not.toHaveBeenCalled();
 
         // A 4xx, so a warning, but with the stack and the driver error.

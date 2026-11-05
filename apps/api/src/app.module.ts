@@ -1,3 +1,4 @@
+import { AuditModule } from './audit/audit.module';
 import { ReportsModule } from './reports/reports.module';
 import { StockCountModule } from './stock-count/stock-count.module';
 import { SupplierModule } from './supplier/supplier.module';
@@ -31,6 +32,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
 
 @Module({
     imports: [
+        AuditModule,
         ReportsModule,
         StockCountModule,
         SupplierModule,
