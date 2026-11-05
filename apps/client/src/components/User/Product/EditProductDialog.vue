@@ -1,5 +1,10 @@
 <template>
-    <BaseModal v-model="open" title="Edit Product" max-width="28rem">
+    <BaseModal
+        v-model="open"
+        title="Edit Product"
+        max-width="28rem"
+        :closable="!saving"
+    >
         <div class="space-y-4">
             <BaseInput
                 v-model="name"

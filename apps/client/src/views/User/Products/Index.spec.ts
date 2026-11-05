@@ -197,6 +197,55 @@ describe('product editing and archival', () => {
         });
         expect(document.querySelector('[role=dialog]')).toBeNull();
     });
+    it.each(['success', 'failure'] as const)(
+        'holds the editor open during a pending save and handles %s',
+        async (outcome) => {
+            let resolve!: (value: { data: null }) => void;
+            let reject!: (reason: Error) => void;
+            api.patch.mockImplementationOnce(
+                () =>
+                    new Promise((yes, no) => {
+                        resolve = yes;
+                        reject = no;
+                    }),
+            );
+            await mount();
+            await click('Edit');
+            await type('Selling price (₱)', '65.25');
+            await click('Save');
+            expect(api.patch).toHaveBeenCalledTimes(1);
+            expect(document.querySelector('[data-modal-close]')).toBeNull();
+            document.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+            );
+            await flush();
+            const dialog =
+                document.querySelector<HTMLElement>('[role=dialog]')!;
+            dialog.parentElement!.dispatchEvent(
+                new MouseEvent('mousedown', { bubbles: true }),
+            );
+            await flush();
+            await click('Cancel');
+            expect(document.querySelector('[role=dialog]')).not.toBeNull();
+            expect(api.patch).toHaveBeenCalledTimes(1);
+            if (outcome === 'success') {
+                resolve({ data: null });
+                await flush();
+                expect(document.querySelector('[role=dialog]')).toBeNull();
+            } else {
+                reject(new Error('network'));
+                await flush();
+                expect(document.querySelector('[role=dialog]')).not.toBeNull();
+                expect(document.querySelector('[role=alert]')).not.toBeNull();
+                expect(
+                    document.querySelector('[data-modal-close]'),
+                ).not.toBeNull();
+                await click('Save');
+                expect(api.patch).toHaveBeenCalledTimes(2);
+                expect(document.querySelector('[role=dialog]')).toBeNull();
+            }
+        },
+    );
     it('restockers can edit names but are not offered price editing', async () => {
         useAuthStore().user = {
             userId: 'restock',
