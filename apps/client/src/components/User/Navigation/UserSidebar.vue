@@ -275,6 +275,12 @@ const sections = computed(() => [
                 visible: canViewDashboard(authStore.user?.roles ?? []),
             },
             {
+                name: 'AuditLog',
+                title: 'Audit Log',
+                icon: Receipt,
+                visible: authStore.isAdmin,
+            },
+            {
                 name: 'Reports',
                 title: 'Sales Reports',
                 icon: Receipt,

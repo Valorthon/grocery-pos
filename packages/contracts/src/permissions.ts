@@ -50,7 +50,13 @@ export interface Permission {
     appRoles?: readonly Role[];
 }
 
-export const PERMISSIONS: readonly Permission[] = [
+export const PERMISSIONS: Permission[] = [
+    {
+        label: 'View sensitive-action audit log',
+        roles: [Role.Admin],
+        routes: ['GET /audit'],
+        pages: ['AuditLog'],
+    },
     {
         label: 'View stock movement history',
         roles: [Role.Restocker, Role.Adjuster],

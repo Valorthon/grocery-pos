@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import mongoose from 'mongoose';
@@ -56,6 +57,12 @@ describe('UserService', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 UserService,
                 {
                     provide: getConnectionToken(),
@@ -457,6 +464,12 @@ describe('UserService.checkCredentials (no enumeration, #12)', () => {
         });
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 UserService,
                 {
                     provide: getConnectionToken(),
@@ -517,6 +530,12 @@ describe('UserService argon2 parameters (#109)', () => {
         });
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 UserService,
                 {
                     provide: getConnectionToken(),
@@ -586,6 +605,12 @@ describe('UserService.getAll count (issue #16)', () => {
         };
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 UserService,
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(User.name), useValue: model },

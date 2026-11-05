@@ -1,3 +1,4 @@
+import { AuditService } from '../../audit/audit.service';
 import { JwtService } from '@nestjs/jwt';
 import { Connection, Model, Types, type ClientSession } from 'mongoose';
 import {
@@ -140,6 +141,10 @@ describe('manager approvals (#34)', () => {
             products as unknown as ProductService,
             jwt,
             { get: () => SECRET } as unknown as TypedConfigService,
+            undefined,
+            {
+                record: jest.fn().mockResolvedValue(undefined),
+            } as unknown as AuditService,
         );
     });
     function token(

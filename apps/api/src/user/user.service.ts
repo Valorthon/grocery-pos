@@ -1,3 +1,5 @@
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '@grocery-pos/contracts';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -34,8 +36,14 @@ function toPolicyUser(doc: {
     _id: Types.ObjectId;
     roles: Role[];
     isActive: boolean;
-}): PolicyUser {
-    return { id: doc._id.toString(), roles: doc.roles, isActive: doc.isActive };
+    name?: string;
+}): PolicyUser & { name?: string } {
+    return {
+        id: doc._id.toString(),
+        roles: doc.roles,
+        isActive: doc.isActive,
+        name: doc.name,
+    };
 }
 
 /**
@@ -62,6 +70,7 @@ export class UserService implements OnModuleInit {
     constructor(
         @InjectConnection() private connection: Connection,
         @InjectModel(User.name) private model: Model<User>,
+        private audit: AuditService,
     ) {}
 
     /** Hashes the dummy up front, so the first unknown-user login is not slower. */
@@ -128,7 +137,7 @@ export class UserService implements OnModuleInit {
                     (
                         await this.model
                             .find({ _id: { $in: ids } })
-                            .select('roles isActive')
+                            .select('name roles isActive')
                             .session(session)
                             .lean()
                     ).map((doc) => [doc._id.toString(), toPolicyUser(doc)]),
@@ -189,6 +198,61 @@ export class UserService implements OnModuleInit {
                     );
                 }
 
+                for (const { target, update } of planned) {
+                    const changes: [
+                        AuditAction,
+                        Record<string, unknown>,
+                        Record<string, unknown>,
+                    ][] = [];
+                    if (
+                        update.name !== undefined &&
+                        update.name !== target.name
+                    )
+                        changes.push([
+                            AuditAction.USER_UPDATED,
+                            { name: target.name },
+                            { name: update.name },
+                        ]);
+                    if (
+                        update.roles !== undefined &&
+                        !sameRoles(update.roles, target.roles)
+                    )
+                        changes.push([
+                            AuditAction.USER_ROLE_CHANGED,
+                            { roles: target.roles },
+                            { roles: update.roles },
+                        ]);
+                    if (
+                        update.isActive !== undefined &&
+                        update.isActive !== target.isActive
+                    )
+                        changes.push([
+                            update.isActive
+                                ? AuditAction.USER_REACTIVATED
+                                : AuditAction.USER_DEACTIVATED,
+                            { isActive: target.isActive },
+                            { isActive: update.isActive },
+                        ]);
+                    if (update.password !== undefined)
+                        changes.push([
+                            AuditAction.USER_PASSWORD_RESET,
+                            {},
+                            { passwordChanged: true },
+                        ]);
+                    for (const [action, before, after] of changes)
+                        await this.audit.record(
+                            {
+                                actor,
+                                action,
+                                targetModel: 'User',
+                                targetId: target.id,
+                                before,
+                                after,
+                            },
+                            session,
+                        );
+                }
+
                 if (demotesAdmin) {
                     const remaining = await this.model
                         .countDocuments({ roles: Role.Admin, isActive: true })
@@ -243,7 +307,7 @@ export class UserService implements OnModuleInit {
     ): Promise<PolicyUser> {
         const doc = await this.model
             .findById(actor.userId)
-            .select('roles isActive')
+            .select('name roles isActive')
             .session(session)
             .lean();
 
@@ -278,7 +342,22 @@ export class UserService implements OnModuleInit {
                     })),
                 );
 
-                await this.model.insertMany(inserts, { session });
+                const rows = await this.model.insertMany(inserts, { session });
+                for (const row of rows)
+                    await this.audit.record(
+                        {
+                            actor,
+                            action: AuditAction.USER_CREATED,
+                            targetModel: 'User',
+                            targetId: String(row._id),
+                            after: {
+                                name: row.name,
+                                roles: row.roles,
+                                isActive: row.isActive,
+                            },
+                        },
+                        session,
+                    );
             },
             this.connection,
             session,
@@ -314,23 +393,35 @@ export class UserService implements OnModuleInit {
 
         // Matching on the old hash makes a concurrent change of the same
         // password lose instead of silently overwriting the winner.
-        const result = await this.model.updateOne(
-            { _id: user._id, passwordHash: user.passwordHash },
-            {
-                $set: {
-                    passwordHash: await argon.hash(dto.newPassword),
-                    overridePinVersion: randomUUID(),
+        await runInTransaction(async (session) => {
+            const result = await this.model.updateOne(
+                { _id: user._id, passwordHash: user.passwordHash },
+                {
+                    $set: {
+                        passwordHash: await argon.hash(dto.newPassword),
+                        overridePinVersion: randomUUID(),
+                    },
                 },
-            },
-            { runValidators: true },
-        );
-
-        if (result.matchedCount === 0) {
-            throw new ForbiddenError(
-                ErrorCode.USER_WRONG_PASSWORD,
-                'Current password is incorrect',
+                { runValidators: true, session },
             );
-        }
+
+            if (result.matchedCount === 0) {
+                throw new ForbiddenError(
+                    ErrorCode.USER_WRONG_PASSWORD,
+                    'Current password is incorrect',
+                );
+            }
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.USER_PASSWORD_CHANGED,
+                    targetModel: 'User',
+                    targetId: actor.userId,
+                    after: { passwordChanged: true },
+                },
+                session,
+            );
+        }, this.connection);
     }
 
     /**

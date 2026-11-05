@@ -1,3 +1,5 @@
+import { AuditService } from '../../audit/audit.service';
+import { AuditAction } from '@grocery-pos/contracts';
 import { StockCountStatus } from '@grocery-pos/contracts';
 import { StockCount } from '../../stock-count/stock-count.schema';
 import { stockCountContext } from '../../stock-count/stock-count.context';
@@ -72,7 +74,8 @@ export class ManagerOverrideService implements OnModuleInit {
         private config: TypedConfigService,
         @Optional()
         @InjectModel(StockCount.name)
-        private stockCounts?: Model<StockCount>,
+        private stockCounts: Model<StockCount> | undefined = undefined,
+        private audit: AuditService,
     ) {}
 
     onModuleInit(): void {
@@ -145,6 +148,16 @@ export class ManagerOverrideService implements OnModuleInit {
                           },
                       },
                 { session },
+            );
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.USER_PIN_CHANGED,
+                    targetModel: 'User',
+                    targetId,
+                    after: { pinConfigured: hash !== null },
+                },
+                session,
             );
         }, this.connection);
     }

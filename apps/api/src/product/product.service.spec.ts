@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import mongoose, { ClientSession } from 'mongoose';
@@ -35,6 +36,12 @@ describe('ProductService.update', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 ProductService,
                 {
                     provide: getConnectionToken(),
@@ -165,6 +172,12 @@ describe('ProductService.getMatches', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 ProductService,
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(Product.name), useValue: { find } },
@@ -257,6 +270,12 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 ProductService,
                 {
                     provide: getConnectionToken(),
@@ -387,6 +406,12 @@ describe('ProductService.ensureValid (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 ProductService,
                 { provide: getConnectionToken(), useValue: {} },
                 {
@@ -524,6 +549,12 @@ describe('ProductService.getAll search (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 ProductService,
                 { provide: getConnectionToken(), useValue: {} },
                 {
@@ -597,6 +628,10 @@ describe('ProductService expiry tracking transitions', () => {
             model as unknown as mongoose.Model<Product>,
             inventory as unknown as InventoryService,
             {} as EanCounterService,
+            undefined,
+            {
+                record: jest.fn().mockResolvedValue(undefined),
+            } as unknown as AuditService,
         );
         const user = {
             userId: '507f1f77bcf86cd799439011',

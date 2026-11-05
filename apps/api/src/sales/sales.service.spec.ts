@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { MOCK_MANAGER_APPROVALS } from '../auth/override/testing/fake-override';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
@@ -144,6 +145,12 @@ describe('SalesService.sell', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 SalesService,
                 MOCK_MANAGER_APPROVALS,
                 {
@@ -1080,6 +1087,12 @@ describe('SalesService.reverse', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 SalesService,
                 MOCK_MANAGER_APPROVALS,
                 {
@@ -1412,6 +1425,12 @@ describe('Sales history scoping (issues #13, #2)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                {
+                    provide: AuditService,
+                    useValue: {
+                        record: jest.fn().mockResolvedValue(undefined),
+                    },
+                },
                 SalesService,
                 MOCK_MANAGER_APPROVALS,
                 { provide: getConnectionToken(), useValue: {} },

@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { ClientSession, Connection, Types } from 'mongoose';
@@ -62,6 +63,10 @@ beforeEach(async () => {
 
     const moduleRef = await Test.createTestingModule({
         providers: [
+            {
+                provide: AuditService,
+                useValue: { record: jest.fn().mockResolvedValue(undefined) },
+            },
             ShiftService,
             { provide: getConnectionToken(), useValue: connection },
             { provide: getModelToken(Shift.name), useValue: shifts },
