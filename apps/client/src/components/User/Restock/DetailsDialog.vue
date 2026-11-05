@@ -7,7 +7,11 @@
                 <div
                     class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
                 >
-                    Description
+                    Supplier / Invoice
+                </div>
+                <div class="text-sm">
+                    {{ item.supplier || 'Unknown supplier' }} ·
+                    {{ item.invoiceNumber || 'No invoice recorded' }}
                 </div>
                 <div class="text-sm">{{ item.description || 'N/A' }}</div>
             </div>

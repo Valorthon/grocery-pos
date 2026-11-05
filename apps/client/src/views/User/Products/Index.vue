@@ -87,6 +87,9 @@
                     formatCurrency(item.price) + '/' + unitLabel(item.unit)
                 }}</span>
             </template>
+            <template #cell-cost="{ item }"
+                ><ProductCostSummary :product="item._id" :unit="item.unit"
+            /></template>
             <template #cell-category="{ item }">{{
                 categories.find((row) => row._id === item.category)?.name ??
                 (item.category ? 'Unavailable category' : 'Uncategorized')
@@ -125,7 +128,8 @@
 
 <script setup lang="ts">
 import { useCategories } from '@/composables/useCategories';
-import { unitLabel } from '@grocery-pos/contracts';
+import ProductCostSummary from '@/components/User/Product/ProductCostSummary.vue';
+import { Role, unitLabel } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { List, Plus, Search, X } from '@lucide/vue';
@@ -213,6 +217,9 @@ const { applied, apply: applySearch } = useAppliedFilters(
 );
 
 const headers = [
+    ...(authStore.user?.roles.includes(Role.Admin)
+        ? [{ key: 'cost', title: 'Latest cost / margin estimate' }]
+        : []),
     { key: 'EAN', title: 'EAN' },
     { key: 'name', title: 'Name' },
     { key: 'category', title: 'Category' },

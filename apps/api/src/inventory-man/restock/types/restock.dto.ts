@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
     ArrayNotEmpty,
+    ValidateIf,
     IsInt,
     IsMongoId,
     IsNotEmpty,
@@ -21,6 +22,7 @@ import {
     Trim,
     TrimLowercase,
 } from '../../../common/validators';
+import { SUPPLIER_LIMITS } from '@grocery-pos/contracts';
 import type { RestockLineFields, RestockRequest } from '@grocery-pos/contracts';
 import { NewProductFields } from '../../../product/types';
 import {
@@ -99,6 +101,15 @@ export class RestockFields implements RestockLineFields {
     unitCost!: number;
 }
 export class RestockDto implements RestockRequest {
+    @IsMongoId()
+    supplier!: string;
+
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsString()
+    @MaxLength(SUPPLIER_LIMITS.INVOICE)
+    @Trim()
+    invoiceNumber?: string;
+
     @ValidateNested({ each: true })
     @ArrayNotEmpty()
     @ArrayMaxSize(BATCH_LIMITS.RESTOCK_LINES)

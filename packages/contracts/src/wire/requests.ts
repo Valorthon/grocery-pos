@@ -165,6 +165,8 @@ export type RestockLineRequest = Omit<
 
 /** `POST /restocks`. */
 export interface RestockRequest {
+    supplier: string;
+    invoiceNumber?: string;
     restockDetails: RestockLineFields[];
     description: string;
 }

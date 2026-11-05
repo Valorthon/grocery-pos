@@ -1,7 +1,23 @@
+vi.mock('@/axios', () => ({
+    default: {
+        get: vi.fn(async () => ({
+            data: {
+                data: [
+                    {
+                        _id: '507f1f77bcf86cd799439011',
+                        name: 'Farm',
+                        isActive: true,
+                    },
+                ],
+                totalItems: 1,
+            },
+        })),
+    },
+}));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { click, flush, type } from '@/testing/form-dom';
+import { click, flush, type, field } from '@/testing/form-dom';
 import { useUIStore } from '@/stores/ui';
 import RestockSaveDialog from './SaveDialog.vue';
 import AdjustmentSaveDialog from '../Adjustments/SaveDialog.vue';
@@ -47,6 +63,12 @@ async function open(
     app.mount(host);
     await flush();
     await type('Description', 'weekly delivery');
+    const select = document.querySelector<HTMLSelectElement>('select');
+    if (select) {
+        select.value = '507f1f77bcf86cd799439011';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await flush();
+    }
     return isOpen;
 }
 
@@ -68,7 +90,15 @@ describe.each([
 
         await click('Save');
 
-        expect(save).toHaveBeenCalledWith({ description: 'weekly delivery' });
+        expect(save).toHaveBeenCalledWith(
+            dialog === RestockSaveDialog
+                ? {
+                      description: 'weekly delivery',
+                      supplier: '507f1f77bcf86cd799439011',
+                      invoiceNumber: '',
+                  }
+                : { description: 'weekly delivery' },
+        );
         expect(isOpen.value).toBe(true);
         const buttons = [...document.body.querySelectorAll('button')];
         expect(buttons.every((b) => b.disabled || !b.textContent?.trim())).toBe(
@@ -100,9 +130,7 @@ describe.each([
 
         expect(isOpen.value).toBe(true);
         expect(saveButton().disabled).toBe(false);
-        expect(
-            document.body.querySelector<HTMLInputElement>('input')?.value,
-        ).toBe('weekly delivery');
+        expect(field('Description').value).toBe('weekly delivery');
     });
 
     it('shows a message when the save throws something unexpected', async () => {

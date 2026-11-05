@@ -140,6 +140,30 @@ Rules:
   replay returns the original receipt. The receipt and drawer figures always come
   from the server response.
 
+**Suppliers and latest-receipt costs** (#41)
+
+- ADMIN and RESTOCKER manage suppliers and receipt-cost defaults. Every new
+  restock requires an active supplier; invoice/DR number is optional. Existing
+  receipts without supplier keep that unknown history. Archive referenced
+  suppliers rather than deleting their receipt links.
+- Product `lastCost` is the last received line's integer-centavo unit cost per
+  displayed unit, written in the stock/receipt transaction. Repeated product
+  lines resolve in receipt order. This is not FIFO or weighted-average costing.
+- Sales snapshot the server's latest-receipt unit cost. Unknown stays absent;
+  only explicit integer zero means free. Do not backfill historical COGS or
+  report incomplete-cost margins as complete. Reversals keep the original basis.
+- Cost snapshots are hidden from cashier receipts, sales detail responses and
+  catalogues. Procurement default endpoints require RESTOCKER/ADMIN; margin
+  estimates in product list/editor are ADMIN-only and labeled latest receipt.
+- Offline cost evidence is stored server-side with an opaque signed reference.
+  JWT/IndexedDB catalogue data never contains readable costs. Sync/reconciliation
+  uses that immutable catalogue basis, not a later receipt's cost. Legacy proofs
+  without evidence remain unknown. Retain evidence for delayed cash uploads.
+- Low-stock restock drafts receive known latest costs asynchronously without
+  overwriting user edits; unknown defaults retain the normal zero-cost review.
+- Purchase orders are the owner-deferred second phase in #123. Reporting of
+  revenue/COGS/margin and missing-cost coverage belongs to #44.
+
 **Shifts** (#2)
 
 - Shifts live on the server (`apps/api/src/shift`); the client keeps

@@ -281,3 +281,11 @@ export async function read<T = Record<string, unknown>>(
     const text = await res.text();
     return { status: res.status, body: (text ? JSON.parse(text) : null) as T };
 }
+
+/** Explicit procurement fixture; production requests never receive an implicit supplier. */
+export async function seedSupplier(db: DbApp): Promise<string> {
+    const row = await db
+        .model<{ name: string; isActive: boolean }>('Supplier')
+        .create({ name: `Farm ${randomUUID()}`, isActive: true });
+    return String(row._id);
+}

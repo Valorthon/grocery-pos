@@ -169,6 +169,7 @@ describe('write routes', () => {
         const who = caller(Role.Restocker);
         const res = await harness.call(who, 'POST', '/restocks', {
             description: 'delivery',
+            supplier: '507f1f77bcf86cd799439011',
             restockDetails: [{ product: ID, quantity: 1, unitCost: 100 }],
         });
         expect(res.status).toBe(201);

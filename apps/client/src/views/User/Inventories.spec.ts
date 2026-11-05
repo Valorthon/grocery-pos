@@ -132,3 +132,57 @@ describe('reorder list and restock draft', () => {
         expect(button.disabled).toBe(false);
     });
 });
+
+describe('receipt-cost restock defaults', () => {
+    it('uses procurement cost rather than selling price, with exact measured total', async () => {
+        useRestockPrefillStore().prepare(rows());
+        api.get.mockResolvedValue({
+            data: [
+                { product: 'rice', lastCost: 12000 },
+                { product: 'bread', lastCost: 0 },
+            ],
+        });
+        await mount(RestockAdd);
+        const lines = [...document.querySelectorAll('tbody tr')];
+        expect(lines[0].textContent).toContain('2.500 kg');
+        expect(lines[0].textContent).toContain('120.00');
+        expect(lines[0].textContent).toContain('300.00');
+        expect(lines[0].textContent).not.toContain('180.00');
+        expect(api.post).not.toHaveBeenCalled();
+    });
+    it('does not save before receipt-cost defaults settle and preserves drafts on lookup failure', async () => {
+        let reject!: (value: unknown) => void;
+        api.get.mockReturnValueOnce(
+            new Promise((_resolve, no) => {
+                reject = no;
+            }),
+        );
+        useRestockPrefillStore().prepare(rows());
+        await mount(RestockAdd);
+        const save = [
+            ...document.querySelectorAll<HTMLButtonElement>('button'),
+        ].find((button) => button.textContent?.trim() === 'Save')!;
+        expect(save.disabled).toBe(true);
+        reject(new Error('offline'));
+        await flush();
+        expect(save.disabled).toBe(false);
+        expect(document.body.textContent).toContain('rice');
+        expect(document.body.textContent).toContain('0.00');
+        expect(api.post).not.toHaveBeenCalled();
+    });
+    it('ignores receipt defaults after the draft page unmounts', async () => {
+        let resolve!: (value: { data: unknown }) => void;
+        api.get.mockReturnValueOnce(
+            new Promise((yes) => {
+                resolve = yes;
+            }),
+        );
+        useRestockPrefillStore().prepare(rows());
+        await mount(RestockAdd);
+        app?.unmount();
+        app = undefined;
+        resolve({ data: [{ product: 'rice', lastCost: 12000 }] });
+        await flush();
+        expect(document.body.textContent).not.toContain('120.00');
+    });
+});

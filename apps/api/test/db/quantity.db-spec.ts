@@ -1,3 +1,4 @@
+import { seedSupplier } from './db-app';
 import { randomUUID } from 'node:crypto';
 import type { Types } from 'mongoose';
 import {
@@ -107,6 +108,7 @@ it('restocks kilograms at per-kg cost, adjusts grams and restores the exact sold
     expect(
         (
             await db.call(admin, 'POST', '/restocks', {
+                supplier: await seedSupplier(db),
                 description: 'weighed delivery',
                 restockDetails: [
                     { product: id, quantity: 1250, unitCost: 10000 },
@@ -160,6 +162,7 @@ it('restocks uppercase and lowercase ids at the same per-kg cost and snapshots t
         expect(
             (
                 await db.call(admin, 'POST', '/restocks', {
+                    supplier: await seedSupplier(db),
                     description,
                     restockDetails: [
                         { product: productId, quantity: 450, unitCost: 18000 },

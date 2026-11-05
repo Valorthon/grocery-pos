@@ -2,6 +2,8 @@
 export interface RestockListRow {
     id: string;
     description: string;
+    supplier?: string;
+    invoiceNumber?: string;
     /** The restocker's name; `N/A` once the account is gone. */
     restockedBy: string;
     /** Formatted. */

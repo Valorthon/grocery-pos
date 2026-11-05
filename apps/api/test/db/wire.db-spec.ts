@@ -1,3 +1,4 @@
+import { seedSupplier } from './db-app';
 import { approvalHeaders, discountApprovalHeaders } from './approval-fixtures';
 import {
     OverrideAction,
@@ -397,6 +398,7 @@ beforeAll(async () => {
 
     // Stock history.
     await post(restocker, '/restocks', {
+        supplier: await seedSupplier(db),
         description: 'Delivery',
         restockDetails: [{ product, quantity: 3, unitCost: 3_000 }],
     });

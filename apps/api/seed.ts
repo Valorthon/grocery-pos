@@ -1,3 +1,4 @@
+import { Supplier, SupplierSchema } from './src/supplier/supplier.schema';
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import { resolveAppEnv } from './src/common/typed-config/app-env';
@@ -237,6 +238,9 @@ async function seedInventory() {
 }
 
 async function seedRestock() {
+    const supplier = await mongoose
+        .model(Supplier.name, SupplierSchema)
+        .create({ name: 'Sample supplier', isActive: true });
     // 1. Fetch available users and products to reference
     const [users, products] = await Promise.all([
         user.find().lean(),
@@ -280,6 +284,7 @@ async function seedRestock() {
         // 3. Create the parent Restock document now that we have the totalCost
         restocksToInsert.push({
             _id: restockId,
+            supplier: supplier._id,
             description: `Monthly Restock Batch #${i + 1}`,
             restockedBy: restockedBy,
             totalCost: totalCost,
@@ -293,6 +298,11 @@ async function seedRestock() {
     // 4. Insert into the database
     await restock.insertMany(restocksToInsert);
     await restockDetails.insertMany(restockDetailsToInsert);
+    for (const line of restockDetailsToInsert)
+        await product.updateOne(
+            { _id: line.product },
+            { $set: { lastCost: line.unitCost, costUpdatedAt: new Date() } },
+        );
 }
 
 async function seedAdjustment() {

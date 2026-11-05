@@ -1,3 +1,4 @@
+import { receiptCost } from '../supplier/cost';
 import { quantityAmount, maxQuantityForAmount } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -208,6 +209,7 @@ export class SalesService {
 
         return await this.modelDetails
             .find({ sales })
+            .select(user.roles.includes(Role.Admin) ? '+unitCost' : '')
             .populate<{ product: NameRef | null }>({
                 path: 'product',
                 select: 'name',
@@ -460,12 +462,13 @@ export class SalesService {
                 );
 
                 const inserts = fullSellDetails.map(
-                    ({ product, quantity, unitPrice, unit }) => ({
+                    ({ product, quantity, unitPrice, unit, unitCost }) => ({
                         insertOne: {
                             document: {
                                 product,
                                 quantity,
                                 unitPrice,
+                                ...(unitCost !== undefined && { unitCost }),
                                 ...(unit && { unit }),
                                 sales: created._id,
                             },
@@ -850,6 +853,7 @@ export class SalesService {
             const lineAmount = quantityAmount(unitPrice, quantity, unit);
             subtotal += lineAmount;
 
+            const costBasis = receiptCost(productDetails.lastCost);
             fullSellDetails.push({
                 product,
                 productName,
@@ -857,6 +861,9 @@ export class SalesService {
                 ...(unit && { unit }),
                 quantity,
                 unitPrice,
+                ...(costBasis !== undefined && {
+                    unitCost: costBasis,
+                }),
             });
         }
 

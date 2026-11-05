@@ -90,6 +90,8 @@ export const INVENTORY_ROW_SHAPE: WireShape<InventoryRow> = {
 
 /** A row of `GET /restocks`. `restockedBy` is null once the user is gone. */
 export interface RestockRow {
+    supplier?: { _id: string; name: string } | null;
+    invoiceNumber?: string;
     _id: string;
     description: string;
     restockedBy: UserRef | null;
@@ -100,6 +102,8 @@ export interface RestockRow {
 }
 
 export const RESTOCK_ROW_SHAPE: WireShape<RestockRow> = {
+    supplier: 'optional',
+    invoiceNumber: 'optional',
     _id: 'required',
     description: 'required',
     restockedBy: 'required',

@@ -1,3 +1,4 @@
+import { SupplierModule } from '../../supplier/supplier.module';
 import { Module } from '@nestjs/common';
 import { RestockService } from './restock.service';
 import { RestockController } from './restock.controller';
@@ -19,6 +20,7 @@ import { ProductModule } from '../../product/product.module';
                 schema: RestockDetailsSchema,
             },
         ]),
+        SupplierModule,
         InventoryModule,
         ProductModule,
     ],

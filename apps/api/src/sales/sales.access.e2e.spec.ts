@@ -170,6 +170,7 @@ const salesModel = {
 
 const detailsModel = {
     find: ({ sales }: { sales: string }) => ({
+        select: () => detailsModel.find({ sales }),
         populate: () => ({
             lean: () =>
                 Promise.resolve([

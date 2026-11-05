@@ -1,3 +1,5 @@
+import { receiptCost } from '../supplier/cost';
+import { OfflineCost } from './offline-cost.schema';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
@@ -50,6 +52,7 @@ const AUDIENCE = 'grocery-pos-offline-price-v1';
 type LeaseDoc = OfflineLease & { _id: Types.ObjectId };
 interface PriceProof {
     purpose: 'offline-price-v1';
+    costRef?: string;
     lease: string;
     cashier: string;
     shift: string;
@@ -109,6 +112,7 @@ export class OfflineService {
         private receipts: SalesService,
         private jwt: JwtService,
         private config: TypedConfigService,
+        @InjectModel(OfflineCost.name) private costQuotes: Model<OfflineCost>,
     ) {}
 
     private async currentSession(actor: AuthUser, session?: ClientSession) {
@@ -245,10 +249,12 @@ export class OfflineService {
                       }
                     : {},
             )
+            .select('+lastCost')
             .sort({ updatedAt: 1, _id: 1 })
             .limit(limit)
             .lean<ProductDoc[]>();
-        const products: OfflineProduct[] = rows.map((product) => {
+        const products: OfflineProduct[] = [];
+        for (const product of rows) {
             if (
                 !Number.isSafeInteger(product.price) ||
                 product.price < 1 ||
@@ -256,12 +262,26 @@ export class OfflineService {
             )
                 throw new InternalError('Invalid cached product price');
             const unit = product.unit ?? UnitOfMeasure.PIECE;
+            const costBasis = receiptCost(product.lastCost);
+            // Store the confidential procurement basis only on the server.
+            const costQuote =
+                product.isActive === false
+                    ? undefined
+                    : await this.costQuotes.create({
+                          lease: lease._id,
+                          product: product._id,
+                          unit,
+                          ...(costBasis !== undefined && {
+                              unitCost: costBasis,
+                          }),
+                      });
             const proof =
                 product.isActive === false
                     ? ''
                     : this.jwt.sign(
                           {
                               purpose: 'offline-price-v1',
+                              costRef: String(costQuote!._id),
                               lease: String(lease._id),
                               cashier: actor.userId,
                               shift: String(lease.shift),
@@ -282,7 +302,7 @@ export class OfflineService {
                               ),
                           },
                       );
-            return {
+            products.push({
                 ...(product.isActive === false && { isActive: false }),
                 _id: String(product._id),
                 EAN: product.EAN,
@@ -291,8 +311,8 @@ export class OfflineService {
                 unit,
                 updatedAt: product.updatedAt.toISOString(),
                 proof,
-            };
-        });
+            });
+        }
         const last = rows[rows.length - 1];
         return {
             products,
@@ -593,8 +613,31 @@ export class OfflineService {
                     ],
                     { session },
                 );
+                const costs = new Map<string, number>();
+                for (const line of lines) {
+                    const ref = line.attested.costRef;
+                    // Existing queued receipts signed before cost tracking remain unknown.
+                    if (ref === undefined) continue;
+                    if (!Types.ObjectId.isValid(ref)) throw invalid();
+                    const quote = await this.costQuotes
+                        .findOne({
+                            _id: ref,
+                            lease: lease._id,
+                            product: line.product,
+                            unit: line.attested.unit,
+                        })
+                        .session(session)
+                        .lean();
+                    if (!quote) throw invalid();
+                    const basis = receiptCost(quote.unitCost);
+                    if (basis !== undefined) costs.set(ref, basis);
+                }
                 await this.details.insertMany(
                     lines.map((line) => ({
+                        ...(line.attested.costRef &&
+                            costs.has(line.attested.costRef) && {
+                                unitCost: costs.get(line.attested.costRef),
+                            }),
                         sales: sale._id,
                         product: new Types.ObjectId(line.product),
                         quantity: line.quantity,

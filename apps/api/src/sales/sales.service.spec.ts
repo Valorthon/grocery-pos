@@ -79,6 +79,7 @@ function sellDto(
  */
 function query(value: unknown) {
     const q = {
+        select: () => q,
         populate: () => q,
         sort: () => q,
         session: () => q,
@@ -1383,6 +1384,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
             sort: () => page,
             skip: () => page,
             limit: () => page,
+            select: () => page,
             populate: () => page,
             lean: () => Promise.resolve([]),
         };

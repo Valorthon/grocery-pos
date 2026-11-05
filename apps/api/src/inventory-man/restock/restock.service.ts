@@ -1,3 +1,4 @@
+import { SupplierService } from '../../supplier/supplier.service';
 import { ValidationError, ErrorCode } from '../../common/errors';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -32,6 +33,7 @@ export class RestockService {
         private inventoryService: InventoryService,
         private config: TypedConfigService,
         private productService: ProductService,
+        private suppliers: SupplierService,
     ) {}
 
     async restock(
@@ -43,6 +45,7 @@ export class RestockService {
 
         await runInTransaction(
             async (session) => {
+                await this.suppliers.assertActive(dto.supplier, session);
                 const updatedRestockDetails =
                     await this.inventoryService.restock(user, dto, session);
 
@@ -77,6 +80,10 @@ export class RestockService {
                     [
                         {
                             description,
+                            supplier: new Types.ObjectId(dto.supplier),
+                            ...(dto.invoiceNumber !== undefined && {
+                                invoiceNumber: dto.invoiceNumber,
+                            }),
                             restockedBy: user.userId,
                             totalCost,
                         },
@@ -94,6 +101,10 @@ export class RestockService {
                 }));
 
                 await this.modelDetails.bulkWrite(inserts, { session });
+                await this.productService.recordReceiptCosts(
+                    updatedRestockDetails,
+                    session,
+                );
             },
             this.connection,
             session,
@@ -128,6 +139,10 @@ export class RestockService {
                     path: 'restockedBy',
                     select: 'name',
                 })
+                .populate<{ supplier: NameRef | null }>({
+                    path: 'supplier',
+                    select: 'name',
+                })
                 .lean<RestockRowDoc[]>(),
 
             this.model.countDocuments(query),
@@ -159,7 +174,14 @@ export class RestockService {
                 $lookup: {
                     from: 'products',
                     pipeline: [
-                        { $project: { saleVersion: 0, priceHistory: 0 } },
+                        {
+                            $project: {
+                                saleVersion: 0,
+                                priceHistory: 0,
+                                lastCost: 0,
+                                costUpdatedAt: 0,
+                            },
+                        },
                     ],
                     localField: 'product',
                     foreignField: '_id',

@@ -101,8 +101,12 @@ export type RestockDraft = Omit<ProductDraft, 'price'> & {
 export function toRestockBody(
     drafts: RestockDraft[],
     description: string,
+    supplier = '',
+    invoiceNumber?: string,
 ): RestockRequest & { restockDetails: RestockLineRequest[] } {
     return {
+        supplier,
+        ...(invoiceNumber !== undefined && { invoiceNumber }),
         restockDetails: drafts.map((d): RestockLineRequest => ({
             ...(d.isNewProduct
                 ? { newProduct: toNewProduct(d) }

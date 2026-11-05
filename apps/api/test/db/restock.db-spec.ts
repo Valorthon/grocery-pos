@@ -1,3 +1,4 @@
+import { seedSupplier } from './db-app';
 /**
  * A restock at a ₱0 unit cost (#85), on the real schemas: the DTO, the
  * RestockDetails `unitCost` and the Restock `totalCost` all take 0, and a
@@ -42,6 +43,7 @@ describe('restock at a ₱0 unit cost (e2e, real MongoDB)', () => {
 
         const res = await read(
             await db.call(restocker, 'POST', '/restocks', {
+                supplier: await seedSupplier(db),
                 description: 'Delivery with samples',
                 restockDetails: [
                     { product: paid, quantity: 3, unitCost: 1_250 },
@@ -66,6 +68,7 @@ describe('restock at a ₱0 unit cost (e2e, real MongoDB)', () => {
 
         const res = await read(
             await db.call(restocker, 'POST', '/restocks', {
+                supplier: await seedSupplier(db),
                 description: 'Free samples',
                 restockDetails: [{ product: free, quantity: 6, unitCost: 0 }],
             }),
@@ -84,6 +87,7 @@ describe('restock at a ₱0 unit cost (e2e, real MongoDB)', () => {
 
         const res = await read(
             await db.call(restocker, 'POST', '/restocks', {
+                supplier: await seedSupplier(db),
                 description: 'Bad',
                 restockDetails: [{ product, quantity: 1, unitCost: -1 }],
             }),

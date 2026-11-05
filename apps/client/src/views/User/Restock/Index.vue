@@ -100,6 +100,8 @@ const serverItems = ref<RestockListRow[]>([]);
 
 const headers = [
     { key: 'description', title: 'Description' },
+    { key: 'supplier', title: 'Supplier' },
+    { key: 'invoiceNumber', title: 'Invoice / DR' },
     { key: 'totalCost', title: 'Total Cost', align: 'right' as const },
     { key: 'restockedBy', title: 'Restocked By' },
     { key: 'date', title: 'Date' },
@@ -193,6 +195,8 @@ const {
         serverItems.value = result.data.data.map((restock) => ({
             id: restock._id,
             description: restock.description,
+            supplier: restock.supplier?.name ?? 'Unknown supplier',
+            invoiceNumber: restock.invoiceNumber || '—',
             restockedBy: restock.restockedBy?.name ?? 'N/A',
             totalCost: formatCurrency(restock.totalCost),
             date: formatStoreDateTime(restock.createdAt),

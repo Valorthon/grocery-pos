@@ -1,3 +1,4 @@
+import { SUPPLIER_LIMITS } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Types } from 'mongoose';
 import { User } from '../../user/user.schema';
@@ -6,6 +7,11 @@ import type { NameRef } from '../../common/wire';
 
 @Schema({ timestamps: true })
 export class Restock {
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Supplier' })
+    supplier?: Types.ObjectId;
+    @Prop({ type: String, trim: true, maxlength: SUPPLIER_LIMITS.INVOICE })
+    invoiceNumber?: string;
+
     @Prop({
         type: String,
         required: true,
@@ -39,9 +45,10 @@ export class Restock {
 export const RestockSchema = SchemaFactory.createForClass(Restock);
 
 /** A restock read with `restockedBy` populated by name (null once deleted). */
-export type RestockRowDoc = Omit<Restock, 'restockedBy'> & {
+export type RestockRowDoc = Omit<Restock, 'restockedBy' | 'supplier'> & {
     _id: Types.ObjectId;
     restockedBy: NameRef | null;
+    supplier?: NameRef | null;
     createdAt: Date;
     updatedAt: Date;
 };

@@ -11,6 +11,11 @@
                 label="Product name"
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
             />
+            <ProductCostSummary
+                v-if="admin"
+                :product="product._id"
+                :unit="product.unit"
+            />
             <CategorySelect
                 v-model="category"
                 :current="product.category"
@@ -53,6 +58,7 @@
     </BaseModal>
 </template>
 <script setup lang="ts">
+import ProductCostSummary from './ProductCostSummary.vue';
 import { ref, watch } from 'vue';
 import {
     Role,

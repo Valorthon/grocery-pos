@@ -161,6 +161,26 @@ export class ProductService {
         );
     }
 
+    /** Receipt writes share the stock transaction; duplicate lines resolve in receipt order. */
+    async recordReceiptCosts(
+        lines: { product: Types.ObjectId; unitCost: number }[],
+        session: ClientSession,
+    ): Promise<void> {
+        for (const line of lines) {
+            await this.model.updateOne(
+                { _id: line.product },
+                {
+                    $set: {
+                        lastCost: line.unitCost,
+                        costUpdatedAt: new Date(),
+                    },
+                    $inc: { saleVersion: 1 },
+                },
+                { session, runValidators: true },
+            );
+        }
+    }
+
     async getMany(products: string[], session?: ClientSession) {
         const unique_ids = [...new Set(products)];
         // Serialize checkout pricing against edits/archival in the same transaction.
@@ -173,7 +193,7 @@ export class ProductService {
 
         const found = await this.model
             .find({ _id: { $in: unique_ids } })
-            .select('price name unit isActive')
+            .select('price name unit isActive +lastCost')
             .session(session ?? null)
             .lean();
 

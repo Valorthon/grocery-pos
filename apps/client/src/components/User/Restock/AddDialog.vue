@@ -125,7 +125,7 @@ import {
     quantityScale,
     unitLabel,
 } from '@grocery-pos/contracts';
-import { computed, reactive, ref, watch } from 'vue';
+import { onBeforeUnmount, computed, reactive, ref, watch } from 'vue';
 import { Plus, Save } from '@lucide/vue';
 import api from '@/axios';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -138,7 +138,7 @@ import type { ComboboxOption } from '@/components/ui/types';
 import { AddForm, AddFormInput } from './dto';
 import { restockLineErrors } from './validation';
 import { Color, useUIStore } from '@/stores/ui';
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { STRING_LIMITS, type ProductCostView } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toEnsureValidQuery } from '@/utils/payloads';
@@ -198,6 +198,10 @@ interface PickedProduct {
  * keep a product id attached (issue #17).
  */
 const picked = ref<PickedProduct | null>(null);
+let costGeneration = 0;
+onBeforeUnmount(() => {
+    costGeneration++;
+});
 
 const selectedProduct = computed<ComboboxOption | null>({
     get: () =>
@@ -209,6 +213,7 @@ const selectedProduct = computed<ComboboxOption | null>({
               }
             : null,
     set: (opt) => {
+        const generation = ++costGeneration;
         const match = opt
             ? matches.value.find((m) => m.product === opt.value)
             : undefined;
@@ -220,6 +225,35 @@ const selectedProduct = computed<ComboboxOption | null>({
                   unit: unitOf(match?.unit),
               }
             : null;
+        if (picked.value && !props.item) {
+            const product = picked.value.product;
+            const previousCost = formData.unitCost;
+            void api
+                .get<ProductCostView[]>('/suppliers/costs', {
+                    params: { products: product },
+                })
+                .then((response) => {
+                    if (
+                        generation !== costGeneration ||
+                        !props.modelValue ||
+                        picked.value?.product !== product ||
+                        formData.unitCost !== previousCost
+                    )
+                        return;
+                    const cost = response.data[0]?.lastCost;
+                    if (cost !== undefined)
+                        formData.unitCost = centavosToPesoInput(cost);
+                })
+                .catch((cause) =>
+                    uiStore.queueMessage(
+                        Color.ERROR,
+                        apiErrorMessages(
+                            cause,
+                            'Cost default unavailable; enter the actual unit cost.',
+                        ),
+                    ),
+                );
+        }
         clearError('EAN');
     },
 });
@@ -254,6 +288,7 @@ function setNewProduct(isNew: boolean) {
 watch(
     () => props.modelValue,
     (open) => {
+        costGeneration++;
         if (!open) return;
         const item = props.item;
         const isNew = item?.isNewProduct ?? false;
