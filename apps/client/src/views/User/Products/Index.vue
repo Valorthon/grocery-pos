@@ -41,6 +41,24 @@
                 ]"
                 @update:model-value="applySearch"
             />
+            <BaseSelect
+                v-model="categoryFilter"
+                label="Category"
+                :options="
+                    categories.map((row) => ({
+                        value: row._id,
+                        label: row.name + (row.isActive ? '' : ' (archived)'),
+                    }))
+                "
+                all-label="All categories"
+                @update:model-value="applySearch"
+            />
+            <p v-if="categoryError" role="alert" class="text-sm text-red-700">
+                {{ categoryError }}
+                <button class="min-h-11 underline" @click="refreshCategories">
+                    Retry
+                </button>
+            </p>
             <div class="flex items-end gap-2">
                 <BaseButton size="sm" @click="applySearch">
                     <Search class="w-4 h-4" />
@@ -69,6 +87,10 @@
                     formatCurrency(item.price) + '/' + unitLabel(item.unit)
                 }}</span>
             </template>
+            <template #cell-category="{ item }">{{
+                categories.find((row) => row._id === item.category)?.name ??
+                (item.category ? 'Unavailable category' : 'Uncategorized')
+            }}</template>
             <template #cell-actions="{ item }">
                 <div v-if="canAddProducts" class="flex gap-2">
                     <BaseButton size="sm" @click="editing = item"
@@ -102,6 +124,7 @@
 </template>
 
 <script setup lang="ts">
+import { useCategories } from '@/composables/useCategories';
 import { unitLabel } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -127,6 +150,12 @@ import {
     useListPaging,
 } from '@/composables/useListFetch';
 
+const {
+    categories,
+    error: categoryError,
+    refresh: refreshCategories,
+} = useCategories();
+const categoryFilter = ref<string | number | null>(null);
 const router = useRouter();
 const authStore = useAuthStore();
 // Offered only to whoever the router lets onto Products/Add (#83): an
@@ -178,6 +207,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
         name: searchName.value,
         EAN: searchEAN.value,
         status: status.value,
+        category: categoryFilter.value,
     }),
     search,
 );
@@ -185,6 +215,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
 const headers = [
     { key: 'EAN', title: 'EAN' },
     { key: 'name', title: 'Name' },
+    { key: 'category', title: 'Category' },
     { key: 'price', title: 'Price', align: 'right' as const },
     { key: 'actions', title: 'Actions' },
 ];
@@ -199,6 +230,7 @@ const serverItems = ref<ProductListRow[]>([]);
 const resetFilters = () => {
     searchEAN.value = '';
     status.value = 'active';
+    categoryFilter.value = null;
     searchName.value = '';
     applySearch();
 };
@@ -216,6 +248,9 @@ const {
                 name: applied.value.name?.toUpperCase(),
                 EAN: applied.value.EAN,
                 status: applied.value.status,
+                ...(applied.value.category && {
+                    category: applied.value.category,
+                }),
             },
         }),
     (result) => {

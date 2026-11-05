@@ -2,6 +2,7 @@ import type { UnitOfMeasure } from '@grocery-pos/contracts';
 interface AddFormFields {
     autoGenerateEAN: boolean;
     unit?: UnitOfMeasure;
+    category?: string;
     EAN: string;
     quantity: number;
     /** Centavos. */

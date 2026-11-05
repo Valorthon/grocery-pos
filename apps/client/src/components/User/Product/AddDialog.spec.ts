@@ -100,7 +100,11 @@ describe('Product AddDialog (#17)', () => {
         await type('Product Name', 'Pens');
         await click('Add to Draft');
         expect(fieldError('Selling Price')).toBe('This field is required');
-        expect(api.get).not.toHaveBeenCalled();
+        expect(
+            api.get.mock.calls.some(([url]) =>
+                String(url).includes('ensureValid'),
+            ),
+        ).toBe(false);
         expect(added).toEqual([]);
     });
 

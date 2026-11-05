@@ -13,3 +13,5 @@ export * from './wire-shape.js';
 export * from './wire/index.js';
 
 export * from './offline.js';
+
+export * from './category.js';

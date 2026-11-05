@@ -28,7 +28,6 @@ import type {
     NewProductRequest,
     NewProductsRequest,
 } from '@grocery-pos/contracts';
-import { Category } from './product.types';
 import {
     NUMERIC_LIMITS,
     STRING_LIMITS,
@@ -97,11 +96,9 @@ export class NewProductFields implements NewProductRequest {
     @TrimLowercase()
     name!: string;
 
-    @IsOptional()
-    @IsEnum(Category, {
-        message: `Category must be a valid enum value: ${Object.values(Category).join(', ')}`,
-    })
-    category?: Category;
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsMongoId()
+    category?: string;
 
     /** Centavos. */
     @IsNotEmpty()
@@ -127,15 +124,17 @@ export class GetDto {
     EAN!: string;
 }
 /** A product edit: at least one field, never an empty `$set` (issue #14). */
-@AtLeastOneOf(['name', 'price', 'category', 'isActive'])
+@AtLeastOneOf(['name', 'price', 'category', 'isActive'], undefined, [
+    'category',
+])
 export class UpdateFields implements ProductUpdateRequest {
     @ValidateIf((_object, value: unknown) => value !== undefined)
     @IsBoolean()
     isActive?: boolean;
 
     @IsOptional()
-    @IsEnum(Category)
-    category?: Category;
+    @IsMongoId()
+    category?: string | null;
 
     @IsOptional()
     @IsString()
@@ -174,6 +173,10 @@ export class UpdateBulkDto implements UpdateProductsRequest {
 }
 
 export class GetAllDto {
+    @IsOptional()
+    @IsMongoId()
+    category?: string;
+
     @IsOptional()
     @IsEnum(['active', 'archived', 'all'])
     @Trim()

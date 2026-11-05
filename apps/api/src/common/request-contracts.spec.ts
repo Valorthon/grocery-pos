@@ -1,4 +1,12 @@
 import type {
+    CreateCategoryRequest,
+    UpdateCategoryRequest,
+} from '@grocery-pos/contracts';
+import type {
+    CreateCategoryDto,
+    UpdateCategoryDto,
+} from '../category/category.dto';
+import type {
     ProductUpdateRequest,
     ProductUpdateLineRequest,
     UpdateProductsRequest,
@@ -190,4 +198,13 @@ describe('request contracts (#90)', () => {
         // The real check is the compiler's, above; this keeps the table used.
         expect(Object.values(checks).every((ok) => ok === true)).toBe(true);
     });
+});
+
+it('category request contracts match DTOs', () => {
+    expect(keysMatch<CreateCategoryDto, CreateCategoryRequest>(true)).toBe(
+        true,
+    );
+    expect(keysMatch<UpdateCategoryDto, UpdateCategoryRequest>(true)).toBe(
+        true,
+    );
 });

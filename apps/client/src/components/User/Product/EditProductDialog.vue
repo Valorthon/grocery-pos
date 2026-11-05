@@ -11,15 +11,10 @@
                 label="Product name"
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
             />
-            <BaseSelect
+            <CategorySelect
                 v-model="category"
-                label="Category"
-                :options="
-                    Object.values(Category).map((value) => ({
-                        value,
-                        label: value,
-                    }))
-                "
+                :current="product.category"
+                :refresh-key="open"
             />
             <p class="text-sm">
                 Unit: {{ unitLabel(product.unit) }} (cannot be changed)
@@ -50,7 +45,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import {
-    Category,
     Role,
     STRING_LIMITS,
     NUMERIC_LIMITS,
@@ -61,7 +55,7 @@ import {
 } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
-import BaseSelect from '@/components/ui/BaseSelect.vue';
+import CategorySelect from './CategorySelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import api from '@/axios';
 import { useAuthStore } from '@/stores/auth';
@@ -72,7 +66,7 @@ const props = defineProps<{ product: ProductView }>();
 const emit = defineEmits<{ saved: [] }>();
 const admin = useAuthStore().user?.roles.includes(Role.Admin) ?? false;
 const name = ref('');
-const category = ref<string | number | null>(null);
+const category = ref<string | undefined>();
 const price = ref('');
 const error = ref('');
 const saving = ref(false);
@@ -81,7 +75,7 @@ watch(
     () => {
         if (open.value) {
             name.value = props.product.name;
-            category.value = props.product.category ?? null;
+            category.value = props.product.category;
             price.value = (props.product.price / 100).toFixed(2);
             error.value = '';
         }
@@ -107,7 +101,9 @@ async function save() {
     }
     const update = {
         name: normalized,
-        ...(category.value && { category: category.value as Category }),
+        ...(category.value !== props.product.category && {
+            category: category.value ?? null,
+        }),
         ...(admin &&
             amount !== null &&
             amount !== props.product.price && { price: amount }),

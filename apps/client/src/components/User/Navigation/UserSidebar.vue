@@ -262,6 +262,12 @@ const sections = computed(() => [
         title: 'Inventory Management',
         items: [
             {
+                name: 'Categories',
+                title: 'Categories',
+                icon: List,
+                visible: authStore.isAdmin,
+            },
+            {
                 name: 'Products',
                 title: 'Product List',
                 icon: List,

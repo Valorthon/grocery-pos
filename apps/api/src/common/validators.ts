@@ -28,6 +28,7 @@ function registerClassCheck(
     check: (presentCount: number) => boolean,
     message: string,
     validationOptions?: ValidationOptions,
+    nullableFields: string[] = [],
 ): ClassDecorator {
     return (target) => {
         registerDecorator({
@@ -39,8 +40,11 @@ function registerClassCheck(
             validator: {
                 validate(value: unknown, args: ValidationArguments) {
                     const dto = args.object as Record<string, unknown>;
-                    const present = properties.filter((prop) =>
-                        isProvided(dto[prop]),
+                    const present = properties.filter(
+                        (prop) =>
+                            isProvided(dto[prop]) ||
+                            (dto[prop] === null &&
+                                nullableFields.includes(prop)),
                     ).length;
                     return value === undefined && check(present);
                 },
@@ -76,6 +80,7 @@ export function ExactlyOneOf(
 export function AtLeastOneOf(
     properties: string[],
     validationOptions?: ValidationOptions,
+    nullableFields: string[] = [],
 ): ClassDecorator {
     return registerClassCheck(
         'atLeastOneOf',
@@ -83,6 +88,7 @@ export function AtLeastOneOf(
         (present) => present >= 1,
         `At least one of the following must be provided: ${properties.join(', ')}`,
         validationOptions,
+        nullableFields,
     );
 }
 
