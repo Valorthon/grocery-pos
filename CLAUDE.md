@@ -140,6 +140,27 @@ Rules:
   replay returns the original receipt. The receipt and drawer figures always come
   from the server response.
 
+**Physical stock counts** (#43, owner decision 2026-11-05)
+
+- ADJUSTER/ADMIN create, resume, save and submit server-side counts. ADMIN or
+  SUPERVISOR approves exact submitted count/version via username + six-digit PIN;
+  this does not grant supervisor-only accounts general inventory-page access.
+- Opening expected quantities are immutable. Approval applies
+  `countedQty - expectedQty` to current balances, preserving all intervening net
+  movements. The physical count must correspond to the opening reference;
+  the UI warns that already-reflected movements cannot be inferred automatically.
+- Blank means uncounted; zero is explicit. Edits use optimistic versions.
+  Submit freezes quantities; approval consumes its one-use grant in the same
+  transaction as one adjustment containing only nonzero variances. All-zero
+  counts approve without an empty adjustment; approval retries cannot double-post.
+- Expiry-tracked stock is counted per existing batch, with normal nonnegative
+  batch/aggregate guards and rollback. Counts never invent expiry/opening lots;
+  a tracked product without a batch can only be counted as zero. Changed product
+  tracking/unit requires a new count. Existing stock/expiry/cost policies remain.
+- A count contains at most 200 posting lines (including batches), so split larger
+  scopes. Initial scope is active products: all, category or picked barcodes.
+  Cancelled/approved counts retain their immutable snapshots and identities.
+
 **Suppliers and latest-receipt costs** (#41)
 
 - ADMIN and RESTOCKER manage suppliers and receipt-cost defaults. Every new

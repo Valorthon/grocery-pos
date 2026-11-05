@@ -52,6 +52,20 @@ export interface Permission {
 
 export const PERMISSIONS: readonly Permission[] = [
     {
+        label: 'Count stock with manager approval',
+        roles: [Role.Adjuster],
+        routes: [
+            'GET /stock-counts',
+            'GET /stock-counts/:id',
+            'POST /stock-counts',
+            'PATCH /stock-counts/:id',
+            'POST /stock-counts/:id/submit',
+            'POST /stock-counts/:id/cancel',
+            'POST /stock-counts/:id/approve',
+        ],
+        pages: ['StockCounts'],
+    },
+    {
         label: 'Review inventory batches and expiry',
         roles: [Role.Restocker, Role.Adjuster],
         routes: ['GET /inventories/expiring', 'GET /inventories/batches'],
@@ -180,10 +194,10 @@ export const PERMISSIONS: readonly Permission[] = [
     },
     {
         label: 'Request manager approval',
-        roles: [Role.Seller, Role.Admin],
+        roles: [Role.Seller, Role.Admin, Role.Adjuster],
         routes: ['POST /auth/override'],
-        pages: ['Sell', 'Sales', 'SalesHistory'],
-        appRoles: [Role.Seller, Role.Admin],
+        pages: ['Sell', 'Sales', 'SalesHistory', 'StockCounts'],
+        appRoles: [Role.Seller, Role.Admin, Role.Adjuster],
     },
     {
         label: 'Set or remove manager PINs',

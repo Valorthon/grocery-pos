@@ -198,6 +198,7 @@ export interface OverrideReversalRequest extends ReverseSaleRequest {
 }
 
 export interface OverrideContextRequest {
+    stockCount?: { countId: string; version: number };
     sale?: SaleRequest;
     reversal?: OverrideReversalRequest;
     /** What the manager sees. The API compares it to current server prices. */

@@ -328,6 +328,12 @@ const sections = computed(() => [
                 visible: canViewRestocks.value,
             },
             {
+                name: 'StockCounts',
+                title: 'Stock Counts',
+                icon: ClipboardEdit,
+                visible: canViewAdjustments.value,
+            },
+            {
                 name: 'Adjustments',
                 title: 'Adjustment History',
                 icon: ClipboardEdit,

@@ -512,3 +512,27 @@ catalogues. Previously collected cash is retained and requires an ADMIN to
 reconcile it; explicit deficit lots keep stock totals accountable without inventing
 expiry dates. Undated reconciliation lots cannot be sold. Review and reconcile those balances through batch-specific adjustments. Cost/margin continues to use the latest-receipt basis,
 not batch valuation.
+
+## Physical stock counts (#43)
+
+ADJUSTER and ADMIN can open **Stock Counts**, choose all active products, a category,
+or picked barcodes, and save partial counts on the server to resume later. Blank
+is not counted; enter zero explicitly for an empty shelf. KG/L quantities use the
+usual three decimal places, and expiry-tracked products are counted per batch.
+
+The opening timestamp and expected quantities are the reference. Align physical
+counting with that reference (prefer a quiet counting period): approval posts the
+fixed variance `counted - opening expected` to current stock, preserving sales,
+receipts, refunds and adjustments made since opening. If the physical count
+already includes those later movements, use a fresh reference; the system cannot
+infer when an individual shelf was counted. Submitted review shows current and
+projected balances. Negative results are refused atomically; review/cancel and
+start a new count if intervening changes make a variance invalid.
+
+An ADMIN or SUPERVISOR enters their manager username and PIN at the counter's
+screen to approve submitted quantities. One transaction posts one adjustment with
+nonzero variances and records the manager; retries do not post twice. A zero-change
+count records approval without creating an empty adjustment. Cancelled counts
+remain in history. At most 200 lines can be counted together (including batch
+lines); choose a smaller scope for larger inventories. Counts do not create new
+expiry batches, and tracking/unit changes require a new count.

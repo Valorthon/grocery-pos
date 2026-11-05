@@ -26,7 +26,7 @@ export class ManagerOverrideController {
         private limiter: LoginAttemptLimiter,
     ) {}
 
-    @Roles(Role.Seller, Role.Admin)
+    @Roles(Role.Seller, Role.Admin, Role.Adjuster)
     @LoginRateLimit()
     @Post()
     async approve(

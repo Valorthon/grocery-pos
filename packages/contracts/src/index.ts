@@ -18,3 +18,5 @@ export * from './category.js';
 
 export * from './supplier.js';
 export * from './expiry.js';
+
+export * from './stock-count.js';
