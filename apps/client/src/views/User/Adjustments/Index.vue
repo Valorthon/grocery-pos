@@ -46,6 +46,10 @@
             </div>
         </div>
 
+        <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
+            Showing source {{ sourceId }}. Clear Filters to view all history.
+        </p>
+
         <BaseTable
             v-model:page="page"
             v-model:items-per-page="limit"
@@ -72,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ClipboardEdit, Pencil, X } from '@lucide/vue';
 import api from '@/axios';
@@ -92,6 +96,12 @@ import type { AdjustmentListRow } from '@/components/User/Adjustments/rows';
 import AdjustDetails from '@/components/User/Adjustments/DetailsDialog.vue';
 
 const router = useRouter();
+const sourceId = computed(() => {
+    const candidate = router.currentRoute?.value.query.source;
+    return typeof candidate === 'string' && /^[a-f0-9]{24}$/i.test(candidate)
+        ? candidate
+        : undefined;
+});
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchAdjust());
 const totalItems = ref(0);
@@ -171,7 +181,18 @@ const resetFilters = () => {
     searchAdjustedBy.value = null;
     searchDateStart.value = '';
     searchDateEnd.value = '';
-    applyFilters();
+    applied.value = {
+        adjustedBy: undefined,
+        dateFrom: undefined,
+        dateTo: undefined,
+    };
+    if (sourceId.value) {
+        // The route watcher performs the single reload after clearing the
+        // deep link; other query parameters belong to the router.
+        void router.replace({
+            query: { ...router.currentRoute.value.query, source: undefined },
+        });
+    } else search();
 };
 
 const {
@@ -182,6 +203,7 @@ const {
     () =>
         api.get<Paginated<AdjustmentRow>>(`/adjustments`, {
             params: {
+                source: sourceId.value,
                 page: page.value,
                 limit: limit.value,
                 ...applied.value,
@@ -199,6 +221,10 @@ const {
     },
     'Could not load the adjustments.',
 );
+
+// Vue Router reuses this component for source links and ordinary sidebar
+// navigation. Follow the current route without applying unsearched inputs.
+watch(sourceId, () => search());
 
 void fetchAdjust();
 

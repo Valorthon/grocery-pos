@@ -1,3 +1,5 @@
+import { StockMovementService } from '../stock-movement/stock-movement.service';
+import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { receiptCost } from '../supplier/cost';
 import { OfflineCost } from './offline-cost.schema';
 import { InventoryBatchService } from '../inventory-man/batch/batch.service';
@@ -116,6 +118,7 @@ export class OfflineService {
         private config: TypedConfigService,
         @InjectModel(OfflineCost.name) private costQuotes: Model<OfflineCost>,
         @Optional() private batches?: InventoryBatchService,
+        @Optional() private ledger?: StockMovementService,
     ) {}
 
     private async currentSession(actor: AuthUser, session?: ClientSession) {
@@ -661,6 +664,20 @@ export class OfflineService {
                         unit: line.attested.unit,
                     })),
                     { session },
+                );
+                await this.ledger?.record(
+                    lines.map((line) => ({
+                        product: line.product,
+                        quantity: -line.quantity,
+                    })),
+                    {
+                        type: StockMovementType.SALE,
+                        refModel: StockMovementSource.SALE,
+                        refId: String(sale._id),
+                        user: actor.userId,
+                        occurredAt: soldAt,
+                    },
+                    session,
                 );
                 return sale._id;
             }, this.connection);

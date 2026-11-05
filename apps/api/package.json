@@ -22,7 +22,8 @@
         "typecheck": "tsc --noEmit -p tsconfig.json",
         "dev": "nest start --watch",
         "lint:fix": "eslint . --fix",
-        "migrate:categories": "ts-node migrate-categories.ts"
+        "migrate:categories": "ts-node migrate-categories.ts",
+        "migrate:stock-ledger": "ts-node migrate-stock-ledger.ts"
     },
     "dependencies": {
         "@grocery-pos/contracts": "workspace:*",

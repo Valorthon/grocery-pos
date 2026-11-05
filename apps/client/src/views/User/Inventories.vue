@@ -74,12 +74,35 @@
             empty-text="No inventory found"
             :items-length="totalItems"
             @retry="fetchInventory"
-        />
+        >
+            <template #cell-history="{ item }"
+                ><BaseButton
+                    size="sm"
+                    variant="outline"
+                    @click="
+                        history = {
+                            _id: item.id,
+                            name: item.name,
+                            unit: item.unit,
+                        }
+                    "
+                    >Stock history</BaseButton
+                ></template
+            >
+        </BaseTable>
     </PageCard>
     <InventoryBatches v-if="showBatches" />
+    <StockHistory
+        v-if="history"
+        :key="history._id"
+        :product="history"
+        @close="history = null"
+    />
 </template>
 
 <script setup lang="ts">
+import StockHistory from '@/components/User/Inventory/StockHistory.vue';
+import type { ProductView, UnitOfMeasure } from '@grocery-pos/contracts';
 import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
@@ -99,6 +122,7 @@ import {
 } from '@/composables/useListFetch';
 import type { InventoryRow, Paginated } from '@grocery-pos/contracts';
 
+const history = ref<Pick<ProductView, '_id' | 'name' | 'unit'> | null>(null);
 const router = useRouter();
 const route = useRoute();
 const showBatches = ref(route?.query.expiring === 'true');
@@ -152,6 +176,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
 );
 
 const headers = [
+    { key: 'history', title: 'History' },
     { key: 'EAN', title: 'EAN' },
     { key: 'name', title: 'Name' },
     { key: 'stock', title: 'Stock', align: 'right' as const },
@@ -165,6 +190,7 @@ interface InventoryListRow {
     EAN: string;
     name: string;
     stock: string;
+    unit?: UnitOfMeasure;
     reorderLevel: string;
 }
 
@@ -196,6 +222,7 @@ const {
         sourceRows.value = result.data.data;
         const data = result.data.data.map((inventory) => ({
             id: inventory.product._id,
+            unit: inventory.product.unit,
             EAN: inventory.product.EAN,
             name: inventory.product.name,
             stock: formatQuantity(inventory.stock, inventory.product.unit),

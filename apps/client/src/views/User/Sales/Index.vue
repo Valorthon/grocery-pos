@@ -579,14 +579,22 @@ const {
     refresh: refreshLookups,
 } = useSalesLookups(authStore.isAdmin);
 const filters = reactive({
-    saleNumber: '',
+    saleNumber:
+        typeof router.currentRoute?.value.query.saleNumber === 'string' &&
+        REPORT_LIMITS.SALE_SEARCH.test(
+            router.currentRoute.value.query.saleNumber,
+        )
+            ? router.currentRoute.value.query.saleNumber
+            : '',
     dateFrom: '',
     dateTo: '',
     paymentType: null as string | null,
     cashier: null as string | null,
     category: null as string | null,
 });
-const appliedFilters = ref<Record<string, string>>({});
+const appliedFilters = ref<Record<string, string>>(
+    filters.saleNumber ? { saleNumber: filters.saleNumber } : {},
+);
 const searchError = ref('');
 function applyFilters() {
     searchError.value = '';

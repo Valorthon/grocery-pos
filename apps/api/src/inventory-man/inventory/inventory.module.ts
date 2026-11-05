@@ -1,3 +1,4 @@
+import { StockMovementModule } from '../../stock-movement/stock-movement.module';
 import { InventoryBatchModule } from '../batch/batch.module';
 import { forwardRef, Module } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
@@ -9,6 +10,7 @@ import { ProductModule } from '../../product/product.module';
 @Module({
     imports: [
         InventoryBatchModule,
+        StockMovementModule,
         MongooseModule.forFeature([
             {
                 name: Inventory.name,

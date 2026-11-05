@@ -283,7 +283,7 @@
 </template>
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import {
     OverrideAction,
     STOCK_COUNT_LINE_MAX,
@@ -310,6 +310,7 @@ import { useCategories } from '@/composables/useCategories';
 import { apiErrorText } from '@/utils/api-error';
 import { useAuthStore } from '@/stores/auth';
 import { watch } from 'vue';
+const router = useRouter();
 const auth = useAuthStore();
 const {
     categories,
@@ -625,7 +626,10 @@ const unload = (event: BeforeUnloadEvent) => {
 };
 onMounted(() => {
     window.addEventListener('beforeunload', unload);
-    void refresh();
+    const source = router.currentRoute?.value.query.source;
+    if (typeof source === 'string' && /^[a-f0-9]{24}$/i.test(source))
+        void load(source);
+    else void refresh();
 });
 onBeforeUnmount(() => {
     generation++;

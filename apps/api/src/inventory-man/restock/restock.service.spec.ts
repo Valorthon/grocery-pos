@@ -239,7 +239,10 @@ describe('RestockService.restock (issue #30)', () => {
                 },
                 {
                     provide: InventoryService,
-                    useValue: { restock: inventoryRestock },
+                    useValue: {
+                        restock: inventoryRestock,
+                        recordMovements: jest.fn(),
+                    },
                 },
                 {
                     provide: ProductService,

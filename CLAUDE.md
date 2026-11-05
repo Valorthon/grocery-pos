@@ -796,3 +796,21 @@ the product owner picks.
   and aggregate changes roll back together. Costing remains latest receipt (#41),
   not lot/FIFO valuation. Expiring view includes already-expired lots; dashboard
   alerts count remaining lots expired or expiring within seven store days.
+
+**Stock movement ledger** (#45, owner decision 2026-11-05)
+
+- Every stock writer appends its signed minor-unit movement in the stock transaction;
+  count approval posts COUNT once, and reversals post VOID/REFUND against the sale.
+  Product sequence is posting order. Offline occurrence time is separate from posting
+  time; date filters use posting days. No update/delete API exists.
+- Before deploying to existing data, stop all API writers and run the stock-ledger
+  dry run, then apply. Reconstruct known receipt/adjustment/count/sale/reversal facts,
+  with an explicit unattributed OPENING gap equal to current stock minus known net
+  movements. Historical balances are derived, not audited historical certainty;
+  missing actors remain unknown. Never invent attribution or silently repair drift.
+- Live first use can establish an explicit unattributed opening for a new/unmigrated
+  product, but migration refuses existing live ledger rows. Complete the historical
+  migration before deploying writers when historical reconstruction is required.
+- Inventory roles see quantities and permitted source links, never procurement costs
+  or unrestricted sales finances. Integrity compares ledger sum to inventory in one
+  snapshot and reports discrepancies without changing either side.

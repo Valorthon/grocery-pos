@@ -583,3 +583,31 @@ count records approval without creating an empty adjustment. Cancelled counts
 remain in history. At most 200 lines can be counted together (including batch
 lines); choose a smaller scope for larger inventories. Counts do not create new
 expiry batches, and tracking/unit changes require a new count.
+
+### Backfill the stock movement ledger before deploying #45
+
+Stop every API instance and background stock writer before this migration and keep
+all writers stopped until it completes. Back up the database first. From the new
+checkout, install dependencies and build contracts, then point `DATABASE_URL` at
+that database (a replica set is required):
+
+```bash
+pnpm migrate:stock-ledger           # read-only preview; creates no marker or index
+pnpm migrate:stock-ledger --apply   # atomic per product; resumable, globally locked
+```
+
+The backfill reconstructs known receipts, adjustments, approved counts, original
+sales and reversal events. It adds an explicitly unattributed OPENING movement for
+`current stock - known net movements`; unknown actors stay unknown. Historical
+running balances are derived estimates. Posting sequence and posting-day filters
+remain separate from original occurrence time, including delayed offline sales.
+There is no invented cost or financial history.
+
+If apply fails, keep the API stopped, resolve the reported data problem and rerun
+`--apply`: unchanged completed products retain their original ledger IDs. A process
+crash can leave a running lock; only after proving the previous process is gone,
+use `pnpm migrate:stock-ledger --apply --resume-stale`. Changed source history or
+existing live ledger rows are refused rather than overwritten. Startup refuses an
+incomplete migration. Do not start the new API first: live writes establish opening
+balances and make historical backfill refuse that product. The history's integrity
+check reports discrepancies and never repairs stock automatically.

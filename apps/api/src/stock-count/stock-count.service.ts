@@ -1,3 +1,4 @@
+import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -480,6 +481,12 @@ export class StockCountService implements OnModuleInit {
                         adjustDetails: changes,
                     },
                     session,
+                    {
+                        type: StockMovementType.COUNT,
+                        refModel: StockMovementSource.COUNT,
+                        refId: id,
+                        user: actor.userId,
+                    },
                 );
                 await this.details.insertMany(
                     changes.map((line) => ({
