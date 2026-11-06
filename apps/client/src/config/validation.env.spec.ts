@@ -69,138 +69,55 @@ describe('client envSchema', () => {
     });
 });
 
-describe('client env: VITE_APP_ENV and the legacy VITE_NODE_ENV (#86)', () => {
+describe('client env: VITE_APP_ENV (#86)', () => {
     const NO_STAGE: Record<string, unknown> = { ...BASE };
     delete NO_STAGE.VITE_APP_ENV;
 
-    it('uses VITE_APP_ENV alone, silently', () => {
-        const result = parseClientEnv({ ...BASE, VITE_APP_ENV: 'stage' });
+    it('uses a trimmed VITE_APP_ENV', () => {
+        const result = parseClientEnv({ ...BASE, VITE_APP_ENV: ' stage\t' });
         if (!result.success) throw new Error(result.error);
         expect(result.data.VITE_APP_ENV).toBe('stage');
-        expect(result.warning).toBeUndefined();
-        expect(resolveAppEnv(BASE)).toEqual({ input: BASE });
     });
 
-    it.each(['dev', 'test', 'stage', 'prod'])(
-        'takes an unset VITE_APP_ENV from VITE_NODE_ENV=%s, with a warning',
+    it.each(['prod', 'stage', 'dev', 'production'])(
+        'ignores the old VITE_NODE_ENV=%s: VITE_APP_ENV is still required',
         (legacy) => {
             const result = parseClientEnv({
                 ...NO_STAGE,
                 VITE_NODE_ENV: legacy,
             });
-            if (!result.success) throw new Error(result.error);
-            expect(result.data.VITE_APP_ENV).toBe(legacy);
-            expect(result.data).not.toHaveProperty('VITE_NODE_ENV');
-            expect(result.warning).toContain(
-                `taken from VITE_NODE_ENV='${legacy}'`,
-            );
-            expect(result.warning).toContain(`set VITE_APP_ENV='${legacy}'`);
-        },
-    );
-
-    it('treats an empty VITE_APP_ENV as unset (an unset Docker build arg)', () => {
-        const result = parseClientEnv({
-            ...BASE,
-            VITE_APP_ENV: '',
-            VITE_NODE_ENV: 'stage',
-        });
-        if (!result.success) throw new Error(result.error);
-        expect(result.data.VITE_APP_ENV).toBe('stage');
-        expect(result.warning).toContain("taken from VITE_NODE_ENV='stage'");
-    });
-
-    it('ignores an empty VITE_NODE_ENV', () => {
-        const result = parseClientEnv({ ...BASE, VITE_NODE_ENV: '' });
-        if (!result.success) throw new Error(result.error);
-        expect(result.warning).toBeUndefined();
-    });
-
-    it('accepts both when they agree, warning to drop VITE_NODE_ENV', () => {
-        const result = parseClientEnv({ ...BASE, VITE_NODE_ENV: 'prod' });
-        if (!result.success) throw new Error(result.error);
-        expect(result.data.VITE_APP_ENV).toBe('prod');
-        expect(result.warning).toContain('VITE_NODE_ENV is deprecated');
-    });
-
-    it.each([
-        ['prod', 'dev'],
-        ['dev', 'prod'],
-        ['stage', 'prod'],
-    ])(
-        'fails when VITE_APP_ENV=%s and VITE_NODE_ENV=%s disagree',
-        (app, node) => {
-            const result = parseClientEnv({
-                ...BASE,
-                VITE_APP_ENV: app,
-                VITE_NODE_ENV: node,
-            });
             expect(result.success).toBe(false);
             if (!result.success) {
-                expect(result.error).toContain(
-                    `VITE_APP_ENV='${app}' and VITE_NODE_ENV='${node}' disagree`,
-                );
-                expect(result.error).toContain(
-                    'local apps/client/.env that still sets VITE_NODE_ENV',
-                );
+                expect(result.error).toContain('VITE_APP_ENV must be one of');
             }
         },
     );
 
-    it.each([
-        ['VITE_APP_ENV only', { VITE_APP_ENV: ' prod ' }],
-        ['VITE_NODE_ENV only', { VITE_NODE_ENV: ' prod ' }],
-        [
-            'both, padded differently',
-            { VITE_APP_ENV: 'prod', VITE_NODE_ENV: 'prod ' },
-        ],
-        ['both, padded', { VITE_APP_ENV: '\tprod', VITE_NODE_ENV: ' prod' }],
-    ])('trims the stage the same way (%s)', (_case, stage) => {
-        const result = parseClientEnv({ ...NO_STAGE, ...stage });
+    it('ignores a disagreeing VITE_NODE_ENV beside VITE_APP_ENV', () => {
+        const result = parseClientEnv({ ...BASE, VITE_NODE_ENV: 'dev' });
         if (!result.success) throw new Error(result.error);
         expect(result.data.VITE_APP_ENV).toBe('prod');
+        expect(result.data).not.toHaveProperty('VITE_NODE_ENV');
     });
 
-    it('compares trimmed values, so padding alone is no disagreement', () => {
-        const resolved = resolveAppEnv({
-            ...BASE,
-            VITE_APP_ENV: ' stage',
-            VITE_NODE_ENV: 'stage ',
+    it.each(['', '  ', undefined])('treats VITE_APP_ENV=%p as missing', (v) => {
+        expect(resolveAppEnv({ VITE_APP_ENV: v })).toEqual({
+            VITE_APP_ENV: undefined,
         });
-        expect(resolved).toMatchObject({ input: { VITE_APP_ENV: 'stage' } });
-        expect(resolved).toHaveProperty('warning');
+        expect(parseClientEnv({ ...BASE, VITE_APP_ENV: v }).success).toBe(
+            false,
+        );
     });
 
-    it('fails without either name', () => {
-        const result = parseClientEnv(NO_STAGE);
-        expect(result.success).toBe(false);
-        if (!result.success) expect(result.error).toContain('VITE_APP_ENV');
-    });
-
-    it.each(['prod', 'stage'])(
-        'still requires VITE_DOMAIN in %s, under either name',
-        (stage) => {
-            for (const name of ['VITE_APP_ENV', 'VITE_NODE_ENV']) {
-                const result = parseClientEnv({
-                    ...NO_STAGE,
-                    [name]: stage,
-                    VITE_DOMAIN: '',
-                });
-                expect(result.success).toBe(false);
-                if (!result.success) {
-                    expect(result.error).toContain('VITE_DOMAIN is required');
-                }
-            }
-        },
-    );
-
-    it('rejects an unknown legacy value under the new name', () => {
+    it.each(['prod', 'stage'])('still requires VITE_DOMAIN in %s', (stage) => {
         const result = parseClientEnv({
-            ...NO_STAGE,
-            VITE_NODE_ENV: 'production',
+            ...BASE,
+            VITE_APP_ENV: stage,
+            VITE_DOMAIN: '',
         });
         expect(result.success).toBe(false);
         if (!result.success) {
-            expect(result.error).toContain('VITE_APP_ENV must be one of');
+            expect(result.error).toContain('VITE_DOMAIN is required');
         }
     });
 });

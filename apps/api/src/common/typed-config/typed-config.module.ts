@@ -1,4 +1,4 @@
-import { Global, Logger, Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { validateEnv } from './validation.env';
 import { TypedConfigService } from './typed-config.service';
@@ -8,10 +8,7 @@ import { TypedConfigService } from './typed-config.service';
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
-            validate: (config) =>
-                validateEnv(config, (message) =>
-                    new Logger('Config').warn(message),
-                ),
+            validate: (config) => validateEnv(config),
         }),
     ],
     providers: [TypedConfigService],

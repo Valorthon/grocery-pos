@@ -107,11 +107,12 @@ healthchecks and running the images locally.
 The client Docker build fetches the login photo itself, best effort (see
 [Login hero photo](#login-hero-photo)).
 
-The client's stage variable is now `VITE_APP_ENV` (#86). Set it on each
-client service before or with this deploy; the old `VITE_NODE_ENV` is still
-accepted for one release (see
-[docs/DEPLOY.md](docs/DEPLOY.md#vite_app_env-and-vite_node_env)). Rename it in
-a local `apps/client/.env` too.
+Before deploying the release that closes #86, every environment must set
+`APP_ENV` on the API and `VITE_APP_ENV` on the client: the legacy `NODE_ENV`
+and `VITE_NODE_ENV` stage fallbacks are gone, so an API without `APP_ENV`
+refuses to start and a local client build without `VITE_APP_ENV` fails (see
+[docs/DEPLOY.md](docs/DEPLOY.md#app_env-and-node_env)). Rename them in a local
+`apps/api/.env` and `apps/client/.env` too.
 
 One-off steps to run by hand at a specific deploy. Each runs from a checkout
 of the deployed commit (with `pnpm install` and the contracts built), pointed
