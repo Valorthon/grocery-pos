@@ -96,6 +96,7 @@
 </template>
 
 <script setup lang="ts">
+import { canOpenPurchaseOrders } from './purchase-order-link';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Truck, X } from '@lucide/vue';
@@ -119,7 +120,7 @@ import {
     type RestockRow,
     type UserRef,
 } from '@grocery-pos/contracts';
-import { Role, useAuthStore } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import type { RestockListRow } from '@/components/User/Restock/rows';
 
 const router = useRouter();
@@ -137,8 +138,9 @@ const purchaseOrderId = computed(() => {
         : undefined;
 });
 const authStore = useAuthStore();
-const canOpenOrders = computed(
-    () => authStore.isAdmin || authStore.hasRole(Role.Restocker),
+// Defensive: the route already needs RESTOCKER/ADMIN (see the helper).
+const canOpenOrders = computed(() =>
+    canOpenPurchaseOrders((role) => authStore.hasRole(role)),
 );
 function openOrder(id: string) {
     void router.push({ name: 'PurchaseOrders', query: { id } });

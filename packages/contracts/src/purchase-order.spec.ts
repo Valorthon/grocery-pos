@@ -31,7 +31,10 @@ describe('purchase order helpers', () => {
                 lines: [line('rice', false)],
                 supplier: null,
             }),
-        ).toEqual(['Archived product: rice.']);
+        ).toEqual(['Unknown supplier.', 'Archived product: rice.']);
+        expect(
+            draftSendBlockers({ ...draft, lines: [], supplier: null }),
+        ).toEqual(['Unknown supplier.']);
         expect(
             draftSendBlockers({ ...draft, status: PurchaseOrderStatus.SENT }),
         ).toEqual([]);

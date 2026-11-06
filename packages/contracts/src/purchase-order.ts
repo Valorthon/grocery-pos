@@ -27,7 +27,9 @@ export function draftSendBlockers(
 ): string[] {
     if (po.status !== PurchaseOrderStatus.DRAFT) return [];
     const out: string[] = [];
-    if (po.supplier && !po.supplier.isActive)
+    // send() refuses a missing supplier too, so name it here.
+    if (!po.supplier) out.push('Unknown supplier.');
+    else if (!po.supplier.isActive)
         out.push(`Supplier ${po.supplier.name} is archived.`);
     const archived = po.lines.filter((l) => !l.productActive);
     if (archived.length)
