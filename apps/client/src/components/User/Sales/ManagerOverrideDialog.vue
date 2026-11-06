@@ -14,7 +14,7 @@
                         ? 'An admin must approve this discount.'
                         : 'An admin or supervisor must approve this action.'
                 }}
-                The cashier stays logged in.
+                {{ note ?? 'The cashier stays logged in.' }}
             </p>
             <BaseInput
                 id="override-manager-name"
@@ -97,6 +97,8 @@ const props = defineProps<{
     modelValue: boolean;
     request: ApprovalRequest | null;
     summary: string;
+    /** Replaces the register's "The cashier stays logged in." line. */
+    note?: string;
 }>();
 const emit = defineEmits<{
     'update:modelValue': [value: boolean];

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import {
+    ErrorCode,
     OverrideAction,
     Role,
     StockCountStatus,
@@ -10,6 +11,8 @@ import {
 } from '@grocery-pos/contracts';
 import Index from './Index.vue';
 import { useAuthStore } from '@/stores/auth';
+import { Color, useUIStore } from '@/stores/ui';
+import { AxiosError, AxiosHeaders } from 'axios';
 import { field, flush, type } from '@/testing/form-dom';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -44,6 +47,22 @@ function fixture(): StockCountView {
             },
         ],
     };
+}
+function conflict(message: string) {
+    return new AxiosError(message, '409', undefined, undefined, {
+        status: 409,
+        statusText: 'Conflict',
+        headers: {},
+        config: { headers: new AxiosHeaders() },
+        data: {
+            statusCode: 409,
+            error: ErrorCode.CONFLICT,
+            message,
+            timestamp: 'now',
+            path: '/stock-counts',
+            requestId: 'r',
+        },
+    });
 }
 let app: App | undefined, count: StockCountView;
 async function mount() {
@@ -154,7 +173,8 @@ describe('physical stock count workflow', () => {
         expect(api.post).toHaveBeenCalledWith('/stock-counts', {
             scope: 'all',
         });
-        expect(document.body.textContent).toContain('2026-11-05');
+        expect(document.body.textContent).toContain('Nov 5, 2026');
+        expect(document.body.textContent).not.toContain('2026-11-05T');
         expect(document.body.textContent).toContain('1.000 kg');
         expect(document.body.textContent).toContain('0.800 kg');
         await exact('Back to counts');
@@ -257,7 +277,13 @@ describe('physical stock count workflow', () => {
         await expect(guard()).resolves.toBe(false);
         pending.reject(new Error('network'));
         await flush();
-        expect(document.body.textContent).toContain('Stock count could not');
+        expect(useUIStore().toasts).toEqual([
+            expect.objectContaining({
+                color: Color.ERROR,
+                lines: [expect.stringContaining('Stock count could not')],
+            }),
+        ]);
+        expect(document.body.textContent).not.toContain('Reload');
         expect(
             document.querySelector<HTMLInputElement>(`#count-${line}`)?.value,
         ).toBe('0.9');
@@ -390,7 +416,9 @@ describe('physical stock count workflow', () => {
         await mount();
         await exact('Open count');
         await enter('0.5');
-        api.patch.mockRejectedValueOnce(new Error('stale version'));
+        api.patch.mockRejectedValueOnce(
+            conflict('Stock count changed. Reload it before continuing.'),
+        );
         await exact('Save progress');
         await exact('Reload');
         await exact('Stay');
@@ -408,5 +436,82 @@ describe('physical stock count workflow', () => {
         expect(
             document.querySelector<HTMLInputElement>(`#count-${line}`)?.value,
         ).toBe('0.800');
+    });
+    it('shows the opening time in the store timezone', async () => {
+        count.createdAt = '2026-11-05T16:30:00.000Z';
+        await mount();
+        expect(document.body.textContent).toContain('Nov 6, 2026');
+        expect(document.body.textContent).toContain('12:30');
+        await exact('Open count');
+        expect(document.body.textContent).toMatch(/Reference:\s*Nov 6, 2026/);
+    });
+    it('refuses submitting uncounted lines inline without a confirm or request', async () => {
+        await mount();
+        await exact('Open count');
+        await exact('Submit for approval');
+        expect(document.querySelector('[role=dialog]')).toBeNull();
+        expect(api.post).not.toHaveBeenCalled();
+        expect(document.body.textContent).toContain('Uncounted: Rice');
+        expect(document.body.textContent).not.toContain('Reload');
+        expect(document.activeElement?.id).toBe(`count-${line}`);
+    });
+    it('shows a server refusal of submit as an error toast, not a load error', async () => {
+        await mount();
+        await exact('Open count');
+        await enter('1');
+        api.post.mockRejectedValueOnce(new Error('refused'));
+        await exact('Submit for approval');
+        await exact('Submit count');
+        expect(useUIStore().toasts[0]?.color).toBe(Color.ERROR);
+        expect(document.body.textContent).not.toContain('Reload');
+    });
+    it('confirms a saved count with a success toast', async () => {
+        await mount();
+        await exact('Open count');
+        await enter('0.5');
+        await exact('Save progress');
+        expect(useUIStore().toasts).toEqual([
+            expect.objectContaining({
+                color: Color.SUCCESS,
+                lines: ['Count progress saved.'],
+            }),
+        ]);
+    });
+    it('words the manager approval for a stock count, not the register', async () => {
+        count.status = StockCountStatus.SUBMITTED;
+        count.lines[0].countedQty = 900;
+        await mount();
+        await exact('Open count');
+        await exact('Manager approval and post');
+        expect(document.body.textContent).toContain(
+            'applies to this count only',
+        );
+        expect(document.body.textContent).not.toContain('cashier');
+    });
+    it('names each uncounted batch of a tracked product by batch or expiry', async () => {
+        const base = count.lines[0];
+        count.lines = [
+            { ...base, tracksExpiry: true, batch: 'b1', batchNo: 'L7' },
+            {
+                ...base,
+                _id: '507f1f77bcf86cd799439014',
+                tracksExpiry: true,
+                batch: 'b2',
+                expiryDate: '2026-12-01',
+            },
+        ];
+        await mount();
+        await exact('Open count');
+        await exact('Submit for approval');
+        expect(document.body.textContent).toContain(
+            'Uncounted: Rice (batch L7), Rice (expires 2026-12-01).',
+        );
+    });
+    it('does not claim a save when nothing changed', async () => {
+        await mount();
+        await exact('Open count');
+        await exact('Save progress');
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(useUIStore().toasts).toEqual([]);
     });
 });
