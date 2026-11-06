@@ -149,6 +149,13 @@ const routes: RouteRecordRaw[] = [
             },
 
             {
+                path: 'purchase-orders',
+                name: 'PurchaseOrders',
+                component: () =>
+                    import('@/views/User/PurchaseOrders/Index.vue'),
+                meta: { roles: [Role.Restocker, Role.Admin] },
+            },
+            {
                 path: 'stock-counts',
                 name: 'StockCounts',
                 component: () => import('@/views/User/StockCounts/Index.vue'),

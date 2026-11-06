@@ -120,6 +120,20 @@ export const PERMISSIONS: Permission[] = [
         ],
         pages: ['Suppliers'],
     },
+    {
+        label: 'Manage and receive purchase orders',
+        roles: [Role.Restocker],
+        routes: [
+            'GET /purchase-orders',
+            'GET /purchase-orders/:id',
+            'POST /purchase-orders',
+            'PATCH /purchase-orders/:id',
+            'POST /purchase-orders/:id/send',
+            'POST /purchase-orders/:id/cancel',
+            'POST /purchase-orders/:id/receive',
+        ],
+        pages: ['PurchaseOrders'],
+    },
 
     {
         label: 'Manage categories',

@@ -140,6 +140,51 @@ Rules:
   replay returns the original receipt. The receipt and drawer figures always come
   from the server response.
 
+**Purchase orders** (#123, owner decisions 2026-11-06)
+
+- RESTOCKER and ADMIN create, edit, send, cancel and receive POs
+  (`/purchase-orders`), no PIN. Lifecycle DRAFT → SENT → PARTIALLY_RECEIVED →
+  RECEIVED / CANCELLED. SENT is a status only (no email/print) and locks lines;
+  only DRAFT is editable (PATCH replaces supplier/note/lines). Drafts are
+  cancelled, never deleted. Cancelling after a partial receipt sets
+  `closedShort`; received stock stays and outstanding reads 0.
+- A PO line is one distinct active product with integer minor-unit
+  `orderedQty`, centavo `expectedCost` per displayed unit and a unit snapshot.
+  Create, edit and send need an active supplier; open (SENT/PARTIAL) POs of an
+  archived supplier stay receivable and cancellable (`assertExists` instead of
+  `assertActive`). A supplier referenced by a PO can't be deleted.
+- No stock moves before receipt. Each receive is exactly one supplier restock
+  (`Restock.purchaseOrder`) through `RestockService.restock` in the same
+  transaction, so #41 lastCost, #42 batches/expiry and #45 ledger apply
+  unchanged. Invoice/DR optional; description defaults to the PO suffix.
+  Receipt cost is prefilled from the expected cost, editable, variance shown,
+  ₱0 confirmed. Over-receipt is refused (cap = outstanding per line).
+- Concurrency: every write filters on `version` + allowed statuses and
+  increments it; a stale or concurrent receive is 409 and rolls back its
+  restock. A receive's `idempotencyKey` is stored in `receipts[]` with a
+  `requestHash` of the normalized body (actor, PO, version, invoice,
+  description, lines by line id), as `POST /sales` does; neither is on the
+  wire. Same key + same hash replays (also for a concurrent retry that lost
+  the version race); same key + other body is 409
+  `SALE_IDEMPOTENCY_MISMATCH`. The client reuses the key only for an
+  unchanged body after a lost answer, makes a new one after any edit or
+  HTTP refusal, and reloads the PO after a 409. The list uses `BaseTable` +
+  `useListPaging`/`useListFetch`/`useAppliedFilters`.
+- Low-stock list offers "Create purchase order" beside "Restock listed items"
+  via a consume-once in-memory handoff (`purchaseOrderPrefill`) with reorder
+  quantities; known latest costs fill untouched lines asynchronously.
+- References are `purchaseOrderReference` (`PO-` + last 8 of the id, upper
+  case), shown on the PO page and in the default receipt description.
+  Restock History shows the linked PO (a link to it when the viewer may open
+  Purchase Orders) and filters by `purchaseOrder` (GetAll DTO /
+  `RestockListQuery`, deep link `?purchaseOrder=` from "View receipts",
+  cleared by Clear Filters). `/purchase-orders?id=` opens one order.
+- A draft whose supplier is archived or that has archived products
+  (`productActive: false` on the line) shows a warning in the list and the
+  editor (`draftSendBlockers`); sending still refuses it. ₱0 expected cost
+  on a draft needs no confirmation (only at receipt).
+- No audit-log entries for POs (owner-confirmed; follow-up recorded on #123).
+
 **Physical stock counts** (#43, owner decision 2026-11-05)
 
 - ADJUSTER/ADMIN create, resume, save and submit server-side counts. ADMIN or

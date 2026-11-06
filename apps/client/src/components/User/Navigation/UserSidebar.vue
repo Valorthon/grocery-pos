@@ -194,6 +194,7 @@ import {
     Truck,
     Users,
     X,
+    ClipboardList,
 } from '@lucide/vue';
 import { useStockAlertsStore } from '@/stores/stockAlerts';
 import { useAuthStore, Role } from '@/stores/auth';
@@ -313,6 +314,12 @@ const sections = computed(() => [
                 name: 'Suppliers',
                 title: 'Suppliers',
                 icon: Truck,
+                visible: authStore.isAdmin || authStore.hasRole(Role.Restocker),
+            },
+            {
+                name: 'PurchaseOrders',
+                title: 'Purchase Orders',
+                icon: ClipboardList,
                 visible: authStore.isAdmin || authStore.hasRole(Role.Restocker),
             },
             {

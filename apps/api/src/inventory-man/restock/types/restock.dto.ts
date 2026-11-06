@@ -23,7 +23,11 @@ import {
     TrimLowercase,
 } from '../../../common/validators';
 import { EXPIRY_LIMITS, SUPPLIER_LIMITS } from '@grocery-pos/contracts';
-import type { RestockLineFields, RestockRequest } from '@grocery-pos/contracts';
+import type {
+    RestockLineFields,
+    RestockListQuery,
+    RestockRequest,
+} from '@grocery-pos/contracts';
 import { NewProductFields } from '../../../product/types';
 import {
     NUMERIC_LIMITS,
@@ -135,13 +139,17 @@ export class RestockDto implements RestockRequest {
     description!: string;
 }
 
-export class GetAllDto {
+export class GetAllDto implements RestockListQuery {
     @ValidateIf((_o, value: unknown) => value !== undefined)
     @IsMongoId()
     source?: string;
+    /** Only receipts recorded against this purchase order (#123). */
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsMongoId()
+    purchaseOrder?: string;
     @IsMongoId()
     @IsOptional()
-    restockedBy!: string;
+    restockedBy?: string;
 
     /** Inclusive start day, `YYYY-MM-DD`, read in the store timezone. */
     @IsOptional()

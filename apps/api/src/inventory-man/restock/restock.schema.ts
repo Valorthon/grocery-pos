@@ -11,6 +11,9 @@ export class Restock {
     supplier?: Types.ObjectId;
     @Prop({ type: String, trim: true, maxlength: SUPPLIER_LIMITS.INVOICE })
     invoiceNumber?: string;
+    /** Set when this receipt received against a purchase order (#123). */
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder' })
+    purchaseOrder?: Types.ObjectId;
 
     @Prop({
         type: String,

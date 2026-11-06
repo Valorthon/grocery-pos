@@ -4,6 +4,8 @@ export interface RestockListRow {
     description: string;
     supplier?: string;
     invoiceNumber?: string;
+    /** The linked purchase order's id (#123), when received against one. */
+    purchaseOrder?: string;
     /** The restocker's name; `N/A` once the account is gone. */
     restockedBy: string;
     /** Formatted. */

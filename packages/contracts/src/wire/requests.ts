@@ -231,3 +231,14 @@ export interface ProductUpdateLineRequest {
 export interface UpdateProductsRequest {
     updates: ProductUpdateLineRequest[];
 }
+
+/** `GET /restocks` query (#123 adds the purchase-order filter). */
+export interface RestockListQuery {
+    source?: string;
+    purchaseOrder?: string;
+    restockedBy?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page: number;
+    limit: number;
+}

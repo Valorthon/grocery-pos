@@ -123,3 +123,20 @@ describe('GetDetailsQueryDto search', () => {
 });
 
 describeDateRange('restock GetAllDto', GetAllDto);
+
+describe('GetAllDto purchase-order filter (#123)', () => {
+    it('accepts an id and refuses anything else', async () => {
+        const errors = async (purchaseOrder: unknown) =>
+            (
+                await validate(
+                    plainToInstance(GetAllDto, {
+                        page: 1,
+                        limit: 5,
+                        purchaseOrder,
+                    }),
+                )
+            ).filter((e) => e.property === 'purchaseOrder');
+        expect(await errors('507f1f77bcf86cd799439011')).toHaveLength(0);
+        expect(await errors('nope')).toHaveLength(1);
+    });
+});

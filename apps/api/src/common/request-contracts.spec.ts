@@ -1,3 +1,21 @@
+import type { RestockListQuery } from '@grocery-pos/contracts';
+import type { GetAllDto as RestockListDto } from '../inventory-man/restock/types';
+import type {
+    CreatePurchaseOrderRequest,
+    PurchaseOrderLineInput,
+    PurchaseOrderReceiptLineInput,
+    PurchaseOrderVersionRequest,
+    ReceivePurchaseOrderRequest,
+    UpdatePurchaseOrderRequest,
+} from '@grocery-pos/contracts';
+import type {
+    CreatePurchaseOrderDto,
+    PurchaseOrderLineDto,
+    PurchaseOrderReceiptLineDto,
+    PurchaseOrderVersionDto,
+    ReceivePurchaseOrderDto,
+    UpdatePurchaseOrderDto,
+} from '../purchase-order/purchase-order.dto';
 import { UpdateSettingsDto } from '../settings/settings.dto';
 import type { UpdateStoreSettingsRequest } from '@grocery-pos/contracts';
 import type {
@@ -251,4 +269,31 @@ it('stock count request contracts match their bounded DTOs', () => {
     expect(
         keysMatch<StockCountVersionDto, StockCountVersionRequest>(true),
     ).toBe(true);
+});
+
+it('purchase order request contracts match their DTOs (#123)', () => {
+    expect(
+        keysMatch<CreatePurchaseOrderDto, CreatePurchaseOrderRequest>(true),
+    ).toBe(true);
+    expect(
+        keysMatch<UpdatePurchaseOrderDto, UpdatePurchaseOrderRequest>(true),
+    ).toBe(true);
+    expect(keysMatch<PurchaseOrderLineDto, PurchaseOrderLineInput>(true)).toBe(
+        true,
+    );
+    expect(
+        keysMatch<PurchaseOrderVersionDto, PurchaseOrderVersionRequest>(true),
+    ).toBe(true);
+    expect(
+        keysMatch<ReceivePurchaseOrderDto, ReceivePurchaseOrderRequest>(true),
+    ).toBe(true);
+    expect(
+        keysMatch<PurchaseOrderReceiptLineDto, PurchaseOrderReceiptLineInput>(
+            true,
+        ),
+    ).toBe(true);
+});
+
+it('the restock list query matches its DTO (#123)', () => {
+    expect(keysMatch<RestockListDto, RestockListQuery>(true)).toBe(true);
 });

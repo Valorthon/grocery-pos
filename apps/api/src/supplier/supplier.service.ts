@@ -8,6 +8,7 @@ import {
     SupplierQueryDto,
     UpdateSupplierDto,
 } from './supplier.dto';
+import { PurchaseOrder } from '../purchase-order/purchase-order.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
 import { Product, type ProductDoc } from '../product/product.schema';
 import { ErrorCode, NotFoundError, ValidationError } from '../common/errors';
@@ -22,6 +23,8 @@ export class SupplierService {
         @InjectModel(Supplier.name) private suppliers: Model<Supplier>,
         @InjectModel(Restock.name) private restocks: Model<Restock>,
         @InjectModel(Product.name) private products: Model<Product>,
+        @InjectModel(PurchaseOrder.name)
+        private purchaseOrders: Model<PurchaseOrder>,
     ) {}
     async list(dto: SupplierQueryDto) {
         const filter = {
@@ -77,13 +80,16 @@ export class SupplierService {
                     'Supplier not found',
                 );
             if (
-                await this.restocks
+                (await this.restocks
                     .exists({ supplier: new Types.ObjectId(id) })
-                    .session(session)
+                    .session(session)) ||
+                (await this.purchaseOrders
+                    .exists({ supplier: new Types.ObjectId(id) })
+                    .session(session))
             )
                 throw new ValidationError(
                     ErrorCode.VALIDATION_INVALID_INPUT,
-                    'Supplier has receipt history; archive it instead',
+                    'Supplier has receipt or purchase-order history; archive it instead',
                 );
             await this.suppliers.deleteOne({ _id: id }, { session });
         }, this.connection);
@@ -99,6 +105,16 @@ export class SupplierService {
                 ErrorCode.VALIDATION_INVALID_INPUT,
                 'Choose an active supplier',
             );
+    }
+    /** Locks the supplier row even when archived (open PO receipts, #123). */
+    async assertExists(id: string, session: ClientSession) {
+        const result = await this.suppliers.updateOne(
+            { _id: id },
+            { $inc: { receiptVersion: 1 } },
+            { session },
+        );
+        if (result.matchedCount !== 1)
+            throw new NotFoundError(ErrorCode.NOT_FOUND, 'Supplier not found');
     }
     async costs(ids: string[], margin: boolean): Promise<ProductCostView[]> {
         const rows = await this.products

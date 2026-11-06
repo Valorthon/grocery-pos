@@ -59,6 +59,8 @@ import {
     RESTOCK_ACTIVITY_SHAPE,
     RESTOCK_LINE_SHAPE,
     RESTOCK_ROW_SHAPE,
+    PURCHASE_ORDER_SHAPE,
+    PURCHASE_ORDER_LINE_SHAPE,
     SALE_DISCOUNT_VIEW_SHAPE,
     SALE_LINE_SHAPE,
     SALE_REVERSAL_VIEW_SHAPE,
@@ -117,6 +119,8 @@ const seed = {} as {
     closedReport: Body;
     forcedReport: Body;
     login: { status: number; body: Body };
+    poDraft: Body;
+    poReceived: Body;
 };
 
 // ---------------------------------------------------------------- helpers
@@ -402,6 +406,34 @@ beforeAll(async () => {
         description: 'Delivery',
         restockDetails: [{ product, quantity: 3, unitCost: 3_000 }],
     });
+    // A purchase order, sent and partly received (#123).
+    const poSupplier = await seedSupplier(db);
+    const draft = await post(restocker, '/purchase-orders', {
+        supplier: poSupplier,
+        note: 'Weekly order',
+        lines: [{ product, orderedQty: 4, expectedCost: 3_000 }],
+    });
+    seed.poDraft = draft;
+    const sent = await post(
+        restocker,
+        `/purchase-orders/${String(draft._id)}/send`,
+        { version: draft.version },
+    );
+    seed.poReceived = await post(
+        restocker,
+        `/purchase-orders/${String(draft._id)}/receive`,
+        {
+            version: sent.version,
+            idempotencyKey: `wire-${randomUUID()}`,
+            lines: [
+                {
+                    line: String((sent.lines as Body[])[0]._id),
+                    quantity: 1,
+                    unitCost: 2_900,
+                },
+            ],
+        },
+    );
     await post(restocker, '/adjustments', {
         description: 'Count',
         adjustDetails: [{ product, change: -1, reason: 'Damaged' }],
@@ -682,6 +714,46 @@ describe('products, stock and history', () => {
             await send(restocker, 'GET', '/restocks/users', undefined, 200),
             USER_REF_SHAPE,
         );
+    });
+
+    it('purchase orders, their lines and the linked receipt (#123)', async () => {
+        for (const [at, po] of [
+            ['POST /purchase-orders', seed.poDraft],
+            ['POST /purchase-orders/:id/receive', seed.poReceived],
+        ] as const) {
+            expectShape(at, po, PURCHASE_ORDER_SHAPE);
+            expectEach(`${at} lines`, po.lines, PURCHASE_ORDER_LINE_SHAPE);
+            expect(JSON.stringify(po)).not.toContain('wire-');
+        }
+        const rows = await page(
+            restocker,
+            '/purchase-orders?page=1&limit=10',
+            PURCHASE_ORDER_SHAPE,
+        );
+        for (const row of rows)
+            expectEach(
+                'GET /purchase-orders lines',
+                row.lines,
+                PURCHASE_ORDER_LINE_SHAPE,
+            );
+        const one = await get(
+            restocker,
+            `/purchase-orders/${String(seed.poReceived._id)}`,
+        );
+        expectShape('GET /purchase-orders/:id', one, PURCHASE_ORDER_SHAPE);
+        const [receipt] = one.receipts as string[];
+        const restocks = await page(
+            restocker,
+            `/restocks?page=1&limit=10&source=${receipt}`,
+            RESTOCK_ROW_SHAPE,
+        );
+        expect(restocks[0].purchaseOrder).toBe(String(one._id));
+        const byOrder = await page(
+            restocker,
+            `/restocks?page=1&limit=10&purchaseOrder=${String(one._id)}`,
+            RESTOCK_ROW_SHAPE,
+        );
+        expect(byOrder.map((r) => r._id)).toEqual([receipt]);
     });
 
     it('adjustment rows, lines and the user filter', async () => {

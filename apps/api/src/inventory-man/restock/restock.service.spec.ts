@@ -81,6 +81,28 @@ describe('RestockService.getAll date filter', () => {
         expect(countDocuments).toHaveBeenCalledWith(query());
     });
 
+    it('filters by restocker and by one receipt id (PO receipt links, #123)', async () => {
+        const restocker = new mongoose.Types.ObjectId();
+        const source = new mongoose.Types.ObjectId();
+        await service.getAll({
+            page: 1,
+            limit: 5,
+            restockedBy: String(restocker),
+            source: String(source),
+        } as GetAllDto);
+        expect(query()).toEqual({ _id: source, restockedBy: restocker });
+    });
+
+    it('filters receipts by purchase order (#123)', async () => {
+        const po = new mongoose.Types.ObjectId();
+        await service.getAll({
+            page: 1,
+            limit: 5,
+            purchaseOrder: String(po),
+        } as GetAllDto);
+        expect(query()).toEqual({ purchaseOrder: po });
+    });
+
     it('applies a start-only range', async () => {
         await service.getAll({
             page: 1,
@@ -206,9 +228,13 @@ describe('RestockService.restock (issue #30)', () => {
     let create: jest.Mock;
     let bulkWrite: jest.Mock;
     let inventoryRestock: jest.Mock;
+    let assertActive: jest.Mock;
+    let assertExists: jest.Mock;
 
     beforeEach(async () => {
         calls = [];
+        assertActive = jest.fn();
+        assertExists = jest.fn();
         inventoryRestock = jest.fn(async () => {
             calls.push('inventory');
             return [
@@ -239,7 +265,7 @@ describe('RestockService.restock (issue #30)', () => {
                 RestockService,
                 {
                     provide: SupplierService,
-                    useValue: { assertActive: jest.fn() },
+                    useValue: { assertActive, assertExists },
                 },
                 {
                     provide: getConnectionToken(),
@@ -291,6 +317,34 @@ describe('RestockService.restock (issue #30)', () => {
             ],
             expect.anything(),
         );
+    });
+
+    it('links a purchase-order receipt and accepts its archived supplier (#123)', async () => {
+        const po = new mongoose.Types.ObjectId();
+        const id = await service.restock(USER, DTO, undefined, {
+            purchaseOrder: po,
+        });
+        expect(id).toBe('restock1');
+        expect(assertExists).toHaveBeenCalled();
+        expect(assertActive).not.toHaveBeenCalled();
+        expect(create).toHaveBeenCalledWith(
+            [expect.objectContaining({ purchaseOrder: po })],
+            expect.anything(),
+        );
+    });
+
+    it('refuses a receipt whose total exceeds AMOUNT_MAX before writing it', async () => {
+        const huge = {
+            description: 'delivery',
+            supplier: P1,
+            restockDetails: [
+                { product: P1, quantity: 3, unitCost: 1_000_000_000 },
+            ],
+        } as unknown as RestockDto;
+        await expect(service.restock(USER, huge)).rejects.toMatchObject({
+            statusCode: 400,
+        });
+        expect(create).not.toHaveBeenCalled();
     });
 
     it('applies the stock first, then writes the restock and one detail row per line', async () => {

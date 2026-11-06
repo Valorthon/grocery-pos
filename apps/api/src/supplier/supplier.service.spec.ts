@@ -38,6 +38,9 @@ function fixture() {
         updateOne: jest.fn(async () => ({ matchedCount: 1 })),
     };
     const restocks = { exists: jest.fn(() => new Query<unknown>(null)) };
+    const purchaseOrders = {
+        exists: jest.fn(() => new Query<unknown>(null)),
+    };
     const costs = new Query([
         {
             ...row,
@@ -57,9 +60,11 @@ function fixture() {
         suppliers as never,
         restocks as never,
         products as never,
+        purchaseOrders as never,
     );
     return {
         service,
+        purchaseOrders,
         suppliers,
         restocks,
         products,
@@ -137,6 +142,27 @@ describe('supplier lifecycle and confidential cost defaults', () => {
         await expect(f.service.remove(String(f.row._id))).rejects.toMatchObject(
             { statusCode: 404 },
         );
+    });
+    it('refuses to delete a supplier referenced only by a purchase order (#123)', async () => {
+        const f = fixture();
+        f.purchaseOrders.exists.mockReturnValue(new Query({ _id: 'po' }));
+        await expect(f.service.remove(String(f.row._id))).rejects.toMatchObject(
+            { statusCode: 400 },
+        );
+        expect(f.suppliers.deleteOne).not.toHaveBeenCalled();
+    });
+    it('locks an archived supplier for an open purchase-order receipt (#123)', async () => {
+        const f = fixture();
+        await f.service.assertExists(String(f.row._id), f.session as never);
+        expect(f.suppliers.updateOne).toHaveBeenCalledWith(
+            { _id: String(f.row._id) },
+            { $inc: { receiptVersion: 1 } },
+            { session: f.session },
+        );
+        f.suppliers.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        await expect(
+            f.service.assertExists(String(f.row._id), f.session as never),
+        ).rejects.toMatchObject({ statusCode: 404 });
     });
     it('locks active suppliers in the receipt transaction and rejects unavailable suppliers', async () => {
         const f = fixture();
