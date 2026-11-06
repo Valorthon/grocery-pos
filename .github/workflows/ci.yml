@@ -56,8 +56,6 @@ jobs:
                         - '.dockerignore'
                         - 'apps/client/nginx.conf.template'
                         - 'apps/client/docker-entrypoint.sh'
-                        - 'apps/api/railway.json'
-                        - 'apps/client/railway.json'
                         - 'pnpm-lock.yaml'
                         - 'pnpm-workspace.yaml'
                         - 'package.json'

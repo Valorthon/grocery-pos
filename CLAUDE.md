@@ -716,7 +716,7 @@ requestId}`. A 5xx never carries details or internals.
   tests of its pure functions.
 - Both Docker images are built (not pushed) only when a Dockerfile,
   `.dockerignore`, `nginx.conf.template`, `docker-entrypoint.sh`, a
-  `railway.json`, a `package.json`, `pnpm-workspace.yaml` or
+  `package.json`, `pnpm-workspace.yaml` or
   `pnpm-lock.yaml` changes.
   The docker job also smoke-tests the client image (non-root, headers,
   `/health`).
@@ -779,10 +779,18 @@ requestId}`. A 5xx never carries details or internals.
   `no-cache`; `/health` is 503 without `index.html`.
 - Both images run non-root (API as `node`, nginx as `nginx` with pid/temp in
   `/tmp`, listening on `$PORT`) and have a `HEALTHCHECK` for local use;
-  Railway uses `railway.json`'s `healthcheckPath`. `VITE_*` are build args,
+  Railway uses the healthcheck in `.railway/railway.ts`. `VITE_*` are build args,
   inlined; a missing `VITE_API_URL`/`VITE_DOMAIN` fails the build clearly.
 - `.dockerignore` patterns are `**/`-prefixed. docker compose is dev-only
   MongoDB without auth.
+- Railway service settings live in `.railway/railway.ts` (#92), not the
+  deprecated `railway.json`: per environment (`staging` from `staging` on
+  `staging.pos.valorthon.store`, `production` from `production` on
+  `pos.valorthon.store`) the `api`, `client` and `mongo` services, Dockerfiles,
+  watch patterns, healthchecks, domains and volume. Variables stay unmanaged in
+  Railway. Apply with `railway config plan|apply --environment <env>`.
+  MongoDB is a keyfile-auth single-node replica set on a volume, private
+  network only. Deployed `HEALTH_HEAP/RSS_THRESHOLD` are 300/400 MB.
 
 **Scope**
 

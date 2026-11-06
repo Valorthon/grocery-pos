@@ -54,7 +54,7 @@ USER node
 EXPOSE 3000
 
 # Local and docker compose use only: Railway ignores HEALTHCHECK and probes
-# railway.json's healthcheckPath (/v1/health/live) instead.
+# the service's healthcheck (/v1/health/live, .railway/railway.ts) instead.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/v1/health/live').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
 
