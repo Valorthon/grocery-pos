@@ -150,3 +150,26 @@ it('locks settings edits until initial load settles, then saves with the loaded 
         expect.objectContaining({ version: 7, storeName: 'My edits' }),
     );
 });
+it('loads the server version when the owner is set after mount (fresh page load, #139)', async () => {
+    useSettingsStore().setOwner(undefined);
+    vi.mocked(api.get).mockResolvedValueOnce({
+        data: { ...initialSettings, storeName: 'Loaded Shop', version: 4 },
+    });
+    await mount();
+    expect(api.get).not.toHaveBeenCalled();
+    expect(field('Store name').disabled).toBe(true);
+    useSettingsStore().setOwner('admin');
+    await flush();
+    expect(field('Store name').value).toBe('Loaded Shop');
+    input('Store name', 'Edited');
+    await flush();
+    vi.mocked(api.patch).mockResolvedValueOnce({
+        data: { ...initialSettings, storeName: 'Edited', version: 5 },
+    });
+    await click('Save store settings');
+    await flush();
+    expect(api.patch).toHaveBeenLastCalledWith(
+        '/settings',
+        expect.objectContaining({ version: 4, storeName: 'Edited' }),
+    );
+});
