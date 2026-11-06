@@ -1,4 +1,18 @@
-import { AuditAction, type AuditValue } from '@grocery-pos/contracts';
+import {
+    AuditAction,
+    BATCH_LIMITS,
+    type AuditValue,
+} from '@grocery-pos/contracts';
+
+/** PO draft fields; `lines` are `product:orderedQty:expectedCost` strings. */
+const PO_DRAFT = [
+    'reference',
+    'supplier',
+    'status',
+    'version',
+    'lineCount',
+    'lines',
+] as const;
 
 const FIELDS: Record<AuditAction, readonly string[]> = {
     [AuditAction.SETTINGS_UPDATED]: [
@@ -44,7 +58,34 @@ const FIELDS: Record<AuditAction, readonly string[]> = {
     [AuditAction.SHIFT_CASH_DROPPED]: ['amount', 'reason'],
     [AuditAction.AUTH_LOGIN]: ['name'],
     [AuditAction.AUTH_LOGIN_FAILED]: ['name'],
+    [AuditAction.PURCHASE_ORDER_CREATED]: PO_DRAFT,
+    [AuditAction.PURCHASE_ORDER_UPDATED]: PO_DRAFT,
+    [AuditAction.PURCHASE_ORDER_SENT]: [
+        'reference',
+        'supplier',
+        'status',
+        'version',
+    ],
+    [AuditAction.PURCHASE_ORDER_CANCELLED]: [
+        'reference',
+        'status',
+        'version',
+        'closedShort',
+    ],
+    /** `lines` are `product:quantity:unitCost` strings of this receipt. */
+    [AuditAction.PURCHASE_ORDER_RECEIVED]: [
+        'reference',
+        'supplier',
+        'status',
+        'version',
+        'restock',
+        'invoiceNumber',
+        'lineCount',
+        'lines',
+    ],
 };
+/** Longest string list: PO lines are capped by the batch limit. */
+const MAX_LIST = BATCH_LIMITS.RESTOCK_LINES;
 /** Positive allowlist: never serialize a document, request, credential or nested object. */
 export function auditFields(
     action: AuditAction,
@@ -59,7 +100,7 @@ export function auditFields(
             result[key] = value;
         else if (
             Array.isArray(value) &&
-            value.length <= 100 &&
+            value.length <= MAX_LIST &&
             value.every((part: unknown) => typeof part === 'string')
         ) {
             result[key] = value.map((part: string) => part.slice(0, 128));

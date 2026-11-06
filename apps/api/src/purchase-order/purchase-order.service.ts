@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
+    AuditAction,
     NUMERIC_LIMITS,
     OPEN_PURCHASE_ORDER_STATUSES,
     PurchaseOrderStatus,
@@ -26,6 +27,7 @@ import { SupplierService } from '../supplier/supplier.service';
 import { Supplier } from '../supplier/supplier.schema';
 import { Product } from '../product/product.schema';
 import { User } from '../user/user.schema';
+import { AuditService } from '../audit/audit.service';
 import { RestockService } from '../inventory-man/restock/restock.service';
 import type { RestockDto } from '../inventory-man/restock/types';
 import {
@@ -136,6 +138,28 @@ function matchReceipt(
     return true;
 }
 
+type DraftLine = Pick<
+    PurchaseOrderLine,
+    'product' | 'orderedQty' | 'expectedCost'
+>;
+/** Allowlisted draft facts for the audit log (#46): never the document. */
+export function draftAudit(
+    row: { _id: unknown; supplier: unknown; status: string; version: number },
+    lines: DraftLine[],
+) {
+    return {
+        reference: purchaseOrderReference(String(row._id)),
+        supplier: String(row.supplier),
+        status: row.status,
+        version: row.version,
+        lineCount: lines.length,
+        lines: lines.map(
+            (l) => `${String(l.product)}:${l.orderedQty}:${l.expectedCost}`,
+        ),
+    };
+}
+const TARGET = 'PurchaseOrder';
+
 @Injectable()
 export class PurchaseOrderService {
     constructor(
@@ -146,6 +170,7 @@ export class PurchaseOrderService {
         @InjectModel(User.name) private users: Model<User>,
         private suppliers: SupplierService,
         private restocks: RestockService,
+        private audit: AuditService,
     ) {}
 
     async list(
@@ -196,12 +221,31 @@ export class PurchaseOrderService {
                 ],
                 { session },
             );
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.PURCHASE_ORDER_CREATED,
+                    targetModel: TARGET,
+                    targetId: String(created._id),
+                    after: draftAudit(
+                        {
+                            _id: created._id,
+                            supplier: dto.supplier,
+                            status: PurchaseOrderStatus.DRAFT,
+                            version: 0,
+                        },
+                        lines,
+                    ),
+                },
+                session,
+            );
             return String(created._id);
         }, this.connection);
         return this.get(id);
     }
 
     async update(
+        actor: AuthUser,
         id: string,
         dto: UpdatePurchaseOrderDto,
     ): Promise<PurchaseOrderView> {
@@ -228,11 +272,34 @@ export class PurchaseOrderService {
                 },
                 session,
             );
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.PURCHASE_ORDER_UPDATED,
+                    targetModel: TARGET,
+                    targetId: id,
+                    before: draftAudit(row, row.lines),
+                    after: draftAudit(
+                        {
+                            _id: row._id,
+                            supplier: dto.supplier,
+                            status: row.status,
+                            version: dto.version + 1,
+                        },
+                        lines,
+                    ),
+                },
+                session,
+            );
         }, this.connection);
         return this.get(id);
     }
 
-    async send(id: string, version: number): Promise<PurchaseOrderView> {
+    async send(
+        actor: AuthUser,
+        id: string,
+        version: number,
+    ): Promise<PurchaseOrderView> {
         await runInTransaction(async (session) => {
             const row = await this.load(id, session);
             if (row.status !== PurchaseOrderStatus.DRAFT) throw conflict();
@@ -258,11 +325,31 @@ export class PurchaseOrderService {
                 },
                 session,
             );
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.PURCHASE_ORDER_SENT,
+                    targetModel: TARGET,
+                    targetId: id,
+                    before: { status: row.status, version },
+                    after: {
+                        reference: purchaseOrderReference(String(row._id)),
+                        supplier: String(row.supplier),
+                        status: PurchaseOrderStatus.SENT,
+                        version: version + 1,
+                    },
+                },
+                session,
+            );
         }, this.connection);
         return this.get(id);
     }
 
-    async cancel(id: string, version: number): Promise<PurchaseOrderView> {
+    async cancel(
+        actor: AuthUser,
+        id: string,
+        version: number,
+    ): Promise<PurchaseOrderView> {
         await runInTransaction(async (session) => {
             const row = await this.load(id, session);
             const cancellable = [
@@ -270,6 +357,7 @@ export class PurchaseOrderService {
                 ...OPEN_PURCHASE_ORDER_STATUSES,
             ];
             if (!cancellable.includes(row.status)) throw conflict();
+            const closedShort = row.lines.some((line) => line.receivedQty > 0);
             await this.write(
                 id,
                 version,
@@ -278,9 +366,23 @@ export class PurchaseOrderService {
                     $set: {
                         status: PurchaseOrderStatus.CANCELLED,
                         cancelledAt: new Date(),
-                        closedShort: row.lines.some(
-                            (line) => line.receivedQty > 0,
-                        ),
+                        closedShort,
+                    },
+                },
+                session,
+            );
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.PURCHASE_ORDER_CANCELLED,
+                    targetModel: TARGET,
+                    targetId: id,
+                    before: { status: row.status, version },
+                    after: {
+                        reference: purchaseOrderReference(String(row._id)),
+                        status: PurchaseOrderStatus.CANCELLED,
+                        version: version + 1,
+                        closedShort,
                     },
                 },
                 session,
@@ -390,6 +492,29 @@ export class PurchaseOrderService {
                             requestHash,
                             restock,
                         },
+                    },
+                },
+                session,
+            );
+            // A replay returned above, so a completed receive is audited once.
+            await this.audit.record(
+                {
+                    actor,
+                    action: AuditAction.PURCHASE_ORDER_RECEIVED,
+                    targetModel: TARGET,
+                    targetId: id,
+                    before: { status: row.status, version: dto.version },
+                    after: {
+                        reference: purchaseOrderReference(String(row._id)),
+                        supplier: String(row.supplier),
+                        status: nextStatus(lines),
+                        version: dto.version + 1,
+                        restock: String(restock),
+                        invoiceNumber: dto.invoiceNumber ?? null,
+                        lineCount: restockDetails.length,
+                        lines: restockDetails.map(
+                            (d) => `${d.product}:${d.quantity}:${d.unitCost}`,
+                        ),
                     },
                 },
                 session,

@@ -42,22 +42,25 @@ export class PurchaseOrderController {
         return this.service.create(actor, dto);
     }
     @Patch(':id') update(
+        @CurrentUser() actor: AuthUser,
         @Param() { id }: PurchaseOrderIdDto,
         @Body() dto: UpdatePurchaseOrderDto,
     ): Promise<PurchaseOrderView> {
-        return this.service.update(id, dto);
+        return this.service.update(actor, id, dto);
     }
     @Post(':id/send') send(
+        @CurrentUser() actor: AuthUser,
         @Param() { id }: PurchaseOrderIdDto,
         @Body() dto: PurchaseOrderVersionDto,
     ): Promise<PurchaseOrderView> {
-        return this.service.send(id, dto.version);
+        return this.service.send(actor, id, dto.version);
     }
     @Post(':id/cancel') cancel(
+        @CurrentUser() actor: AuthUser,
         @Param() { id }: PurchaseOrderIdDto,
         @Body() dto: PurchaseOrderVersionDto,
     ): Promise<PurchaseOrderView> {
-        return this.service.cancel(id, dto.version);
+        return this.service.cancel(actor, id, dto.version);
     }
     @Post(':id/receive') receive(
         @CurrentUser() actor: AuthUser,

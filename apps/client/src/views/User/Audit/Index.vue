@@ -24,7 +24,7 @@
                             :key="value"
                             :value="value"
                         >
-                            {{ value }}
+                            {{ AUDIT_ACTION_LABELS[value] }}
                         </option>
                     </select></label
                 >
@@ -72,7 +72,12 @@
                                 {{ formatStoreDateTime(row.createdAt) }}
                             </td>
                             <td>{{ row.actor?.name ?? 'Unauthenticated' }}</td>
-                            <td>{{ row.action }}</td>
+                            <td>
+                                {{
+                                    AUDIT_ACTION_LABELS[row.action] ??
+                                    row.action
+                                }}
+                            </td>
                             <td>{{ row.target.model }} {{ row.target.id }}</td>
                             <td>
                                 <BaseButton
@@ -120,7 +125,10 @@
         >
             <div class="p-5 space-y-3 text-sm">
                 <p>
-                    {{ selected.action }} ·
+                    {{
+                        AUDIT_ACTION_LABELS[selected.action] ?? selected.action
+                    }}
+                    ·
                     {{ formatStoreDateTime(selected.createdAt) }}
                 </p>
                 <p>
@@ -150,6 +158,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
+    AUDIT_ACTION_LABELS,
     AuditAction,
     type AuditLogView,
     type Paginated,

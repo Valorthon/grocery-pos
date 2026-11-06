@@ -143,3 +143,29 @@ it('shows empty and failed states and supports retry', async () => {
     await click('Retry');
     expect(document.body.textContent).toContain('No matching audit events');
 });
+it('labels purchase-order actions and filters by them', async () => {
+    api.get.mockResolvedValue({
+        data: {
+            data: [{ ...row(), action: AuditAction.PURCHASE_ORDER_RECEIVED }],
+            totalItems: 1,
+        },
+    });
+    await mount();
+    expect(document.body.textContent).toContain('Purchase order received');
+    const select = document.querySelector('select')!;
+    const labels = [...select.options].map((o) => o.textContent?.trim());
+    for (const label of [
+        'Purchase order created',
+        'Purchase order draft edited',
+        'Purchase order sent',
+        'Purchase order cancelled',
+        'Purchase order received',
+    ])
+        expect(labels).toContain(label);
+    select.value = AuditAction.PURCHASE_ORDER_CANCELLED;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+    expect(
+        api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
+    ).toMatchObject({ action: AuditAction.PURCHASE_ORDER_CANCELLED });
+});

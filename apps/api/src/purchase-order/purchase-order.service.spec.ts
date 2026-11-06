@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import {
+    AuditAction,
     PurchaseOrderStatus,
     purchaseOrderReference,
     Role,
@@ -13,6 +14,8 @@ import {
 } from './purchase-order.service';
 import { ErrorCode } from '../common/errors';
 import { PurchaseOrderController } from './purchase-order.controller';
+import type { AuditEvent } from '../audit/audit.service';
+import { auditFields } from '../audit/audit-fields';
 
 class Query<T> {
     constructor(readonly value: T) {}
@@ -106,6 +109,11 @@ function fixture(status = PurchaseOrderStatus.SENT, receivedQty = 0) {
         endSession: jest.fn(),
     };
     const connection = { startSession: jest.fn(async () => session) };
+    const audit = {
+        record: jest.fn<Promise<void>, [AuditEvent, unknown]>(
+            async () => undefined,
+        ),
+    };
     const service = new PurchaseOrderService(
         connection as never,
         orders as never,
@@ -114,6 +122,7 @@ function fixture(status = PurchaseOrderStatus.SENT, receivedQty = 0) {
         users as never,
         suppliers as never,
         restocks as never,
+        audit as never,
     );
     return {
         service,
@@ -128,6 +137,7 @@ function fixture(status = PurchaseOrderStatus.SENT, receivedQty = 0) {
         productId,
         supplierId,
         session,
+        audit,
     };
 }
 
@@ -243,7 +253,7 @@ describe('PurchaseOrderService', () => {
                 },
             ],
         };
-        await f.service.update(String(f.row._id), dto);
+        await f.service.update(actor, String(f.row._id), dto);
         expect(f.orders.updateOne).toHaveBeenCalledWith(
             {
                 _id: String(f.row._id),
@@ -258,33 +268,33 @@ describe('PurchaseOrderService', () => {
         );
         f.orders.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
         await expect(
-            f.service.update(String(f.row._id), dto),
+            f.service.update(actor, String(f.row._id), dto),
         ).rejects.toMatchObject({ statusCode: 409 });
         f.row.status = PurchaseOrderStatus.SENT;
         await expect(
-            f.service.update(String(f.row._id), dto),
+            f.service.update(actor, String(f.row._id), dto),
         ).rejects.toMatchObject({ statusCode: 409 });
     });
     it('sends a draft once and needs an active supplier', async () => {
         const f = fixture(PurchaseOrderStatus.DRAFT);
-        await f.service.send(String(f.row._id), 2);
+        await f.service.send(actor, String(f.row._id), 2);
         expect(f.suppliers.assertActive).toHaveBeenCalled();
         expect(f.orders.updateOne.mock.calls[0]![1]).toMatchObject({
             $set: { status: PurchaseOrderStatus.SENT },
         });
         f.row.status = PurchaseOrderStatus.SENT;
         await expect(
-            f.service.send(String(f.row._id), 3),
+            f.service.send(actor, String(f.row._id), 3),
         ).rejects.toMatchObject({ statusCode: 409 });
     });
     it('cancels a draft, or closes a partial receipt short', async () => {
         const f = fixture(PurchaseOrderStatus.DRAFT);
-        await f.service.cancel(String(f.row._id), 2);
+        await f.service.cancel(actor, String(f.row._id), 2);
         expect(f.orders.updateOne.mock.calls[0]![1]).toMatchObject({
             $set: { status: PurchaseOrderStatus.CANCELLED, closedShort: false },
         });
         const p = fixture(PurchaseOrderStatus.PARTIALLY_RECEIVED, 1000);
-        await p.service.cancel(String(p.row._id), 2);
+        await p.service.cancel(actor, String(p.row._id), 2);
         expect(p.orders.updateOne.mock.calls[0]![1]).toMatchObject({
             $set: { status: PurchaseOrderStatus.CANCELLED, closedShort: true },
         });
@@ -293,7 +303,7 @@ describe('PurchaseOrderService', () => {
         const view = await p.service.get(String(p.row._id));
         expect(view.lines[0]!.outstandingQty).toBe(0);
         await expect(
-            p.service.cancel(String(p.row._id), 3),
+            p.service.cancel(actor, String(p.row._id), 3),
         ).rejects.toMatchObject({ statusCode: 409 });
     });
     it('receives through one linked restock and advances status', async () => {
@@ -520,6 +530,7 @@ describe('PurchaseOrderService edge views', () => {
             users as never,
             f.suppliers as never,
             f.restocks as never,
+            f.audit as never,
         );
         const view = await service.get(String(f.row._id));
         expect(view).toMatchObject({
@@ -540,7 +551,7 @@ describe('PurchaseOrderService edge views', () => {
     });
     it('keeps a note on edit and passes expiry, batch and description on receive', async () => {
         const d = fixture(PurchaseOrderStatus.DRAFT);
-        await d.service.update(String(d.row._id), {
+        await d.service.update(actor, String(d.row._id), {
             version: 2,
             supplier: String(d.supplierId),
             note: 'keep',
@@ -591,7 +602,7 @@ describe('PurchaseOrderService lookups', () => {
         const f = fixture();
         f.orders.findById.mockReturnValueOnce(new Query(null as never));
         await expect(
-            f.service.send(String(f.row._id), 0),
+            f.service.send(actor, String(f.row._id), 0),
         ).rejects.toMatchObject({ statusCode: 404 });
         await f.service.list({ page: 1, limit: 20 });
         expect(f.orders.find).toHaveBeenCalledWith({});
@@ -613,9 +624,13 @@ describe('PurchaseOrderController', () => {
         await c.list({ page: 1, limit: 20 });
         await c.get({ id: 'po' });
         await c.create(actor, { supplier: 's', lines: [] });
-        await c.update({ id: 'po' }, { version: 1, supplier: 's', lines: [] });
-        await c.send({ id: 'po' }, { version: 1 });
-        await c.cancel({ id: 'po' }, { version: 2 });
+        await c.update(
+            actor,
+            { id: 'po' },
+            { version: 1, supplier: 's', lines: [] },
+        );
+        await c.send(actor, { id: 'po' }, { version: 1 });
+        await c.cancel(actor, { id: 'po' }, { version: 2 });
         await c.receive(
             actor,
             { id: 'po' },
@@ -625,12 +640,170 @@ describe('PurchaseOrderController', () => {
                 lines: [],
             },
         );
-        expect(service.send).toHaveBeenCalledWith('po', 1);
-        expect(service.cancel).toHaveBeenCalledWith('po', 2);
+        expect(service.send).toHaveBeenCalledWith(actor, 'po', 1);
+        expect(service.cancel).toHaveBeenCalledWith(actor, 'po', 2);
         expect(service.receive).toHaveBeenCalledWith(actor, 'po', {
             version: 3,
             idempotencyKey: 'k',
             lines: [],
         });
+    });
+});
+
+describe('PurchaseOrderService audit (#46)', () => {
+    const ref = (f: ReturnType<typeof fixture>) =>
+        purchaseOrderReference(String(f.row._id));
+    const entry = (f: ReturnType<typeof fixture>, n = 0) => {
+        const [event, session] = f.audit.record.mock.calls[n]!;
+        expect(session).toBe(f.session);
+        return event;
+    };
+    it('records a create with allowlisted draft facts in the transaction', async () => {
+        const f = fixture();
+        await f.service.create(actor, {
+            supplier: String(f.supplierId),
+            note: 'secret-ish note',
+            lines: [
+                {
+                    product: String(f.productId),
+                    orderedQty: 5000,
+                    expectedCost: 18000,
+                },
+            ],
+        });
+        const event = entry(f);
+        expect(event).toMatchObject({
+            actor,
+            action: AuditAction.PURCHASE_ORDER_CREATED,
+            targetModel: 'PurchaseOrder',
+            targetId: String(f.row._id),
+        });
+        expect(auditFields(event.action, event.after ?? {})).toEqual({
+            reference: ref(f),
+            supplier: String(f.supplierId),
+            status: PurchaseOrderStatus.DRAFT,
+            version: 0,
+            lineCount: 1,
+            lines: [`${String(f.productId)}:5000:18000`],
+        });
+    });
+    it('records a draft edit before and after', async () => {
+        const f = fixture(PurchaseOrderStatus.DRAFT);
+        const other = String(new Types.ObjectId());
+        await f.service.update(actor, String(f.row._id), {
+            version: 2,
+            supplier: other,
+            lines: [
+                {
+                    product: String(f.productId),
+                    orderedQty: 3000,
+                    expectedCost: 0,
+                },
+            ],
+        });
+        const event = entry(f);
+        expect(event.action).toBe(AuditAction.PURCHASE_ORDER_UPDATED);
+        expect(event.before).toMatchObject({
+            supplier: String(f.supplierId),
+            version: 2,
+            lines: [`${String(f.productId)}:5000:18000`],
+        });
+        expect(event.after).toMatchObject({
+            supplier: other,
+            version: 3,
+            lineCount: 1,
+            lines: [`${String(f.productId)}:3000:0`],
+        });
+    });
+    it('records send and cancel with status, version and closedShort', async () => {
+        const f = fixture(PurchaseOrderStatus.DRAFT);
+        await f.service.send(actor, String(f.row._id), 2);
+        expect(entry(f)).toMatchObject({
+            action: AuditAction.PURCHASE_ORDER_SENT,
+            before: { status: PurchaseOrderStatus.DRAFT, version: 2 },
+            after: {
+                reference: ref(f),
+                supplier: String(f.supplierId),
+                status: PurchaseOrderStatus.SENT,
+                version: 3,
+            },
+        });
+        const p = fixture(PurchaseOrderStatus.PARTIALLY_RECEIVED, 10);
+        await p.service.cancel(actor, String(p.row._id), 2);
+        expect(entry(p)).toMatchObject({
+            action: AuditAction.PURCHASE_ORDER_CANCELLED,
+            before: {
+                status: PurchaseOrderStatus.PARTIALLY_RECEIVED,
+                version: 2,
+            },
+            after: {
+                status: PurchaseOrderStatus.CANCELLED,
+                version: 3,
+                closedShort: true,
+            },
+        });
+    });
+    it('records a receive without its key, hash or batch details', async () => {
+        const f = fixture();
+        await f.service.receive(actor, String(f.row._id), {
+            version: 2,
+            idempotencyKey: 'key-audit-1',
+            invoiceNumber: 'DR-9',
+            lines: [
+                {
+                    line: String(f.lineId),
+                    quantity: 2000,
+                    unitCost: 17000,
+                    batchNo: 'B1',
+                },
+            ],
+        });
+        const event = entry(f);
+        expect(event.action).toBe(AuditAction.PURCHASE_ORDER_RECEIVED);
+        expect(auditFields(event.action, event.after ?? {})).toEqual({
+            reference: ref(f),
+            supplier: String(f.supplierId),
+            status: PurchaseOrderStatus.PARTIALLY_RECEIVED,
+            version: 3,
+            restock: String(f.restockId),
+            invoiceNumber: 'DR-9',
+            lineCount: 1,
+            lines: [`${String(f.productId)}:2000:17000`],
+        });
+        const text = JSON.stringify(event);
+        expect(text).not.toContain('key-audit-1');
+        expect(text).not.toMatch(/[0-9a-f]{64}/);
+    });
+    it('does not audit a replay or a failed write', async () => {
+        const f = fixture(PurchaseOrderStatus.RECEIVED, 5000);
+        const dto = {
+            version: 2,
+            idempotencyKey: 'key-audit-2',
+            lines: [{ line: String(f.lineId), quantity: 1, unitCost: 1 }],
+        };
+        f.row.receipts.push({
+            key: dto.idempotencyKey,
+            requestHash: receiveRequestHash(
+                actor.userId,
+                String(f.row._id),
+                dto,
+            ),
+            restock: f.restockId,
+        });
+        await f.service.receive(actor, String(f.row._id), dto);
+        expect(f.audit.record).not.toHaveBeenCalled();
+        const g = fixture(PurchaseOrderStatus.DRAFT);
+        g.orders.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        await expect(
+            g.service.send(actor, String(g.row._id), 2),
+        ).rejects.toMatchObject({ statusCode: 409 });
+        expect(g.audit.record).not.toHaveBeenCalled();
+    });
+    it('fails the action when the audit write fails', async () => {
+        const f = fixture(PurchaseOrderStatus.DRAFT);
+        f.audit.record.mockRejectedValueOnce(new Error('audit down'));
+        await expect(
+            f.service.cancel(actor, String(f.row._id), 2),
+        ).rejects.toThrow();
     });
 });

@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import {
+    AuditAction,
+    purchaseOrderReference,
     PurchaseOrderStatus,
     ErrorCode,
     Role,
@@ -20,6 +22,8 @@ import {
     stockOf,
     type DbApp,
 } from './db-app';
+import { AuditService } from '../../src/audit/audit.service';
+import type { AuditLog } from '../../src/audit/audit.schema';
 
 let db: DbApp;
 const admin = caller('po-admin', Role.Admin),
@@ -311,4 +315,127 @@ it('flags archived products on a draft and still refuses to send it', async () =
         },
     );
     expect(send.status).toBe(404);
+});
+
+const poEvents = (po: string, action?: AuditAction) =>
+    db
+        .model<AuditLog>('AuditLog')
+        .find({
+            targetModel: 'PurchaseOrder',
+            targetId: new Types.ObjectId(po),
+            ...(action && { action }),
+        })
+        .sort({ createdAt: 1, _id: 1 })
+        .lean();
+
+it('audits every PO action once, with allowlisted fields only (#46)', async () => {
+    const product = await seedProduct(db, 1000, 0);
+    const supplier = await seedSupplier(db);
+    const created = await call('POST', '/purchase-orders', {
+        supplier,
+        note: 'call before noon',
+        lines: [{ product, orderedQty: 5, expectedCost: 600 }],
+    });
+    const id = created.body._id;
+    const edited = await call('PATCH', `/purchase-orders/${id}`, {
+        version: created.body.version,
+        supplier,
+        lines: [{ product, orderedQty: 4, expectedCost: 550 }],
+    });
+    expect(edited.status).toBe(200);
+    const sent = await call('POST', `/purchase-orders/${id}/send`, {
+        version: edited.body.version,
+    });
+    const key = `k-${randomUUID()}`;
+    const first = await receive(
+        sent.body,
+        [{ quantity: 1, unitCost: 560 }],
+        key,
+    );
+    expect(first.status).toBe(201);
+    const replay = await receive(
+        sent.body,
+        [{ quantity: 1, unitCost: 560 }],
+        key,
+    );
+    expect(replay.status).toBe(201);
+    const cancelled = await call('POST', `/purchase-orders/${id}/cancel`, {
+        version: first.body.version,
+    });
+    expect(cancelled.status).toBe(201);
+    const rows = await poEvents(id);
+    expect(rows.map((r) => r.action)).toEqual([
+        AuditAction.PURCHASE_ORDER_CREATED,
+        AuditAction.PURCHASE_ORDER_UPDATED,
+        AuditAction.PURCHASE_ORDER_SENT,
+        AuditAction.PURCHASE_ORDER_RECEIVED,
+        AuditAction.PURCHASE_ORDER_CANCELLED,
+    ]);
+    const reference = purchaseOrderReference(id);
+    expect(rows[0]).toMatchObject({
+        actorName: restocker.username,
+        after: {
+            reference,
+            supplier,
+            status: PurchaseOrderStatus.DRAFT,
+            version: 0,
+            lineCount: 1,
+            lines: [`${product}:5:600`],
+        },
+    });
+    expect(rows[1].before).toMatchObject({ lines: [`${product}:5:600`] });
+    expect(rows[1].after).toMatchObject({ lines: [`${product}:4:550`] });
+    expect(rows[3].after).toEqual({
+        reference,
+        supplier,
+        status: PurchaseOrderStatus.PARTIALLY_RECEIVED,
+        version: first.body.version,
+        restock: first.body.receipts[0],
+        invoiceNumber: null,
+        lineCount: 1,
+        lines: [`${product}:1:560`],
+    });
+    expect(rows[4].after).toMatchObject({
+        status: PurchaseOrderStatus.CANCELLED,
+        closedShort: true,
+    });
+    const text = JSON.stringify(rows);
+    expect(text).not.toContain(key);
+    expect(text).not.toContain('call before noon');
+    expect(text).not.toMatch(/[0-9a-f]{64}/);
+    const listed = await db.call(
+        admin,
+        'GET',
+        `/audit?action=${AuditAction.PURCHASE_ORDER_RECEIVED}&page=1&limit=100`,
+    );
+    expect(listed.status).toBe(200);
+});
+
+it('rolls a failed receive back with no audit entry, and an audit outage back with no receipt', async () => {
+    const product = await seedProduct(db, 1000, 0);
+    const po = await sentOrder([{ product, orderedQty: 3, expectedCost: 100 }]);
+    const over = await receive(po, [{ quantity: 4, unitCost: 100 }]);
+    expect(over.status).toBe(400);
+    expect(
+        await poEvents(po._id, AuditAction.PURCHASE_ORDER_RECEIVED),
+    ).toHaveLength(0);
+    const spy = jest
+        .spyOn(db.app.get(AuditService), 'record')
+        .mockRejectedValueOnce(new Error('forced audit outage'));
+    const failed = await receive(po, [{ quantity: 2, unitCost: 100 }]);
+    spy.mockRestore();
+    expect(failed.status).toBe(500);
+    expect(await stockOf(db, product)).toBe(0);
+    expect(await restockCount(po._id)).toBe(0);
+    const again = await call('GET', `/purchase-orders/${po._id}`);
+    expect(again.body.version).toBe(po.version);
+    expect(again.body.receipts).toEqual([]);
+    expect(
+        await poEvents(po._id, AuditAction.PURCHASE_ORDER_RECEIVED),
+    ).toHaveLength(0);
+    const ok = await receive(po, [{ quantity: 2, unitCost: 100 }]);
+    expect(ok.status).toBe(201);
+    expect(
+        await poEvents(po._id, AuditAction.PURCHASE_ORDER_RECEIVED),
+    ).toHaveLength(1);
 });
