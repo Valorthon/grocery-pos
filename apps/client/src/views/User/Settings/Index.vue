@@ -113,7 +113,7 @@
     </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     SETTINGS_LIMITS,
     type StoreIdentity,
@@ -180,15 +180,37 @@ useUnsavedDraftsGuard({
     confirm,
 });
 let active = true;
+let stopOwnerWait: (() => void) | undefined;
 onBeforeUnmount(() => {
     active = false;
+    stopOwnerWait?.();
 });
+/**
+ * On a fresh page load this view mounts before the layout sets the settings
+ * owner, so a refresh now would return early and leave the defaults
+ * (version 0) in the form (#139). Wait for the owner first.
+ */
+function ownerKnown(): Promise<void> {
+    if (settings.owner) return Promise.resolve();
+    return new Promise((resolve) => {
+        stopOwnerWait = watch(
+            () => settings.owner,
+            (owner) => {
+                if (!owner) return;
+                stopOwnerWait?.();
+                resolve();
+            },
+        );
+    });
+}
 function resetForm() {
     form.value = { ...settings.settings };
     baseline.value = JSON.stringify(form.value);
     reorderInput.value = form.value.defaultReorderLevel;
 }
 onMounted(async () => {
+    await ownerKnown();
+    if (!active) return;
     await settings.refresh();
     if (active) {
         resetForm();
