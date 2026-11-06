@@ -2,14 +2,15 @@
     <div>
         <label
             v-if="label"
-            :for="id"
+            :for="fieldId"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5"
         >
             {{ label }}
         </label>
 
         <select
-            :id="id"
+            :id="fieldId"
+            :aria-label="label ? undefined : ariaLabel || undefined"
             :value="selected"
             :disabled="disabled"
             :class="[
@@ -27,13 +28,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 
 const props = withDefaults(
     defineProps<{
         modelValue?: string | number | null;
         id?: string;
         label?: string;
+        /** Accessible name for a select shown without a visible label. */
+        ariaLabel?: string;
         disabled?: boolean;
         options: Array<{ label: string; value: string | number }>;
         /**
@@ -47,10 +50,18 @@ const props = withDefaults(
         modelValue: '',
         id: '',
         label: '',
+        ariaLabel: '',
         disabled: false,
         allLabel: '',
     },
 );
+
+/*
+ * Without an explicit id the label still names the field (#142): a
+ * generated id ties <label for> to the control.
+ */
+const autoId = useId();
+const fieldId = computed(() => props.id || autoId);
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: string | null): void;

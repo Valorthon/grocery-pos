@@ -119,3 +119,36 @@ describe('BaseInput v-model.number (#17)', () => {
         expect(value.value).toBe('');
     });
 });
+
+describe('BaseInput label (issue #142)', () => {
+    function labelFor(input: HTMLInputElement) {
+        return document
+            .querySelector(`label[for="${input.id}"]`)
+            ?.textContent?.trim();
+    }
+
+    it('ties the label to the input without an explicit id', () => {
+        const input = mount({ label: 'Username' });
+        expect(input.id).not.toBe('');
+        expect(labelFor(input)).toBe('Username');
+    });
+
+    it('gives each field without an id its own generated id', () => {
+        mountRender(() =>
+            h('div', [
+                h(BaseInput, { label: 'From', type: 'date' }),
+                h(BaseInput, { label: 'To', type: 'date' }),
+            ]),
+        );
+        const [from, to] = Array.from(document.querySelectorAll('input'));
+        expect(from!.id).not.toBe(to!.id);
+        expect(labelFor(from!)).toBe('From');
+        expect(labelFor(to!)).toBe('To');
+    });
+
+    it('keeps an explicit id', () => {
+        const input = mount({ id: 'sales-from', label: 'From' });
+        expect(input.id).toBe('sales-from');
+        expect(labelFor(input)).toBe('From');
+    });
+});
