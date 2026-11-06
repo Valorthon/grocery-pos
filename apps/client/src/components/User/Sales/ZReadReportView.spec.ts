@@ -67,11 +67,29 @@ function row(host: HTMLElement, label: string): string | undefined {
 }
 
 describe('ZReadReportView money figures', () => {
+    it('labels gross as after discounts and shows discounts as information only', async () => {
+        const host = await mount(REPORT);
+        const rows = [...host.querySelectorAll('div.flex.justify-between')];
+        const gross = rows.find((r) =>
+            r.textContent?.includes('Gross Sales (after discounts):'),
+        );
+        expect(gross).toBeDefined();
+        expect(gross?.hasAttribute('data-info')).toBe(false);
+        const discounts = rows.find((r) =>
+            r.textContent?.includes('Discounts Given (2)'),
+        );
+        expect(discounts?.getAttribute('data-info')).toBe('true');
+        expect(discounts?.textContent).toContain(
+            '(already deducted from gross)',
+        );
+        expect(discounts?.textContent).not.toContain('(-)');
+    });
+
     it('shows every stored figure as pesos with two decimals', async () => {
         const host = await mount(REPORT);
 
         expect(row(host, 'Transactions')).toBe('12');
-        expect(row(host, 'Gross Sales')).toBe('₱12,345.50');
+        expect(row(host, 'Gross Sales (after discounts)')).toBe('₱12,345.50');
         expect(row(host, 'Discounts Given (2)')).toBe('₱123.45');
         expect(row(host, '(-) Voids (1)')).toBe('₱45.50');
         expect(row(host, '(-) Refunds (1)')).toBe('₱10.05');
