@@ -16,7 +16,11 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
-async function mount(allLabel?: string, initial: string | null = null) {
+async function mount(
+    allLabel?: string,
+    initial: string | null = null,
+    extra: Record<string, unknown> = {},
+) {
     const model = ref<string | number | null>(initial);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -26,6 +30,7 @@ async function mount(allLabel?: string, initial: string | null = null) {
                 modelValue: model.value,
                 options: USERS,
                 allLabel,
+                ...extra,
                 'onUpdate:modelValue': (v: string | null) => {
                     model.value = v;
                 },
@@ -76,5 +81,25 @@ describe('BaseSelect "All" option (issue #20)', () => {
         expect(select.options).toHaveLength(2);
         await choose(select, 'u2');
         expect(model.value).toBe('u2');
+    });
+});
+
+describe('BaseSelect accessible name (issue #142)', () => {
+    it('ties the visible label to the select without an explicit id', async () => {
+        const { select } = await mount(undefined, null, { label: 'Category' });
+        expect(select.id).not.toBe('');
+        expect(
+            document
+                .querySelector(`label[for="${select.id}"]`)
+                ?.textContent?.trim(),
+        ).toBe('Category');
+        expect(select.hasAttribute('aria-label')).toBe(false);
+    });
+
+    it('names a select without a visible label by its aria-label', async () => {
+        const { select } = await mount(undefined, null, {
+            'aria-label': 'Status',
+        });
+        expect(select.getAttribute('aria-label')).toBe('Status');
     });
 });

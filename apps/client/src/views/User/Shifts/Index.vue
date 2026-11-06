@@ -18,6 +18,7 @@
             <BaseSelect
                 v-model="statusFilter"
                 class="w-40"
+                aria-label="Status"
                 :options="statusOptions"
             />
         </header>

@@ -2,7 +2,7 @@
     <div :class="attrs.class" :style="attrs.style">
         <label
             v-if="label"
-            :for="id"
+            :for="fieldId"
             class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5"
         >
             {{ label }}
@@ -17,7 +17,7 @@
             </span>
 
             <input
-                :id="id"
+                :id="fieldId"
                 v-bind="inputAttrs()"
                 :type="type"
                 :maxlength="maxlength"
@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, useAttrs } from 'vue';
+import { computed, useAttrs, useId } from 'vue';
 import { X } from '@lucide/vue';
 
 /*
@@ -98,6 +98,13 @@ const props = withDefaults(
         mono: false,
     },
 );
+
+/*
+ * Without an explicit id the label still names the field (#142): a
+ * generated id ties <label for> to the control.
+ */
+const autoId = useId();
+const fieldId = computed(() => props.id || autoId);
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;

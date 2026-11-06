@@ -127,8 +127,9 @@
             class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-slate-100"
         >
             <div class="flex items-center gap-2 text-xs text-slate-500">
-                <span>Rows per page:</span>
+                <label :for="rowsPerPageId">Rows per page:</label>
                 <select
+                    :id="rowsPerPageId"
                     :value="itemsPerPage"
                     class="px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold cursor-pointer"
                     @change="
@@ -177,7 +178,7 @@
 </template>
 
 <script setup lang="ts" generic="T extends TableRow">
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import { AlertCircle, RotateCw } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import type { Component } from 'vue';
@@ -215,6 +216,9 @@ const props = withDefaults(
         emptyIcon: undefined,
     },
 );
+
+// Ties the visible "Rows per page" label to its select (#142).
+const rowsPerPageId = useId();
 
 const emit = defineEmits<{
     (e: 'update:page', value: number): void;
