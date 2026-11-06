@@ -5,6 +5,7 @@ import { Role } from '@grocery-pos/contracts';
 import { flush } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import Index from './Index.vue';
+import { canOpenPurchaseOrders } from './purchase-order-link';
 
 const api = vi.hoisted(() => ({
     get: vi.fn<
@@ -91,13 +92,12 @@ describe('restock history purchase-order links (#123)', () => {
             query: { purchaseOrder: undefined, source: undefined },
         });
     });
-    it('shows the reference without a link to viewers who cannot open orders', async () => {
-        await mount([Role.Adjuster]);
-        expect(document.body.textContent).toContain('PO-99439ABC');
-        expect(
-            [...document.querySelectorAll('button')].some(
-                (b) => b.textContent?.trim() === 'PO-99439ABC',
-            ),
-        ).toBe(false);
+    it('gates the link on the roles that can open purchase orders', () => {
+        const has = (roles: Role[]) => (role: Role) => roles.includes(role);
+        expect(canOpenPurchaseOrders(has([Role.Restocker]))).toBe(true);
+        expect(canOpenPurchaseOrders(has([Role.Admin]))).toBe(true);
+        expect(canOpenPurchaseOrders(has([Role.Adjuster, Role.Seller]))).toBe(
+            false,
+        );
     });
 });

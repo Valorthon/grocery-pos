@@ -710,7 +710,10 @@ async function transition(path: 'send' | 'cancel', success: string) {
 }
 
 /** After a 409 the order changed elsewhere: show its current state. */
-async function reloadOnConflict(cause: unknown): Promise<boolean> {
+async function reloadOnConflict(
+    cause: unknown,
+    notice = 'Purchase order reloaded.',
+): Promise<boolean> {
     const po = current.value;
     if (!po || apiErrorBody(cause)?.statusCode !== 409) return false;
     try {
@@ -719,7 +722,7 @@ async function reloadOnConflict(cause: unknown): Promise<boolean> {
         );
         if (unmounted || current.value?._id !== po._id) return false;
         show(fresh.data, draftLinesOf(fresh.data));
-        ui.queueMessage(Color.INFO, 'Purchase order reloaded.');
+        ui.queueMessage(Color.INFO, notice);
         return true;
     } catch {
         return false;
@@ -835,7 +838,13 @@ async function submitReceive() {
         // lost answer keeps the key so an unchanged retry replays.
         if (apiErrorBody(cause)) receiveKey = '';
         receiveError.value = apiErrorText(cause);
-        if (await reloadOnConflict(cause)) receiving.value = false;
+        if (
+            await reloadOnConflict(
+                cause,
+                'Purchase order reloaded. The receipt you entered was not recorded; enter it again.',
+            )
+        )
+            receiving.value = false;
     } finally {
         busy.value = false;
     }

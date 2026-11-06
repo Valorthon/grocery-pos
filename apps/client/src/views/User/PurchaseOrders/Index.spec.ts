@@ -10,6 +10,7 @@ import {
 } from '@grocery-pos/contracts';
 import Index from './Index.vue';
 import { useAuthStore } from '@/stores/auth';
+import { useUIStore } from '@/stores/ui';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { field, flush, pickFirstMatch, type } from '@/testing/form-dom';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
@@ -207,6 +208,9 @@ describe('Purchase orders page (#123)', () => {
         await press('Record receipt');
         expect(api.get).toHaveBeenCalledWith('/purchase-orders/po1');
         expect(document.body.textContent).not.toContain('Record receipt');
+        expect(useUIStore().toasts.flatMap((t) => t.lines)).toContain(
+            'Purchase order reloaded. The receipt you entered was not recorded; enter it again.',
+        );
         await press('Receive');
         api.post.mockResolvedValueOnce({
             data: { ...order(), status: PurchaseOrderStatus.RECEIVED },
