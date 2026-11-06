@@ -876,9 +876,8 @@
                             <div class="flex justify-between font-medium">
                                 <span class="text-slate-500"
                                     >Subtotal ({{
-                                        cartStore.totalUnits
-                                    }}
-                                    Items)</span
+                                        countOf(cartStore.totalUnits, 'Item')
+                                    }})</span
                                 >
                                 <span class="text-slate-900 font-bold">{{
                                     currency(subtotal)
@@ -1006,6 +1005,7 @@
 </template>
 
 <script setup lang="ts">
+import { countOf } from '@/utils/plural';
 import { quantityError as quantityFieldError } from '@/utils/rules';
 import {
     quantityInput,

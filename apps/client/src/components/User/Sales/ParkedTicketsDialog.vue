@@ -26,18 +26,21 @@
                 </h3>
                 <p class="text-xs text-slate-600">
                     {{ new Date(ticket.parkedAt).toLocaleString() }} ·
-                    {{ ticket.items.length }} lines ·
+                    {{ countOf(ticket.items.length, 'line') }} ·
                     {{
-                        ticket.items.reduce(
-                            (n, item) =>
-                                n +
-                                (item.unit && item.unit !== UnitOfMeasure.PIECE
-                                    ? 1
-                                    : item.quantity),
-                            0,
+                        countOf(
+                            ticket.items.reduce(
+                                (n, item) =>
+                                    n +
+                                    (item.unit &&
+                                    item.unit !== UnitOfMeasure.PIECE
+                                        ? 1
+                                        : item.quantity),
+                                0,
+                            ),
+                            'item',
                         )
                     }}
-                    items
                 </p>
                 <p class="text-xs text-slate-600">
                     Prices refresh on resume. Discounts need fresh admin
@@ -73,6 +76,7 @@
 </template>
 
 <script setup lang="ts">
+import { countOf } from '@/utils/plural';
 import { isAxiosError } from 'axios';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {

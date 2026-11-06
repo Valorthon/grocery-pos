@@ -50,7 +50,7 @@
                     label="Group by"
                     :options="
                         Object.values(SalesReportGroup).map((value) => ({
-                            label: value,
+                            label: GROUP_LABELS[value],
                             value,
                         }))
                     "
@@ -114,7 +114,7 @@
             <template v-if="report">
                 <p class="text-sm font-semibold" data-testid="report-applied">
                     {{ report.from }} through {{ report.to }} ·
-                    {{ report.groupBy }} · {{ report.timeZone }}
+                    {{ GROUP_LABELS[report.groupBy] }} · {{ report.timeZone }}
                 </p>
                 <div class="grid gap-3 sm:grid-cols-3">
                     <div class="rounded-xl border border-slate-200 p-3">
@@ -324,6 +324,7 @@
     </PageCard>
 </template>
 <script setup lang="ts">
+import { GROUP_LABELS } from './group-labels';
 import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue';
 import { isAxiosError } from 'axios';
 import { RouterLink } from 'vue-router';

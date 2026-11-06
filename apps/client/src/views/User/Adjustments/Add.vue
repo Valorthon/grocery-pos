@@ -41,7 +41,7 @@
             v-if="filteredItems.length === 0"
             class="py-16 text-center text-slate-400 text-sm"
         >
-            No new products added yet. Click "Adjust Stock" to start.
+            No adjustments added yet. Click "Adjust Stock" to start.
         </div>
         <div v-else class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-sm">

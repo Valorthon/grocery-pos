@@ -42,6 +42,10 @@ import { computeZRead, ShiftSale } from './z-read';
 
 type ShiftDoc = Shift & { _id: Types.ObjectId };
 
+/** Why a cashier's own close is refused while offline leases are open (#143). */
+export const OFFLINE_PENDING_MESSAGE =
+    "Offline mode is still on for this shift on at least one terminal. Sync its pending cash sales and turn offline mode off there, then close. If that terminal's browser data is gone, ask an admin to force-close the shift.";
+
 /** The stored Z-read: the report without the movements, which stay on the shift. */
 type StoredZRead = Omit<ZReadReport, 'movements'>;
 
@@ -493,7 +497,7 @@ export class ShiftService {
                 )
                     throw new ConflictError(
                         ErrorCode.OFFLINE_PENDING,
-                        'Sync pending cash sales and release offline mode on every terminal before closing this shift. An admin may force-close if reconciliation is required.',
+                        OFFLINE_PENDING_MESSAGE,
                     );
                 return this.close(shift, user, counts, countedCash, session);
             },

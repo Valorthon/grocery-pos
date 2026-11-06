@@ -422,6 +422,21 @@ function withMilkOnTicket() {
     );
 }
 
+describe('Sell register subtotal count (#143)', () => {
+    it('says "1 Item" for one unit and "2 Items" for two', async () => {
+        withMilkOnTicket();
+        mount();
+        await flush();
+        expect(document.body.textContent).toContain('Subtotal (1 Item)');
+        useCartStore().add(
+            { product: 'p1', EAN: MILK.EAN, name: 'milk', unitPrice: 9500 },
+            1,
+        );
+        await flush();
+        expect(document.body.textContent).toContain('Subtotal (2 Items)');
+    });
+});
+
 describe('Sell register keyboard (issue #22)', () => {
     it('F2 puts the focus in the scan box, from anywhere', async () => {
         withMilkOnTicket();

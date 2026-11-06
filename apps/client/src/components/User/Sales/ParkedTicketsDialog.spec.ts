@@ -81,6 +81,9 @@ describe('parked tickets dialog', () => {
         await flush();
         expect(document.body.textContent).toContain('Customer A');
         expect(document.body.textContent).toContain('2 items');
+        // One line: singular (#143).
+        expect(document.body.textContent).toContain('1 line ·');
+        expect(document.body.textContent).not.toContain('1 lines');
         expect(document.body.textContent).toContain('Stock is not reserved');
     });
     it('re-prices all lines, resumes intact, closes, and never posts a sale or changes stock', async () => {

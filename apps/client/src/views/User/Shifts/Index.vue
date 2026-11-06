@@ -139,6 +139,7 @@
                 >
             </template>
         </BaseModal>
+        <ConfirmDialog :request="request" @answer="answer" />
     </div>
 </template>
 
@@ -156,6 +157,8 @@ import {
 import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import { useConfirm } from '@/composables/useConfirm';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import Badge from '@/components/ui/Badge.vue';
@@ -244,6 +247,7 @@ const {
 void fetchShifts();
 watch(statusFilter, search);
 
+const { request, confirm, answer } = useConfirm();
 const isDialogOpen = ref(false);
 const selected = ref<ShiftListItem | null>(null);
 const closeCounts = ref<BillCounts>({});
@@ -273,6 +277,14 @@ async function forceClose() {
         closeError.value = refused;
         return;
     }
+    const ok = await confirm({
+        title: 'Force-close shift?',
+        message: `Close ${shift.cashierName}'s shift with ${formatCurrency(countedCash.value)} counted? This can't be undone: it saves their Z-read now.`,
+        confirmLabel: 'Force-close',
+        cancelLabel: 'Go back',
+        danger: true,
+    });
+    if (!ok || selected.value !== shift || closing.value) return;
     closing.value = true;
     closeError.value = '';
     try {

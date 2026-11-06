@@ -19,12 +19,17 @@ const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 const nav = vi.hoisted(() => ({
     push: vi.fn(),
+    replace: vi.fn(),
     route: { value: { query: {} as Record<string, string> } },
 }));
 vi.mock('vue-router', async (importOriginal) => ({
     ...(await importOriginal<typeof import('vue-router')>()),
     onBeforeRouteLeave: vi.fn(),
-    useRouter: () => ({ push: nav.push, currentRoute: nav.route }),
+    useRouter: () => ({
+        push: nav.push,
+        replace: nav.replace,
+        currentRoute: nav.route,
+    }),
 }));
 
 function order(status = PurchaseOrderStatus.SENT): PurchaseOrderView {
@@ -420,6 +425,21 @@ describe('Purchase order references and draft warnings (#123)', () => {
         );
         expect(document.body.textContent).toContain('Archived product: soap.');
     });
+    it('writes the open order to ?id= and clears it on close (#143)', async () => {
+        nav.route.value = { query: { status: 'SENT' } };
+        await mount();
+        await press('Open');
+        expect(nav.replace).toHaveBeenCalledTimes(1);
+        expect(nav.replace).toHaveBeenLastCalledWith({
+            query: { status: 'SENT', id: 'po1' },
+        });
+        nav.route.value = { query: { status: 'SENT', id: 'po1' } };
+        await press('Back to list');
+        expect(nav.replace).toHaveBeenLastCalledWith({
+            query: { status: 'SENT' },
+        });
+        expect(nav.push).not.toHaveBeenCalled();
+    });
     it('opens a deep-linked order and links to its receipts', async () => {
         nav.route.value = { query: { id: ID } };
         api.get.mockImplementation((url: string) =>
@@ -431,6 +451,8 @@ describe('Purchase order references and draft warnings (#123)', () => {
         );
         await mount();
         expect(api.get).toHaveBeenCalledWith(`/purchase-orders/${ID}`);
+        // Already in the address: nothing is rewritten.
+        expect(nav.replace).not.toHaveBeenCalled();
         expect(document.body.textContent).toContain('PO-99439ABC');
         await press('View receipts');
         expect(nav.push).toHaveBeenCalledWith({

@@ -128,7 +128,9 @@
                     class="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs"
                 >
                     <div class="flex justify-between text-slate-600">
-                        <span>Subtotal ({{ itemCount }} Items):</span>
+                        <span
+                            >Subtotal ({{ countOf(itemCount, 'Item') }}):</span
+                        >
                         <span class="font-bold text-slate-900">{{
                             currency(receipt?.subtotal ?? 0)
                         }}</span>
@@ -211,6 +213,7 @@
 </template>
 
 <script setup lang="ts">
+import { countOf } from '@/utils/plural';
 import { storePresentation, terminalLabel } from '@/settings/presentation';
 import {
     formatQuantity,

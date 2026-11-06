@@ -62,6 +62,7 @@ interface PageCase {
     emptyMessage: string;
     /** Two drafts that share every would-be key (EAN, product). */
     draft: (name: string) => Record<string, unknown>;
+    emptyState: string;
 }
 
 const cases: [string, PageCase][] = [
@@ -72,6 +73,7 @@ const cases: [string, PageCase][] = [
             list: 'Products',
             saveLabel: 'Save All',
             emptyMessage: 'No products to save',
+            emptyState: 'No new products added yet. Click "Add Product"',
             // Auto-generated barcodes: both EANs are ''.
             draft: (name) => ({
                 EAN: '',
@@ -89,6 +91,7 @@ const cases: [string, PageCase][] = [
             saveLabel: 'Save',
             dialogTitle: 'Save Restock Info',
             emptyMessage: 'No restock lines to save',
+            emptyState: 'No new products added yet. Click "Add Product"',
             draft: (name) => ({
                 isNewProduct: true,
                 autoGenerateEAN: true,
@@ -108,6 +111,7 @@ const cases: [string, PageCase][] = [
             saveLabel: 'Save',
             dialogTitle: 'Save Adjustment Info',
             emptyMessage: 'No adjustments to save',
+            emptyState: 'No adjustments added yet. Click "Adjust Stock"',
             // Two lines for the same product.
             draft: (name) => ({
                 EAN: '4006381333931',
@@ -356,6 +360,11 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         await press('Leave');
         await again;
         expect(router.currentRoute.value.name).toBe('Other');
+    });
+
+    it('says what to add while empty (#143)', async () => {
+        await mountPage(c.page);
+        expect(document.body.textContent).toContain(c.emptyState);
     });
 
     it('leaves without asking when there are no drafts', async () => {

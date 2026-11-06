@@ -107,7 +107,7 @@
                 />
                 <BaseButton type="submit">Search</BaseButton
                 ><BaseButton variant="outline" @click="clearFilters"
-                    >Clear filters</BaseButton
+                    >Clear Filters</BaseButton
                 >
             </form>
             <p
@@ -163,7 +163,7 @@
             :closable="!reversing"
         >
             <p class="mb-3 text-sm font-bold" data-testid="sale-full-id">
-                Sale #{{ selectedId.slice(-8) }} · {{ selectedId }}
+                Sale #{{ saleNumber(selectedId) }} · {{ selectedId }}
             </p>
             <p v-if="selectedSale?.offline" class="text-sm mb-3 text-amber-900">
                 Offline cash sale · occurred {{ selectedSale.soldAt }}.
@@ -492,6 +492,8 @@ import Badge from '@/components/ui/Badge.vue';
 import Spinner from '@/components/ui/Spinner.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
+import { dateRangeError } from '@/utils/rules';
+import { saleNumber } from '@/components/User/Sales/receipt';
 import { formatStoreDateTime } from '@/utils/datetime';
 import {
     apiErrorCode,
@@ -606,12 +608,8 @@ function applyFilters() {
             'Enter a full sale ID or its final eight hexadecimal characters.';
         return;
     }
-    if (
-        filters.dateFrom &&
-        filters.dateTo &&
-        filters.dateFrom > filters.dateTo
-    ) {
-        searchError.value = 'The end date must not be before the start date.';
+    if (dateRangeError(filters.dateFrom, filters.dateTo)) {
+        searchError.value = dateRangeError(filters.dateFrom, filters.dateTo);
         return;
     }
     appliedFilters.value = Object.fromEntries(
@@ -674,7 +672,7 @@ const {
     (result) => {
         serverItems.value = result.data.data.map((sale) => ({
             id: sale._id,
-            saleNumber: sale._id.slice(-8),
+            saleNumber: saleNumber(sale._id),
             cashier: sale.cashier?.name ?? 'N/A',
             amount: formatCurrency(sale.amount ?? 0),
             totals: {

@@ -144,6 +144,35 @@ afterEach(() => {
     localStorage.clear();
 });
 
+describe('UserLayout sidebar section headings (#143)', () => {
+    beforeEach(() => {
+        media = stubMatchMedia(true);
+    });
+    const headings = () =>
+        [...sidebar().querySelectorAll('nav > div.uppercase')].map((d) =>
+            d.textContent?.trim(),
+        );
+
+    it('shows no heading over a section with no item for the user', async () => {
+        localStorage.setItem(
+            'user',
+            JSON.stringify({
+                userId: 'r1',
+                username: 'stock',
+                roles: [Role.Restocker],
+            }),
+        );
+        await mountAt('/admin/products');
+        expect(headings()).toContain('Inventory Management');
+        expect(headings()).not.toContain('Admin');
+    });
+
+    it('keeps the Admin heading for an admin', async () => {
+        await mountAt('/admin/products');
+        expect(headings()).toContain('Admin');
+    });
+});
+
 describe('UserLayout sidebar at lg and up', () => {
     beforeEach(() => {
         media = stubMatchMedia(true);
