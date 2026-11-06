@@ -140,6 +140,35 @@ Rules:
   replay returns the original receipt. The receipt and drawer figures always come
   from the server response.
 
+**Purchase orders** (#123, owner decisions 2026-11-06)
+
+- RESTOCKER and ADMIN create, edit, send, cancel and receive POs
+  (`/purchase-orders`), no PIN. Lifecycle DRAFT → SENT → PARTIALLY_RECEIVED →
+  RECEIVED / CANCELLED. SENT is a status only (no email/print) and locks lines;
+  only DRAFT is editable (PATCH replaces supplier/note/lines). Drafts are
+  cancelled, never deleted. Cancelling after a partial receipt sets
+  `closedShort`; received stock stays and outstanding reads 0.
+- A PO line is one distinct active product with integer minor-unit
+  `orderedQty`, centavo `expectedCost` per displayed unit and a unit snapshot.
+  Create, edit and send need an active supplier; open (SENT/PARTIAL) POs of an
+  archived supplier stay receivable and cancellable (`assertExists` instead of
+  `assertActive`). A supplier referenced by a PO can't be deleted.
+- No stock moves before receipt. Each receive is exactly one supplier restock
+  (`Restock.purchaseOrder`) through `RestockService.restock` in the same
+  transaction, so #41 lastCost, #42 batches/expiry and #45 ledger apply
+  unchanged. Invoice/DR optional; description defaults to the PO suffix.
+  Receipt cost is prefilled from the expected cost, editable, variance shown,
+  ₱0 confirmed. Over-receipt is refused (cap = outstanding per line).
+- Concurrency: every write filters on `version` + allowed statuses and
+  increments it; a stale or concurrent receive is 409 and rolls back its
+  restock. `idempotencyKey` (private, stored in `receipts[]`, never on the
+  wire) replays a completed receive. The client keeps the key across a lost
+  answer and makes a new one after an HTTP refusal.
+- Low-stock list offers "Create purchase order" beside "Restock listed items"
+  via a consume-once in-memory handoff (`purchaseOrderPrefill`) with reorder
+  quantities; known latest costs fill untouched lines asynchronously.
+- No audit-log entries: #46's allowlist doesn't name POs or restocks.
+
 **Physical stock counts** (#43, owner decision 2026-11-05)
 
 - ADJUSTER/ADMIN create, resume, save and submit server-side counts. ADMIN or

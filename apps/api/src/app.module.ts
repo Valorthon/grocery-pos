@@ -2,6 +2,7 @@ import { SettingsModule } from './settings/settings.module';
 import { AuditModule } from './audit/audit.module';
 import { ReportsModule } from './reports/reports.module';
 import { StockCountModule } from './stock-count/stock-count.module';
+import { PurchaseOrderModule } from './purchase-order/purchase-order.module';
 import { SupplierModule } from './supplier/supplier.module';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypedConfigModule } from './common/typed-config/typed-config.module';
@@ -37,6 +38,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
         AuditModule,
         ReportsModule,
         StockCountModule,
+        PurchaseOrderModule,
         SupplierModule,
         // First, so the correlation id is set before any other middleware.
         RequestIdModule,

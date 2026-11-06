@@ -28,5 +28,6 @@ import { ProductModule } from '../../product/product.module';
     ],
     providers: [RestockService],
     controllers: [RestockController],
+    exports: [RestockService],
 })
 export class RestockModule {}

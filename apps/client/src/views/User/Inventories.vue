@@ -20,6 +20,14 @@
                 >Restock listed items</BaseButton
             >
             <BaseButton
+                v-if="canRestock && applied.lowStock"
+                size="sm"
+                variant="outline"
+                :disabled="loading || !!loadError || sourceRows.length === 0"
+                @click="createPurchaseOrder"
+                >Create purchase order</BaseButton
+            >
+            <BaseButton
                 size="sm"
                 @click="router.push({ name: 'Adjustments/Add' })"
             >
@@ -111,6 +119,7 @@ import { Package, Pencil, Search, X } from '@lucide/vue';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
+import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
@@ -129,6 +138,7 @@ const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
 const prefill = useRestockPrefillStore();
+const poPrefill = usePurchaseOrderPrefillStore();
 const lowStock = ref(route?.query.lowStock === 'true');
 const sourceRows = ref<InventoryRow[]>([]);
 async function createRestock() {
@@ -141,6 +151,17 @@ async function createRestock() {
         return;
     if (prefill.prepare(sourceRows.value))
         await router.push({ name: 'Restocks/Add' });
+}
+async function createPurchaseOrder() {
+    if (
+        !canRestock.value ||
+        !sourceRows.value.length ||
+        loadError.value ||
+        loading.value
+    )
+        return;
+    if (poPrefill.prepare(sourceRows.value))
+        await router.push({ name: 'PurchaseOrders' });
 }
 function toggleLowStock() {
     applySearch();

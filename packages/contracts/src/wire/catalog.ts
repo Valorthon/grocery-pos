@@ -96,6 +96,8 @@ export const INVENTORY_ROW_SHAPE: WireShape<InventoryRow> = {
 export interface RestockRow {
     supplier?: { _id: string; name: string } | null;
     invoiceNumber?: string;
+    /** The purchase order this receipt received against (#123). */
+    purchaseOrder?: string;
     _id: string;
     description: string;
     restockedBy: UserRef | null;
@@ -108,6 +110,7 @@ export interface RestockRow {
 export const RESTOCK_ROW_SHAPE: WireShape<RestockRow> = {
     supplier: 'optional',
     invoiceNumber: 'optional',
+    purchaseOrder: 'optional',
     _id: 'required',
     description: 'required',
     restockedBy: 'required',

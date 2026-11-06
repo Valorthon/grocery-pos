@@ -4,6 +4,7 @@ import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
 import { click, field, flush } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
+import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import type { ApiGet } from '@/testing/api-mock';
 import Inventories from './Inventories.vue';
@@ -96,6 +97,15 @@ describe('reorder list and restock draft', () => {
         expect(api.post).not.toHaveBeenCalled();
         expect(useRestockPrefillStore().take()).toEqual([]);
     });
+    it('hands the listed items to a purchase-order draft once (#123)', async () => {
+        await mount();
+        await click('Create purchase order');
+        expect(nav.push).toHaveBeenCalledWith({ name: 'PurchaseOrders' });
+        const lines = usePurchaseOrderPrefillStore().take();
+        expect(lines.map((line) => line.name)).toEqual(['rice', 'bread']);
+        expect(api.post).not.toHaveBeenCalled();
+        expect(usePurchaseOrderPrefillStore().take()).toEqual([]);
+    });
     it('adjusters can inspect the list but are not offered a restock action', async () => {
         useAuthStore().user = {
             userId: 'a',
@@ -104,6 +114,9 @@ describe('reorder list and restock draft', () => {
         };
         await mount();
         expect(document.body.textContent).not.toContain('Restock listed items');
+        expect(document.body.textContent).not.toContain(
+            'Create purchase order',
+        );
     });
     it('applies a low-stock toggle once on page one and retains server order', async () => {
         route.query = {};

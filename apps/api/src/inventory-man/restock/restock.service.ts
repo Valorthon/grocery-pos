@@ -30,6 +30,10 @@ import { AuthUser } from '../../auth/types';
 import { ProductService } from '../../product/product.service';
 /** One entry of the `GET .../users` filter list: nothing beyond the name. */
 export type UserOption = NameRef;
+export interface RestockOptions {
+    /** Links the receipt to this PO; its supplier need not be active. */
+    purchaseOrder?: Types.ObjectId;
+}
 
 @Injectable()
 export class RestockService {
@@ -52,12 +56,16 @@ export class RestockService {
         user: AuthUser,
         dto: RestockDto,
         session?: ClientSession,
-    ): Promise<void> {
+        options: RestockOptions = {},
+    ): Promise<Types.ObjectId> {
         const { description, restockDetails } = dto;
 
-        await runInTransaction(
+        return runInTransaction(
             async (session) => {
-                await this.suppliers.assertActive(dto.supplier, session);
+                // An open PO of a since-archived supplier stays receivable (#123).
+                if (options.purchaseOrder)
+                    await this.suppliers.assertExists(dto.supplier, session);
+                else await this.suppliers.assertActive(dto.supplier, session);
                 const updatedRestockDetails =
                     await this.inventoryService.restock(user, dto, session);
 
@@ -95,6 +103,9 @@ export class RestockService {
                             supplier: new Types.ObjectId(dto.supplier),
                             ...(dto.invoiceNumber !== undefined && {
                                 invoiceNumber: dto.invoiceNumber,
+                            }),
+                            ...(options.purchaseOrder && {
+                                purchaseOrder: options.purchaseOrder,
                             }),
                             restockedBy: user.userId,
                             totalCost,
@@ -145,6 +156,7 @@ export class RestockService {
                     },
                     session,
                 );
+                return created._id;
             },
             this.connection,
             session,
