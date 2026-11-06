@@ -74,7 +74,7 @@
                     </thead>
                     <tbody>
                         <tr v-for="row in rows" :key="row._id" class="border-t">
-                            <td>{{ row.createdAt }}</td>
+                            <td>{{ formatStoreDateTime(row.createdAt) }}</td>
                             <td>{{ row.status }}</td>
                             <td>{{ row.lines.length }}</td>
                             <td>
@@ -106,7 +106,8 @@
                         >Back to counts</BaseButton
                     ><strong>{{ selected.status }}</strong
                     ><span class="text-sm"
-                        >Reference: {{ selected.createdAt }}</span
+                        >Reference:
+                        {{ formatStoreDateTime(selected.createdAt) }}</span
                     >
                 </div>
                 <p class="text-sm text-slate-600">
@@ -275,6 +276,7 @@
             :model-value="isApprovalOpen"
             :request="approvalRequest"
             :summary="approvalSummary"
+            note="You stay logged in; the approval applies to this count only."
             @approved="completeApproval"
             @cancel="cancelApproval"
             @update:model-value="(open) => !open && cancelApproval()"
@@ -285,6 +287,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import {
+    ErrorCode,
     OverrideAction,
     STOCK_COUNT_LINE_MAX,
     StockCountStatus,
@@ -307,7 +310,9 @@ import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog
 import { useConfirm } from '@/composables/useConfirm';
 import { useManagerApproval } from '@/composables/useManagerApproval';
 import { useCategories } from '@/composables/useCategories';
-import { apiErrorText } from '@/utils/api-error';
+import { apiErrorCode, apiErrorText } from '@/utils/api-error';
+import { formatStoreDateTime } from '@/utils/datetime';
+import { Color, useUIStore } from '@/stores/ui';
 import { useAuthStore } from '@/stores/auth';
 import { watch } from 'vue';
 const router = useRouter();
@@ -318,6 +323,7 @@ const {
     refresh: refreshCategories,
 } = useCategories();
 const { request, answer, confirm } = useConfirm();
+const uiStore = useUIStore();
 const {
     isApprovalOpen,
     approvalRequest,
@@ -368,8 +374,14 @@ function accept(count: StockCountView) {
     dirty.value = false;
     validation.value = '';
 }
+/**
+ * Runs one request. A failed load is an inline error with Reload; a failed
+ * user action is an error toast, except a version conflict, which also
+ * offers Reload because the count changed on the server.
+ */
 async function run(
     action: (turn: number, owner: string | undefined) => Promise<void>,
+    kind: 'load' | 'action' = 'action',
 ) {
     if (busy.value) return;
     const turn = ++generation,
@@ -380,11 +392,11 @@ async function run(
     try {
         await action(turn, owner);
     } catch (cause) {
-        if (live(turn, owner))
-            error.value = apiErrorText(
-                cause,
-                'Stock count could not be updated.',
-            );
+        if (!live(turn, owner)) return;
+        const text = apiErrorText(cause, 'Stock count could not be updated.');
+        if (kind === 'action') uiStore.queueMessage(Color.ERROR, text);
+        if (kind === 'load' || apiErrorCode(cause) === ErrorCode.CONFLICT)
+            error.value = text;
     } finally {
         if (live(turn, owner)) busy.value = false;
     }
@@ -399,13 +411,13 @@ async function refresh() {
             rows.value = data.data;
             total.value = data.totalItems;
         }
-    });
+    }, 'load');
 }
 async function load(id: string) {
     await run(async (turn, owner) => {
         const { data } = await api.get<StockCountView>(`/stock-counts/${id}`);
         if (live(turn, owner)) accept(data);
-    });
+    }, 'load');
 }
 async function retry() {
     if (busy.value) return;
@@ -497,16 +509,29 @@ async function persist(
 }
 async function save() {
     await run(async (turn, owner) => {
-        await persist(turn, owner);
+        if (await persist(turn, owner))
+            uiStore.queueMessage(Color.SUCCESS, 'Count progress saved.');
     });
 }
+function uncountedLines(): StockCountLineView[] {
+    return (selected.value?.lines ?? []).filter(
+        (line) => !(entries.value[line._id] ?? '').trim(),
+    );
+}
 async function submit() {
+    if (!selected.value) return;
+    const blank = uncountedLines();
+    if (blank.length) {
+        const names = blank.slice(0, 3).map((line) => line.name);
+        validation.value = `Count every line before submitting (enter 0 for none). Uncounted: ${names.join(', ')}${blank.length > 3 ? ` and ${blank.length - 3} more` : ''}.`;
+        document.getElementById(`count-${blank[0]._id}`)?.focus();
+        return;
+    }
     if (
-        !selected.value ||
         !(await confirm({
             title: 'Submit stock count?',
             message:
-                'All lines must be counted. Submission freezes these quantities for manager approval.',
+                'Every line is counted. Submission freezes these quantities for manager approval.',
             confirmLabel: 'Submit count',
         }))
     )
