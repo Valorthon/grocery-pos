@@ -17,11 +17,6 @@ export default defineConfig(({ mode }) => {
         throw new Error('Invalid .env variables. Check console for info.');
     }
 
-    // Once per build or dev-server start (#86: the VITE_NODE_ENV fallback).
-    if (result.warning) {
-        console.warn(`[env] ${result.warning}`);
-    }
-
     return {
         plugins: [
             vue(),

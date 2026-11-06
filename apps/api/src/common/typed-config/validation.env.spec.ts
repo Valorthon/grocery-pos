@@ -350,103 +350,60 @@ describe('envSchema.APP_ENV', () => {
 });
 
 describe('validateEnv', () => {
-    const withoutAppEnv = (env: Record<string, unknown>) =>
-        Object.fromEntries(
-            Object.entries(env).filter(([key]) => key !== 'APP_ENV'),
-        );
-    const NO_APP_ENV = withoutAppEnv(PROD_ENV);
+    const NO_APP_ENV = Object.fromEntries(
+        Object.entries(PROD_ENV).filter(([key]) => key !== 'APP_ENV'),
+    );
 
-    function run(env: Record<string, unknown>) {
-        const warnings: string[] = [];
-        const parsed = validateEnv(env, (m) => warnings.push(m));
-        return { parsed, warnings };
-    }
-
-    it('uses APP_ENV beside the image NODE_ENV=production, silently', () => {
-        const { parsed, warnings } = run({
-            ...PROD_ENV,
-            NODE_ENV: 'production',
-        });
-        expect(parsed.APP_ENV).toBe('prod');
-        expect(warnings).toEqual([]);
+    it('uses APP_ENV beside the image NODE_ENV=production', () => {
+        expect(
+            validateEnv({ ...PROD_ENV, NODE_ENV: 'production' }).APP_ENV,
+        ).toBe('prod');
     });
 
     it('allows a local APP_ENV=dev run of the image (NODE_ENV=production)', () => {
-        const { parsed, warnings } = run({
-            ...BASE_ENV,
-            APP_ENV: 'dev',
-            NODE_ENV: 'production',
-        });
-        expect(parsed.APP_ENV).toBe('dev');
-        expect(warnings).toEqual([]);
+        expect(
+            validateEnv({ ...BASE_ENV, APP_ENV: 'dev', NODE_ENV: 'production' })
+                .APP_ENV,
+        ).toBe('dev');
     });
 
-    it.each(['prod', 'stage', 'dev', 'test'])(
-        'takes an unset APP_ENV from the legacy NODE_ENV=%s, with a deprecation warning',
-        (legacy) => {
-            const env = withoutAppEnv(
-                legacy === 'dev' || legacy === 'test' ? BASE_ENV : PROD_ENV,
+    it('trims APP_ENV', () => {
+        expect(validateEnv({ ...PROD_ENV, APP_ENV: ' stage ' }).APP_ENV).toBe(
+            'stage',
+        );
+    });
+
+    // #86: the one-release NODE_ENV fallback is gone.
+    it.each(['prod', 'stage', 'dev', 'test', 'production', undefined])(
+        'fails startup when APP_ENV is unset, even with NODE_ENV=%p',
+        (NODE_ENV) => {
+            expect(() => validateEnv({ ...NO_APP_ENV, NODE_ENV })).toThrow(
+                'APP_ENV must be one of',
             );
-            const { parsed, warnings } = run({ ...env, NODE_ENV: legacy });
-            expect(parsed.APP_ENV).toBe(legacy);
-            expect(warnings).toHaveLength(1);
-            expect(warnings[0]).toContain('deprecated');
-            expect(warnings[0]).toContain(`APP_ENV='${legacy}'`);
+            expect(() =>
+                validateEnv({ ...NO_APP_ENV, APP_ENV: '  ', NODE_ENV }),
+            ).toThrow('APP_ENV must be one of');
         },
     );
 
-    it('treats a blank APP_ENV as unset', () => {
-        const { parsed, warnings } = run({
-            ...PROD_ENV,
-            APP_ENV: '  ',
-            NODE_ENV: 'stage',
-        });
-        expect(parsed.APP_ENV).toBe('stage');
-        expect(warnings).toHaveLength(1);
-    });
-
-    it('keeps the prod rules when the stage comes from the legacy NODE_ENV', () => {
-        expect(() =>
-            run({ ...NO_APP_ENV, NODE_ENV: 'prod', DOMAIN: '' }),
-        ).toThrow('DOMAIN');
-    });
-
     it.each([
         ['prod', 'dev'],
-        ['prod', 'stage'],
         ['stage', 'prod'],
         ['dev', 'prod'],
-        ['prod', 'test'],
-    ])('fails fast when APP_ENV=%s and NODE_ENV=%s disagree', (app, node) => {
-        const warn = jest.fn();
+    ])('ignores a stale NODE_ENV: APP_ENV=%s with NODE_ENV=%s', (app, node) => {
+        const env = app === 'dev' ? BASE_ENV : PROD_ENV;
+        expect(
+            validateEnv({ ...env, APP_ENV: app, NODE_ENV: node }).APP_ENV,
+        ).toBe(app);
+    });
+
+    it('rejects an unknown APP_ENV', () => {
         expect(() =>
-            validateEnv({ ...PROD_ENV, APP_ENV: app, NODE_ENV: node }, warn),
-        ).toThrow(`APP_ENV='${app}' and NODE_ENV='${node}' disagree`);
-        expect(warn).not.toHaveBeenCalled();
-    });
-
-    it('warns when a legacy NODE_ENV agrees with APP_ENV', () => {
-        const { parsed, warnings } = run({ ...PROD_ENV, NODE_ENV: 'prod' });
-        expect(parsed.APP_ENV).toBe('prod');
-        expect(warnings).toHaveLength(1);
-        expect(warnings[0]).toContain("NODE_ENV='prod' is deprecated");
-    });
-
-    it("stays silent for NODE_ENV=test with APP_ENV=test (jest's own value)", () => {
-        const { warnings } = run({ ...BASE_ENV, NODE_ENV: 'test' });
-        expect(warnings).toEqual([]);
-    });
-
-    it('fails when neither names a stage', () => {
-        expect(() => run({ ...NO_APP_ENV, NODE_ENV: 'production' })).toThrow(
-            'APP_ENV must be one of',
-        );
-        expect(() => run(NO_APP_ENV)).toThrow('APP_ENV must be one of');
-    });
-
-    it('rejects an unknown APP_ENV even beside a legacy NODE_ENV', () => {
-        expect(() =>
-            run({ ...PROD_ENV, APP_ENV: 'production', NODE_ENV: 'production' }),
+            validateEnv({
+                ...PROD_ENV,
+                APP_ENV: 'production',
+                NODE_ENV: 'production',
+            }),
         ).toThrow('APP_ENV must be one of');
     });
 });

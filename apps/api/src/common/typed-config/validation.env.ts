@@ -207,19 +207,14 @@ export const OPTIONAL_ENV_KEYS: ReadonlySet<keyof EnvTypes> = optionalKeys(
 );
 
 /**
- * What ConfigModule validates: resolves APP_ENV (with the NODE_ENV
- * transition in app-env.ts), then parses. Throws on any problem; `warn`
- * receives deprecation notices.
+ * What ConfigModule validates: trims APP_ENV (NODE_ENV is never the stage),
+ * then parses. Throws on any problem.
  */
-export function validateEnv(
-    config: Record<string, unknown>,
-    warn: (message: string) => void,
-): EnvTypes {
-    const { appEnv, warning, error } = resolveAppEnv(config);
-    if (error) throw new Error(`Invalid env variable: ${error}`);
-    if (warning) warn(warning);
-
-    const parsed = envSchema.safeParse({ ...config, APP_ENV: appEnv });
+export function validateEnv(config: Record<string, unknown>): EnvTypes {
+    const parsed = envSchema.safeParse({
+        ...config,
+        APP_ENV: resolveAppEnv(config),
+    });
     if (!parsed.success) {
         throw new Error(
             'Invalid env variable: ' +

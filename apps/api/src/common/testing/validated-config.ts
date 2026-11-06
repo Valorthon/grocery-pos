@@ -33,5 +33,5 @@ export const DEV_ENV_WITHOUT_DOMAIN: Readonly<Record<string, string>> = {
 export function validatedConfig(
     env: Record<string, unknown>,
 ): TypedConfigService {
-    return new TypedConfigService(validateEnv(env, () => undefined));
+    return new TypedConfigService(validateEnv(env));
 }

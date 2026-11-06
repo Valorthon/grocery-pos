@@ -99,9 +99,7 @@ async function dropIfExists(model: { collection: mongoose.Collection }) {
 }
 
 async function seedAll() {
-    const { appEnv, warning, error } = resolveAppEnv(process.env);
-    if (error) throw new Error(error);
-    if (warning) console.warn(warning);
+    const appEnv = resolveAppEnv(process.env);
     assertSeedAllowed(appEnv, process.argv.slice(2));
 
     const databaseUrl =

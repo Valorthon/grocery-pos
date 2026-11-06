@@ -737,12 +737,10 @@ requestId}`. A 5xx never carries details or internals.
 - `APP_ENV` (dev|test|stage|prod) is the API's stage; prod and stage are
   "deployed" (`isDeployedEnv` in `typed-config/app-env.ts`): strict secrets,
   `DOMAIN` required, trust proxy, and `Secure` cookies on stage too. The API
-  image sets `NODE_ENV=production`; no app rule keys off `NODE_ENV`. For
-  one release an unset `APP_ENV` is taken from a legacy `NODE_ENV`
-  (dev|test|stage|prod) with a warning; a legacy `NODE_ENV` that disagrees
-  with `APP_ENV` fails startup. The client's stage is `VITE_APP_ENV`
-  (#86); for one release an unset one is taken from the old
-  `VITE_NODE_ENV` with a warning, and the two disagreeing fail the build.
+  image sets `NODE_ENV=production`; no app rule keys off `NODE_ENV`, and
+  it is never read as the stage: an unset or invalid `APP_ENV` fails
+  startup. The client's stage is `VITE_APP_ENV` (#86); the old
+  `VITE_NODE_ENV` is not read (the one-release fallbacks were removed).
 - nginx sends a strict CSP (`script-src 'self'`, `style-src 'self'` with no
   `'unsafe-inline'`, `img-src 'self' data:`, `connect-src 'self'` + the API
   origin, `frame-ancestors 'none'`, …), nosniff, `X-Frame-Options`,

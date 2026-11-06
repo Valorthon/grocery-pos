@@ -69,63 +69,26 @@ function text(value: unknown): string | undefined {
 }
 
 /**
- * VITE_APP_ENV is the client's stage (#86), renamed from VITE_NODE_ENV to
- * match the API's APP_ENV. For one release the old name is still read:
- *
- * - Only VITE_NODE_ENV set: taken as VITE_APP_ENV, with a deprecation warning.
- * - Both set and equal: VITE_APP_ENV is used, with a warning to drop the old.
- * - Both set and different: an error. One of them is stale, and guessing
- *   could build prod with dev rules.
- * - Only VITE_APP_ENV, or neither: no warning (the schema requires
- *   VITE_APP_ENV).
- *
- * Both values are trimmed before they are compared, and the trimmed stage is
- * what the schema sees, whichever name it came from. An empty string counts
- * as unset (Docker passes unset build args as '').
+ * VITE_APP_ENV is the client's stage (#86), trimmed before the schema sees
+ * it; an empty string counts as unset (Docker passes unset build args as '').
+ * The old name VITE_NODE_ENV is no longer read: on its own it fails the
+ * schema like any missing VITE_APP_ENV.
  */
-export function resolveAppEnv(
-    raw: RawEnv,
-): { input: RawEnv; warning?: string } | { error: string } {
-    const appEnv = text(raw.VITE_APP_ENV);
-    const legacy = text(raw.VITE_NODE_ENV);
-
-    if (legacy === undefined) {
-        return { input: { ...raw, VITE_APP_ENV: appEnv } };
-    }
-
-    if (appEnv !== undefined) {
-        if (appEnv !== legacy) {
-            return {
-                error: `VITE_APP_ENV='${appEnv}' and VITE_NODE_ENV='${legacy}' disagree. VITE_APP_ENV is the client's stage; remove the deprecated VITE_NODE_ENV. A likely source is a local apps/client/.env that still sets VITE_NODE_ENV: rename it to VITE_APP_ENV there.`,
-            };
-        }
-        return {
-            input: { ...raw, VITE_APP_ENV: appEnv },
-            warning: `VITE_NODE_ENV is deprecated and ignored beside VITE_APP_ENV='${appEnv}': remove it.`,
-        };
-    }
-
-    return {
-        input: { ...raw, VITE_APP_ENV: legacy },
-        warning: `VITE_APP_ENV is unset, so it was taken from VITE_NODE_ENV='${legacy}'. This fallback is deprecated and will be removed: set VITE_APP_ENV='${legacy}' instead.`,
-    };
+export function resolveAppEnv(raw: RawEnv): RawEnv {
+    return { ...raw, VITE_APP_ENV: text(raw.VITE_APP_ENV) };
 }
 
 export type ClientEnvResult =
-    | { success: true; data: ClientEnv; warning?: string }
-    | { success: false; error: string };
+    { success: true; data: ClientEnv } | { success: false; error: string };
 
 /** Resolves the stage (see resolveAppEnv), then validates with envSchema. */
 export function parseClientEnv(raw: RawEnv): ClientEnvResult {
-    const resolved = resolveAppEnv(raw);
-    if ('error' in resolved) return { success: false, error: resolved.error };
-
-    const result = envSchema.safeParse(resolved.input);
+    const result = envSchema.safeParse(resolveAppEnv(raw));
     if (!result.success) {
         return {
             success: false,
             error: JSON.stringify(zod.treeifyError(result.error), null, 2),
         };
     }
-    return { success: true, data: result.data, warning: resolved.warning };
+    return { success: true, data: result.data };
 }
