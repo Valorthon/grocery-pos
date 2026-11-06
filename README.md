@@ -514,12 +514,13 @@ each other.
   the Actions tab) and fails on any high advisory.
 - When a Docker-related file changes (either Dockerfile, `.dockerignore`,
   `apps/client/nginx.conf.template`, `apps/client/docker-entrypoint.sh`,
-  either `railway.json`, any `package.json`, `pnpm-workspace.yaml` or
+  any `package.json`, `pnpm-workspace.yaml` or
   `pnpm-lock.yaml`), a separate job builds both
   images, without pushing them, and smoke-tests the client image (non-root,
   security headers, `/health`).
 
-Railway rebuilds a service only when its `build.watchPatterns` match: the
+Railway rebuilds a service only when its watch patterns
+(`.railway/railway.ts`) match: the
 app's own folder, `packages/contracts`, the lockfile, the root
 `package.json`, `pnpm-workspace.yaml` and `.dockerignore`.
 

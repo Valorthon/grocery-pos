@@ -98,7 +98,7 @@ EXPOSE 8080
 USER nginx
 
 # Local and docker compose use only: Railway ignores HEALTHCHECK and probes
-# railway.json's healthcheckPath (/health) instead.
+# the service's healthcheck (/health, .railway/railway.ts) instead.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -q -O /dev/null "http://127.0.0.1:${PORT}/health" || exit 1
 

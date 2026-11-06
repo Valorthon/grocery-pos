@@ -1,9 +1,26 @@
 # Deploying Grocery POS
 
-Production and staging run on [Railway](https://railway.com) as two services
-built from this repo's Dockerfiles: the API (`apps/api`) and the client
-(`apps/client`, static files served by nginx). MongoDB is a separate replica
-set (Atlas or similar; transactions need a replica set).
+Production and staging run on [Railway](https://railway.com) (project
+`grocery-pos`, environments `staging` and `production`) as three services:
+the API (`apps/api`) and the client (`apps/client`, static files served by
+nginx), built from this repo's Dockerfiles, and `mongo`, a MongoDB replica set
+on a Railway volume (transactions need a replica set; see
+[MongoDB](#mongodb)). An external replica set such as Atlas works too: point
+`DATABASE_URL` at it and drop the `mongo` service.
+
+| Environment  | Branch       | Client                        | API                               |
+| ------------ | ------------ | ----------------------------- | --------------------------------- |
+| `staging`    | `staging`    | `staging.pos.valorthon.store` | `api.staging.pos.valorthon.store` |
+| `production` | `production` | `app.pos.valorthon.store`     | `api.app.pos.valorthon.store`     |
+
+Each environment's cookie parent (`DOMAIN`) is its client host:
+`staging.pos.valorthon.store` and `app.pos.valorthon.store`. They are
+siblings, so neither environment's cookies are ever sent to the other's
+hosts. Never use `pos.valorthon.store` itself as a `DOMAIN`: it is the parent
+of staging, so production's `jwt` and `refresh` cookies would reach the
+staging API, and a browser logged into both would send two cookies of each
+name. Promote by moving
+`develop` to `staging`, then `staging` to `production`.
 
 ## Prerequisite: a custom domain with a shared parent
 
@@ -27,18 +44,43 @@ validation requires `DOMAIN`, so on Railway's domains login cannot work.
 
 Set it up per environment:
 
-1. Add the custom domains in each Railway service (Settings, Networking) and
-   create the DNS records Railway shows.
+1. List the domains in `.railway/railway.ts` and apply it (see
+   [Service settings](#service-settings-railwayrailwayts)), or add them in each
+   service (Settings, Networking). Create the DNS records Railway shows: a
+   CNAME per host plus a `_railway-verify.<host>` TXT record. The DNS for
+   `valorthon.store` is at Namecheap (Advanced DNS; the Host field takes the
+   name without `.valorthon.store`). Railway issues the certificates once both
+   records resolve, usually within minutes.
 2. Use them in the variables below: `FRONTEND_URL`, `DOMAIN`, `VITE_API_URL`,
    `VITE_DOMAIN`.
 
-## Services and variables
+## Service settings (`.railway/railway.ts`)
 
-Each service's `railway.json` (`apps/api/railway.json`,
-`apps/client/railway.json`) selects its Dockerfile, the paths that trigger a
-rebuild (`build.watchPatterns`) and the healthcheck. Point each Railway
-service at its file (Settings, Config-as-code) and keep the service's root
-directory at the repo root, because both images need `packages/contracts`.
+`.railway/railway.ts` declares the three services for one environment: each
+one's source (the environment's branch, or the `mongo:7.0` image), Dockerfile,
+the paths that trigger a rebuild (watch patterns), healthcheck, custom domains
+and the Mongo volume. It replaced the per-app `railway.json` files (#92):
+Railway deprecated config-as-code, refuses it for new services, and stops
+reading those files on 2026-12-01. Every service builds from the repo root,
+because both images need `packages/contracts`.
+
+Railway does not read the file during a deploy; apply a change by hand from
+the repo root, after `railway link` to the project:
+
+```bash
+railway config plan --environment staging    # preview; "already up to date" when nothing changed
+railway config apply --environment staging
+```
+
+Run it as a plain command: the `railway` SDK (a root dev dependency) checks the
+CLI version through the shell's `$_`, so wrapping it in `timeout` or similar
+fails with "requires Railway CLI 5.42.1 or newer". The SDK is pinned exactly
+(`railway` 3.16.0) because it checks for a minimum CLI version; upgrade the
+two together. Variables are unmanaged:
+the file never reads or writes them, so secrets stay in Railway. Set them per
+service as below.
+
+## Services and variables
 
 ### API service
 
@@ -57,7 +99,7 @@ each.
 | `JWT_SECRET`, `COOKIE_SECRET`                       | Two different values from `openssl rand -base64 48`. Placeholders and equal values are refused.                 |
 | `JWT_EXPIRY_S`, `REFRESH_EXPIRY_S`                  | Seconds, e.g. `900` and `604800`. The refresh expiry must be longer.                                            |
 | `EAN_COUNTER_ID`, `EAN_COUNTER_DIGITS`              | As in `.env.example` (`EAN_COUNTER_DIGITS` must be `9`).                                                        |
-| `HEALTH_HEAP_THRESHOLD`, `HEALTH_RSS_THRESHOLD`     | Bytes. `/v1/health/live` fails above them.                                                                      |
+| `HEALTH_HEAP_THRESHOLD`, `HEALTH_RSS_THRESHOLD`     | Bytes. `/v1/health/live` fails above them. See [Memory thresholds](#memory-thresholds).                         |
 | `HEALTH_DISK_THRESHOLD_PERCENT`, `HEALTH_DISK_PATH` | e.g. `0.9` and `/`.                                                                                             |
 | `STORE_TIMEZONE`                                    | Optional, default `Asia/Manila`.                                                                                |
 
@@ -199,8 +241,8 @@ at build time, so a change takes a rebuild.
 
 ## Healthchecks
 
-Railway ignores the Dockerfile `HEALTHCHECK` and probes
-`deploy.healthcheckPath` from `railway.json`:
+Railway ignores the Dockerfile `HEALTHCHECK` and probes the service's
+`healthcheck` from `.railway/railway.ts` (300 s timeout):
 
 - API: `/v1/health/live` (heap, RSS and disk under the `HEALTH_*`
   thresholds). `/v1/health/ready` pings MongoDB.
@@ -209,6 +251,16 @@ Railway ignores the Dockerfile `HEALTHCHECK` and probes
 
 Both images also have a `HEALTHCHECK` on the same paths for `docker run` and
 docker compose.
+
+### Memory thresholds
+
+`.env.example`'s 150 MB (`157286400`) suits local development, not a deployed
+API: a live check that fails makes Railway restart the service. Staging
+measured about 70 MB idle and a 205 MB container peak (while seeding) on
+2026-11-06, so it runs with `HEALTH_HEAP_THRESHOLD=314572800` (300 MB) and
+`HEALTH_RSS_THRESHOLD=419430400` (400 MB). Use the same in production, then
+check `railway metrics --service api --memory --since 7d` after a week of real
+traffic and keep both thresholds well above the observed peak.
 
 ## Images
 
@@ -251,6 +303,47 @@ commit against the target `DATABASE_URL`. See the README's
 
 - dropping the old `shift_1` sales index (#16);
 - `pnpm migrate:decode-entities` (#15), with the API stopped.
+
+## MongoDB
+
+The `mongo` service runs `mongo:7.0` on the volume `mongo-volume` (5 GB,
+`/data/db`), as the single-node replica set `rs0` with authentication. Its
+start command (in `.railway/railway.ts`) creates a replica-set keyfile on the
+volume once. It is reachable only on Railway's private network, as
+`mongo.railway.internal:27017`; there is no public TCP proxy.
+
+Variables: `MONGO_INITDB_ROOT_USERNAME` (`root`) and a random
+`MONGO_INITDB_ROOT_PASSWORD`, read only when the volume is empty. The API's
+`DATABASE_URL` is then:
+
+```text
+mongodb://root:<password>@mongo.railway.internal:27017/grocery_pos?replicaSet=rs0&authSource=admin
+```
+
+On a new environment, initiate the replica set once after the first deploy:
+
+```bash
+railway ssh --service mongo -e <env> -- bash -c 'mongosh -u root -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongo.railway.internal:27017\"}]})"'
+```
+
+The member host must be the private name, so a client outside Railway can
+only connect with `directConnection=true` (through a TCP proxy, which is
+normally off).
+
+**Backups:** Railway's volume backups (manual and scheduled) need a Pro
+workspace; the project is not on Pro, so the volume currently has none. Set up
+backups before production holds real data.
+
+### Seeding a deployed environment
+
+`pnpm seed` drops every collection, and the API image has no `ts-node`. For
+staging, transpile `apps/api/seed.ts` to CommonJS (drop the `dotenv/config`
+import and point `./src/` imports at `/app/apps/api/dist/`) and run it inside
+the API container over `railway ssh`, with
+`NODE_PATH=/app/apps/api/node_modules` and `--force-destroy-data`. Then
+replace the seeded accounts' shared `password123` (an ADMIN's
+`PATCH /v1/users`, and `PATCH /v1/users/me/password` for the admin itself),
+because the deployed hosts are public. Never seed production.
 
 ## docker compose
 
