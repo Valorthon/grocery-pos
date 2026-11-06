@@ -795,8 +795,10 @@ requestId}`. A 5xx never carries details or internals.
 
 Phases 1–7 of #31 are complete. Phase 7 (#28, #30, #27, #29) laid
 foundations: CI that gates, coverage and a real-DB suite, wire contracts, and
-deploy hardening. Next is the feature roadmap in #31 (#34–#48), in an order
-the product owner picks.
+deploy hardening. The feature roadmap in #31 (#34–#47, plus purchase orders
+#123) is merged. Open: #48 (BIR compliance, deferred), #92 (first-deploy
+Railway checks, owner) and #93 (two dev-tool-only Dependabot alerts waiting
+on upstream fixes).
 
 **Product editing and archival** (#38)
 
