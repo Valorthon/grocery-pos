@@ -183,7 +183,12 @@ Rules:
   (`productActive: false` on the line) shows a warning in the list and the
   editor (`draftSendBlockers`); sending still refuses it. ₱0 expected cost
   on a draft needs no confirmation (only at receipt).
-- No audit-log entries for POs (owner-confirmed; follow-up recorded on #123).
+- Every PO action (create, edit draft, send, cancel, receive) writes an
+  allowlisted `PURCHASE_ORDER.*` audit entry in the change's transaction
+  (#123 round 3): reference, supplier, status, version, `lineCount`, `lines`
+  as `product:orderedQty:expectedCost` (receive: `product:quantity:unitCost`
+  plus `restock` and `invoiceNumber`), `closedShort` on cancel. Never the
+  note, idempotency key or request hash. A receive replay adds no entry.
 
 **Physical stock counts** (#43, owner decision 2026-11-05)
 
@@ -454,7 +459,8 @@ requestId}`. A 5xx never carries details or internals.
   work requires an owner decision; this feature adds no archive/export/delete action.
 - Explicit service calls record user creation/name/roles/activation/password/PIN
   changes, product price changes, discounts, voids/refunds, shift open/close/force-close,
-  cash in/drop, and handled successful/failed credential logins. Replays do not
+  cash in/drop, purchase-order create/edit/send/cancel/receive (#123), and
+  handled successful/failed credential logins. Replays do not
   duplicate completed-sale events. Existing history is not backfilled or invented.
 - Where state is transactional, the audit entry shares that transaction; opening
   shifts, drawer movements and own-password writes also use a transaction so an

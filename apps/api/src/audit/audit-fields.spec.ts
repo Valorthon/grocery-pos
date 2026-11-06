@@ -42,7 +42,7 @@ describe('business audit field allowlist', () => {
         ).toEqual({});
         expect(
             auditFields(AuditAction.USER_UPDATED, {
-                roles: Array(101).fill('SELLER'),
+                roles: Array(201).fill('SELLER'),
             }),
         ).toEqual({});
         expect(
@@ -68,5 +68,39 @@ describe('business audit field allowlist', () => {
         expect(
             auditFields(AuditAction.PRODUCT_PRICE_CHANGED, { price: 0 }),
         ).toEqual({ price: 0 });
+    });
+    it('keeps only allowlisted purchase-order facts, never keys, hashes or documents', () => {
+        const lines = Array.from({ length: 200 }, (_, i) => `p${i}:1:0`);
+        expect(
+            auditFields(AuditAction.PURCHASE_ORDER_RECEIVED, {
+                reference: 'PO-ABCDEF12',
+                status: 'RECEIVED',
+                restock: 'r1',
+                lines,
+                idempotencyKey: 'key',
+                requestHash: 'hash',
+                receipts: [{ key: 'key' }],
+                note: 'free text',
+            }),
+        ).toEqual({
+            reference: 'PO-ABCDEF12',
+            status: 'RECEIVED',
+            restock: 'r1',
+            lines,
+        });
+        expect(
+            auditFields(AuditAction.PURCHASE_ORDER_CANCELLED, {
+                closedShort: false,
+                lines: ['x'],
+                supplier: 's',
+            }),
+        ).toEqual({ closedShort: false });
+        expect(
+            auditFields(AuditAction.PURCHASE_ORDER_CREATED, {
+                lines: [...lines, 'one-too-many'],
+                note: 'n',
+                lineCount: 201,
+            }),
+        ).toEqual({ lineCount: 201 });
     });
 });
