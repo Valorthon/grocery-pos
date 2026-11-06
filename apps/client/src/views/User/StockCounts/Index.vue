@@ -509,9 +509,17 @@ async function persist(
 }
 async function save() {
     await run(async (turn, owner) => {
-        if (await persist(turn, owner))
+        const before = selected.value?.version;
+        if ((await persist(turn, owner)) && selected.value?.version !== before)
             uiStore.queueMessage(Color.SUCCESS, 'Count progress saved.');
     });
+}
+function lineLabel(line: StockCountLineView): string {
+    if (!line.tracksExpiry) return line.name;
+    if (line.batchNo) return `${line.name} (batch ${line.batchNo})`;
+    return line.expiryDate
+        ? `${line.name} (expires ${line.expiryDate})`
+        : `${line.name} (no expiry)`;
 }
 function uncountedLines(): StockCountLineView[] {
     return (selected.value?.lines ?? []).filter(
@@ -522,7 +530,7 @@ async function submit() {
     if (!selected.value) return;
     const blank = uncountedLines();
     if (blank.length) {
-        const names = blank.slice(0, 3).map((line) => line.name);
+        const names = blank.slice(0, 3).map(lineLabel);
         validation.value = `Count every line before submitting (enter 0 for none). Uncounted: ${names.join(', ')}${blank.length > 3 ? ` and ${blank.length - 3} more` : ''}.`;
         document.getElementById(`count-${blank[0]._id}`)?.focus();
         return;

@@ -488,4 +488,30 @@ describe('physical stock count workflow', () => {
         );
         expect(document.body.textContent).not.toContain('cashier');
     });
+    it('names each uncounted batch of a tracked product by batch or expiry', async () => {
+        const base = count.lines[0];
+        count.lines = [
+            { ...base, tracksExpiry: true, batch: 'b1', batchNo: 'L7' },
+            {
+                ...base,
+                _id: '507f1f77bcf86cd799439014',
+                tracksExpiry: true,
+                batch: 'b2',
+                expiryDate: '2026-12-01',
+            },
+        ];
+        await mount();
+        await exact('Open count');
+        await exact('Submit for approval');
+        expect(document.body.textContent).toContain(
+            'Uncounted: Rice (batch L7), Rice (expires 2026-12-01).',
+        );
+    });
+    it('does not claim a save when nothing changed', async () => {
+        await mount();
+        await exact('Open count');
+        await exact('Save progress');
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(useUIStore().toasts).toEqual([]);
+    });
 });
