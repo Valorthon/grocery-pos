@@ -173,7 +173,17 @@ Rules:
 - Low-stock list offers "Create purchase order" beside "Restock listed items"
   via a consume-once in-memory handoff (`purchaseOrderPrefill`) with reorder
   quantities; known latest costs fill untouched lines asynchronously.
-- No audit-log entries: #46's allowlist doesn't name POs or restocks.
+- References are `purchaseOrderReference` (`PO-` + last 8 of the id, upper
+  case), shown on the PO page and in the default receipt description.
+  Restock History shows the linked PO (a link to it when the viewer may open
+  Purchase Orders) and filters by `purchaseOrder` (GetAll DTO /
+  `RestockListQuery`, deep link `?purchaseOrder=` from "View receipts",
+  cleared by Clear Filters). `/purchase-orders?id=` opens one order.
+- A draft whose supplier is archived or that has archived products
+  (`productActive: false` on the line) shows a warning in the list and the
+  editor (`draftSendBlockers`); sending still refuses it. ₱0 expected cost
+  on a draft needs no confirmation (only at receipt).
+- No audit-log entries for POs (owner-confirmed; follow-up recorded on #123).
 
 **Physical stock counts** (#43, owner decision 2026-11-05)
 

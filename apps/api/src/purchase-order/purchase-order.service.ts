@@ -7,6 +7,7 @@ import {
     OPEN_PURCHASE_ORDER_STATUSES,
     PurchaseOrderStatus,
     maxQuantityForAmount,
+    purchaseOrderReference,
     quantityAmount,
     unitOf,
     type UnitOfMeasure,
@@ -368,7 +369,7 @@ export class PurchaseOrderService {
                 ...(dto.invoiceNumber && { invoiceNumber: dto.invoiceNumber }),
                 description:
                     dto.description ||
-                    `Purchase order ${String(row._id).slice(-8)}`,
+                    `Purchase order ${purchaseOrderReference(String(row._id))}`,
                 restockDetails,
             } as RestockDto;
             const restock = await this.restocks.restock(
@@ -467,7 +468,7 @@ export class PurchaseOrderService {
         const [products, suppliers, users] = await Promise.all([
             this.products
                 .find({ _id: { $in: productIds } })
-                .select('name EAN tracksExpiry')
+                .select('name EAN tracksExpiry isActive')
                 .lean<ProductInfo[]>(),
             this.supplierRows
                 .find({ _id: { $in: rows.map((r) => r.supplier) } })
@@ -516,6 +517,7 @@ export class PurchaseOrderService {
                         EAN: p?.EAN ?? '',
                         unit: line.unit,
                         tracksExpiry: p?.tracksExpiry ?? false,
+                        productActive: !!p && p.isActive !== false,
                         orderedQty: line.orderedQty,
                         receivedQty: line.receivedQty,
                         outstandingQty:

@@ -288,3 +288,27 @@ it('ends concurrent retries of one key as one restock, both answered', async () 
         new Set([results[0].body.receipts.join()]),
     );
 });
+
+it('flags archived products on a draft and still refuses to send it', async () => {
+    const product = await seedProduct(db, 1000, 0);
+    const created = await call('POST', '/purchase-orders', {
+        supplier: await seedSupplier(db),
+        lines: [{ product, orderedQty: 1, expectedCost: 1 }],
+    });
+    await db
+        .model('Product')
+        .collection.updateOne(
+            { _id: new Types.ObjectId(product) },
+            { $set: { isActive: false } },
+        );
+    const draft = await call('GET', `/purchase-orders/${created.body._id}`);
+    expect(draft.body.lines[0].productActive).toBe(false);
+    const send = await call(
+        'POST',
+        `/purchase-orders/${created.body._id}/send`,
+        {
+            version: draft.body.version,
+        },
+    );
+    expect(send.status).toBe(404);
+});

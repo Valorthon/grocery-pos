@@ -748,6 +748,12 @@ describe('products, stock and history', () => {
             RESTOCK_ROW_SHAPE,
         );
         expect(restocks[0].purchaseOrder).toBe(String(one._id));
+        const byOrder = await page(
+            restocker,
+            `/restocks?page=1&limit=10&purchaseOrder=${String(one._id)}`,
+            RESTOCK_ROW_SHAPE,
+        );
+        expect(byOrder.map((r) => r._id)).toEqual([receipt]);
     });
 
     it('adjustment rows, lines and the user filter', async () => {

@@ -93,6 +93,16 @@ describe('RestockService.getAll date filter', () => {
         expect(query()).toEqual({ _id: source, restockedBy: restocker });
     });
 
+    it('filters receipts by purchase order (#123)', async () => {
+        const po = new mongoose.Types.ObjectId();
+        await service.getAll({
+            page: 1,
+            limit: 5,
+            purchaseOrder: String(po),
+        } as GetAllDto);
+        expect(query()).toEqual({ purchaseOrder: po });
+    });
+
     it('applies a start-only range', async () => {
         await service.getAll({
             page: 1,

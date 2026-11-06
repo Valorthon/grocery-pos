@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import {
     PurchaseOrderStatus,
+    purchaseOrderReference,
     Role,
     UnitOfMeasure,
 } from '@grocery-pos/contracts';
@@ -198,6 +199,7 @@ describe('PurchaseOrderService', () => {
         expect(view.lines[0]).toMatchObject({
             name: 'rice',
             outstandingQty: 5000,
+            productActive: true,
         });
     });
     it('refuses repeated, missing or archived products', async () => {
@@ -309,7 +311,7 @@ describe('PurchaseOrderService', () => {
             {
                 supplier: String(f.supplierId),
                 invoiceNumber: 'DR-1',
-                description: `Purchase order ${String(f.row._id).slice(-8)}`,
+                description: `Purchase order ${purchaseOrderReference(String(f.row._id))}`,
                 restockDetails: [
                     {
                         product: String(f.productId),
@@ -533,6 +535,7 @@ describe('PurchaseOrderService edge views', () => {
             name: '',
             EAN: '',
             tracksExpiry: false,
+            productActive: false,
         });
     });
     it('keeps a note on edit and passes expiry, batch and description on receive', async () => {

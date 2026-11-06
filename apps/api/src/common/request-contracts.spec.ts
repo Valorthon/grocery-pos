@@ -1,3 +1,5 @@
+import type { RestockListQuery } from '@grocery-pos/contracts';
+import type { GetAllDto as RestockListDto } from '../inventory-man/restock/types';
 import type {
     CreatePurchaseOrderRequest,
     PurchaseOrderLineInput,
@@ -290,4 +292,8 @@ it('purchase order request contracts match their DTOs (#123)', () => {
             true,
         ),
     ).toBe(true);
+});
+
+it('the restock list query matches its DTO (#123)', () => {
+    expect(keysMatch<RestockListDto, RestockListQuery>(true)).toBe(true);
 });

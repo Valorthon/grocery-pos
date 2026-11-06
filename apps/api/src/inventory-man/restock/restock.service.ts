@@ -170,6 +170,8 @@ export class RestockService {
 
         const query: Record<string, unknown> = {};
         if (dto.source) query._id = new Types.ObjectId(dto.source);
+        if (dto.purchaseOrder)
+            query.purchaseOrder = new Types.ObjectId(dto.purchaseOrder);
         if (restockedBy) {
             query.restockedBy = new Types.ObjectId(restockedBy);
         }

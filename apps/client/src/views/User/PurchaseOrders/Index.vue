@@ -35,6 +35,9 @@
                     :items-length="totalItems"
                     @retry="load"
                 >
+                    <template #cell-reference="{ item }">
+                        {{ purchaseOrderReference(item._id) }}
+                    </template>
                     <template #cell-createdAt="{ item }">
                         {{ formatDate(item.createdAt) }}
                     </template>
@@ -43,6 +46,11 @@
                     </template>
                     <template #cell-status="{ item }">
                         {{ STATUS_LABELS[item.status] }}
+                        <span
+                            v-if="draftSendBlockers(item).length"
+                            class="block text-xs font-medium text-amber-700"
+                            >Needs review before sending</span
+                        >
                     </template>
                     <template #cell-lines="{ item }">
                         {{ item.lines.length }}
@@ -60,6 +68,10 @@
             <template v-else>
                 <div v-if="current" class="text-sm text-slate-700 space-y-1">
                     <p>
+                        <strong>{{
+                            purchaseOrderReference(current._id)
+                        }}</strong>
+                        ·
                         <strong>{{ STATUS_LABELS[current.status] }}</strong>
                         · created {{ formatDate(current.createdAt) }}
                         <span v-if="current.createdBy">
@@ -78,6 +90,26 @@
                                 : 'receipts'
                         }}
                         in Restock History.
+                        <BaseButton
+                            size="sm"
+                            variant="outline"
+                            @click="viewReceipts(current._id)"
+                            >View receipts</BaseButton
+                        >
+                    </p>
+                </div>
+                <div
+                    v-if="blockers.length"
+                    role="status"
+                    class="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"
+                >
+                    <p class="font-medium">
+                        This draft can't be sent as it stands.
+                    </p>
+                    <p v-for="text in blockers" :key="text">{{ text }}</p>
+                    <p>
+                        Choose an active supplier or remove the archived
+                        products, then save.
                     </p>
                 </div>
                 <template v-if="isDraft">
@@ -353,6 +385,8 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 import {
     EXPIRY_LIMITS,
     OPEN_PURCHASE_ORDER_STATUSES,
+    draftSendBlockers,
+    purchaseOrderReference,
     PURCHASE_ORDER_LIMITS,
     PurchaseOrderStatus,
     STRING_LIMITS,
@@ -366,6 +400,7 @@ import {
     type PurchaseOrderView,
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
+import { useRouter } from 'vue-router';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -424,6 +459,7 @@ onBeforeUnmount(() => {
 
 // ---------------------------------------------------------------- list
 const headers = [
+    { key: 'reference', title: 'Order' },
     { key: 'createdAt', title: 'Created' },
     { key: 'supplier', title: 'Supplier' },
     { key: 'status', title: 'Status' },
@@ -492,6 +528,13 @@ const isDraft = computed(
         editing.value &&
         (!current.value || current.value.status === PurchaseOrderStatus.DRAFT),
 );
+const blockers = computed(() =>
+    current.value ? draftSendBlockers(current.value) : [],
+);
+const router = useRouter();
+function viewReceipts(id: string) {
+    void router.push({ name: 'Restocks', query: { purchaseOrder: id } });
+}
 const isOpen = computed(
     () =>
         !!current.value &&
@@ -808,5 +851,19 @@ if (prefilled.length) {
     );
     void prefillCosts(prefilled);
 }
+const deepLink = router.currentRoute?.value.query.id;
+if (
+    !prefilled.length &&
+    typeof deepLink === 'string' &&
+    /^[a-f0-9]{24}$/i.test(deepLink)
+)
+    void api
+        .get<PurchaseOrderView>(`/purchase-orders/${deepLink}`)
+        .then((result) => {
+            if (!unmounted && !editing.value) open(result.data);
+        })
+        .catch((cause) => {
+            if (!unmounted) ui.queueMessage(Color.ERROR, apiErrorText(cause));
+        });
 void load();
 </script>

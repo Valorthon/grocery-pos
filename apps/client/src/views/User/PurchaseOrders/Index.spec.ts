@@ -16,10 +16,14 @@ import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
+const nav = vi.hoisted(() => ({
+    push: vi.fn(),
+    route: { value: { query: {} as Record<string, string> } },
+}));
 vi.mock('vue-router', async (importOriginal) => ({
     ...(await importOriginal<typeof import('vue-router')>()),
     onBeforeRouteLeave: vi.fn(),
-    useRouter: () => ({ currentRoute: { value: { query: {} } } }),
+    useRouter: () => ({ push: nav.push, currentRoute: nav.route }),
 }));
 
 function order(status = PurchaseOrderStatus.SENT): PurchaseOrderView {
@@ -42,6 +46,7 @@ function order(status = PurchaseOrderStatus.SENT): PurchaseOrderView {
                 EAN: '4800000000017',
                 unit: UnitOfMeasure.PIECE,
                 tracksExpiry: false,
+                productActive: true,
                 orderedQty: 3,
                 receivedQty: 0,
                 outstandingQty: 3,
@@ -76,6 +81,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     document.cookie = 'dummy=1; path=/';
     setActivePinia(createPinia());
+    nav.route.value = { query: {} };
     useAuthStore().user = {
         userId: 'u',
         username: 'restocker',
@@ -378,5 +384,54 @@ describe('Purchase order list and receipts (#123)', () => {
         expect(document.body.textContent).toContain('enter the actual cost');
         expect(field('Received (pc)').value).toBe('1');
         expect(api.post).not.toHaveBeenCalled();
+    });
+});
+
+describe('Purchase order references and draft warnings (#123)', () => {
+    const ID = '507f1f77bcf86cd799439abc';
+    function archivedDraft(): PurchaseOrderView {
+        const po = { ...order(PurchaseOrderStatus.DRAFT), _id: ID };
+        po.lines = [{ ...po.lines[0]!, productActive: false }];
+        return po;
+    }
+    it('warns on an archived supplier or product in the list and editor', async () => {
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve(
+                url === '/purchase-orders'
+                    ? { data: { data: [archivedDraft()], totalItems: 1 } }
+                    : { data: { data: [], totalItems: 0 } },
+            ),
+        );
+        await mount();
+        expect(document.body.textContent).toContain('PO-99439ABC');
+        expect(document.body.textContent).toContain(
+            'Needs review before sending',
+        );
+        await press('Open');
+        expect(document.body.textContent).toContain(
+            "This draft can't be sent as it stands.",
+        );
+        expect(document.body.textContent).toContain(
+            'Supplier Farm is archived.',
+        );
+        expect(document.body.textContent).toContain('Archived product: soap.');
+    });
+    it('opens a deep-linked order and links to its receipts', async () => {
+        nav.route.value = { query: { id: ID } };
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve(
+                url === '/purchase-orders'
+                    ? { data: { data: [], totalItems: 0 } }
+                    : { data: { ...order(), _id: ID, receipts: ['r1'] } },
+            ),
+        );
+        await mount();
+        expect(api.get).toHaveBeenCalledWith(`/purchase-orders/${ID}`);
+        expect(document.body.textContent).toContain('PO-99439ABC');
+        await press('View receipts');
+        expect(nav.push).toHaveBeenCalledWith({
+            name: 'Restocks',
+            query: { purchaseOrder: ID },
+        });
     });
 });

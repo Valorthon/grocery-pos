@@ -16,6 +16,29 @@ export const OPEN_PURCHASE_ORDER_STATUSES: readonly PurchaseOrderStatus[] = [
     PurchaseOrderStatus.PARTIALLY_RECEIVED,
 ];
 
+/** Readable PO reference shown on screens and in default receipt text. */
+export function purchaseOrderReference(id: string): string {
+    return `PO-${id.slice(-8).toUpperCase()}`;
+}
+
+/** A draft that cannot be sent as it stands (#123): archived supplier or products. */
+export function draftSendBlockers(
+    po: Pick<PurchaseOrderView, 'status' | 'supplier' | 'lines'>,
+): string[] {
+    if (po.status !== PurchaseOrderStatus.DRAFT) return [];
+    const out: string[] = [];
+    if (po.supplier && !po.supplier.isActive)
+        out.push(`Supplier ${po.supplier.name} is archived.`);
+    const archived = po.lines.filter((l) => !l.productActive);
+    if (archived.length)
+        out.push(
+            `Archived ${archived.length === 1 ? 'product' : 'products'}: ${archived
+                .map((l) => l.name || l.EAN)
+                .join(', ')}.`,
+        );
+    return out;
+}
+
 export const PURCHASE_ORDER_LIMITS = {
     NOTE: 300,
     /** Same bound as a restock, since one receipt is one restock. */
@@ -67,6 +90,8 @@ export interface PurchaseOrderLineView {
     EAN: string;
     unit: UnitOfMeasure;
     tracksExpiry: boolean;
+    /** False once the product is archived: a draft cannot be sent. */
+    productActive: boolean;
     orderedQty: number;
     receivedQty: number;
     outstandingQty: number;
@@ -99,6 +124,7 @@ export const PURCHASE_ORDER_LINE_SHAPE: WireShape<PurchaseOrderLineView> = {
     EAN: 'required',
     unit: 'required',
     tracksExpiry: 'required',
+    productActive: 'required',
     orderedQty: 'required',
     receivedQty: 'required',
     outstandingQty: 'required',

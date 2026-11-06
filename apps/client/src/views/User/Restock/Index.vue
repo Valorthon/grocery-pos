@@ -49,6 +49,11 @@
         <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
             Showing source {{ sourceId }}. Clear Filters to view all history.
         </p>
+        <p v-if="purchaseOrderId" class="px-5 py-2 text-sm text-slate-600">
+            Showing receipts of
+            {{ purchaseOrderReference(purchaseOrderId) }}. Clear Filters to view
+            all history.
+        </p>
 
         <BaseTable
             v-model:page="page"
@@ -62,7 +67,22 @@
             row-click
             @click:row="showDetails"
             @retry="fetchRestock"
-        />
+        >
+            <template #cell-purchaseOrder="{ item }">
+                <button
+                    v-if="item.purchaseOrder && canOpenOrders"
+                    type="button"
+                    class="min-h-11 text-primary-700 underline"
+                    @click.stop="openOrder(item.purchaseOrder)"
+                >
+                    {{ purchaseOrderReference(item.purchaseOrder) }}
+                </button>
+                <span v-else-if="item.purchaseOrder">{{
+                    purchaseOrderReference(item.purchaseOrder)
+                }}</span>
+                <span v-else>—</span>
+            </template>
+        </BaseTable>
     </PageCard>
 
     <BaseModal
@@ -93,7 +113,13 @@ import { apiErrorMessages } from '@/utils/api-error';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
-import type { Paginated, RestockRow, UserRef } from '@grocery-pos/contracts';
+import {
+    purchaseOrderReference,
+    type Paginated,
+    type RestockRow,
+    type UserRef,
+} from '@grocery-pos/contracts';
+import { Role, useAuthStore } from '@/stores/auth';
 import type { RestockListRow } from '@/components/User/Restock/rows';
 
 const router = useRouter();
@@ -103,6 +129,20 @@ const sourceId = computed(() => {
         ? candidate
         : undefined;
 });
+/** Deep-link filter from a purchase order's "View receipts" (#123). */
+const purchaseOrderId = computed(() => {
+    const candidate = router.currentRoute?.value.query.purchaseOrder;
+    return typeof candidate === 'string' && /^[a-f0-9]{24}$/i.test(candidate)
+        ? candidate
+        : undefined;
+});
+const authStore = useAuthStore();
+const canOpenOrders = computed(
+    () => authStore.isAdmin || authStore.hasRole(Role.Restocker),
+);
+function openOrder(id: string) {
+    void router.push({ name: 'PurchaseOrders', query: { id } });
+}
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchRestock());
 const totalItems = ref(0);
@@ -112,6 +152,7 @@ const headers = [
     { key: 'description', title: 'Description' },
     { key: 'supplier', title: 'Supplier' },
     { key: 'invoiceNumber', title: 'Invoice / DR' },
+    { key: 'purchaseOrder', title: 'Purchase order' },
     { key: 'totalCost', title: 'Total Cost', align: 'right' as const },
     { key: 'restockedBy', title: 'Restocked By' },
     { key: 'date', title: 'Date' },
@@ -190,11 +231,15 @@ const resetFilters = () => {
         dateFrom: undefined,
         dateTo: undefined,
     };
-    if (sourceId.value) {
+    if (sourceId.value || purchaseOrderId.value) {
         // The route watcher performs the single reload after clearing the
         // deep link; other query parameters belong to the router.
         void router.replace({
-            query: { ...router.currentRoute.value.query, source: undefined },
+            query: {
+                ...router.currentRoute.value.query,
+                source: undefined,
+                purchaseOrder: undefined,
+            },
         });
     } else search();
 };
@@ -208,6 +253,7 @@ const {
         api.get<Paginated<RestockRow>>(`/restocks`, {
             params: {
                 source: sourceId.value,
+                purchaseOrder: purchaseOrderId.value,
                 page: page.value,
                 limit: limit.value,
                 ...applied.value,
@@ -219,6 +265,9 @@ const {
             description: restock.description,
             supplier: restock.supplier?.name ?? 'Unknown supplier',
             invoiceNumber: restock.invoiceNumber || '—',
+            ...(restock.purchaseOrder && {
+                purchaseOrder: restock.purchaseOrder,
+            }),
             restockedBy: restock.restockedBy?.name ?? 'N/A',
             totalCost: formatCurrency(restock.totalCost),
             date: formatStoreDateTime(restock.createdAt),
@@ -231,7 +280,7 @@ const {
 
 // Vue Router reuses this component for source links and ordinary sidebar
 // navigation. Follow the current route without applying unsearched inputs.
-watch(sourceId, () => search());
+watch([sourceId, purchaseOrderId], () => search());
 
 void fetchRestock();
 
