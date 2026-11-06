@@ -53,10 +53,15 @@
                 Sales
             </div>
             <Row label="Transactions" :value="String(report.sales.count)" />
-            <Row label="Gross Sales" :value="currency(report.sales.gross)" />
+            <Row
+                label="Gross Sales (after discounts)"
+                :value="currency(report.sales.gross)"
+            />
             <Row
                 :label="`Discounts Given (${report.sales.discounts.count})`"
                 :value="currency(report.sales.discounts.amount)"
+                note="already deducted from gross"
+                info
             />
             <Row
                 :label="`(-) Voids (${report.sales.voids.count})`"
@@ -174,6 +179,9 @@ const Row = defineComponent({
         label: { type: String, required: true },
         value: { type: String, required: true },
         bold: { type: Boolean, default: false },
+        /** Information only: indented and muted, not part of the sum. */
+        info: { type: Boolean, default: false },
+        note: { type: String, default: '' },
     },
     setup(p) {
         return () =>
@@ -183,11 +191,18 @@ const Row = defineComponent({
                     class: [
                         'flex justify-between',
                         p.bold ? 'font-bold text-slate-900' : '',
+                        p.info ? 'pl-3 text-slate-500 italic' : '',
                     ],
+                    'data-info': p.info ? 'true' : undefined,
                 },
                 [
-                    h('span', { class: 'text-slate-600' }, `${p.label}:`),
-                    h('span', { class: 'font-bold' }, p.value),
+                    h('span', { class: p.info ? '' : 'text-slate-600' }, [
+                        `${p.label}:`,
+                        p.note
+                            ? h('span', { class: 'block' }, `(${p.note})`)
+                            : null,
+                    ]),
+                    h('span', { class: p.info ? '' : 'font-bold' }, p.value),
                 ],
             );
     },
