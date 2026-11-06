@@ -44,6 +44,9 @@ export class PurchaseOrderReceipt {
     /** Private idempotency key of the receive attempt; never on the wire. */
     @Prop({ type: String, required: true })
     key!: string;
+    /** Hash of the normalized receive request (`receiveRequestHash`). */
+    @Prop({ type: String, required: true })
+    requestHash!: string;
     @Prop({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Restock',

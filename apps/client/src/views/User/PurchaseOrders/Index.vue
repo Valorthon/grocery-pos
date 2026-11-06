@@ -21,71 +21,42 @@
                         label="Status"
                         all-label="All statuses"
                         :options="statusOptions"
-                        @update:model-value="search"
+                        @update:model-value="apply"
                     />
                 </div>
-                <p v-if="listError" role="alert" class="text-red-700">
-                    {{ listError }}
-                    <BaseButton @click="load">Retry</BaseButton>
-                </p>
-                <p v-if="listLoading">Loading purchase orders…</p>
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="text-left">Created</th>
-                            <th class="text-left">Supplier</th>
-                            <th>Status</th>
-                            <th>Lines</th>
-                            <th class="text-right">Expected total</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="row in rows" :key="row._id" class="border-t">
-                            <td>{{ formatDate(row.createdAt) }}</td>
-                            <td>{{ supplierLabel(row) }}</td>
-                            <td class="text-center">
-                                {{ STATUS_LABELS[row.status] }}
-                            </td>
-                            <td class="text-center">{{ row.lines.length }}</td>
-                            <td class="text-right">
-                                {{ formatCurrency(row.expectedTotal) }}
-                            </td>
-                            <td class="text-center py-1">
-                                <BaseButton size="sm" @click="open(row)"
-                                    >Open</BaseButton
-                                >
-                            </td>
-                        </tr>
-                        <tr v-if="!rows.length && !listLoading && !listError">
-                            <td
-                                colspan="6"
-                                class="py-6 text-center text-slate-500"
-                            >
-                                No purchase orders.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div v-if="!listError" class="flex items-center gap-3">
-                    <BaseButton
-                        size="sm"
-                        variant="outline"
-                        :disabled="page <= 1 || listLoading"
-                        @click="goPage(page - 1)"
-                        >Previous</BaseButton
-                    >
-                    <span class="text-sm">Page {{ page }} of {{ pages }}</span>
-                    <BaseButton
-                        size="sm"
-                        variant="outline"
-                        :disabled="page >= pages || listLoading"
-                        @click="goPage(page + 1)"
-                        >Next</BaseButton
-                    >
-                </div>
+                <BaseTable
+                    v-model:page="page"
+                    v-model:items-per-page="limit"
+                    :headers="headers"
+                    :items="rows"
+                    :loading="listLoading"
+                    :error="listError"
+                    empty-text="No purchase orders"
+                    :items-length="totalItems"
+                    @retry="load"
+                >
+                    <template #cell-createdAt="{ item }">
+                        {{ formatDate(item.createdAt) }}
+                    </template>
+                    <template #cell-supplier="{ item }">
+                        {{ supplierLabel(item) }}
+                    </template>
+                    <template #cell-status="{ item }">
+                        {{ STATUS_LABELS[item.status] }}
+                    </template>
+                    <template #cell-lines="{ item }">
+                        {{ item.lines.length }}
+                    </template>
+                    <template #cell-expectedTotal="{ item }">
+                        {{ formatCurrency(item.expectedTotal) }}
+                    </template>
+                    <template #cell-action="{ item }">
+                        <BaseButton size="sm" @click="open(item)"
+                            >Open</BaseButton
+                        >
+                    </template>
+                </BaseTable>
             </template>
-
             <template v-else>
                 <div v-if="current" class="text-sm text-slate-700 space-y-1">
                     <p>
@@ -400,6 +371,12 @@ import PageCard from '@/components/ui/PageCard.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import {
+    useAppliedFilters,
+    useListFetch,
+    useListPaging,
+} from '@/composables/useListFetch';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -433,7 +410,6 @@ import {
 } from '@/utils/currency';
 import { apiErrorBody, apiErrorText } from '@/utils/api-error';
 
-const LIMIT = 20;
 const ui = useUIStore();
 const {
     request: confirmRequest,
@@ -447,54 +423,45 @@ onBeforeUnmount(() => {
 });
 
 // ---------------------------------------------------------------- list
+const headers = [
+    { key: 'createdAt', title: 'Created' },
+    { key: 'supplier', title: 'Supplier' },
+    { key: 'status', title: 'Status' },
+    { key: 'lines', title: 'Lines', align: 'right' as const },
+    { key: 'expectedTotal', title: 'Expected total', align: 'right' as const },
+    { key: 'action', title: 'Action', align: 'right' as const },
+];
 const rows = ref<PurchaseOrderView[]>([]);
 const totalItems = ref(0);
-const page = ref(1);
 const statusFilter = ref<string | number | null>(null);
-const listLoading = ref(false);
-const listError = ref('');
-const pages = computed(() => Math.max(1, Math.ceil(totalItems.value / LIMIT)));
 const statusOptions = Object.values(PurchaseOrderStatus).map((value) => ({
     label: STATUS_LABELS[value],
     value,
 }));
-let listGeneration = 0;
-async function load() {
-    const generation = ++listGeneration;
-    listLoading.value = true;
-    listError.value = '';
-    try {
-        const result = await api.get<Paginated<PurchaseOrderView>>(
-            '/purchase-orders',
-            {
-                params: {
-                    page: page.value,
-                    limit: LIMIT,
-                    ...(statusFilter.value && { status: statusFilter.value }),
-                },
+const { page, limit, search } = useListPaging(() => load(), 10);
+const { applied, apply } = useAppliedFilters(
+    () => ({ status: statusFilter.value }),
+    search,
+);
+const {
+    loading: listLoading,
+    error: listError,
+    load,
+} = useListFetch(
+    () =>
+        api.get<Paginated<PurchaseOrderView>>('/purchase-orders', {
+            params: {
+                page: page.value,
+                limit: limit.value,
+                ...(applied.value.status && { status: applied.value.status }),
             },
-        );
-        if (generation !== listGeneration) return;
+        }),
+    (result) => {
         rows.value = result.data.data;
         totalItems.value = result.data.totalItems;
-    } catch (cause) {
-        if (generation === listGeneration)
-            listError.value = apiErrorText(
-                cause,
-                'Unable to load purchase orders.',
-            );
-    } finally {
-        if (generation === listGeneration) listLoading.value = false;
-    }
-}
-function search() {
-    page.value = 1;
-    void load();
-}
-function goPage(next: number) {
-    page.value = next;
-    void load();
-}
+    },
+    'Unable to load purchase orders.',
+);
 
 function supplierLabel(po: PurchaseOrderView) {
     if (!po.supplier) return 'Unknown supplier';
@@ -691,9 +658,28 @@ async function transition(path: 'send' | 'cancel', success: string) {
         show(result.data, draftLinesOf(result.data));
         ui.queueMessage(Color.SUCCESS, success);
     } catch (cause) {
-        if (!unmounted) ui.queueMessage(Color.ERROR, apiErrorText(cause));
+        if (unmounted) return;
+        ui.queueMessage(Color.ERROR, apiErrorText(cause));
+        await reloadOnConflict(cause);
     } finally {
         busy.value = false;
+    }
+}
+
+/** After a 409 the order changed elsewhere: show its current state. */
+async function reloadOnConflict(cause: unknown): Promise<boolean> {
+    const po = current.value;
+    if (!po || apiErrorBody(cause)?.statusCode !== 409) return false;
+    try {
+        const fresh = await api.get<PurchaseOrderView>(
+            `/purchase-orders/${po._id}`,
+        );
+        if (unmounted || current.value?._id !== po._id) return false;
+        show(fresh.data, draftLinesOf(fresh.data));
+        ui.queueMessage(Color.INFO, 'Purchase order reloaded.');
+        return true;
+    } catch {
+        return false;
     }
 }
 async function send() {
@@ -731,7 +717,13 @@ const receiptErrs = ref<Record<number, Record<string, string>>>({});
 const invoiceNumber = ref('');
 const description = ref('');
 const receiveError = ref('');
+/**
+ * The receive attempt's key and the body it was sent with. Like the
+ * register's checkout attempt, the key is reused only for an unchanged
+ * body (a retry after a lost answer replays); any edit makes a new one.
+ */
 let receiveKey = '';
+let keySignature = '';
 
 function openReceive() {
     if (!current.value) return;
@@ -740,7 +732,8 @@ function openReceive() {
     invoiceNumber.value = '';
     description.value = '';
     receiveError.value = '';
-    receiveKey = newReceiveKey();
+    receiveKey = '';
+    keySignature = '';
     receiving.value = true;
 }
 function varianceText(line: ReceiptFormLine) {
@@ -771,17 +764,23 @@ async function submitReceive() {
         })),
     );
     if (zero && !(await confirm(zero))) return;
+    const body = toReceiveBody(
+        po,
+        '',
+        receipt.value,
+        invoiceNumber.value,
+        description.value,
+    );
+    const signature = JSON.stringify(body);
+    if (!receiveKey || signature !== keySignature) {
+        receiveKey = newReceiveKey();
+        keySignature = signature;
+    }
     busy.value = true;
     try {
         const result = await api.post<PurchaseOrderView>(
             `/purchase-orders/${po._id}/receive`,
-            toReceiveBody(
-                po,
-                receiveKey,
-                receipt.value,
-                invoiceNumber.value,
-                description.value,
-            ),
+            { ...body, idempotencyKey: receiveKey },
         );
         if (unmounted) return;
         receiving.value = false;
@@ -790,9 +789,10 @@ async function submitReceive() {
     } catch (cause) {
         if (unmounted) return;
         // A definite refusal never applied, so the next attempt is new; a
-        // lost answer keeps the key so a retry replays instead of doubling.
-        if (apiErrorBody(cause)) receiveKey = newReceiveKey();
+        // lost answer keeps the key so an unchanged retry replays.
+        if (apiErrorBody(cause)) receiveKey = '';
         receiveError.value = apiErrorText(cause);
+        if (await reloadOnConflict(cause)) receiving.value = false;
     } finally {
         busy.value = false;
     }

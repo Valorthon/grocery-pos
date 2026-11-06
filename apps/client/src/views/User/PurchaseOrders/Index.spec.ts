@@ -166,16 +166,23 @@ describe('Purchase orders page (#123)', () => {
         );
     });
 
-    it('retries a lost receive with the same key and a refused one with a new key', async () => {
+    it('reuses the key only for an unchanged body and reloads after a 409', async () => {
         await mount();
         await press('Open');
         await press('Receive');
+        type Sent = { idempotencyKey: string; lines: unknown[] };
+        const sent = (n: number) =>
+            (api.post.mock.calls[n] as [string, Sent])[1];
         api.post.mockRejectedValueOnce(new Error('Network Error'));
         await press('Record receipt');
-        const [, firstBody] = api.post.mock.calls[0] as [
-            string,
-            { idempotencyKey: string },
-        ];
+        api.post.mockRejectedValueOnce(new Error('Network Error'));
+        await press('Record receipt');
+        expect(sent(1).idempotencyKey).toBe(sent(0).idempotencyKey);
+        await type('Actual unit cost', '1.10');
+        api.post.mockRejectedValueOnce(new Error('Network Error'));
+        await press('Record receipt');
+        expect(sent(2).idempotencyKey).not.toBe(sent(0).idempotencyKey);
+        api.get.mockClear();
         api.post.mockRejectedValueOnce({
             isAxiosError: true,
             response: {
@@ -192,22 +199,17 @@ describe('Purchase orders page (#123)', () => {
             },
         });
         await press('Record receipt');
-        const [, secondBody] = api.post.mock.calls[1] as [
-            string,
-            { idempotencyKey: string },
-        ];
-        expect(secondBody.idempotencyKey).toBe(firstBody.idempotencyKey);
+        expect(api.get).toHaveBeenCalledWith('/purchase-orders/po1');
+        expect(document.body.textContent).not.toContain('Record receipt');
+        await press('Receive');
         api.post.mockResolvedValueOnce({
             data: { ...order(), status: PurchaseOrderStatus.RECEIVED },
         });
         await press('Record receipt');
-        const [url, thirdBody] = api.post.mock.calls[2] as [
-            string,
-            { idempotencyKey: string; lines: unknown[] },
-        ];
+        const [url, last] = api.post.mock.calls[4] as [string, Sent];
         expect(url).toBe('/purchase-orders/po1/receive');
-        expect(thirdBody.idempotencyKey).not.toBe(firstBody.idempotencyKey);
-        expect(thirdBody.lines).toEqual([
+        expect(last.idempotencyKey).not.toBe(sent(2).idempotencyKey);
+        expect(last.lines).toEqual([
             { line: 'l1', quantity: 3, unitCost: 100 },
         ]);
         expect(document.body.textContent).toContain('Received');
@@ -337,11 +339,11 @@ describe('Purchase order list and receipts (#123)', () => {
         await mount();
         await press('Next');
         expect(api.get).toHaveBeenLastCalledWith('/purchase-orders', {
-            params: { page: 2, limit: 20 },
+            params: { page: 2, limit: 10 },
         });
         await choose('Status', PurchaseOrderStatus.SENT);
         expect(api.get).toHaveBeenLastCalledWith('/purchase-orders', {
-            params: { page: 1, limit: 20, status: PurchaseOrderStatus.SENT },
+            params: { page: 1, limit: 10, status: PurchaseOrderStatus.SENT },
         });
         api.get.mockRejectedValueOnce(new Error('down'));
         await press('Next');
@@ -349,6 +351,9 @@ describe('Purchase order list and receipts (#123)', () => {
             'Unable to load purchase orders.',
         );
         await press('Retry');
+        expect(api.get).toHaveBeenLastCalledWith('/purchase-orders', {
+            params: { page: 2, limit: 10, status: PurchaseOrderStatus.SENT },
+        });
         expect(document.body.textContent).not.toContain(
             'Unable to load purchase orders.',
         );

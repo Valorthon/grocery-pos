@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
@@ -85,6 +86,53 @@ export function nextStatus(
     return lines.every((line) => line.receivedQty >= line.orderedQty)
         ? PurchaseOrderStatus.RECEIVED
         : PurchaseOrderStatus.PARTIALLY_RECEIVED;
+}
+
+const byString = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Fingerprint of a receive request, stored with its idempotency key (as
+ * `POST /sales` does). Only what decides the receipt is hashed, in a fixed
+ * order; the key itself is not part of it.
+ */
+export function receiveRequestHash(
+    actor: string,
+    id: string,
+    dto: ReceivePurchaseOrderDto,
+): string {
+    const canonical = {
+        actor,
+        purchaseOrder: id,
+        version: dto.version,
+        invoiceNumber: dto.invoiceNumber ?? null,
+        description: dto.description ?? null,
+        lines: dto.lines
+            .map((l) => ({
+                line: String(l.line),
+                quantity: l.quantity,
+                unitCost: l.unitCost,
+                expiryDate: l.expiryDate ?? null,
+                batchNo: l.batchNo ?? null,
+            }))
+            .sort((a, b) => byString(a.line, b.line)),
+    };
+    return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
+
+/** True for a replay; a reused key with another body is a 409. */
+function matchReceipt(
+    row: Pick<PurchaseOrderDoc, 'receipts'>,
+    key: string,
+    requestHash: string,
+): boolean {
+    const receipt = (row.receipts ?? []).find((r) => r.key === key);
+    if (!receipt) return false;
+    if (receipt.requestHash !== requestHash)
+        throw new ConflictError(
+            ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+            'This receive was already recorded with different details. Reload the purchase order.',
+        );
+    return true;
 }
 
 @Injectable()
@@ -251,9 +299,36 @@ export class PurchaseOrderService {
         id: string,
         dto: ReceivePurchaseOrderDto,
     ): Promise<PurchaseOrderView> {
+        const requestHash = receiveRequestHash(actor.userId, id, dto);
+        try {
+            await this.receiveOnce(actor, id, dto, requestHash);
+        } catch (err) {
+            // A concurrent retry of the same attempt lost the version race
+            // to the attempt itself: answer it as the replay it is.
+            if (
+                !(err instanceof ConflictError) ||
+                err.code !== ErrorCode.CONFLICT ||
+                !(await this.replayed(id, dto.idempotencyKey, requestHash))
+            )
+                throw err;
+        }
+        return this.get(id);
+    }
+
+    private async replayed(id: string, key: string, requestHash: string) {
+        const row = await this.orders.findById(id).lean<PurchaseOrderDoc>();
+        return !!row && matchReceipt(row, key, requestHash);
+    }
+
+    private async receiveOnce(
+        actor: AuthUser,
+        id: string,
+        dto: ReceivePurchaseOrderDto,
+        requestHash: string,
+    ): Promise<void> {
         await runInTransaction(async (session) => {
             const row = await this.load(id, session);
-            if (row.receipts.some((r) => r.key === dto.idempotencyKey)) return;
+            if (matchReceipt(row, dto.idempotencyKey, requestHash)) return;
             if (!OPEN_PURCHASE_ORDER_STATUSES.includes(row.status))
                 throw new ConflictError(
                     ErrorCode.CONFLICT,
@@ -309,13 +384,16 @@ export class PurchaseOrderService {
                 {
                     $set: { lines, status: nextStatus(lines) },
                     $push: {
-                        receipts: { key: dto.idempotencyKey, restock },
+                        receipts: {
+                            key: dto.idempotencyKey,
+                            requestHash,
+                            restock,
+                        },
                     },
                 },
                 session,
             );
         }, this.connection);
-        return this.get(id);
     }
 
     private async load(id: string, session: ClientSession) {

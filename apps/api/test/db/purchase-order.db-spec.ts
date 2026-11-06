@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import {
     PurchaseOrderStatus,
+    ErrorCode,
     Role,
     StockMovementType,
     UnitOfMeasure,
@@ -253,4 +254,37 @@ it('cancels an unwanted draft and keeps it in history', async () => {
         ),
     );
     expect(list.body.data.map((r) => r._id)).toContain(created.body._id);
+});
+
+it('refuses a reused key with a different body and changes nothing', async () => {
+    const product = await seedProduct(db, 1000, 0);
+    const po = await sentOrder([{ product, orderedQty: 3, expectedCost: 100 }]);
+    const key = `k-${randomUUID()}`;
+    expect(
+        (await receive(po, [{ quantity: 1, unitCost: 100 }], key)).status,
+    ).toBe(201);
+    const other = await receive(po, [{ quantity: 2, unitCost: 100 }], key);
+    expect(other.status).toBe(409);
+    expect((other.body as unknown as { error: string }).error).toBe(
+        ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+    );
+    expect(await stockOf(db, product)).toBe(1);
+    expect(await restockCount(po._id)).toBe(1);
+});
+
+it('ends concurrent retries of one key as one restock, both answered', async () => {
+    const product = await seedProduct(db, 1000, 0);
+    const po = await sentOrder([{ product, orderedQty: 4, expectedCost: 100 }]);
+    const key = `k-${randomUUID()}`;
+    const results = await Promise.all([
+        receive(po, [{ quantity: 2, unitCost: 100 }], key),
+        receive(po, [{ quantity: 2, unitCost: 100 }], key),
+        receive(po, [{ quantity: 2, unitCost: 100 }], key),
+    ]);
+    expect(results.map((r) => r.status)).toEqual([201, 201, 201]);
+    expect(await stockOf(db, product)).toBe(2);
+    expect(await restockCount(po._id)).toBe(1);
+    expect(new Set(results.map((r) => r.body.receipts.join()))).toEqual(
+        new Set([results[0].body.receipts.join()]),
+    );
 });

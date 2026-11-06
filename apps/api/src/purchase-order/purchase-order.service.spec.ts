@@ -8,7 +8,9 @@ import {
     PurchaseOrderService,
     expectedTotal,
     nextStatus,
+    receiveRequestHash,
 } from './purchase-order.service';
+import { ErrorCode } from '../common/errors';
 import { PurchaseOrderController } from './purchase-order.controller';
 
 class Query<T> {
@@ -51,7 +53,11 @@ function fixture(status = PurchaseOrderStatus.SENT, receivedQty = 0) {
                 expectedCost: 18000,
             },
         ],
-        receipts: [] as { key: string; restock: Types.ObjectId }[],
+        receipts: [] as {
+            key: string;
+            requestHash: string;
+            restock: Types.ObjectId;
+        }[],
         createdAt: new Date('2026-11-06T00:00:00Z'),
         updatedAt: new Date('2026-11-06T00:00:00Z'),
     };
@@ -327,7 +333,11 @@ describe('PurchaseOrderService', () => {
         expect(update.$set.status).toBe(PurchaseOrderStatus.RECEIVED);
         expect(update.$set.lines[0]!.receivedQty).toBe(5000);
         expect(update.$push).toEqual({
-            receipts: { key: 'key-00001', restock: f.restockId },
+            receipts: {
+                key: 'key-00001',
+                requestHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+                restock: f.restockId,
+            },
         });
     });
     it('refuses over-receipt, unknown lines, stale versions and closed orders', async () => {
@@ -377,15 +387,95 @@ describe('PurchaseOrderService', () => {
     });
     it('replays a completed receive key without another restock', async () => {
         const f = fixture(PurchaseOrderStatus.RECEIVED, 5000);
-        f.row.receipts.push({ key: 'key-00003', restock: f.restockId });
-        const view = await f.service.receive(actor, String(f.row._id), {
+        const dto = {
             version: 2,
             idempotencyKey: 'key-00003',
             lines: [{ line: String(f.lineId), quantity: 1, unitCost: 1 }],
+        };
+        f.row.receipts.push({
+            key: 'key-00003',
+            requestHash: receiveRequestHash(
+                actor.userId,
+                String(f.row._id),
+                dto,
+            ),
+            restock: f.restockId,
         });
+        const view = await f.service.receive(actor, String(f.row._id), dto);
         expect(f.restocks.restock).not.toHaveBeenCalled();
         expect(view.receipts).toEqual([String(f.restockId)]);
         expect(JSON.stringify(view)).not.toContain('key-00003');
+        await expect(
+            f.service.receive(actor, String(f.row._id), {
+                ...dto,
+                lines: [{ ...dto.lines[0]!, unitCost: 2 }],
+            }),
+        ).rejects.toMatchObject({
+            statusCode: 409,
+            code: ErrorCode.SALE_IDEMPOTENCY_MISMATCH,
+        });
+        expect(f.restocks.restock).not.toHaveBeenCalled();
+    });
+    it('answers a same-key retry that lost the version race as a replay', async () => {
+        const f = fixture();
+        const dto = {
+            version: 2,
+            idempotencyKey: 'key-00004',
+            lines: [{ line: String(f.lineId), quantity: 1, unitCost: 1 }],
+        };
+        const winner = {
+            ...f.row,
+            version: 3,
+            receipts: [
+                {
+                    key: 'key-00004',
+                    requestHash: receiveRequestHash(
+                        actor.userId,
+                        String(f.row._id),
+                        dto,
+                    ),
+                    restock: f.restockId,
+                },
+            ],
+        };
+        f.orders.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        f.orders.findById
+            .mockReturnValueOnce(new Query(f.row))
+            .mockReturnValue(new Query(winner));
+        const view = await f.service.receive(actor, String(f.row._id), dto);
+        expect(view.receipts).toEqual([String(f.restockId)]);
+        f.orders.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        f.orders.findById.mockReturnValue(new Query(f.row));
+        await expect(
+            f.service.receive(actor, String(f.row._id), {
+                ...dto,
+                idempotencyKey: 'key-00005',
+            }),
+        ).rejects.toMatchObject({ statusCode: 409, code: ErrorCode.CONFLICT });
+    });
+    it('hashes the normalized body, not line order or the key', () => {
+        const a = { line: 'a', quantity: 1, unitCost: 1 };
+        const b = { line: 'b', quantity: 2, unitCost: 2 };
+        const one = receiveRequestHash('u', 'po', {
+            version: 1,
+            idempotencyKey: 'x',
+            lines: [a, b],
+        });
+        expect(
+            receiveRequestHash('u', 'po', {
+                version: 1,
+                idempotencyKey: 'y',
+                lines: [b, a],
+            }),
+        ).toBe(one);
+        expect(
+            receiveRequestHash('u', 'po', {
+                version: 1,
+                idempotencyKey: 'x',
+                invoiceNumber: 'DR',
+                lines: [a, b],
+            }),
+        ).not.toBe(one);
     });
     it('lists by status and supplier and 404s an unknown id', async () => {
         const f = fixture();

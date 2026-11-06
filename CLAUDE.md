@@ -161,9 +161,15 @@ Rules:
   ₱0 confirmed. Over-receipt is refused (cap = outstanding per line).
 - Concurrency: every write filters on `version` + allowed statuses and
   increments it; a stale or concurrent receive is 409 and rolls back its
-  restock. `idempotencyKey` (private, stored in `receipts[]`, never on the
-  wire) replays a completed receive. The client keeps the key across a lost
-  answer and makes a new one after an HTTP refusal.
+  restock. A receive's `idempotencyKey` is stored in `receipts[]` with a
+  `requestHash` of the normalized body (actor, PO, version, invoice,
+  description, lines by line id), as `POST /sales` does; neither is on the
+  wire. Same key + same hash replays (also for a concurrent retry that lost
+  the version race); same key + other body is 409
+  `SALE_IDEMPOTENCY_MISMATCH`. The client reuses the key only for an
+  unchanged body after a lost answer, makes a new one after any edit or
+  HTTP refusal, and reloads the PO after a 409. The list uses `BaseTable` +
+  `useListPaging`/`useListFetch`/`useAppliedFilters`.
 - Low-stock list offers "Create purchase order" beside "Restock listed items"
   via a consume-once in-memory handoff (`purchaseOrderPrefill`) with reorder
   quantities; known latest costs fill untouched lines asynchronously.
