@@ -20,11 +20,11 @@ import {
 } from 'railway/iac';
 
 // The parent of both hostnames is the cookie domain (`DOMAIN` and
-// `VITE_DOMAIN`). Staging gets its own parent, so its cookies never reach
-// production's hosts.
+// `VITE_DOMAIN`). The two parents are siblings: neither is a parent of the
+// other, so no session cookie of one environment is ever sent to the other.
 const ENVIRONMENTS = {
     staging: { branch: 'staging', domain: 'staging.pos.valorthon.store' },
-    production: { branch: 'production', domain: 'pos.valorthon.store' },
+    production: { branch: 'production', domain: 'app.pos.valorthon.store' },
 } as const;
 
 // A build of either image needs packages/contracts and the workspace files.
@@ -65,6 +65,8 @@ export default defineRailway((ctx) => {
     });
     const mongo = service('mongo', {
         source: image('mongo:7.0'),
+        // Railway's stored default for an image service; nothing is built.
+        // Removing it shows up as drift in `railway config plan`.
         build: { buildEnvironment: 'V3', builder: 'RAILPACK' },
         start: MONGO_START,
         replicas: { 'us-west2': 1 },

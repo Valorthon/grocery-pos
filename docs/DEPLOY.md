@@ -11,10 +11,15 @@ on a Railway volume (transactions need a replica set; see
 | Environment  | Branch       | Client                        | API                               |
 | ------------ | ------------ | ----------------------------- | --------------------------------- |
 | `staging`    | `staging`    | `staging.pos.valorthon.store` | `api.staging.pos.valorthon.store` |
-| `production` | `production` | `pos.valorthon.store`         | `api.pos.valorthon.store`         |
+| `production` | `production` | `app.pos.valorthon.store`     | `api.app.pos.valorthon.store`     |
 
-Staging has its own cookie parent (`staging.pos.valorthon.store`), so a
-staging session never reaches production's hosts. Promote by moving
+Each environment's cookie parent (`DOMAIN`) is its client host:
+`staging.pos.valorthon.store` and `app.pos.valorthon.store`. They are
+siblings, so neither environment's cookies are ever sent to the other's
+hosts. Never use `pos.valorthon.store` itself as a `DOMAIN`: it is the parent
+of staging, so production's `jwt` and `refresh` cookies would reach the
+staging API, and a browser logged into both would send two cookies of each
+name. Promote by moving
 `develop` to `staging`, then `staging` to `production`.
 
 ## Prerequisite: a custom domain with a shared parent
@@ -69,7 +74,9 @@ railway config apply --environment staging
 
 Run it as a plain command: the `railway` SDK (a root dev dependency) checks the
 CLI version through the shell's `$_`, so wrapping it in `timeout` or similar
-fails with "requires Railway CLI 5.42.1 or newer". Variables are unmanaged:
+fails with "requires Railway CLI 5.42.1 or newer". The SDK is pinned exactly
+(`railway` 3.16.0) because it checks for a minimum CLI version; upgrade the
+two together. Variables are unmanaged:
 the file never reads or writes them, so secrets stay in Railway. Set them per
 service as below.
 

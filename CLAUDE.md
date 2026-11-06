@@ -786,7 +786,8 @@ requestId}`. A 5xx never carries details or internals.
 - Railway service settings live in `.railway/railway.ts` (#92), not the
   deprecated `railway.json`: per environment (`staging` from `staging` on
   `staging.pos.valorthon.store`, `production` from `production` on
-  `pos.valorthon.store`) the `api`, `client` and `mongo` services, Dockerfiles,
+  `app.pos.valorthon.store`, sibling cookie parents so neither environment's
+  cookies reach the other) the `api`, `client` and `mongo` services, Dockerfiles,
   watch patterns, healthchecks, domains and volume. Variables stay unmanaged in
   Railway. Apply with `railway config plan|apply --environment <env>`.
   MongoDB is a keyfile-auth single-node replica set on a volume, private
