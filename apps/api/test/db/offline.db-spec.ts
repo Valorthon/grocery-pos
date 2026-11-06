@@ -240,6 +240,7 @@ it('blocks own close while a terminal lease is active and permits close after sy
         await db.call(seller, 'POST', '/shifts/current/close', { counts: {} }),
     );
     expect(blocked.body.error).toBe(ErrorCode.OFFLINE_PENDING);
+    expect(blocked.body.message).toMatch(/ask an admin to force-close/);
     expect((await db.call(seller, 'POST', '/offline/sync', body)).status).toBe(
         201,
     );

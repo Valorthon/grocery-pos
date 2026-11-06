@@ -128,6 +128,24 @@ describe('event-date reports UI', () => {
             params: { from: '2026-11-05', to: '2026-11-05', groupBy: 'day' },
         });
         expect(document.body.textContent).toContain('Pacific/Auckland');
+        // Human labels, same values (#143).
+        expect(
+            [
+                ...document.querySelectorAll<HTMLOptionElement>(
+                    '#report-group option',
+                ),
+            ].map((o) => [o.textContent?.trim(), o.value]),
+        ).toEqual([
+            ['Day', 'day'],
+            ['Product', 'product'],
+            ['Category', 'category'],
+            ['Cashier', 'cashier'],
+            ['Payment type', 'paymentType'],
+        ]);
+        expect(
+            document.querySelector('[data-testid="report-applied"]')
+                ?.textContent,
+        ).toContain('· Day ·');
         expect(document.body.textContent).toContain('0.450 kg');
         expect(document.body.textContent).toContain('₱35.00');
         expect(

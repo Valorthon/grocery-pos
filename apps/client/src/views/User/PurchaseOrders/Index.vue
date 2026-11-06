@@ -381,7 +381,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
     EXPIRY_LIMITS,
     OPEN_PURCHASE_ORDER_STATUSES,
@@ -861,6 +861,18 @@ if (prefilled.length) {
     void prefillCosts(prefilled);
 }
 const deepLink = router.currentRoute?.value.query.id;
+// The open order is in the address as `?id=` (#143), so it can be
+// bookmarked or shared; replace, so opening orders adds no history.
+watch(
+    () => (editing.value ? current.value?._id : undefined),
+    (id) => {
+        const query = { ...(router.currentRoute?.value.query ?? {}) };
+        if ((query.id ?? undefined) === id) return;
+        if (id) query.id = id;
+        else delete query.id;
+        void router.replace({ query });
+    },
+);
 if (
     !prefilled.length &&
     typeof deepLink === 'string' &&

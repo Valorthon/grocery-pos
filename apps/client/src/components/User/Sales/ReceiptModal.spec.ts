@@ -176,5 +176,5 @@ it('renders the snapshotted weight and price per kg without treating grams as it
     expect(text).toContain('0.450 kg');
     expect(text).toContain('₱180.00/kg');
     expect(text).toContain('₱81.00');
-    expect(text).toContain('Subtotal (1 Items)');
+    expect(text).toContain('Subtotal (1 Item)');
 });

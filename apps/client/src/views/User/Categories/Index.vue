@@ -143,7 +143,10 @@ async function save() {
         } satisfies CreateCategoryRequest;
         if (editing.value)
             await api.patch(`/categories/${editing.value._id}`, body);
-        else await api.post('/categories', body);
+        else {
+            await api.post('/categories', body);
+            useUIStore().queueMessage(Color.SUCCESS, 'Category created');
+        }
         open.value = false;
         await refresh();
     } catch (cause) {

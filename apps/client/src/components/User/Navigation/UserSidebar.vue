@@ -103,7 +103,10 @@
                             :key="section.title"
                         >
                             <div
-                                v-if="!rail"
+                                v-if="
+                                    !rail &&
+                                    section.items.some((i) => i.visible)
+                                "
                                 class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400"
                             >
                                 {{ section.title }}

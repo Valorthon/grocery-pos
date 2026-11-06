@@ -59,6 +59,20 @@ function forceCloseButton(): HTMLButtonElement {
     )!;
 }
 
+async function answerConfirm(label: string) {
+    [...document.querySelectorAll('button')]
+        .find((b) => b.textContent?.trim() === label)!
+        .click();
+    await flush();
+}
+
+/** The shift dialog's own close (×), not a leaving confirmation's. */
+function shiftModalClose(): Element | undefined {
+    return [...document.querySelectorAll('[data-modal-close]')].find(
+        (b) => !b.closest('[role="dialog"]')?.textContent?.includes('?'),
+    );
+}
+
 function errorText(): string | undefined {
     return document.querySelector('[data-testid="force-close-error"]')
         ?.textContent;
@@ -114,9 +128,10 @@ describe('Shifts force-close while closing (issue #22)', () => {
         await typeCount('1000', '1');
         forceCloseButton().click();
         await flush();
+        await answerConfirm('Force-close');
         expect(api.post).toHaveBeenCalled();
 
-        expect(document.querySelector('[data-modal-close]')).toBeNull();
+        expect(shiftModalClose()).toBeUndefined();
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         document
             .querySelector('.fixed.inset-0')!
@@ -127,6 +142,38 @@ describe('Shifts force-close while closing (issue #22)', () => {
         // A refused close leaves the dialog open, dismissable again.
         fail(new Error('offline'));
         await flush();
-        expect(document.querySelector('[data-modal-close]')).not.toBeNull();
+        expect(shiftModalClose()).toBeDefined();
+    });
+});
+
+describe('Shifts force-close confirmation (issue #143)', () => {
+    it('asks first, naming the cashier, and Go back posts nothing', async () => {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(ShiftsIndex);
+        app.use(createPinia());
+        app.mount(host);
+        await flush();
+        [...document.querySelectorAll('tr')]
+            .find((tr) => tr.textContent?.includes('ana'))!
+            .click();
+        await flush();
+        await typeCount('1000', '1');
+
+        forceCloseButton().click();
+        await flush();
+        expect(document.body.textContent).toContain('Force-close shift?');
+        expect(document.body.textContent).toContain("Close ana's shift");
+        expect(document.body.textContent).toContain("can't be undone");
+        await answerConfirm('Go back');
+        expect(api.post).not.toHaveBeenCalled();
+
+        api.post.mockReturnValue(new Promise(() => undefined));
+        forceCloseButton().click();
+        await flush();
+        await answerConfirm('Force-close');
+        expect(api.post).toHaveBeenCalledWith('/shifts/shift1/close', {
+            counts: { '1000': 1 },
+        });
     });
 });

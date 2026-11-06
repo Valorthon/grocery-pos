@@ -70,6 +70,9 @@ describe('category administration', () => {
             expect(document.querySelector('[role=dialog]')).toBeNull(),
         );
         expect(api.get.mock.calls.length).toBe(2);
+        expect(useUIStore().toasts.flatMap((t) => t.lines)).toContain(
+            'Category created',
+        );
     });
     it('edits an existing name/order without changing product price permissions', async () => {
         await mount();

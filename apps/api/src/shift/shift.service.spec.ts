@@ -24,7 +24,7 @@ import { runInTransaction } from '../common/utils/db';
 import { Sales } from '../sales/sales.schema';
 import { OfflineLease } from '../offline/offline-lease.schema';
 import { Shift } from './shift.schema';
-import { ShiftService } from './shift.service';
+import { OFFLINE_PENDING_MESSAGE, ShiftService } from './shift.service';
 import {
     FakeModel,
     fakeConnection,
@@ -54,10 +54,12 @@ const FLOAT = 100_000;
 let service: ShiftService;
 let shifts: FakeModel;
 let sales: FakeModel;
+let leaseModel: FakeModel;
 let connection: ReturnType<typeof fakeConnection>;
 
 beforeEach(async () => {
     shifts = fakeShiftModel();
+    leaseModel = new FakeModel();
     sales = new FakeModel();
     connection = fakeConnection(shifts, sales);
 
@@ -73,13 +75,17 @@ beforeEach(async () => {
             { provide: getModelToken(Sales.name), useValue: sales },
             {
                 provide: getModelToken(OfflineLease.name),
-                useValue: new FakeModel(),
+                useValue: leaseModel,
             },
         ],
     }).compile();
 
     service = moduleRef.get(ShiftService);
 });
+
+function moduleLeases(): { exists: (...args: unknown[]) => unknown } {
+    return leaseModel as unknown as { exists: (...args: unknown[]) => unknown };
+}
 
 /** Runs `fn` in a fake transaction, as SalesService does. */
 function inTransaction<T>(fn: (session: ClientSession) => Promise<T>) {
@@ -492,6 +498,24 @@ describe('ShiftService.closeOwn (Z-read)', () => {
                 code: ErrorCode.SHIFT_NOT_OPEN,
             },
         );
+    });
+
+    it('refuses while a terminal lease is open, naming the admin force-close', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        const leases = moduleLeases();
+        jest.spyOn(leases, 'exists').mockReturnValueOnce({
+            session: () => Promise.resolve({ _id: 'lease' }),
+        } as never);
+
+        await expect(service.closeOwn(ANA, FLOAT_COUNTS)).rejects.toMatchObject(
+            {
+                statusCode: 409,
+                code: ErrorCode.OFFLINE_PENDING,
+                message: OFFLINE_PENDING_MESSAGE,
+            },
+        );
+        expect(OFFLINE_PENDING_MESSAGE).toMatch(/admin to force-close/);
+        expect(shifts.byId(_id)!.status).toBe(ShiftStatus.OPEN);
     });
 
     it('refuses a close whose shift was closed underneath it, and writes nothing', async () => {

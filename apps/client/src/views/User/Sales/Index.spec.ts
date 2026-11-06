@@ -478,7 +478,9 @@ describe('sales-history applied filters and receipt identity', () => {
     it('searches suffix/full IDs, shows short number and full ID in details', async () => {
         serve({ ...CASH_SALE, _id: '0123456789abcdefdeadbeef' }, []);
         await history();
-        expect(document.body.textContent).toContain('deadbeef');
+        // Upper case, as on the receipt (#143).
+        expect(document.body.textContent).toContain('DEADBEEF');
+        expect(document.body.textContent).not.toContain('deadbeef');
         input('sales-number', 'deadbeef');
         await flush();
         button('Search').click();
@@ -488,7 +490,7 @@ describe('sales-history applied filters and receipt identity', () => {
         await flush();
         expect(
             document.querySelector('[data-testid="sale-full-id"]')?.textContent,
-        ).toContain('0123456789abcdefdeadbeef');
+        ).toContain('Sale #DEADBEEF · 0123456789abcdefdeadbeef');
     });
     it('rejects malformed identity/date filters without replacing the current result', async () => {
         serve(CASH_SALE, []);
@@ -507,7 +509,9 @@ describe('sales-history applied filters and receipt identity', () => {
         await flush();
         button('Search').click();
         await flush();
-        expect(document.body.textContent).toContain('end date must not');
+        expect(document.body.textContent).toContain(
+            'The end date is before the start date',
+        );
         expect(
             api.get.mock.calls.filter(([url]) => url === '/sales'),
         ).toHaveLength(count);
@@ -530,7 +534,7 @@ describe('sales-history applied filters and receipt identity', () => {
         payment.dispatchEvent(new Event('change'));
         await flush();
         expect(salesParams()).toMatchObject({ paymentType: 'CASH' });
-        button('Clear filters').click();
+        button('Clear Filters').click();
         await flush();
         expect(salesParams()).toEqual({ page: 1, limit: 5 });
     });
