@@ -8,13 +8,14 @@ on a Railway volume (transactions need a replica set; see
 [MongoDB](#mongodb)). An external replica set such as Atlas works too: point
 `DATABASE_URL` at it and drop the `mongo` service.
 
-| Environment  | Branch       | Client                        | API                               |
-| ------------ | ------------ | ----------------------------- | --------------------------------- |
-| `staging`    | `staging`    | `staging.pos.valorthon.store` | `api.staging.pos.valorthon.store` |
-| `production` | `production` | `app.pos.valorthon.store`     | `api.app.pos.valorthon.store`     |
+| Environment  | Branch       | Client                            | API                               |
+| ------------ | ------------ | --------------------------------- | --------------------------------- |
+| `staging`    | `staging`    | `app.staging.pos.valorthon.store` | `api.staging.pos.valorthon.store` |
+| `production` | `production` | `app.pos.valorthon.store`         | `api.app.pos.valorthon.store`     |
 
-Each environment's cookie parent (`DOMAIN`) is its client host:
-`staging.pos.valorthon.store` and `app.pos.valorthon.store`. They are
+Each environment's cookie parent (`DOMAIN`, `VITE_DOMAIN`) covers both its
+hosts: `staging.pos.valorthon.store` for staging, `app.pos.valorthon.store`
+(the client host itself) for production. They are
 siblings, so neither environment's cookies are ever sent to the other's
 hosts. Never use `pos.valorthon.store` itself as a `DOMAIN`: it is the parent
 of staging, so production's `jwt` and `refresh` cookies would reach the

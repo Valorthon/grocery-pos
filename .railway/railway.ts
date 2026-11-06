@@ -19,12 +19,22 @@ import {
     volume,
 } from 'railway/iac';
 
-// The parent of both hostnames is the cookie domain (`DOMAIN` and
-// `VITE_DOMAIN`). The two parents are siblings: neither is a parent of the
-// other, so no session cookie of one environment is ever sent to the other.
+// `cookie` is the cookie domain (`DOMAIN` and `VITE_DOMAIN`), a parent of
+// both hosts. The two environments' cookie domains are siblings: neither is
+// a parent of the other, so no session cookie of one is sent to the other.
 const ENVIRONMENTS = {
-    staging: { branch: 'staging', domain: 'staging.pos.valorthon.store' },
-    production: { branch: 'production', domain: 'app.pos.valorthon.store' },
+    staging: {
+        branch: 'staging',
+        cookie: 'staging.pos.valorthon.store',
+        client: 'app.staging.pos.valorthon.store',
+        api: 'api.staging.pos.valorthon.store',
+    },
+    production: {
+        branch: 'production',
+        cookie: 'app.pos.valorthon.store',
+        client: 'app.pos.valorthon.store',
+        api: 'api.app.pos.valorthon.store',
+    },
 } as const;
 
 // A build of either image needs packages/contracts and the workspace files.
@@ -84,7 +94,7 @@ export default defineRailway((ctx) => {
         healthcheck: '/v1/health/live',
         healthcheckTimeout: 300,
         replicas: { 'us-west2': 1 },
-        domains: [`api.${env.domain}`],
+        domains: [env.api],
     });
 
     const client = service('client', {
@@ -98,7 +108,7 @@ export default defineRailway((ctx) => {
         healthcheck: '/health',
         healthcheckTimeout: 300,
         replicas: { 'us-west2': 1 },
-        domains: [env.domain],
+        domains: [env.client],
     });
 
     return project('grocery-pos', {
