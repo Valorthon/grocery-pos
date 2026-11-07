@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
+import { AxiosError, type AxiosResponse } from 'axios';
 import {
     DEFAULT_TERMINAL,
+    ErrorCode,
     ShiftStatus,
     type ZReadReport,
 } from '@grocery-pos/contracts';
@@ -10,7 +12,12 @@ import { useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
 import ShiftOutModal from './ShiftOutModal.vue';
 import ZReadReportView from './ZReadReportView.vue';
-import { COUNTS_INVALID } from './shift';
+import {
+    blockingTerminals,
+    closeErrorText,
+    COUNTS_INVALID,
+    offlinePendingText,
+} from './shift';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -121,7 +128,7 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
         const shift = await openModal();
         await countThousands(1);
         expect(document.body.textContent).toContain(
-            '1 parked tickets are still open',
+            '1 parked ticket is still open',
         );
         document
             .querySelector<HTMLButtonElement>(
@@ -149,6 +156,24 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
         await flush();
         expect(shift.activeShift).toBeNull();
         expect(cart.parked[0].shiftId).toBeNull();
+    });
+    it('names several parked tickets in the plural', async () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        for (const product of ['p1', 'p2']) {
+            cart.add({
+                product,
+                EAN: '2000000000015',
+                name: 'milk',
+                unitPrice: 100,
+            });
+            cart.park('', 'shift1');
+        }
+        await openModal();
+        expect(cart.parked).toHaveLength(2);
+        expect(document.body.textContent).toContain(
+            '2 parked tickets are still open',
+        );
     });
     it('cancelling shift close preserves parked tickets and clears the choice on reopen', async () => {
         const cart = useCartStore();
@@ -273,6 +298,98 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
             document.querySelector('[data-testid="shift-out-error"]')
                 ?.textContent,
         ).toContain('Could not close the shift');
+    });
+});
+
+describe('a close refused by offline terminals (#143)', () => {
+    const SERVER_MESSAGE =
+        'Offline mode is still on for this shift on at least one terminal.';
+
+    function refusal(details: unknown, error = ErrorCode.OFFLINE_PENDING) {
+        return new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, null, {
+            status: 409,
+            data: {
+                statusCode: 409,
+                error,
+                message: SERVER_MESSAGE,
+                timestamp: '2026-11-07T00:00:00.000Z',
+                path: '/v1/shifts/current/close',
+                details,
+                requestId: 'r1',
+            },
+        } as AxiosResponse);
+    }
+
+    async function refusedWith(err: unknown): Promise<string> {
+        const shift = useShiftStore();
+        shift.activeShift = {
+            _id: 'shift1',
+            status: ShiftStatus.OPEN,
+            cashierName: 'ana',
+            terminal: DEFAULT_TERMINAL,
+            openedAt: '2026-09-25T00:00:00.000Z',
+            openingFloat: 100_000,
+            movements: [],
+        };
+        shift.loaded = true;
+        mount(ShiftOutModal);
+        shift.shiftOutOpen = true;
+        await flush();
+        await typeCount('1000', '1');
+        api.post.mockRejectedValue(err);
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="shift-out-confirm"]',
+            )!
+            .click();
+        await flush();
+        expect(shift.shiftOutOpen).toBe(true);
+        return (
+            document.querySelector('[data-testid="shift-out-error"]')
+                ?.textContent ?? ''
+        );
+    }
+
+    it('names one blocking terminal in the singular', async () => {
+        const text = await refusedWith(refusal({ terminals: 1 }));
+        expect(text).toContain(
+            '1 terminal still has offline mode on for this shift.',
+        );
+        expect(text).toContain('ask an admin to force-close');
+    });
+
+    it('names several blocking terminals in the plural', async () => {
+        const text = await refusedWith(refusal({ terminals: 2 }));
+        expect(text).toContain(
+            '2 terminals still have offline mode on for this shift.',
+        );
+    });
+
+    it('falls back to the server message without a count', async () => {
+        const text = await refusedWith(refusal(null));
+        expect(text).toContain(SERVER_MESSAGE);
+        expect(text).not.toMatch(/terminals? still ha/);
+    });
+
+    it('reads the count only from a well-formed OFFLINE_PENDING body', () => {
+        expect(blockingTerminals(refusal({ terminals: 3 }))).toBe(3);
+        for (const details of [
+            null,
+            {},
+            { terminals: 0 },
+            { terminals: -1 },
+            { terminals: 1.5 },
+            { terminals: '2' },
+        ]) {
+            expect(blockingTerminals(refusal(details))).toBeNull();
+        }
+        expect(
+            blockingTerminals(refusal({ terminals: 2 }, ErrorCode.CONFLICT)),
+        ).toBeNull();
+        expect(blockingTerminals(new Error('offline'))).toBeNull();
+        expect(closeErrorText(refusal({ terminals: 2 }), 'x')).toBe(
+            offlinePendingText(2),
+        );
     });
 });
 

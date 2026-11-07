@@ -3,9 +3,12 @@ import {
     billCountTotal,
     CASH_DENOMINATIONS,
     type CashDenomination,
+    ErrorCode,
     NUMERIC_LIMITS,
+    type OfflinePendingDetails,
     SHIFT_LIMITS,
 } from '@grocery-pos/contracts';
+import { apiErrorBody, apiErrorText } from '@/utils/api-error';
 
 export type { BillCounts };
 
@@ -69,4 +72,41 @@ export function piecesError(text: string): string {
     }
     if (/^-\s*\d/.test(value)) return 'Can’t be negative';
     return 'Whole pieces only';
+}
+
+/**
+ * How many terminals still block the cashier's close (#143): the
+ * `details.terminals` of an OFFLINE_PENDING refusal, or null when the
+ * error is something else or the count is missing or malformed.
+ */
+export function blockingTerminals(error: unknown): number | null {
+    const body = apiErrorBody(error);
+    if (body?.error !== ErrorCode.OFFLINE_PENDING) return null;
+    const details = body.details as Partial<OfflinePendingDetails> | null;
+    const terminals = details?.terminals;
+    return typeof terminals === 'number' &&
+        Number.isInteger(terminals) &&
+        terminals > 0
+        ? terminals
+        : null;
+}
+
+/** Why the server refused the close because terminals are still offline. */
+export function offlinePendingText(terminals: number): string {
+    const who =
+        terminals === 1
+            ? '1 terminal still has'
+            : `${terminals.toLocaleString('en-PH')} terminals still have`;
+    return `${who} offline mode on for this shift. Sync their pending cash sales and turn offline mode off there, then close. If a terminal's browser data is gone, ask an admin to force-close the shift.`;
+}
+
+/**
+ * What Shift Out shows for a failed close: the blocking-terminal count
+ * when the server sent one, else the usual API error text.
+ */
+export function closeErrorText(error: unknown, fallback: string): string {
+    const terminals = blockingTerminals(error);
+    return terminals === null
+        ? apiErrorText(error, fallback)
+        : offlinePendingText(terminals);
 }

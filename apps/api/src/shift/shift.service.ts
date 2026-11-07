@@ -18,6 +18,7 @@ import {
     DEFAULT_TERMINAL,
     type DrawerMovementView,
     DrawerMovementType,
+    type OfflinePendingDetails,
     type Paginated,
     ReversalType,
     SHIFT_LIMITS,
@@ -490,15 +491,21 @@ export class ShiftService {
                     .session(session)
                     .lean<ShiftDoc>();
                 if (!shift) throw this.notOpen();
-                if (
-                    await this.offlineLeases
-                        .exists({ shift: shift._id, active: true })
-                        .session(session)
-                )
+                // One terminal may hold several leases (one per login
+                // session): count terminals, never name them.
+                const terminalIds: unknown[] = await this.offlineLeases
+                    .distinct('terminalId', { shift: shift._id, active: true })
+                    .session(session);
+                if (terminalIds.length > 0) {
+                    const details: OfflinePendingDetails = {
+                        terminals: terminalIds.length,
+                    };
                     throw new ConflictError(
                         ErrorCode.OFFLINE_PENDING,
                         OFFLINE_PENDING_MESSAGE,
+                        details,
                     );
+                }
                 return this.close(shift, user, counts, countedCash, session);
             },
             this.connection,

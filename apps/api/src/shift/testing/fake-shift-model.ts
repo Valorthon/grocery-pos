@@ -6,7 +6,7 @@
  * Covers what ShiftService calls: `findOne` / `findById` / `find` (chained
  * with `sort`, `skip`, `limit`, `session`, `lean`), `create`,
  * `findOneAndUpdate` and `updateOne` with `$set`, `$inc` and `$push`,
- * `countDocuments` and `exists`. Filters are plain equality (compared as
+ * `countDocuments`, `exists` and `distinct`. Filters are plain equality (compared as
  * strings, so ObjectIds match their hex). The unique partial index on open
  * shifts is enforced on `create`, with Mongo's duplicate-key error shape.
  * Transactions run one at a time and roll back on a throw; real snapshot
@@ -151,6 +151,16 @@ export class FakeModel {
             const row = this.rows.find((r) => matches(r, filter));
             return row ? { _id: row._id } : null;
         });
+    }
+
+    distinct(field: string, filter: Filter = {}): FakeQuery<unknown[]> {
+        return new FakeQuery(() => [
+            ...new Set(
+                this.rows
+                    .filter((row) => matches(row, filter))
+                    .map((row) => row[field]),
+            ),
+        ]);
     }
 
     countDocuments(filter: Filter = {}): FakeQuery<number> {

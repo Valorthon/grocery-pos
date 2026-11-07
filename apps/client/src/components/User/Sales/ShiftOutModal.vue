@@ -22,7 +22,8 @@
             class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3"
         >
             <legend class="text-sm font-bold">
-                {{ cart.parked.length }} parked tickets are still open
+                {{ countOf(cart.parked.length, 'parked ticket') }}
+                {{ cart.parked.length === 1 ? 'is' : 'are' }} still open
             </legend>
             <p class="text-xs text-slate-700">
                 Choose what happens to these drafts when this shift closes. They
@@ -107,13 +108,14 @@ import { billCountTotal, ErrorCode } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { countPieces, countsError } from './shift';
+import { closeErrorText, countPieces, countsError } from './shift';
 import type { BillCounts } from './shift';
-import { apiErrorMessage, useShiftStore } from '@/stores/shift';
+import { useShiftStore } from '@/stores/shift';
 import { apiErrorCode } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
 import { useCartStore } from '@/stores/cart';
 import { formatCurrency } from '@/utils/currency';
+import { countOf } from '@/utils/plural';
 
 /**
  * The closing count is blind (issue #2): the cashier sees only what they
@@ -178,7 +180,7 @@ async function confirm() {
     try {
         await shiftStore.closeShift(billCounts.value, parkedChoice.value);
     } catch (err) {
-        error.value = apiErrorMessage(err, 'Could not close the shift');
+        error.value = closeErrorText(err, 'Could not close the shift');
         if (apiErrorCode(err) === ErrorCode.SHIFT_NOT_OPEN) {
             // Closed elsewhere (e.g. by an admin): the modal has closed.
             uiStore.queueMessage(
