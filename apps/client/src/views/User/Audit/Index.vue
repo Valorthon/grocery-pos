@@ -8,9 +8,12 @@
             </p>
             <div class="flex flex-wrap items-end gap-3">
                 <BaseInput
-                    v-model="actor"
-                    label="Actor user ID"
+                    v-model="username"
+                    label="Username"
+                    :maxlength="STRING_LIMITS.USERNAME"
+                    clearable
                     @keydown.enter="search"
+                    @clear="search"
                 />
                 <label class="text-sm"
                     >Action<select
@@ -160,6 +163,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     AUDIT_ACTION_LABELS,
     AuditAction,
+    STRING_LIMITS,
+    type AuditListQuery,
     type AuditLogView,
     type Paginated,
 } from '@grocery-pos/contracts';
@@ -173,8 +178,8 @@ import { dateRangeError } from '@/utils/rules';
 import { formatStoreDateTime } from '@/utils/datetime';
 import { useAuthStore } from '@/stores/auth';
 const auth = useAuthStore();
-const actor = ref(''),
-    action = ref(''),
+const username = ref(''),
+    action = ref<AuditAction | ''>(''),
     from = ref(''),
     to = ref(''),
     page = ref(1),
@@ -186,18 +191,13 @@ const rows = ref<AuditLogView[]>([]),
     selected = ref<AuditLogView | null>(null);
 const actions = Object.values(AuditAction);
 const rangeError = computed(() => dateRangeError(from.value, to.value));
-let applied: { actor?: string; action?: string; from?: string; to?: string } =
-        {},
+let applied: Omit<AuditListQuery, 'page' | 'limit'> = {},
     generation = 0;
 function search() {
     validation.value = rangeError.value;
     if (validation.value) return;
-    if (actor.value && !/^[a-fA-F0-9]{24}$/.test(actor.value)) {
-        validation.value = 'Enter a valid user ID.';
-        return;
-    }
     applied = {
-        actor: actor.value || undefined,
+        username: username.value.trim() || undefined,
         action: action.value || undefined,
         from: from.value || undefined,
         to: to.value || undefined,
@@ -206,7 +206,7 @@ function search() {
     void load();
 }
 function clear() {
-    actor.value = '';
+    username.value = '';
     action.value = '';
     from.value = '';
     to.value = '';
@@ -220,7 +220,11 @@ async function load() {
     selected.value = null;
     try {
         const { data } = await api.get<Paginated<AuditLogView>>('/audit', {
-            params: { ...applied, page: page.value, limit: 20 },
+            params: {
+                ...applied,
+                page: page.value,
+                limit: 20,
+            } satisfies AuditListQuery,
         });
         if (version !== generation) return;
         rows.value = data.data;

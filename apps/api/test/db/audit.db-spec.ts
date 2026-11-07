@@ -259,7 +259,7 @@ it('restricts list access to admins and validates filter/pagination/wire shape',
         await db.call(
             admin,
             'GET',
-            `/audit?actor=${admin.userId}&action=${AuditAction.AUTH_LOGIN}&page=1&limit=1`,
+            `/audit?username=${encodeURIComponent(` ${admin.username.toUpperCase()} `)}&action=${AuditAction.AUTH_LOGIN}&page=1&limit=1`,
         ),
     );
     expect(result.status).toBe(200);
@@ -272,6 +272,14 @@ it('restricts list access to admins and validates filter/pagination/wire shape',
         _id: admin.userId,
         name: admin.username,
     });
+    const unknown = await read<Paginated<AuditLogView>>(
+        await db.call(admin, 'GET', '/audit?username=audit-nobody'),
+    );
+    expect(unknown.status).toBe(200);
+    expect(unknown.body).toEqual({ totalItems: 0, data: [] });
+    expect(
+        (await db.call(admin, 'GET', `/audit?actor=${admin.userId}`)).status,
+    ).toBe(400);
     expect((await db.call(admin, 'GET', '/audit?limit=101')).status).toBe(400);
     expect(
         (await db.call(admin, 'GET', '/audit?from=2026-12-02&to=2026-12-01'))

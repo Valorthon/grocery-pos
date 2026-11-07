@@ -242,3 +242,16 @@ export interface RestockListQuery {
     page: number;
     limit: number;
 }
+
+/**
+ * `GET /audit` query. `username` is the actor's current username (#143);
+ * it matches entries recorded under that user's earlier names too.
+ */
+export interface AuditListQuery {
+    page: number;
+    limit: number;
+    username?: string;
+    action?: import('../audit.js').AuditAction;
+    from?: string;
+    to?: string;
+}

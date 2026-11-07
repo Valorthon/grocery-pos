@@ -13,6 +13,7 @@ import {
     type Paginated,
 } from '@grocery-pos/contracts';
 import { AuditLog } from './audit.schema';
+import { User } from '../user/user.schema';
 import { auditFields } from './audit-fields';
 import { auditMetadata } from './audit-context';
 import { AuditQueryDto } from './audit.dto';
@@ -33,6 +34,7 @@ export class AuditService implements OnModuleInit {
     constructor(
         @InjectModel(AuditLog.name) private model: Model<AuditLog>,
         private config: TypedConfigService,
+        @InjectModel(User.name) private users: Model<User>,
         @OptionalSettings()
         @InjectSettings(SettingsService)
         private settings?: SettingsService,
@@ -66,7 +68,15 @@ export class AuditService implements OnModuleInit {
     }
     async list(dto: AuditQueryDto): Promise<Paginated<AuditLogView>> {
         const filter: Record<string, unknown> = {};
-        if (dto.actor) filter.actor = new Types.ObjectId(dto.actor);
+        if (dto.username) {
+            // The current holder of the name, by id: entries recorded under
+            // an earlier name still match, and an unknown name matches none.
+            const user = await this.users
+                .findOne({ name: dto.username }, { _id: 1 })
+                .lean<{ _id: Types.ObjectId }>();
+            if (!user) return { totalItems: 0, data: [] };
+            filter.actor = user._id;
+        }
         if (dto.action) filter.action = dto.action;
         const range = dateRangeFilter(
             dto.from,
