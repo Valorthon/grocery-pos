@@ -107,9 +107,9 @@ import { billCountTotal, ErrorCode } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BillCountInput from './BillCountInput.vue';
-import { countPieces, countsError } from './shift';
+import { closeErrorText, countPieces, countsError } from './shift';
 import type { BillCounts } from './shift';
-import { apiErrorMessage, useShiftStore } from '@/stores/shift';
+import { useShiftStore } from '@/stores/shift';
 import { apiErrorCode } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
 import { useCartStore } from '@/stores/cart';
@@ -178,7 +178,7 @@ async function confirm() {
     try {
         await shiftStore.closeShift(billCounts.value, parkedChoice.value);
     } catch (err) {
-        error.value = apiErrorMessage(err, 'Could not close the shift');
+        error.value = closeErrorText(err, 'Could not close the shift');
         if (apiErrorCode(err) === ErrorCode.SHIFT_NOT_OPEN) {
             // Closed elsewhere (e.g. by an admin): the modal has closed.
             uiStore.queueMessage(

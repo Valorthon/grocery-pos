@@ -7,6 +7,7 @@ import {
     DrawerMovementType,
     ErrorCode,
     NUMERIC_LIMITS,
+    OFFLINE_PENDING_DETAILS_SHAPE,
     PaymentType,
     ReversalType,
     Role,
@@ -20,6 +21,7 @@ import {
     Z_READ_TENDERS_SHAPE,
 } from '@grocery-pos/contracts';
 import { AuthUser } from '../auth/types';
+import { AppError } from '../common/errors/app-error';
 import { runInTransaction } from '../common/utils/db';
 import { Sales } from '../sales/sales.schema';
 import { OfflineLease } from '../offline/offline-lease.schema';
@@ -82,10 +84,6 @@ beforeEach(async () => {
 
     service = moduleRef.get(ShiftService);
 });
-
-function moduleLeases(): { exists: (...args: unknown[]) => unknown } {
-    return leaseModel as unknown as { exists: (...args: unknown[]) => unknown };
-}
 
 /** Runs `fn` in a fake transaction, as SalesService does. */
 function inTransaction<T>(fn: (session: ClientSession) => Promise<T>) {
@@ -500,22 +498,65 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         );
     });
 
-    it('refuses while a terminal lease is open, naming the admin force-close', async () => {
+    it('refuses while a terminal lease is open, naming the admin force-close and the terminal count', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        const leases = moduleLeases();
-        jest.spyOn(leases, 'exists').mockReturnValueOnce({
-            session: () => Promise.resolve({ _id: 'lease' }),
-        } as never);
+        const shift = new Types.ObjectId(_id);
+        // Terminal A holds two leases (two login sessions): one terminal.
+        leaseModel.seed({ shift, terminalId: 'A', sid: 's1', active: true });
+        leaseModel.seed({ shift, terminalId: 'A', sid: 's2', active: true });
+        leaseModel.seed({ shift, terminalId: 'B', sid: 's1', active: true });
+        // Released leases and other shifts' leases do not block.
+        leaseModel.seed({ shift, terminalId: 'C', sid: 's1', active: false });
+        leaseModel.seed({
+            shift: new Types.ObjectId(),
+            terminalId: 'D',
+            sid: 's1',
+            active: true,
+        });
 
-        await expect(service.closeOwn(ANA, FLOAT_COUNTS)).rejects.toMatchObject(
-            {
-                statusCode: 409,
-                code: ErrorCode.OFFLINE_PENDING,
-                message: OFFLINE_PENDING_MESSAGE,
-            },
-        );
+        const refused = service.closeOwn(ANA, FLOAT_COUNTS);
+        await expect(refused).rejects.toMatchObject({
+            statusCode: 409,
+            code: ErrorCode.OFFLINE_PENDING,
+            message: OFFLINE_PENDING_MESSAGE,
+            details: { terminals: 2 },
+        });
+        const body = (await refused.catch((err: AppError) => err)) as AppError;
+        expect(body.toResponse('/p', 'r').details).toEqual({ terminals: 2 });
+        expect(
+            wireShapeDiff(body.details, OFFLINE_PENDING_DETAILS_SHAPE),
+        ).toEqual({ missing: [], unexpected: [] });
         expect(OFFLINE_PENDING_MESSAGE).toMatch(/admin to force-close/);
         expect(shifts.byId(_id)!.status).toBe(ShiftStatus.OPEN);
+    });
+
+    it('counts a single blocking terminal as one', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        leaseModel.seed({
+            shift: new Types.ObjectId(_id),
+            terminalId: 'A',
+            sid: 's1',
+            active: true,
+        });
+
+        await expect(service.closeOwn(ANA, FLOAT_COUNTS)).rejects.toMatchObject(
+            { code: ErrorCode.OFFLINE_PENDING, details: { terminals: 1 } },
+        );
+    });
+
+    it('closes once every lease of the shift is released', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        leaseModel.seed({
+            shift: new Types.ObjectId(_id),
+            terminalId: 'A',
+            sid: 's1',
+            active: false,
+        });
+
+        await expect(
+            service.closeOwn(ANA, FLOAT_COUNTS),
+        ).resolves.toBeDefined();
+        expect(shifts.byId(_id)!.status).toBe(ShiftStatus.CLOSED);
     });
 
     it('refuses a close whose shift was closed underneath it, and writes nothing', async () => {

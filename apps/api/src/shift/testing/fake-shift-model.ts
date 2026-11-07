@@ -153,6 +153,16 @@ export class FakeModel {
         });
     }
 
+    distinct(field: string, filter: Filter = {}): FakeQuery<unknown[]> {
+        return new FakeQuery(() => [
+            ...new Set(
+                this.rows
+                    .filter((row) => matches(row, filter))
+                    .map((row) => row[field]),
+            ),
+        ]);
+    }
+
     countDocuments(filter: Filter = {}): FakeQuery<number> {
         return new FakeQuery(
             () => this.rows.filter((row) => matches(row, filter)).length,

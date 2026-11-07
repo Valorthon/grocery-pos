@@ -67,6 +67,11 @@ export enum ErrorCode {
      */
     OFFLINE_INVALID = 'OFFLINE_001',
     OFFLINE_RECONCILIATION_REQUIRED = 'OFFLINE_002',
+    /**
+     * A cashier's own shift close is refused while terminals still hold an
+     * active offline lease for the shift (their queued cash sales may not
+     * be synced yet). 409; `details` is `OfflinePendingDetails` (#143).
+     */
     OFFLINE_PENDING = 'OFFLINE_003',
     CONFLICT = 'CONFLICT_001',
     /**
@@ -150,6 +155,19 @@ export const APP_ERROR_RESPONSE_SHAPE: WireShape<AppErrorResponse> = {
     path: 'required',
     details: 'required',
     requestId: 'required',
+};
+
+/**
+ * `details` of an OFFLINE_PENDING close refusal (#143): how many terminals
+ * (distinct terminal ids with an active offline lease on the shift) still
+ * block the close. A count only, never terminal ids or labels.
+ */
+export interface OfflinePendingDetails {
+    terminals: number;
+}
+
+export const OFFLINE_PENDING_DETAILS_SHAPE: WireShape<OfflinePendingDetails> = {
+    terminals: 'required',
 };
 
 /** Shape of every paginated list endpoint. */

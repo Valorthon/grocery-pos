@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import {
     wireShapeDiff,
     OFFLINE_LEASE_SHAPE,
+    OFFLINE_PENDING_DETAILS_SHAPE,
     OFFLINE_CATALOG_SHAPE,
     OFFLINE_PRODUCT_SHAPE,
     CURRENT_SHIFT_VIEW_SHAPE,
@@ -241,6 +242,11 @@ it('blocks own close while a terminal lease is active and permits close after sy
     );
     expect(blocked.body.error).toBe(ErrorCode.OFFLINE_PENDING);
     expect(blocked.body.message).toMatch(/ask an admin to force-close/);
+    // A count only (#143): the one terminal holding a lease, no ids.
+    expect(blocked.body.details).toEqual({ terminals: 1 });
+    expect(
+        wireShapeDiff(blocked.body.details, OFFLINE_PENDING_DETAILS_SHAPE),
+    ).toEqual({ missing: [], unexpected: [] });
     expect((await db.call(seller, 'POST', '/offline/sync', body)).status).toBe(
         201,
     );
