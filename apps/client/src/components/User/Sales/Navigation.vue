@@ -20,54 +20,78 @@
                     <Menu class="w-6 h-6" aria-hidden="true" />
                 </button>
 
-                <button
-                    type="button"
-                    class="min-h-11 min-w-11 flex items-center gap-2.5 group focus-ring"
-                    aria-label="GroceryPOS dashboard"
-                    @click="router.push({ name: 'SellerDashboard' })"
+                <!--
+                    Real links (#143): a modified or middle click opens a
+                    new tab; a plain one goes through the router.
+                -->
+                <RouterLink
+                    v-slot="{ href, navigate }"
+                    :to="{ name: 'SellerDashboard' }"
+                    custom
                 >
-                    <div
-                        class="w-8 h-8 rounded-lg bg-primary-600/10 text-primary-600 flex items-center justify-center border border-primary-600/20 group-hover:bg-primary-600/20 transition-colors"
+                    <a
+                        :href="href"
+                        class="min-h-11 min-w-11 flex items-center gap-2.5 group focus-ring"
+                        aria-label="GroceryPOS dashboard"
+                        @click="follow($event, navigate)"
                     >
-                        <Store class="w-5 h-5" />
-                    </div>
-                    <span
-                        class="text-xl font-extrabold tracking-tight text-primary-600 hidden sm:inline"
-                    >
-                        GroceryPOS
-                    </span>
-                </button>
+                        <div
+                            class="w-8 h-8 rounded-lg bg-primary-600/10 text-primary-600 flex items-center justify-center border border-primary-600/20 group-hover:bg-primary-600/20 transition-colors"
+                        >
+                            <Store class="w-5 h-5" />
+                        </div>
+                        <span
+                            class="text-xl font-extrabold tracking-tight text-primary-600 hidden sm:inline"
+                        >
+                            GroceryPOS
+                        </span>
+                    </a>
+                </RouterLink>
 
                 <nav
                     class="hidden md:flex items-center gap-1 ml-4 pl-4 border-l border-slate-200"
                 >
-                    <button
-                        type="button"
-                        class="min-h-11 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
-                        :class="
-                            isDashboard
-                                ? 'bg-slate-100 text-slate-900'
-                                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                        "
-                        @click="router.push({ name: 'SellerDashboard' })"
+                    <RouterLink
+                        v-slot="{ href, navigate }"
+                        :to="{ name: 'SellerDashboard' }"
+                        custom
                     >
-                        <LayoutDashboard class="w-3.5 h-3.5" />
-                        <span>Dashboard</span>
-                    </button>
+                        <a
+                            :href="href"
+                            class="min-h-11 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
+                            :class="
+                                isDashboard
+                                    ? 'bg-slate-100 text-slate-900'
+                                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                            "
+                            :aria-current="isDashboard ? 'page' : undefined"
+                            @click="follow($event, navigate)"
+                        >
+                            <LayoutDashboard class="w-3.5 h-3.5" />
+                            <span>Dashboard</span>
+                        </a>
+                    </RouterLink>
 
-                    <button
-                        type="button"
-                        class="min-h-11 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
-                        :class="
-                            isOrders
-                                ? 'bg-slate-100 text-slate-900'
-                                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
-                        "
-                        @click="router.push({ name: 'Sales' })"
+                    <RouterLink
+                        v-slot="{ href, navigate }"
+                        :to="{ name: 'Sales' }"
+                        custom
                     >
-                        <ReceiptText class="w-3.5 h-3.5" />
-                        <span>Orders & Sales</span>
-                    </button>
+                        <a
+                            :href="href"
+                            class="min-h-11 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 focus-ring"
+                            :class="
+                                isOrders
+                                    ? 'bg-slate-100 text-slate-900'
+                                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                            "
+                            :aria-current="isOrders ? 'page' : undefined"
+                            @click="follow($event, navigate)"
+                        >
+                            <ReceiptText class="w-3.5 h-3.5" />
+                            <span>Orders & Sales</span>
+                        </a>
+                    </RouterLink>
                 </nav>
             </div>
 
@@ -138,26 +162,32 @@
                         </button>
                     </div>
                     <nav class="p-3 space-y-1.5">
-                        <button
+                        <RouterLink
                             v-for="item in menuItems"
+                            v-slot="{ href, navigate }"
                             :key="item.route"
-                            type="button"
-                            class="w-full min-h-11 flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm transition-all focus-ring"
-                            :class="
-                                item.active
-                                    ? 'bg-primary-600 text-white font-bold shadow-xs'
-                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold'
-                            "
-                            :aria-current="item.active ? 'page' : undefined"
-                            @click="go(item.route)"
+                            :to="{ name: item.route }"
+                            custom
                         >
-                            <component
-                                :is="item.icon"
-                                class="w-5 h-5 shrink-0"
-                                aria-hidden="true"
-                            />
-                            <span>{{ item.label }}</span>
-                        </button>
+                            <a
+                                :href="href"
+                                class="w-full min-h-11 flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm transition-all focus-ring"
+                                :class="
+                                    item.active
+                                        ? 'bg-primary-600 text-white font-bold shadow-xs'
+                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold'
+                                "
+                                :aria-current="item.active ? 'page' : undefined"
+                                @click="follow($event, navigate)"
+                            >
+                                <component
+                                    :is="item.icon"
+                                    class="w-5 h-5 shrink-0"
+                                    aria-hidden="true"
+                                />
+                                <span>{{ item.label }}</span>
+                            </a>
+                        </RouterLink>
                     </nav>
                 </div>
             </div>
@@ -167,7 +197,8 @@
 
 <script setup lang="ts">
 import { computed, ref, useTemplateRef, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { RouterLink, useRoute } from 'vue-router';
+import { isPlainClick } from '@/utils/nav-click';
 import {
     LayoutDashboard,
     Menu,
@@ -183,7 +214,6 @@ import { useModalDrawer } from '@/composables/useModalDrawer';
 import UserProfileMenu from './UserProfileMenu.vue';
 
 const route = useRoute();
-const router = useRouter();
 const cartStore = useCartStore();
 const shiftStore = useShiftStore();
 const drawerRoot = useTemplateRef<HTMLElement>('drawerRoot');
@@ -229,8 +259,10 @@ const menuItems = computed(() => [
     },
 ]);
 
-function go(name: string) {
+/** A plain click closes the menu and navigates; others are the browser's. */
+function follow(e: MouseEvent, navigate: (e: MouseEvent) => unknown) {
+    if (!isPlainClick(e)) return;
     closeMenu();
-    void router.push({ name });
+    void navigate(e);
 }
 </script>

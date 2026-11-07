@@ -111,50 +111,68 @@
                             >
                                 {{ section.title }}
                             </div>
-                            <button
+                            <!--
+                                Real links (#143): a modified or middle
+                                click opens a new tab; a plain one goes
+                                through the router, and its guards.
+                            -->
+                            <RouterLink
                                 v-for="item in section.items"
-                                v-show="item.visible"
+                                v-slot="{ href, navigate }"
                                 :key="item.name"
-                                type="button"
-                                class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
-                                :class="[
-                                    rail
-                                        ? 'justify-center p-3'
-                                        : 'justify-between min-h-11 px-3.5 py-2.5',
-                                    isActive(item.name)
-                                        ? 'bg-primary-600 text-white font-bold shadow-xs'
-                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
-                                ]"
-                                :title="rail ? item.title : undefined"
-                                :aria-label="rail ? item.title : undefined"
-                                :aria-current="
-                                    isActive(item.name) ? 'page' : undefined
-                                "
-                                @click="navigate(item.name)"
+                                :to="target(item.name)"
+                                custom
                             >
-                                <div class="flex items-center gap-3 min-w-0">
-                                    <component
-                                        :is="item.icon"
-                                        class="w-5 h-5 shrink-0"
-                                        :class="
-                                            isActive(item.name)
-                                                ? 'text-white'
-                                                : 'text-slate-500 group-hover:text-slate-900'
-                                        "
-                                    />
-                                    <span
-                                        v-if="!rail"
-                                        class="text-sm block truncate"
-                                        >{{ item.title }}</span
+                                <a
+                                    v-show="item.visible"
+                                    :href="href"
+                                    class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
+                                    :class="[
+                                        rail
+                                            ? 'justify-center p-3'
+                                            : 'justify-between min-h-11 px-3.5 py-2.5',
+                                        isActive(item.name)
+                                            ? 'bg-primary-600 text-white font-bold shadow-xs'
+                                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
+                                    ]"
+                                    :title="rail ? item.title : undefined"
+                                    :aria-label="rail ? item.title : undefined"
+                                    :aria-current="
+                                        isActive(item.name) ? 'page' : undefined
+                                    "
+                                    @click="follow($event, navigate)"
+                                >
+                                    <div
+                                        class="flex items-center gap-3 min-w-0"
                                     >
-                                    <span
-                                        v-if="item.name === 'LowStock' && !rail"
-                                        class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"
-                                        aria-label="Low stock count"
-                                        >{{ stockAlerts.count ?? '?' }}</span
-                                    >
-                                </div>
-                            </button>
+                                        <component
+                                            :is="item.icon"
+                                            class="w-5 h-5 shrink-0"
+                                            :class="
+                                                isActive(item.name)
+                                                    ? 'text-white'
+                                                    : 'text-slate-500 group-hover:text-slate-900'
+                                            "
+                                        />
+                                        <span
+                                            v-if="!rail"
+                                            class="text-sm block truncate"
+                                            >{{ item.title }}</span
+                                        >
+                                        <span
+                                            v-if="
+                                                item.name === 'LowStock' &&
+                                                !rail
+                                            "
+                                            class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"
+                                            aria-label="Low stock count"
+                                            >{{
+                                                stockAlerts.count ?? '?'
+                                            }}</span
+                                        >
+                                    </div>
+                                </a>
+                            </RouterLink>
                         </template>
                     </nav>
                     <div
@@ -183,7 +201,7 @@
 
 <script setup lang="ts">
 import { computed, ref, useTemplateRef, watch } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { RouterLink, type RouteLocationRaw, useRoute } from 'vue-router';
 import {
     ClipboardEdit,
     Clock,
@@ -205,12 +223,12 @@ import { canViewDashboard } from '@/router/access';
 import UserProfileMenu from '@/components/User/Sales/UserProfileMenu.vue';
 import { useIsLarge } from '@/composables/useMediaQuery';
 import { useModalDrawer } from '@/composables/useModalDrawer';
+import { isPlainClick } from '@/utils/nav-click';
 
 /** `modelValue`: whether the drawer is open (below lg only). */
 const props = defineProps<{ modelValue: boolean }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
-const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
@@ -396,12 +414,16 @@ function isActive(name: string) {
     return route.name === name;
 }
 
-function navigate(name: string) {
+function target(name: string): RouteLocationRaw {
+    return name === 'LowStock'
+        ? { name: 'Inventories', query: { lowStock: 'true' } }
+        : { name };
+}
+
+/** A plain click closes the drawer and navigates; others are the browser's. */
+function follow(e: MouseEvent, navigate: (e: MouseEvent) => unknown) {
+    if (!isPlainClick(e)) return;
     closeDrawer();
-    void router.push(
-        name === 'LowStock'
-            ? { name: 'Inventories', query: { lowStock: 'true' } }
-            : { name },
-    );
+    void navigate(e);
 }
 </script>

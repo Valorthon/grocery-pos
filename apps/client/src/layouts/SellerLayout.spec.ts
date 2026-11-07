@@ -25,6 +25,7 @@ import { useShiftStore } from '@/stores/shift';
 import { useUIStore } from '@/stores/ui';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
+import { clickLink, NEW_TAB_CLICKS } from '@/testing/link-click';
 import { useRegisterShortcuts } from '@/composables/useRegisterShortcuts';
 import { useStickyFocus } from '@/composables/useStickyFocus';
 import SellerLayout from './SellerLayout.vue';
@@ -317,6 +318,86 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(sidebar().contains(document.activeElement)).toBe(true);
         });
 
+        function link(label: string) {
+            return [
+                ...sidebar().querySelectorAll<HTMLAnchorElement>('nav a'),
+            ].find((a) => a.textContent?.includes(label))!;
+        }
+
+        it('renders its items as links to their pages (#143)', async () => {
+            await mountAt('/seller/orders');
+
+            expect(sidebar().querySelectorAll('nav button')).toHaveLength(0);
+            expect(link('Dashboard').getAttribute('href')).toBe('/seller');
+            expect(link('Register (Sale)').getAttribute('href')).toBe(
+                '/seller/register',
+            );
+            expect(link('Sales History').getAttribute('href')).toBe(
+                '/seller/orders',
+            );
+            expect(link('Sales History').getAttribute('aria-current')).toBe(
+                'page',
+            );
+            expect(link('Register (Sale)').hasAttribute('aria-current')).toBe(
+                false,
+            );
+        });
+
+        it.each(NEW_TAB_CLICKS)(
+            'leaves a %s click to the browser: no navigation, no shift check, drawer stays open (#143)',
+            async (_name, init) => {
+                await mountAt('/seller/orders');
+                const shift = useShiftStore();
+                const goToRegister = vi.spyOn(shift, 'goToRegister');
+                menuButton().click();
+                await flush();
+
+                for (const label of ['Register (Sale)', 'Dashboard']) {
+                    const { appTookIt } = clickLink(link(label), init);
+                    await flush();
+                    expect(appTookIt).toBe(false);
+                }
+
+                expect(goToRegister).not.toHaveBeenCalled();
+                expect(router.currentRoute.value.name).toBe('Sales');
+                expect(menuButton().getAttribute('aria-expanded')).toBe('true');
+                expect(anyModalOpen.value).toBe(true);
+            },
+        );
+
+        it('asks for a shift on a plain click on Register when there is none (#143)', async () => {
+            await mountAt('/seller/orders');
+            useShiftStore().activeShift = null;
+            menuButton().click();
+            await flush();
+
+            const { appTookIt } = clickLink(link('Register (Sale)'));
+            await flush();
+
+            expect(appTookIt).toBe(true);
+            expect(useShiftStore().shiftInOpen).toBe(true);
+            expect(router.currentRoute.value.name).toBe('Sales');
+            expect(isClosed()).toBe(true);
+        });
+
+        it('goes to the register through the shift check on a plain click (#143)', async () => {
+            await mountAt('/seller/orders');
+            const shift = useShiftStore();
+            // The store navigates with the app's router; stub it here.
+            const goToRegister = vi
+                .spyOn(shift, 'goToRegister')
+                .mockResolvedValue();
+            menuButton().click();
+            await flush();
+
+            const { appTookIt } = clickLink(link('Register (Sale)'));
+            await flush();
+
+            expect(appTookIt).toBe(true);
+            expect(goToRegister).toHaveBeenCalledTimes(1);
+            expect(isClosed()).toBe(true);
+        });
+
         it('ignores a stored collapse: the drawer shows its labels', async () => {
             localStorage.setItem('grocery_pos_sidebar_v1:u1', 'collapsed');
             await mountAt('/seller/register');
@@ -357,9 +438,9 @@ describe('SellerLayout sidebar (issue #26)', () => {
             menuButton().click();
             await flush();
 
-            const history = [...sidebar().querySelectorAll('nav button')].find(
-                (b) => b.textContent?.includes('Sales History'),
-            ) as HTMLButtonElement;
+            const history = [...sidebar().querySelectorAll('nav a')].find((b) =>
+                b.textContent?.includes('Sales History'),
+            ) as HTMLAnchorElement;
             history.click();
             await flush();
 
@@ -541,9 +622,7 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             await mountAt('/seller');
 
             const tabs = [
-                ...document.querySelectorAll<HTMLButtonElement>(
-                    'header nav button',
-                ),
+                ...document.querySelectorAll<HTMLAnchorElement>('header nav a'),
             ];
             expect(tabs.map((t) => t.textContent?.trim())).toEqual([
                 'Dashboard',
@@ -552,10 +631,32 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             for (const tab of tabs) {
                 expect(tab.className.split(/\s+/)).toContain('min-h-11');
             }
+            // Real links, so they open in a new tab too (#143).
+            expect(tabs.map((t) => t.getAttribute('href'))).toEqual([
+                '/seller',
+                '/seller/orders',
+            ]);
+            expect(tabs.map((t) => t.getAttribute('aria-current'))).toEqual([
+                'page',
+                null,
+            ]);
+            expect(
+                document
+                    .querySelector(
+                        'header a[aria-label="GroceryPOS dashboard"]',
+                    )
+                    ?.getAttribute('href'),
+            ).toBe('/seller');
             const account = document.querySelector<HTMLElement>(
                 'header [data-dropdown-trigger]',
             )!;
             expect(account.className.split(/\s+/)).toContain('min-h-11');
+
+            // A plain click navigates in this tab, through the router.
+            const { appTookIt } = clickLink(tabs[1]);
+            await flush();
+            expect(appTookIt).toBe(true);
+            expect(router.currentRoute.value.name).toBe('Sales');
         });
     });
 
@@ -594,7 +695,7 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
                 'Dashboard',
             );
 
-            const items = [...panel.querySelectorAll('button')];
+            const items = [...panel.querySelectorAll('button, a')];
             expect(items.map((b) => b.textContent?.trim())).toEqual([
                 '',
                 'Dashboard',
@@ -655,9 +756,9 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             await mountAt('/seller');
             await open();
 
-            const orders = [...drawer()!.querySelectorAll('button')].find((b) =>
-                b.textContent?.includes('Orders & Sales'),
-            )!;
+            const orders = [
+                ...drawer()!.querySelectorAll<HTMLAnchorElement>('nav a'),
+            ].find((b) => b.textContent?.includes('Orders & Sales'))!;
             orders.click();
             await flush();
 
@@ -666,6 +767,26 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             expect(anyModalOpen.value).toBe(false);
             expect(appRoot().hasAttribute('inert')).toBe(false);
         });
+
+        it.each(NEW_TAB_CLICKS)(
+            'leaves a %s click on an item to the browser and stays open (#143)',
+            async (_name, init) => {
+                await mountAt('/seller');
+                await open();
+
+                const orders = [
+                    ...drawer()!.querySelectorAll<HTMLAnchorElement>('nav a'),
+                ].find((a) => a.textContent?.includes('Orders & Sales'))!;
+                expect(orders.getAttribute('href')).toBe('/seller/orders');
+                const { appTookIt } = clickLink(orders, init);
+                await flush();
+
+                expect(appTookIt).toBe(false);
+                expect(router.currentRoute.value.name).toBe('SellerDashboard');
+                expect(drawer()).not.toBeNull();
+                expect(anyModalOpen.value).toBe(true);
+            },
+        );
 
         it('closes when the window grows to md', async () => {
             await mountAt('/seller');
