@@ -10,6 +10,7 @@ import {
 import { Role } from '@grocery-pos/contracts';
 import { stubMatchMedia } from '@/testing/match-media';
 import { anyModalOpen } from '@/components/ui/modal-stack';
+import { clickLink, NEW_TAB_CLICKS } from '@/testing/link-click';
 import UserLayout from './UserLayout.vue';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
@@ -22,8 +23,15 @@ const Stub = defineComponent({
 /** Every page the admin sidebar and app bar link to. */
 const PAGES = [
     ['', 'Dashboard'],
+    ['settings', 'Settings'],
+    ['audit', 'AuditLog'],
+    ['reports', 'Reports'],
     ['sales', 'SalesHistory'],
     ['shifts', 'Shifts'],
+    ['suppliers', 'Suppliers'],
+    ['purchase-orders', 'PurchaseOrders'],
+    ['categories', 'Categories'],
+    ['stock-counts', 'StockCounts'],
     ['products', 'Products'],
     ['products/add', 'Products/Add'],
     ['inventories', 'Inventories'],
@@ -102,9 +110,9 @@ function appRoot() {
 }
 
 function navButton(label: string) {
-    return [...sidebar().querySelectorAll('nav button')].find((b) =>
+    return [...sidebar().querySelectorAll('nav a')].find((b) =>
         b.textContent?.includes(label),
-    ) as HTMLButtonElement;
+    ) as HTMLAnchorElement;
 }
 
 function escape() {
@@ -483,5 +491,126 @@ describe('UserLayout sidebar below lg: a drawer (#89)', () => {
         expect(document.body.style.overflow).toBe('');
         expect(document.activeElement?.tagName).toBe('MAIN');
         expect(document.activeElement?.textContent).toBe('Elsewhere');
+    });
+});
+
+describe('UserLayout sidebar items are links (#143)', () => {
+    function links() {
+        return [...sidebar().querySelectorAll<HTMLAnchorElement>('nav a')];
+    }
+
+    it('renders every item as an anchor with its route as href', async () => {
+        media = stubMatchMedia(true);
+        await mountAt('/admin/products');
+
+        // No item is a button any more: each can open in a new tab.
+        expect(sidebar().querySelectorAll('nav button')).toHaveLength(0);
+        const hrefs = Object.fromEntries(
+            links().map((a) => [
+                a.textContent?.replace(/\d+|\?/g, '').trim(),
+                a.getAttribute('href'),
+            ]),
+        );
+        expect(hrefs).toMatchObject({
+            Dashboard: '/admin',
+            'Audit Log': '/admin/audit',
+            'Product List': '/admin/products',
+            Inventory: '/admin/inventories',
+            'Low Stock': '/admin/inventories?lowStock=true',
+            'Restock History': '/admin/restocks',
+            Users: '/admin/users',
+        });
+        // Every item is still a 44px target.
+        for (const a of links()) {
+            expect(a.className).toMatch(/\bmin-h-11\b/);
+        }
+    });
+
+    it('marks only the current page, telling Low Stock from Inventory', async () => {
+        media = stubMatchMedia(true);
+        await mountAt('/admin/inventories?lowStock=true');
+
+        const current = links().filter(
+            (a) => a.getAttribute('aria-current') === 'page',
+        );
+        expect(current).toHaveLength(1);
+        expect(current[0].textContent).toContain('Low Stock');
+        expect(current[0].className).toContain('bg-primary-600');
+        expect(navButton('Inventory').className).not.toContain(
+            'bg-primary-600',
+        );
+    });
+
+    it('keeps a link per item in the collapsed rail, labelled', async () => {
+        media = stubMatchMedia(true);
+        await mountAt('/admin/products');
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="admin-sidebar-collapse"]',
+            )!
+            .click();
+        await flush();
+
+        const restocks = links().find(
+            (a) => a.getAttribute('aria-label') === 'Restock History',
+        )!;
+        expect(restocks.getAttribute('href')).toBe('/admin/restocks');
+    });
+
+    describe('below lg', () => {
+        beforeEach(() => {
+            media = stubMatchMedia(false);
+        });
+
+        it('navigates in this tab and closes the drawer on a plain click', async () => {
+            await mountAt('/admin/products');
+            menuButton().click();
+            await flush();
+
+            const { appTookIt } = clickLink(navButton('Low Stock'));
+            await flush();
+
+            expect(appTookIt).toBe(true);
+            expect(router.currentRoute.value.fullPath).toBe(
+                '/admin/inventories?lowStock=true',
+            );
+            expect(isClosed()).toBe(true);
+        });
+
+        it.each(NEW_TAB_CLICKS)(
+            'leaves a %s click to the browser: no navigation here, drawer stays open',
+            async (_name, init) => {
+                await mountAt('/admin/products');
+                menuButton().click();
+                await flush();
+
+                const { appTookIt } = clickLink(
+                    navButton('Restock History'),
+                    init,
+                );
+                await flush();
+
+                expect(appTookIt).toBe(false);
+                expect(router.currentRoute.value.name).toBe('Products');
+                expect(menuButton().getAttribute('aria-expanded')).toBe('true');
+                expect(anyModalOpen.value).toBe(true);
+            },
+        );
+
+        it('goes through the router guards on a plain click', async () => {
+            await mountAt('/admin/products');
+            // e.g. the unsaved-drafts guard answering "Stay".
+            const guard = vi.fn(() => false);
+            router.beforeEach(guard);
+            menuButton().click();
+            await flush();
+
+            const { appTookIt } = clickLink(navButton('Restock History'));
+            await flush();
+
+            expect(appTookIt).toBe(true);
+            expect(guard).toHaveBeenCalledTimes(1);
+            expect(router.currentRoute.value.name).toBe('Products');
+        });
     });
 });

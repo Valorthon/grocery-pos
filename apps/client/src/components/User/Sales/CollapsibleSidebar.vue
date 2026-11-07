@@ -107,56 +107,71 @@
 
                     <!-- Nav items -->
                     <nav class="p-3 space-y-1.5">
-                        <button
+                        <!--
+                            Real links (#143): a modified or middle click
+                            opens a new tab; a plain one goes through the
+                            router (the register through the shift check).
+                        -->
+                        <RouterLink
                             v-for="item in navItems"
+                            v-slot="{ href, navigate }"
                             :key="item.id"
-                            type="button"
-                            class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
-                            :class="[
-                                isCollapsed
-                                    ? 'justify-center p-3'
-                                    : 'justify-between px-3.5 py-3',
-                                isActive(item.id)
-                                    ? 'bg-primary-600 text-white font-bold shadow-xs'
-                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
-                            ]"
-                            :title="isCollapsed ? item.label : undefined"
-                            :aria-label="isCollapsed ? item.label : undefined"
-                            :aria-current="
-                                isActive(item.id) ? 'page' : undefined
-                            "
-                            @click="handleClick(item)"
+                            :to="{ name: item.route }"
+                            custom
                         >
-                            <div class="flex items-center gap-3 shrink-0">
-                                <component
-                                    :is="item.icon"
-                                    class="w-5 h-5 shrink-0"
+                            <a
+                                :href="href"
+                                class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
+                                :class="[
+                                    isCollapsed
+                                        ? 'justify-center p-3'
+                                        : 'justify-between px-3.5 py-3',
+                                    isActive(item.id)
+                                        ? 'bg-primary-600 text-white font-bold shadow-xs'
+                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
+                                ]"
+                                :title="isCollapsed ? item.label : undefined"
+                                :aria-label="
+                                    isCollapsed ? item.label : undefined
+                                "
+                                :aria-current="
+                                    isActive(item.id) ? 'page' : undefined
+                                "
+                                @click="follow($event, item, navigate)"
+                            >
+                                <div class="flex items-center gap-3 shrink-0">
+                                    <component
+                                        :is="item.icon"
+                                        class="w-5 h-5 shrink-0"
+                                        :class="
+                                            isActive(item.id)
+                                                ? 'text-white'
+                                                : 'text-slate-500 group-hover:text-slate-900'
+                                        "
+                                    />
+                                    <span
+                                        v-if="!isCollapsed"
+                                        class="text-xs sm:text-sm block whitespace-nowrap"
+                                    >
+                                        {{ item.label }}
+                                    </span>
+                                </div>
+
+                                <span
+                                    v-if="
+                                        item.id === 'register' && cartCount > 0
+                                    "
+                                    class="text-xs font-black px-2 py-0.5 rounded-full"
                                     :class="
                                         isActive(item.id)
-                                            ? 'text-white'
-                                            : 'text-slate-500 group-hover:text-slate-900'
+                                            ? 'bg-white text-primary-600'
+                                            : 'bg-primary-600 text-white'
                                     "
-                                />
-                                <span
-                                    v-if="!isCollapsed"
-                                    class="text-xs sm:text-sm block whitespace-nowrap"
                                 >
-                                    {{ item.label }}
+                                    {{ cartCount }}
                                 </span>
-                            </div>
-
-                            <span
-                                v-if="item.id === 'register' && cartCount > 0"
-                                class="text-xs font-black px-2 py-0.5 rounded-full"
-                                :class="
-                                    isActive(item.id)
-                                        ? 'bg-white text-primary-600'
-                                        : 'bg-primary-600 text-white'
-                                "
-                            >
-                                {{ cartCount }}
-                            </span>
-                        </button>
+                            </a>
+                        </RouterLink>
                     </nav>
                 </div>
 
@@ -170,7 +185,8 @@
 
 <script setup lang="ts">
 import { computed, useTemplateRef, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
+import { isPlainClick } from '@/utils/nav-click';
 import {
     LayoutDashboard,
     PanelLeft,
@@ -262,12 +278,22 @@ function isActive(id: string) {
     }
 }
 
-function handleClick(item: { id: string; route: string }) {
+/**
+ * A plain click closes the drawer and navigates in this tab; the register
+ * first asks for a shift if there is none. Other clicks are the browser's.
+ */
+function follow(
+    e: MouseEvent,
+    item: { id: string },
+    navigate: (e: MouseEvent) => unknown,
+) {
+    if (!isPlainClick(e)) return;
     closeDrawer();
     if (item.id === 'register') {
+        e.preventDefault();
         void shiftStore.goToRegister();
         return;
     }
-    void router.push({ name: item.route });
+    void navigate(e);
 }
 </script>

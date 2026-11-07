@@ -31,6 +31,29 @@ const Stub = defineComponent({ render: () => h('div') });
 let app: App | null = null;
 let media: ReturnType<typeof stubMatchMedia> | null = null;
 
+/** The pages the sidebars link to: their links resolve on render (#143). */
+const NAV_PAGES = [
+    'Dashboard',
+    'Settings',
+    'AuditLog',
+    'Reports',
+    'SalesHistory',
+    'Shifts',
+    'Suppliers',
+    'PurchaseOrders',
+    'Categories',
+    'Products',
+    'Inventories',
+    'Restocks',
+    'StockCounts',
+    'Adjustments',
+    'Users',
+    'Roles',
+    'SellerDashboard',
+    'Sell',
+    'Sales',
+];
+
 async function mountAt(layout: Component, children: string[], at: string) {
     const router: Router = createRouter({
         history: createMemoryHistory(),
@@ -38,11 +61,13 @@ async function mountAt(layout: Component, children: string[], at: string) {
             {
                 path: '/',
                 component: layout,
-                children: children.map((name) => ({
-                    path: name.toLowerCase(),
-                    name,
-                    component: Stub,
-                })),
+                children: [...new Set([...children, ...NAV_PAGES])].map(
+                    (name) => ({
+                        path: name.toLowerCase(),
+                        name,
+                        component: Stub,
+                    }),
+                ),
             },
             { path: '/login', name: 'Login', component: Stub },
         ],
