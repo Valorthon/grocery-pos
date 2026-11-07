@@ -128,7 +128,7 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
         const shift = await openModal();
         await countThousands(1);
         expect(document.body.textContent).toContain(
-            '1 parked tickets are still open',
+            '1 parked ticket is still open',
         );
         document
             .querySelector<HTMLButtonElement>(
@@ -156,6 +156,24 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
         await flush();
         expect(shift.activeShift).toBeNull();
         expect(cart.parked[0].shiftId).toBeNull();
+    });
+    it('names several parked tickets in the plural', async () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        for (const product of ['p1', 'p2']) {
+            cart.add({
+                product,
+                EAN: '2000000000015',
+                name: 'milk',
+                unitPrice: 100,
+            });
+            cart.park('', 'shift1');
+        }
+        await openModal();
+        expect(cart.parked).toHaveLength(2);
+        expect(document.body.textContent).toContain(
+            '2 parked tickets are still open',
+        );
     });
     it('cancelling shift close preserves parked tickets and clears the choice on reopen', async () => {
         const cart = useCartStore();
@@ -335,7 +353,7 @@ describe('a close refused by offline terminals (#143)', () => {
     it('names one blocking terminal in the singular', async () => {
         const text = await refusedWith(refusal({ terminals: 1 }));
         expect(text).toContain(
-            '1 terminal still has offline sales or leases open for this shift.',
+            '1 terminal still has offline mode on for this shift.',
         );
         expect(text).toContain('ask an admin to force-close');
     });
@@ -343,7 +361,7 @@ describe('a close refused by offline terminals (#143)', () => {
     it('names several blocking terminals in the plural', async () => {
         const text = await refusedWith(refusal({ terminals: 2 }));
         expect(text).toContain(
-            '2 terminals still have offline sales or leases open for this shift.',
+            '2 terminals still have offline mode on for this shift.',
         );
     });
 

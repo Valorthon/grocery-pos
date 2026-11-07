@@ -22,7 +22,8 @@
             class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3"
         >
             <legend class="text-sm font-bold">
-                {{ cart.parked.length }} parked tickets are still open
+                {{ countOf(cart.parked.length, 'parked ticket') }}
+                {{ cart.parked.length === 1 ? 'is' : 'are' }} still open
             </legend>
             <p class="text-xs text-slate-700">
                 Choose what happens to these drafts when this shift closes. They
@@ -114,6 +115,7 @@ import { apiErrorCode } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
 import { useCartStore } from '@/stores/cart';
 import { formatCurrency } from '@/utils/currency';
+import { countOf } from '@/utils/plural';
 
 /**
  * The closing count is blind (issue #2): the cashier sees only what they

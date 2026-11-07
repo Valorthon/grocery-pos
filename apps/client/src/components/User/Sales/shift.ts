@@ -97,7 +97,7 @@ export function offlinePendingText(terminals: number): string {
         terminals === 1
             ? '1 terminal still has'
             : `${terminals.toLocaleString('en-PH')} terminals still have`;
-    return `${who} offline sales or leases open for this shift. Sync their pending cash sales and turn offline mode off there, then close. If a terminal's browser data is gone, ask an admin to force-close the shift.`;
+    return `${who} offline mode on for this shift. Sync their pending cash sales and turn offline mode off there, then close. If a terminal's browser data is gone, ask an admin to force-close the shift.`;
 }
 
 /**

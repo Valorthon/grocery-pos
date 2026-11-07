@@ -544,6 +544,27 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         );
     });
 
+    it('counts the blocking terminals inside the close transaction', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        const session = { id: 'close-tx' } as unknown as ClientSession;
+        const inSession = jest.fn().mockResolvedValue(['A']);
+        const distinct = jest
+            .spyOn(leaseModel, 'distinct')
+            .mockReturnValue({ session: inSession } as never);
+
+        await expect(
+            service.closeOwn(ANA, FLOAT_COUNTS, session),
+        ).rejects.toMatchObject({
+            code: ErrorCode.OFFLINE_PENDING,
+            details: { terminals: 1 },
+        });
+        expect(distinct).toHaveBeenCalledWith('terminalId', {
+            shift: new Types.ObjectId(_id),
+            active: true,
+        });
+        expect(inSession).toHaveBeenCalledWith(session);
+    });
+
     it('closes once every lease of the shift is released', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         leaseModel.seed({
