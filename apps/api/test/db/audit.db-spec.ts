@@ -259,7 +259,7 @@ it('restricts list access to admins and validates filter/pagination/wire shape',
         await db.call(
             admin,
             'GET',
-            `/audit?actor=${admin.userId}&action=${AuditAction.AUTH_LOGIN}&page=1&limit=1`,
+            `/audit?username=${encodeURIComponent(` ${admin.username.toUpperCase()} `)}&action=${AuditAction.AUTH_LOGIN}&page=1&limit=1`,
         ),
     );
     expect(result.status).toBe(200);
@@ -272,6 +272,62 @@ it('restricts list access to admins and validates filter/pagination/wire shape',
         _id: admin.userId,
         name: admin.username,
     });
+    const unknown = await read<Paginated<AuditLogView>>(
+        await db.call(admin, 'GET', '/audit?username=audit-nobody'),
+    );
+    expect(unknown.status).toBe(200);
+    expect(unknown.body).toEqual({ totalItems: 0, data: [] });
+    // Failed logins typed with a name match it too (#143), for a name no
+    // account holds and for an existing account's name.
+    const unknownFailed = await read<Paginated<AuditLogView>>(
+        await db.call(admin, 'GET', '/audit?username=%20Audit-Unknown%20'),
+    );
+    expect(unknownFailed.body.totalItems).toBe(1);
+    expect(unknownFailed.body.data[0]).toMatchObject({
+        action: AuditAction.AUTH_LOGIN_FAILED,
+        actor: null,
+        after: { name: 'audit-unknown' },
+    });
+    expect(
+        (
+            await db.call(admin, 'POST', '/auth/login', {
+                username: admin.username,
+                password: 'wrong-password-audit',
+            })
+        ).status,
+    ).toBe(401);
+    const adminFailed = await read<Paginated<AuditLogView>>(
+        await db.call(
+            admin,
+            'GET',
+            `/audit?username=${admin.username}&action=${AuditAction.AUTH_LOGIN_FAILED}`,
+        ),
+    );
+    expect(adminFailed.body.totalItems).toBe(1);
+    expect(adminFailed.body.data[0]).toMatchObject({
+        actor: null,
+        after: { name: admin.username },
+    });
+    const adminAll = await read<Paginated<AuditLogView>>(
+        await db.call(admin, 'GET', `/audit?username=${admin.username}`),
+    );
+    expect(adminAll.body.data.map((entry) => entry.actor?._id ?? null)).toEqual(
+        expect.arrayContaining([admin.userId, null]),
+    );
+    expect(
+        adminAll.body.data.every(
+            (entry) =>
+                entry.actor?._id === admin.userId ||
+                (entry.action === AuditAction.AUTH_LOGIN_FAILED &&
+                    entry.after.name === admin.username),
+        ),
+    ).toBe(true);
+    expect(
+        (await db.call(admin, 'GET', `/audit?actor=${admin.userId}`)).status,
+    ).toBe(400);
+    expect((await db.call(admin, 'GET', '/audit?username[$ne]=x')).status).toBe(
+        400,
+    );
     expect((await db.call(admin, 'GET', '/audit?limit=101')).status).toBe(400);
     expect(
         (await db.call(admin, 'GET', '/audit?from=2026-12-02&to=2026-12-01'))

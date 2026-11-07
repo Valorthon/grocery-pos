@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
-import { AuditAction, Role, type AuditLogView } from '@grocery-pos/contracts';
+import {
+    AuditAction,
+    Role,
+    STRING_LIMITS,
+    type AuditLogView,
+} from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
 import { click, field, flush } from '@/testing/form-dom';
 import type { ApiGet } from '@/testing/api-mock';
@@ -71,7 +76,7 @@ it('pages and retries applied filters rather than unsearched edits', async () =>
         params: {
             from: '2026-11-01',
             to: undefined,
-            actor: undefined,
+            username: undefined,
             action: undefined,
             page: 2,
             limit: 20,
@@ -89,13 +94,9 @@ it('pages and retries applied filters rather than unsearched edits', async () =>
         api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
     ).toMatchObject({ from: undefined, page: 1 });
 });
-it('validates actor ids/date ordering and applies exact action selection', async () => {
+it('validates date ordering and applies exact action selection', async () => {
     await mount();
-    input('Actor user ID', 'bad');
-    await click('Search');
-    expect(document.body.textContent).toContain('valid user ID');
-    expect(api.get).toHaveBeenCalledTimes(1);
-    input('Actor user ID', '507f1f77bcf86cd799439011');
+    input('Username', 'Cashier1');
     input('From', '2026-11-02');
     input('To', '2026-11-01');
     await click('Search');
@@ -108,9 +109,50 @@ it('validates actor ids/date ordering and applies exact action selection', async
     expect(
         api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
     ).toMatchObject({
-        actor: '507f1f77bcf86cd799439011',
+        username: 'Cashier1',
         action: AuditAction.USER_CREATED,
     });
+});
+it('filters by a typed username on Enter, Search or clearing it, never an id (#143)', async () => {
+    await mount();
+    const box = field('Username');
+    expect(box.maxLength).toBe(STRING_LIMITS.USERNAME);
+    const hint = document.getElementById(box.getAttribute('aria-describedby')!);
+    expect(hint?.textContent).toContain('Current username');
+    input('Username', '  maria  ');
+    expect(api.get).toHaveBeenCalledTimes(1);
+    box.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(api.get).toHaveBeenLastCalledWith('/audit', {
+        params: {
+            username: 'maria',
+            action: undefined,
+            from: undefined,
+            to: undefined,
+            page: 1,
+            limit: 20,
+        },
+    });
+    expect(document.querySelector('[role=alert]')).toBeNull();
+    input('Username', 'jose');
+    await click('Next');
+    expect(
+        api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
+    ).toMatchObject({ username: 'maria', page: 2 });
+    field('Username').parentElement!.querySelector('button')!.click();
+    await flush();
+    expect(field('Username').value).toBe('');
+    expect(
+        api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
+    ).toMatchObject({ username: undefined, page: 1 });
+    input('Username', '   ');
+    await click('Search');
+    expect(
+        api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
+    ).toMatchObject({ username: undefined });
 });
 it('does not load audit data for USER_MANAGER', async () => {
     useAuthStore().user!.roles = [Role.UserManager];

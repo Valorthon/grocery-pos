@@ -2,12 +2,16 @@ import { Types, type Model } from 'mongoose';
 import { AuditAction } from '@grocery-pos/contracts';
 import { AuditService } from './audit.service';
 import { AuditLog } from './audit.schema';
+import type { User } from '../user/user.schema';
 import { AuditContextMiddleware, auditMetadata } from './audit-context';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import type { Request, Response } from 'express';
 
 const id = new Types.ObjectId();
-function setup(rows: Record<string, unknown>[] = []) {
+function setup(
+    rows: Record<string, unknown>[] = [],
+    found: { _id: Types.ObjectId } | null = null,
+) {
     const query = {
         sort: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
@@ -20,13 +24,17 @@ function setup(rows: Record<string, unknown>[] = []) {
         find: jest.fn(() => query),
         countDocuments: jest.fn().mockResolvedValue(rows.length),
     };
+    const userQuery = { lean: jest.fn().mockResolvedValue(found) };
+    const users = { findOne: jest.fn(() => userQuery) };
     return {
         service: new AuditService(
             model as unknown as Model<AuditLog>,
             { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
+            users as unknown as Model<User>,
         ),
         model,
         query,
+        users,
     };
 }
 it('awaits audit indexes and propagates startup failure', async () => {
@@ -89,38 +97,45 @@ it('records unknown actors and absent targets without fabricating attribution', 
     );
 });
 it('filters by actor/action/store-calendar days and returns whitelisted complete wire fields', async () => {
-    const { service, model, query } = setup([
-        {
-            _id: id,
-            actor: id,
-            actorName: 'Admin',
-            targetModel: 'User',
-            targetId: id,
-            action: AuditAction.USER_UPDATED,
-            before: { name: 'old', password: 'secret' },
-            after: { name: 'new' },
-            approvedBy: id,
-            ip: '127.0.0.1',
-            userAgent: 'browser',
-            createdAt: new Date('2026-11-01T00:00:00Z'),
-        },
-    ]);
+    const { service, model, query, users } = setup(
+        [
+            {
+                _id: id,
+                actor: id,
+                actorName: 'Admin',
+                targetModel: 'User',
+                targetId: id,
+                action: AuditAction.USER_UPDATED,
+                before: { name: 'old', password: 'secret' },
+                after: { name: 'new' },
+                approvedBy: id,
+                ip: '127.0.0.1',
+                userAgent: 'browser',
+                createdAt: new Date('2026-11-01T00:00:00Z'),
+            },
+        ],
+        { _id: id },
+    );
     const result = await service.list({
         page: 2,
         limit: 10,
-        actor: String(id),
+        username: 'admin',
         action: AuditAction.USER_UPDATED,
         from: '2026-11-01',
         to: '2026-11-01',
     });
     expect(model.find).toHaveBeenCalledWith({
-        actor: id,
+        $or: [
+            { actor: id },
+            { action: AuditAction.AUTH_LOGIN_FAILED, 'after.name': 'admin' },
+        ],
         action: AuditAction.USER_UPDATED,
         createdAt: {
             $gte: new Date('2026-10-31T16:00:00Z'),
             $lt: new Date('2026-11-01T16:00:00Z'),
         },
     });
+    expect(users.findOne).toHaveBeenCalledWith({ name: 'admin' }, { _id: 1 });
     expect(query.skip).toHaveBeenCalledWith(10);
     expect(query.limit).toHaveBeenCalledWith(10);
     expect(result.data[0]).toMatchObject({
@@ -131,6 +146,80 @@ it('filters by actor/action/store-calendar days and returns whitelisted complete
         createdAt: '2026-11-01T00:00:00.000Z',
     });
     expect(JSON.stringify(result)).not.toContain('secret');
+});
+it('filters by the current holder of a username, so entries from before a rename still match (#143)', async () => {
+    const { service, model, users } = setup(
+        [
+            {
+                _id: id,
+                actor: id,
+                actorName: 'old-name',
+                targetModel: 'User',
+                action: AuditAction.AUTH_LOGIN,
+                createdAt: new Date('2026-11-01T00:00:00Z'),
+            },
+        ],
+        { _id: id },
+    );
+    const result = await service.list({
+        page: 1,
+        limit: 20,
+        username: 'new-name',
+    });
+    expect(users.findOne).toHaveBeenCalledWith(
+        { name: 'new-name' },
+        { _id: 1 },
+    );
+    const filter = {
+        $or: [
+            { actor: id },
+            {
+                action: AuditAction.AUTH_LOGIN_FAILED,
+                'after.name': 'new-name',
+            },
+        ],
+    };
+    expect(model.find).toHaveBeenCalledWith(filter);
+    expect(model.countDocuments).toHaveBeenCalledWith(filter);
+    expect(result.data[0].actor).toEqual({ _id: String(id), name: 'old-name' });
+});
+it('answers an unknown username with its failed logins only, not an error (#143)', async () => {
+    const { service, model, users } = setup(
+        [
+            {
+                _id: id,
+                actor: null,
+                action: AuditAction.AUTH_LOGIN_FAILED,
+                targetModel: 'User',
+                after: { name: 'nobody' },
+                createdAt: new Date('2026-11-01T00:00:00Z'),
+            },
+        ],
+        null,
+    );
+    const result = await service.list({
+        page: 1,
+        limit: 20,
+        username: 'nobody',
+    });
+    expect(users.findOne).toHaveBeenCalledWith({ name: 'nobody' }, { _id: 1 });
+    const filter = {
+        $or: [
+            { action: AuditAction.AUTH_LOGIN_FAILED, 'after.name': 'nobody' },
+        ],
+    };
+    expect(model.find).toHaveBeenCalledWith(filter);
+    expect(model.countDocuments).toHaveBeenCalledWith(filter);
+    expect(result.totalItems).toBe(1);
+    expect(result.data[0]).toMatchObject({
+        actor: null,
+        after: { name: 'nobody' },
+    });
+});
+it('does not look up a user without a username filter', async () => {
+    const { service, users } = setup();
+    await service.list({ page: 1, limit: 20 });
+    expect(users.findOne).not.toHaveBeenCalled();
 });
 it('tolerates minimized empty historical diff objects and missing attribution', async () => {
     const { service, model } = setup([

@@ -51,3 +51,13 @@ it('blocks bulk mutation and has no expiry index', async () => {
         ),
     ).toBe(false);
 });
+it('indexes failed-login names for the username filter, partially (#143)', () => {
+    expect(AuditLogSchema.indexes()).toContainEqual([
+        { 'after.name': 1, createdAt: -1 },
+        expect.objectContaining({
+            partialFilterExpression: {
+                action: AuditAction.AUTH_LOGIN_FAILED,
+            },
+        }),
+    ]);
+});

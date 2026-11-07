@@ -32,6 +32,13 @@ export const AuditLogSchema = SchemaFactory.createForClass(AuditLog);
 AuditLogSchema.index({ createdAt: -1, _id: -1 });
 AuditLogSchema.index({ actor: 1, createdAt: -1 });
 AuditLogSchema.index({ action: 1, createdAt: -1 });
+// The username filter's failed-login branch (#143).
+AuditLogSchema.index(
+    { 'after.name': 1, createdAt: -1 },
+    {
+        partialFilterExpression: { action: AuditAction.AUTH_LOGIN_FAILED },
+    },
+);
 const rejectMutation = () => {
     throw new Error('Audit entries are append-only');
 };

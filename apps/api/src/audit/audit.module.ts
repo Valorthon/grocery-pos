@@ -1,6 +1,7 @@
 import { Global, MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuditLog, AuditLogSchema } from './audit.schema';
+import { User, UserSchema } from '../user/user.schema';
 import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';
 import { AuditContextMiddleware } from './audit-context';
@@ -9,6 +10,7 @@ import { AuditContextMiddleware } from './audit-context';
     imports: [
         MongooseModule.forFeature([
             { name: AuditLog.name, schema: AuditLogSchema },
+            { name: User.name, schema: UserSchema },
         ]),
     ],
     providers: [AuditService],
