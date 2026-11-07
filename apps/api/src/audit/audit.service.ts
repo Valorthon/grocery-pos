@@ -69,13 +69,18 @@ export class AuditService implements OnModuleInit {
     async list(dto: AuditQueryDto): Promise<Paginated<AuditLogView>> {
         const filter: Record<string, unknown> = {};
         if (dto.username) {
-            // The current holder of the name, by id: entries recorded under
-            // an earlier name still match, and an unknown name matches none.
+            // The current holder of the name, by id, so entries recorded
+            // under an earlier name still match; plus failed logins typed
+            // with this name (stored trimmed and lowercased, actor null),
+            // which an unknown name still finds (#143).
             const user = await this.users
                 .findOne({ name: dto.username }, { _id: 1 })
                 .lean<{ _id: Types.ObjectId }>();
-            if (!user) return { totalItems: 0, data: [] };
-            filter.actor = user._id;
+            const failed = {
+                action: AuditAction.AUTH_LOGIN_FAILED,
+                'after.name': dto.username,
+            };
+            filter.$or = user ? [{ actor: user._id }, failed] : [failed];
         }
         if (dto.action) filter.action = dto.action;
         const range = dateRangeFilter(

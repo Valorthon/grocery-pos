@@ -125,7 +125,10 @@ it('filters by actor/action/store-calendar days and returns whitelisted complete
         to: '2026-11-01',
     });
     expect(model.find).toHaveBeenCalledWith({
-        actor: id,
+        $or: [
+            { actor: id },
+            { action: AuditAction.AUTH_LOGIN_FAILED, 'after.name': 'admin' },
+        ],
         action: AuditAction.USER_UPDATED,
         createdAt: {
             $gte: new Date('2026-10-31T16:00:00Z'),
@@ -167,18 +170,51 @@ it('filters by the current holder of a username, so entries from before a rename
         { name: 'new-name' },
         { _id: 1 },
     );
-    expect(model.find).toHaveBeenCalledWith({ actor: id });
-    expect(model.countDocuments).toHaveBeenCalledWith({ actor: id });
+    const filter = {
+        $or: [
+            { actor: id },
+            {
+                action: AuditAction.AUTH_LOGIN_FAILED,
+                'after.name': 'new-name',
+            },
+        ],
+    };
+    expect(model.find).toHaveBeenCalledWith(filter);
+    expect(model.countDocuments).toHaveBeenCalledWith(filter);
     expect(result.data[0].actor).toEqual({ _id: String(id), name: 'old-name' });
 });
-it('answers an unknown username with an empty page, not an error (#143)', async () => {
-    const { service, model, users } = setup([{ _id: id }], null);
-    await expect(
-        service.list({ page: 1, limit: 20, username: 'nobody' }),
-    ).resolves.toEqual({ totalItems: 0, data: [] });
+it('answers an unknown username with its failed logins only, not an error (#143)', async () => {
+    const { service, model, users } = setup(
+        [
+            {
+                _id: id,
+                actor: null,
+                action: AuditAction.AUTH_LOGIN_FAILED,
+                targetModel: 'User',
+                after: { name: 'nobody' },
+                createdAt: new Date('2026-11-01T00:00:00Z'),
+            },
+        ],
+        null,
+    );
+    const result = await service.list({
+        page: 1,
+        limit: 20,
+        username: 'nobody',
+    });
     expect(users.findOne).toHaveBeenCalledWith({ name: 'nobody' }, { _id: 1 });
-    expect(model.find).not.toHaveBeenCalled();
-    expect(model.countDocuments).not.toHaveBeenCalled();
+    const filter = {
+        $or: [
+            { action: AuditAction.AUTH_LOGIN_FAILED, 'after.name': 'nobody' },
+        ],
+    };
+    expect(model.find).toHaveBeenCalledWith(filter);
+    expect(model.countDocuments).toHaveBeenCalledWith(filter);
+    expect(result.totalItems).toBe(1);
+    expect(result.data[0]).toMatchObject({
+        actor: null,
+        after: { name: 'nobody' },
+    });
 });
 it('does not look up a user without a username filter', async () => {
     const { service, users } = setup();

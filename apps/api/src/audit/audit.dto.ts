@@ -35,10 +35,12 @@ export class AuditQueryDto implements AuditListQuery {
     @ValidateIf((_o, value: unknown) => value !== undefined)
     @IsString()
     @MaxLength(STRING_LIMITS.USERNAME)
-    @Transform(({ value }) =>
-        typeof value === 'string'
-            ? value.trim().toLowerCase()
-            : (value as unknown),
+    // Reads the raw value: implicit conversion would turn an object such as
+    // `{ $ne: null }` into "[object Object]"; left as is, @IsString refuses it.
+    @Transform(({ obj }: { obj: Record<string, unknown> }) =>
+        typeof obj.username === 'string'
+            ? obj.username.trim().toLowerCase()
+            : obj.username,
     )
     username?: string;
     @ValidateIf((_o, value: unknown) => value !== undefined)

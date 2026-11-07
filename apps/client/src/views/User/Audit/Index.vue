@@ -7,14 +7,22 @@
                 is configured.
             </p>
             <div class="flex flex-wrap items-end gap-3">
-                <BaseInput
-                    v-model="username"
-                    label="Username"
-                    :maxlength="STRING_LIMITS.USERNAME"
-                    clearable
-                    @keydown.enter="search"
-                    @clear="search"
-                />
+                <div>
+                    <BaseInput
+                        v-model="username"
+                        label="Username"
+                        :maxlength="STRING_LIMITS.USERNAME"
+                        clearable
+                        aria-describedby="audit-username-hint"
+                        @keydown.enter="search"
+                        @clear="search"
+                    />
+                    <p id="audit-username-hint" class="text-xs text-slate-500">
+                        Current username. Also finds that account's entries
+                        under earlier names, and failed logins typed with this
+                        name.
+                    </p>
+                </div>
                 <label class="text-sm"
                     >Action<select
                         v-model="action"

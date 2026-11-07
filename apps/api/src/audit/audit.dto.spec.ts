@@ -29,10 +29,6 @@ describe('audit query boundaries', () => {
                 username: ` ${'a'.repeat(STRING_LIMITS.USERNAME)} `,
             }),
         ).toMatchObject({ username: 'a'.repeat(STRING_LIMITS.USERNAME) });
-        const injected = (await query({ username: { $ne: null } })) as {
-            username: unknown;
-        };
-        expect(typeof injected.username).toBe('string');
     });
     it.each([
         { page: 0 },
@@ -41,6 +37,8 @@ describe('audit query boundaries', () => {
         { actor: '507f1f77bcf86cd799439011' },
         { username: 'a'.repeat(STRING_LIMITS.USERNAME + 1) },
         { username: ['admin', 'other'] },
+        { username: { $ne: null } },
+        { username: 42 },
         { action: 'AUTH.SECRET' },
         { from: '2026-02-30' },
         { from: '2026-11-02', to: '2026-11-01' },

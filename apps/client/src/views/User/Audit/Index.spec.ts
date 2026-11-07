@@ -117,6 +117,8 @@ it('filters by a typed username on Enter, Search or clearing it, never an id (#1
     await mount();
     const box = field('Username');
     expect(box.maxLength).toBe(STRING_LIMITS.USERNAME);
+    const hint = document.getElementById(box.getAttribute('aria-describedby')!);
+    expect(hint?.textContent).toContain('Current username');
     input('Username', '  maria  ');
     expect(api.get).toHaveBeenCalledTimes(1);
     box.dispatchEvent(
