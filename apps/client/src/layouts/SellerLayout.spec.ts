@@ -33,6 +33,21 @@ import SellerLayout from './SellerLayout.vue';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 
+// Stores navigate with the app's router (`import('@/router')`); here that
+// is the test's router, so e.g. the shift store's goToRegister really runs.
+const appRouter = vi.hoisted(() => ({ current: null as Router | null }));
+vi.mock('@/router', () => ({
+    default: {
+        push: (to: Parameters<Router['push']>[0]) =>
+            appRouter.current!.push(to),
+        replace: (to: Parameters<Router['replace']>[0]) =>
+            appRouter.current!.replace(to),
+        get currentRoute() {
+            return appRouter.current!.currentRoute;
+        },
+    },
+}));
+
 const SHIFT: CurrentShiftView = {
     _id: 'shift1',
     status: ShiftStatus.OPEN,
@@ -70,6 +85,7 @@ async function mountAt(path: string, register: Component = Stub) {
             },
         ],
     });
+    appRouter.current = router;
     await router.push(path);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -383,10 +399,8 @@ describe('SellerLayout sidebar (issue #26)', () => {
         it('goes to the register through the shift check on a plain click (#143)', async () => {
             await mountAt('/seller/orders');
             const shift = useShiftStore();
-            // The store navigates with the app's router; stub it here.
-            const goToRegister = vi
-                .spyOn(shift, 'goToRegister')
-                .mockResolvedValue();
+            const goToRegister = vi.spyOn(shift, 'goToRegister');
+            expect(shift.activeShift).toEqual(SHIFT);
             menuButton().click();
             await flush();
 
@@ -395,6 +409,9 @@ describe('SellerLayout sidebar (issue #26)', () => {
 
             expect(appTookIt).toBe(true);
             expect(goToRegister).toHaveBeenCalledTimes(1);
+            // With a shift open: straight to the register, no shift-in prompt.
+            expect(router.currentRoute.value.name).toBe('Sell');
+            expect(shift.shiftInOpen).toBe(false);
             expect(isClosed()).toBe(true);
         });
 
@@ -658,6 +675,30 @@ describe('SellerLayout dashboard menu below md (#89)', () => {
             expect(appTookIt).toBe(true);
             expect(router.currentRoute.value.name).toBe('Sales');
         });
+
+        it.each(NEW_TAB_CLICKS)(
+            'leaves a %s click on a tab or the brand to the browser (#143)',
+            async (_name, init) => {
+                media = stubMatchMedia(true);
+                await mountAt('/seller');
+
+                const orders = [
+                    ...document.querySelectorAll<HTMLAnchorElement>(
+                        'header nav a',
+                    ),
+                ].find((a) => a.textContent?.includes('Orders & Sales'))!;
+                const brand = document.querySelector<HTMLAnchorElement>(
+                    'header a[aria-label="GroceryPOS dashboard"]',
+                )!;
+                for (const link of [orders, brand]) {
+                    const { appTookIt } = clickLink(link, init);
+                    await flush();
+                    expect(appTookIt).toBe(false);
+                }
+
+                expect(router.currentRoute.value.name).toBe('SellerDashboard');
+            },
+        );
     });
 
     describe('below md: a drawer', () => {

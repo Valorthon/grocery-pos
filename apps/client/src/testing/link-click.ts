@@ -36,5 +36,7 @@ export const NEW_TAB_CLICKS: readonly [string, MouseEventInit][] = [
     ['Cmd', { metaKey: true }],
     ['Shift', { shiftKey: true }],
     ['Alt', { altKey: true }],
-    ['middle button', { button: 1 }],
+    // A real middle click fires `auxclick`, not `click`, so the app never
+    // sees it; a `click` from any non-primary button is left alone too.
+    ['non-primary button', { button: 1 }],
 ];
