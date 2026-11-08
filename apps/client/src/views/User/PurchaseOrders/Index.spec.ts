@@ -379,6 +379,28 @@ describe('Purchase order list and receipts (#123)', () => {
         );
     });
 
+    it('removes the status chip with one request (#171)', async () => {
+        api.get.mockImplementation((url: string) =>
+            url === '/purchase-orders'
+                ? Promise.resolve({ data: { data: [order()], totalItems: 45 } })
+                : Promise.resolve({ data: [] }),
+        );
+        await mount();
+        await choose('Status', PurchaseOrderStatus.SENT);
+        api.get.mockClear();
+
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label^="Remove filter Status:"]',
+            )!
+            .click();
+        await flush();
+
+        expect(
+            api.get.mock.calls.filter(([url]) => url === '/purchase-orders'),
+        ).toEqual([['/purchase-orders', { params: { page: 1, limit: 10 } }]]);
+    });
+
     it('validates receipt lines before posting', async () => {
         await mount();
         await press('Open');

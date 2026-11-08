@@ -58,6 +58,33 @@ async function mount() {
 
 const params = () => api.get.mock.calls.map(([, config]) => config?.params);
 
+describe('product list FilterBar (#171)', () => {
+    const chip = (label: string) =>
+        document.querySelector<HTMLButtonElement>(
+            `button[aria-label="Remove filter ${label}"]`,
+        );
+
+    it('removes one chip with one load and never sends unsearched text', async () => {
+        await mount();
+        await type('EAN / Barcode', '4006');
+        await type('Product Name', 'milk');
+        await click('Search');
+        expect(chip('Name: milk')).not.toBeNull();
+        expect(chip('EAN: 4006')).not.toBeNull();
+        await type('Product Name', 'bread');
+        expect(chip('Name: bread')).toBeNull();
+        api.get.mockClear();
+
+        chip('EAN: 4006')!.click();
+        await flush();
+
+        expect(params()).toEqual([
+            expect.objectContaining({ page: 1, name: 'MILK', EAN: '' }),
+        ]);
+        expect(field('Product Name').value).toBe('milk');
+    });
+});
+
 describe('product list search (issue #20)', () => {
     it('searches from the Search button', async () => {
         await mount();
@@ -78,9 +105,8 @@ describe('product list search (issue #20)', () => {
         await type('Product Name', 'milk');
         api.get.mockClear();
 
-        field('Product Name').dispatchEvent(
-            new KeyboardEvent('keydown', { key: 'Enter' }),
-        );
+        // Enter submits the FilterBar search form once.
+        field('Product Name').form!.requestSubmit();
         await flush();
 
         expect(params()).toEqual([

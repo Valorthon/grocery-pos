@@ -66,15 +66,36 @@ describe.each([
             dateFrom: appliedFrom,
         });
         expect(requests()[0]?.dateTo).toBeUndefined();
-        expect(document.body.textContent).toContain(`Showing source ${second}`);
+        // The applied deep link shows as a FilterBar chip (#171).
+        expect(chipLabels()).toContain(`Source: ${second}`);
         api.get.mockClear();
         await router.push(path);
         await flush();
         expect(requests()).toHaveLength(1);
         expect(requests()[0]?.source).toBeUndefined();
-        expect(document.body.textContent).not.toContain('Showing source');
+        expect(chipLabels().some((c) => c.startsWith('Source:'))).toBe(false);
         await click('Clear Filters');
         expect(requests()[requests().length - 1]?.source).toBeUndefined();
+    });
+
+    it('removes the source chip with one route change and one request, keeping focus (#171)', async () => {
+        const router = await mount();
+        api.get.mockClear();
+        const chip = document.querySelector<HTMLButtonElement>(
+            `button[aria-label="Remove filter Source: ${first}"]`,
+        )!;
+        chip.focus();
+
+        chip.click();
+        await flush();
+        await flush();
+
+        expect(router.currentRoute.value.query.source).toBeUndefined();
+        expect(requests()).toHaveLength(1);
+        expect(requests()[0]?.source).toBeUndefined();
+        // The chip is gone; focus moved to the Filters toggle, not <body>.
+        expect(document.activeElement).not.toBe(document.body);
+        expect(document.activeElement?.textContent).toContain('Filters');
     });
 
     it('clears the visible source restriction and ignores malformed source IDs', async () => {
@@ -91,6 +112,12 @@ describe.each([
         // Invalid route text never becomes a backend filter, even on retry.
         await click('Next');
         expect(requests()[requests().length - 1]?.source).toBeUndefined();
-        expect(document.body.textContent).not.toContain('Showing source');
+        expect(chipLabels().some((c) => c.startsWith('Source:'))).toBe(false);
     });
 });
+
+function chipLabels(): string[] {
+    return [...document.querySelectorAll('[data-chip]')].map((b) =>
+        b.textContent!.trim(),
+    );
+}

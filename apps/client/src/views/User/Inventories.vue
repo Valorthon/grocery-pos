@@ -32,52 +32,41 @@
                 Adjust
             </BaseButton>
         </template>
-        <template v-if="applied.lowStock" #chips>
-            <Badge color="warning" size="md" data-testid="low-stock-chip"
-                >Filtered: low stock</Badge
-            >
-        </template>
         <PageCard>
-            <div
-                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
+            <FilterBar
+                v-model:search="searchName"
+                search-label="Product Name"
+                :chips="chips"
+                :initially-open="chips.some((chip) => chip.inPanel)"
+                class="px-5 py-4 border-b border-line"
+                @search="applySearch"
+                @remove="removeFilter"
+                @clear="resetFilters"
             >
                 <BaseInput
                     v-model="searchEAN"
                     label="EAN / Barcode"
                     clearable
-                    @enter="applySearch"
                     @clear="applySearch"
                 />
-                <BaseInput
-                    v-model="searchName"
-                    label="Product Name"
-                    clearable
-                    @enter="applySearch"
-                    @clear="applySearch"
-                />
-                <label class="flex items-center gap-2 text-sm"
+                <label class="flex min-h-11 items-center gap-2 text-sm"
                     ><input
                         v-model="lowStock"
                         type="checkbox"
                         @change="toggleLowStock"
                     />Low stock</label
                 >
-                <div class="flex items-end gap-2">
-                    <BaseButton size="sm" @click="applySearch">
-                        <Search class="w-4 h-4" />
-                        Search
-                    </BaseButton>
+                <div class="flex items-end">
                     <BaseButton
                         variant="outline"
-                        size="sm"
+                        class="min-h-11"
                         @click="resetFilters"
                     >
                         <X class="w-4 h-4" />
                         Clear Filters
                     </BaseButton>
                 </div>
-            </div>
-
+            </FilterBar>
             <BaseTable
                 v-model:page="page"
                 v-model:items-per-page="limit"
@@ -122,14 +111,15 @@ import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Pencil, Search, X } from '@lucide/vue';
+import { Pencil, X } from '@lucide/vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import type { FilterChip } from '@/components/ui/page-primitives';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
-import Badge from '@/components/ui/Badge.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -225,6 +215,25 @@ interface InventoryListRow {
 }
 
 const serverItems = ref<InventoryListRow[]>([]);
+
+const chips = computed<FilterChip[]>(() => {
+    const a = applied.value;
+    const out: FilterChip[] = [];
+    if (a.name) out.push({ key: 'name', label: `Name: ${a.name}` });
+    if (a.EAN) out.push({ key: 'EAN', label: `EAN: ${a.EAN}`, inPanel: true });
+    if (a.lowStock)
+        out.push({ key: 'lowStock', label: 'Low stock', inPanel: true });
+    return out;
+});
+/** Drops one applied filter; typed-but-unsearched text goes back first. */
+function removeFilter(key: string) {
+    searchName.value = key === 'name' ? '' : applied.value.name;
+    searchEAN.value = key === 'EAN' ? '' : applied.value.EAN;
+    if (key === 'lowStock') {
+        lowStock.value = false;
+        toggleLowStock();
+    } else applySearch();
+}
 
 const resetFilters = () => {
     searchEAN.value = '';

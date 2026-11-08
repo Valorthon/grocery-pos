@@ -74,9 +74,12 @@ describe('restock history purchase-order links (#123)', () => {
         expect(
             api.get.mock.calls.find((c) => c[0] === '/restocks')?.[1]?.params,
         ).toMatchObject({ purchaseOrder: PO });
-        expect(document.body.textContent).toContain(
-            'Showing receipts of PO-99439ABC',
-        );
+        // The deep link shows as a FilterBar chip (#171).
+        expect(
+            document.querySelector(
+                'button[aria-label="Remove filter Purchase order: PO-99439ABC"]',
+            ),
+        ).not.toBeNull();
         const link = [...document.querySelectorAll('button')].find(
             (b) => b.textContent?.trim() === 'PO-99439ABC',
         )!;

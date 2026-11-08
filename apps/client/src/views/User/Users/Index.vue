@@ -7,32 +7,20 @@
             </BaseButton>
         </template>
         <PageCard>
-            <div
-                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
-            >
-                <BaseInput
-                    v-model="searchName"
-                    label="Search Name"
-                    :maxlength="STRING_LIMITS.USERNAME"
-                    clearable
-                    @enter="applySearch"
-                    @clear="applySearch"
-                />
-                <div class="md:col-span-3 flex items-end gap-2">
-                    <BaseButton size="sm" @click="applySearch">
-                        <Search class="w-4 h-4" />
-                        Search
-                    </BaseButton>
-                    <BaseButton
-                        variant="outline"
-                        size="sm"
-                        @click="resetFilters"
-                    >
-                        <X class="w-4 h-4" />
-                        Clear Filters
-                    </BaseButton>
-                </div>
-            </div>
+            <FilterBar
+                v-model:search="searchName"
+                search-label="Search Name"
+                :maxlength="STRING_LIMITS.USERNAME"
+                :chips="
+                    applied.name
+                        ? [{ key: 'name', label: `Name: ${applied.name}` }]
+                        : []
+                "
+                class="px-5 py-4 border-b border-line"
+                @search="applySearch"
+                @remove="resetFilters"
+                @clear="resetFilters"
+            />
 
             <BaseTable
                 v-model:page="page"
@@ -246,7 +234,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Pencil, Plus, Search, X } from '@lucide/vue';
+import { Pencil, Plus } from '@lucide/vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';

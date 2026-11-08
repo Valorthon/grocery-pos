@@ -554,6 +554,43 @@ describe('sales-history applied filters and receipt identity', () => {
         await flush();
         expect(salesParams()).toEqual({ page: 1, limit: 5 });
     });
+    it('removes one chip with one request, despite a refused range or unsearched text (#171)', async () => {
+        serve(CASH_SALE, []);
+        await history();
+        expect(
+            document
+                .querySelector('#sales-number')!
+                .closest('form[role="search"]')
+                ?.querySelector('button[type="submit"]'),
+        ).not.toBeNull();
+        input('sales-from', '2026-11-02', 'change');
+        const payment =
+            document.querySelector<HTMLSelectElement>('#sales-payment')!;
+        payment.value = PaymentType.CASH;
+        payment.dispatchEvent(new Event('change'));
+        await flush();
+        // A refused reversed To and typed-but-unsearched text.
+        input('sales-to', '2026-11-01', 'change');
+        input('sales-number', 'deadbeef');
+        await flush();
+        const count = () =>
+            api.get.mock.calls.filter(([url]) => url === '/sales').length;
+        const before = count();
+
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Remove filter Payment: CASH"]',
+            )!
+            .click();
+        await flush();
+
+        expect(count()).toBe(before + 1);
+        expect(salesParams()).toEqual({
+            page: 1,
+            limit: 5,
+            dateFrom: '2026-11-02',
+        });
+    });
     it('uses managed cashier/category selectors for administrators', async () => {
         serve(CASH_SALE, []);
         const original = api.get.getMockImplementation()!;

@@ -26,16 +26,18 @@
                     New Sale
                 </BaseButton>
             </template>
-            <form
-                class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-                @submit.prevent="applyFilters"
+            <FilterBar
+                v-model:search="filters.saleNumber"
+                search-id="sales-number"
+                search-label="Sale number or full ID"
+                :maxlength="24"
+                :chips="chips"
+                :initially-open="chips.some((chip) => chip.inPanel)"
+                class="mb-4"
+                @search="applyFilters"
+                @remove="removeFilter"
+                @clear="clearFilters"
             >
-                <BaseInput
-                    id="sales-number"
-                    v-model="filters.saleNumber"
-                    label="Sale number or full ID"
-                    :maxlength="24"
-                />
                 <BaseInput
                     id="sales-from"
                     v-model="filters.dateFrom"
@@ -92,11 +94,15 @@
                     "
                     @update:model-value="applyFilters"
                 />
-                <BaseButton type="submit">Search</BaseButton
-                ><BaseButton variant="outline" @click="clearFilters"
-                    >Clear Filters</BaseButton
-                >
-            </form>
+                <div class="flex items-end">
+                    <BaseButton
+                        variant="outline"
+                        class="min-h-11"
+                        @click="clearFilters"
+                        >Clear Filters</BaseButton
+                    >
+                </div>
+            </FilterBar>
             <p
                 v-if="filterError"
                 role="alert"
@@ -454,6 +460,8 @@ import { useManagerApproval } from '@/composables/useManagerApproval';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import type { TableHeader } from '@/components/ui/types';
 import BaseInput from '@/components/ui/BaseInput.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import type { FilterChip } from '@/components/ui/page-primitives';
 import { useSalesLookups } from '@/composables/useSalesLookups';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -588,6 +596,60 @@ function applyFilters() {
             .map(([key, value]) => [key, String(value).trim()]),
     );
     search();
+}
+const chips = computed<FilterChip[]>(() => {
+    const a = appliedFilters.value;
+    const out: FilterChip[] = [];
+    if (a.saleNumber)
+        out.push({ key: 'saleNumber', label: `Sale: ${a.saleNumber}` });
+    if (a.dateFrom)
+        out.push({
+            key: 'dateFrom',
+            label: `From: ${a.dateFrom}`,
+            inPanel: true,
+        });
+    if (a.dateTo)
+        out.push({ key: 'dateTo', label: `To: ${a.dateTo}`, inPanel: true });
+    if (a.paymentType)
+        out.push({
+            key: 'paymentType',
+            label: `Payment: ${a.paymentType}`,
+            inPanel: true,
+        });
+    if (a.cashier)
+        out.push({
+            key: 'cashier',
+            label: `Cashier: ${cashiers.value.find((row) => row._id === a.cashier)?.name ?? a.cashier}`,
+            inPanel: true,
+        });
+    if (a.category)
+        out.push({
+            key: 'category',
+            label: `Category: ${categories.value.find((row) => row._id === a.category)?.name ?? a.category}`,
+            inPanel: true,
+        });
+    return out;
+});
+/*
+ * Removing a chip drops that filter only: the search box goes back to
+ * its applied text and every input to its applied value first, so
+ * typed-but-unsearched text or a refused range is never sent.
+ */
+function removeFilter(key: string) {
+    const a = appliedFilters.value;
+    Object.assign(filters, {
+        saleNumber: a.saleNumber ?? '',
+        dateFrom: a.dateFrom ?? '',
+        dateTo: a.dateTo ?? '',
+        paymentType: a.paymentType ?? null,
+        cashier: a.cashier ?? null,
+        category: a.category ?? null,
+    });
+    if (key === 'saleNumber' || key === 'dateFrom' || key === 'dateTo')
+        filters[key] = '';
+    else if (key === 'paymentType' || key === 'cashier' || key === 'category')
+        filters[key] = null;
+    applyFilters();
 }
 function clearFilters() {
     Object.assign(filters, {

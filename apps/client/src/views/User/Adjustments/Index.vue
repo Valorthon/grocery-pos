@@ -10,8 +10,13 @@
             </BaseButton>
         </template>
         <PageCard>
-            <div
-                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-3"
+            <FilterBar
+                :searchable="false"
+                :chips="chips"
+                initially-open
+                class="px-5 py-4 border-b border-line"
+                @remove="removeFilter"
+                @clear="resetFilters"
             >
                 <BaseSelect
                     v-model="searchAdjustedBy"
@@ -35,22 +40,17 @@
                     :error="rangeError"
                     @update:model-value="applyFilters"
                 />
-                <div class="md:col-span-2 flex items-end">
+                <div class="flex items-end">
                     <BaseButton
                         variant="outline"
-                        size="sm"
+                        class="min-h-11"
                         @click="resetFilters"
                     >
                         <X class="w-4 h-4" />
                         Clear Filters
                     </BaseButton>
                 </div>
-            </div>
-
-            <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
-                Showing source {{ sourceId }}. Clear Filters to view all
-                history.
-            </p>
+            </FilterBar>
 
             <BaseTable
                 v-model:page="page"
@@ -87,6 +87,8 @@ import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import type { FilterChip } from '@/components/ui/page-primitives';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -180,6 +182,54 @@ const applyFilters = () => {
     };
     search();
 };
+
+// Chips read the applied snapshot and the deep link, never the inputs.
+const chips = computed<FilterChip[]>(() => {
+    const a = applied.value;
+    const out: FilterChip[] = [];
+    if (a.adjustedBy)
+        out.push({
+            key: 'adjustedBy',
+            label: `Adjusted by: ${userOptions.value.find((o) => o.value === a.adjustedBy)?.label ?? a.adjustedBy}`,
+            inPanel: true,
+        });
+    if (a.dateFrom)
+        out.push({
+            key: 'dateFrom',
+            label: `From: ${a.dateFrom}`,
+            inPanel: true,
+        });
+    if (a.dateTo)
+        out.push({ key: 'dateTo', label: `To: ${a.dateTo}`, inPanel: true });
+    if (sourceId.value)
+        out.push({ key: 'source', label: `Source: ${sourceId.value}` });
+    return out;
+});
+
+/** Drops one applied filter with exactly one reload. */
+function removeFilter(key: string) {
+    if (key === 'source') {
+        // The route watcher performs the single reload.
+        void router.replace({
+            query: { ...router.currentRoute.value.query, source: undefined },
+        });
+        return;
+    }
+    // The inputs go back to the applied range first, so a reversed range
+    // still being typed never applies.
+    searchAdjustedBy.value = applied.value.adjustedBy ?? null;
+    searchDateStart.value = applied.value.dateFrom ?? '';
+    searchDateEnd.value = applied.value.dateTo ?? '';
+    if (key === 'adjustedBy') searchAdjustedBy.value = null;
+    if (key === 'dateFrom') searchDateStart.value = '';
+    if (key === 'dateTo') searchDateEnd.value = '';
+    applied.value = {
+        adjustedBy: searchAdjustedBy.value ?? undefined,
+        dateFrom: searchDateStart.value || undefined,
+        dateTo: searchDateEnd.value || undefined,
+    };
+    search();
+}
 
 const resetFilters = () => {
     searchAdjustedBy.value = null;

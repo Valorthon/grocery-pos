@@ -16,7 +16,13 @@
         <PageCard>
             <div class="space-y-4 p-5">
                 <template v-if="!editing">
-                    <div class="flex flex-wrap items-end gap-3">
+                    <FilterBar
+                        :searchable="false"
+                        :chips="statusChips"
+                        initially-open
+                        @remove="clearStatus"
+                        @clear="clearStatus"
+                    >
                         <BaseSelect
                             v-model="statusFilter"
                             label="Status"
@@ -24,7 +30,7 @@
                             :options="statusOptions"
                             @update:model-value="apply"
                         />
-                    </div>
+                    </FilterBar>
                     <BaseTable
                         v-model:page="page"
                         v-model:items-per-page="limit"
@@ -483,6 +489,8 @@ import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import type { FilterChip } from '@/components/ui/page-primitives';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import {
     useAppliedFilters,
@@ -560,6 +568,22 @@ const { applied, apply } = useAppliedFilters(
     () => ({ status: statusFilter.value }),
     search,
 );
+// The status chip reads the applied filter.
+const statusChips = computed<FilterChip[]>(() =>
+    applied.value.status
+        ? [
+              {
+                  key: 'status',
+                  label: `Status: ${STATUS_LABELS[applied.value.status as PurchaseOrderStatus] ?? applied.value.status}`,
+                  inPanel: true,
+              },
+          ]
+        : [],
+);
+function clearStatus() {
+    statusFilter.value = null;
+    apply();
+}
 const {
     loading: listLoading,
     error: listError,

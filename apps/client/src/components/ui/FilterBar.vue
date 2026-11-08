@@ -7,8 +7,11 @@
     >
         <div class="flex flex-wrap items-end gap-2">
             <BaseInput
+                v-if="searchable"
+                :id="searchId"
                 :model-value="search"
                 :label="searchLabel"
+                :aria-describedby="searchHint ? hintId : undefined"
                 :placeholder="placeholder"
                 :maxlength="maxlength"
                 clearable
@@ -16,12 +19,13 @@
                 @update:model-value="emit('update:search', $event)"
                 @clear="emit('search')"
             />
-            <BaseButton type="submit" class="min-h-11">
+            <BaseButton v-if="searchable" type="submit" class="min-h-11">
                 <template #icon><SearchIcon :size="16" /></template>
                 Search
             </BaseButton>
             <BaseButton
                 v-if="$slots.default"
+                ref="toggle"
                 variant="outline"
                 class="min-h-11"
                 :aria-expanded="open"
@@ -38,6 +42,14 @@
                 </span>
             </BaseButton>
         </div>
+
+        <p
+            v-if="searchable && searchHint"
+            :id="hintId"
+            class="text-xs text-muted"
+        >
+            {{ searchHint }}
+        </p>
 
         <div
             v-if="$slots.default"
@@ -90,7 +102,7 @@
  * that input and call its `apply()` once. Select/date controls in the
  * default slot keep applying on change, as the page wires them.
  */
-import { computed, nextTick, ref, useId } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { Search as SearchIcon, SlidersHorizontal, X } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import BaseInput from './BaseInput.vue';
@@ -98,19 +110,29 @@ import type { FilterChip } from './page-primitives';
 
 const props = withDefaults(
     defineProps<{
-        search: string;
+        search?: string;
         searchLabel?: string;
         placeholder?: string;
         maxlength?: number;
+        /** Id of the search input, for labels and specs. */
+        searchId?: string;
+        /** A hint under the search row, tied to the box by aria-describedby. */
+        searchHint?: string;
         chips?: FilterChip[];
+        /** False on lists without a text search: only the panel and chips. */
+        searchable?: boolean;
         /** Start with the Filters panel open. */
         initiallyOpen?: boolean;
     }>(),
     {
+        search: '',
         searchLabel: 'Search',
         placeholder: undefined,
         maxlength: undefined,
+        searchId: '',
+        searchHint: '',
         chips: () => [],
+        searchable: true,
         initiallyOpen: false,
     },
 );
@@ -124,9 +146,37 @@ const emit = defineEmits<{
 
 const open = ref(props.initiallyOpen);
 const root = ref<HTMLFormElement | null>(null);
+const toggle = ref<{ $el: HTMLElement } | null>(null);
 const panelCount = computed(
     () => props.chips.filter((chip) => chip.inPanel).length,
 );
+
+/*
+ * Resolves once the page's chips satisfy `done`. A deep-link chip goes
+ * only after the route changes, later than the next tick, so focus waits
+ * for the chip to really unmount. A newer removal or unmount cancels it.
+ */
+let stopWaiting: (() => void) | null = null;
+function chipsUntil(done: () => boolean): Promise<boolean> {
+    stopWaiting?.();
+    return new Promise((resolve) => {
+        if (done()) return resolve(true);
+        const stop = watch(
+            () => props.chips,
+            () => {
+                if (!done()) return;
+                stop();
+                stopWaiting = null;
+                resolve(true);
+            },
+        );
+        stopWaiting = () => {
+            stop();
+            resolve(false);
+        };
+    });
+}
+onBeforeUnmount(() => stopWaiting?.());
 
 /*
  * The focused chip unmounts once the page drops it, so focus goes to the
@@ -134,20 +184,30 @@ const panelCount = computed(
  */
 async function removeChip(key: string, index: number) {
     emit('remove', key);
+    if (!(await chipsUntil(() => !props.chips.some((c) => c.key === key))))
+        return;
     await nextTick();
     const chips = root.value?.querySelectorAll<HTMLElement>('[data-chip]');
     const next = chips?.[Math.min(index, chips.length - 1)];
-    (next ?? searchBox())?.focus();
+    (next ?? fallbackFocus())?.focus();
 }
 
 async function clearAll() {
     emit('clear');
+    if (!(await chipsUntil(() => props.chips.length === 0))) return;
     await nextTick();
-    searchBox()?.focus();
+    fallbackFocus()?.focus();
 }
 
-function searchBox() {
-    return root.value?.querySelector<HTMLInputElement>('input') ?? null;
+/*
+ * The search box; without one, the Filters toggle (a panel input may be
+ * hidden while the panel is collapsed).
+ */
+function fallbackFocus(): HTMLElement | null {
+    if (props.searchable)
+        return root.value?.querySelector<HTMLInputElement>('input') ?? null;
+    return toggle.value?.$el ?? null;
 }
 const panelId = useId();
+const hintId = useId();
 </script>

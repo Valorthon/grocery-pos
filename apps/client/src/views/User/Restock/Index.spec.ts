@@ -338,6 +338,52 @@ describe('restock history filters and paging (issue #20)', () => {
             userFilter().options[userFilter().selectedIndex]?.textContent,
         ).toContain('All users');
     });
+
+    describe('restock history FilterBar (#171)', () => {
+        const chipLabels = () =>
+            [...document.querySelectorAll('[data-chip]')].map((b) =>
+                b.textContent!.trim(),
+            );
+
+        it('chips show the applied range, never a reversed one being typed', async () => {
+            serve();
+            await mount();
+            expect(
+                document.querySelector('form[role="search"]'),
+            ).not.toBeNull();
+            await type('From', '2026-03-02');
+            await flush();
+            await type('To', '2026-03-01');
+            await flush();
+
+            expect(chipLabels()).toEqual(['From: 2026-03-02']);
+        });
+
+        it('removing a chip drops that filter with exactly one request', async () => {
+            serve();
+            await mount();
+            await choose(userFilter(), 'u1');
+            await type('From', '2026-03-02');
+            await flush();
+            api.get.mockClear();
+
+            document
+                .querySelector<HTMLButtonElement>(
+                    'button[aria-label="Remove filter From: 2026-03-02"]',
+                )!
+                .click();
+            await flush();
+
+            expect(listCalls()).toEqual([
+                expect.objectContaining({
+                    page: 1,
+                    restockedBy: 'u1',
+                    dateFrom: undefined,
+                }),
+            ]);
+            expect(field('From').value).toBe('');
+        });
+    });
 });
 
 describe('restock history dates (issue #24)', () => {
