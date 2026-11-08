@@ -114,7 +114,7 @@
                     <button
                         type="button"
                         class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
-                        @click="pickQuickCash(total)"
+                        @click="pickQuickCash(total, 'cash')"
                     >
                         Exact
                     </button>
@@ -123,7 +123,7 @@
                         :key="amount"
                         type="button"
                         class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
-                        @click="pickQuickCash(amount)"
+                        @click="pickQuickCash(amount, 'cash')"
                     >
                         {{ currency(amount) }}
                     </button>
@@ -148,6 +148,7 @@
                 </div>
 
                 <div
+                    :id="changeId"
                     class="flex items-center justify-between p-2.5 bg-surface rounded-control border border-line"
                 >
                     <span class="text-xs font-bold text-muted"
@@ -229,7 +230,7 @@
                             :key="bill"
                             type="button"
                             class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
-                            @click="splitCashGiven = centavosToPesoInput(bill)"
+                            @click="pickQuickCash(bill, 'split')"
                         >
                             {{ currency(bill) }}
                         </button>
@@ -279,6 +280,7 @@
                                 v-model="referenceNumber"
                                 :form="formId"
                                 aria-label="GCash reference number"
+                                data-split-reference
                                 type="text"
                                 inputmode="numeric"
                                 autocomplete="off"
@@ -322,6 +324,7 @@
                         out of the cash tender too (settleTenders).
                     -->
                     <div
+                        :id="changeId"
                         class="flex items-center justify-between p-2.5 bg-surface rounded-control border border-line"
                     >
                         <span class="text-xs font-bold text-muted"
@@ -375,6 +378,7 @@
             >
             <BaseButton
                 :id="confirmId"
+                :aria-describedby="changeShown ? changeId : undefined"
                 type="submit"
                 :form="formId"
                 class="flex-1"
@@ -510,20 +514,30 @@ const payment = computed(() =>
 const canConfirm = computed(() => payment.value !== null);
 const confirmId = `${formId}-confirm`;
 
+const changeId = `${formId}-change`;
+/** The Change Due row is on screen: CASH, or SPLIT once cash is given. */
+const changeShown = computed(
+    () =>
+        method.value === PaymentType.CASH ||
+        (method.value === PaymentType.SPLIT && split.value.cash > 0),
+);
+
 /**
- * A quick-cash button fills the amount, then hands the focus to Confirm
- * when the payment is valid (#197), so Enter confirms instead of pressing
- * the quick amount again; otherwise back to the amount field. Confirm is
- * the form's submit button and `finish` ignores a second submit while
- * processing, so Enter can't send the sale twice.
+ * A quick-cash or split bill button fills its amount, then hands the focus
+ * on (#197) so Enter doesn't press the same button again: to Confirm when
+ * the payment is valid (Confirm describes itself with the Change Due), else
+ * to the GCash reference a real split still needs. Confirm is the form's
+ * submit button and `finish` ignores a submit while processing, so Enter
+ * can't send the sale twice.
  */
-async function pickQuickCash(amount: number) {
-    amountTendered.value = centavosToPesoInput(amount);
+async function pickQuickCash(amount: number, field: 'cash' | 'split') {
+    (field === 'cash' ? amountTendered : splitCashGiven).value =
+        centavosToPesoInput(amount);
     await nextTick();
-    const target = canConfirm.value
+    const next = canConfirm.value
         ? document.getElementById(confirmId)
-        : fields.value?.querySelector<HTMLElement>('[data-autofocus]');
-    target?.focus();
+        : fields.value?.querySelector<HTMLElement>('[data-split-reference]');
+    next?.focus();
 }
 
 function currency(value: number): string {
