@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Restock History">
         <template #icon>
-            <Truck class="w-5 h-5 text-primary-600" />
+            <Truck class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton
@@ -72,7 +72,7 @@
                 <button
                     v-if="item.purchaseOrder && canOpenOrders"
                     type="button"
-                    class="min-h-11 text-primary-700 underline"
+                    class="min-h-11 text-leaf-700 underline"
                     @click.stop="openOrder(item.purchaseOrder)"
                 >
                     {{ purchaseOrderReference(item.purchaseOrder) }}

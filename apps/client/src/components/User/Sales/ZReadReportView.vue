@@ -123,7 +123,7 @@
         >
             <div class="flex justify-between font-bold text-slate-900">
                 <span>Physical Cash Counted:</span>
-                <span class="text-primary-600">{{
+                <span class="text-leaf-600">{{
                     currency(report.drawer.countedCash)
                 }}</span>
             </div>

@@ -1,7 +1,5 @@
 <template>
-    <div
-        class="min-h-screen flex flex-col bg-[#f8fafc] text-slate-900 antialiased"
-    >
+    <div class="min-h-screen flex flex-col bg-paper text-slate-900 antialiased">
         <GuestAppbar v-if="!route.meta.hideAppBar" />
         <main class="flex-1">
             <router-view />

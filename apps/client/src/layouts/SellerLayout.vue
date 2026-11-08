@@ -1,6 +1,6 @@
 <template>
     <div
-        class="h-screen w-screen overflow-hidden flex flex-col bg-[#f8fafc] text-slate-900 antialiased"
+        class="h-screen w-screen overflow-hidden flex flex-col bg-paper text-slate-900 antialiased"
     >
         <OfflineStatus />
         <template v-if="isDashboard">

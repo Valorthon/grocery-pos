@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Inventory">
         <template #icon>
-            <Package class="w-5 h-5 text-primary-600" />
+            <Package class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton

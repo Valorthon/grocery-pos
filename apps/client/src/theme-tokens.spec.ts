@@ -92,14 +92,10 @@ describe('theme tokens (#153)', () => {
         }
     });
 
-    it('keeps primary-* as an alias of leaf-*', () => {
-        for (const step of [
-            50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950,
-        ]) {
-            expect(map.get(`primary-${step}`)).toBe(
-                `var(--color-leaf-${step})`,
-            );
-        }
+    it('has no primary-* alias left (#158)', () => {
+        expect([...map.keys()].filter((k) => k.startsWith('primary'))).toEqual(
+            [],
+        );
         expect(map.has('teal-dark')).toBe(false);
     });
 
@@ -127,11 +123,14 @@ describe('theme tokens (#153)', () => {
         ['surface', 'leaf-700'],
         ['surface', 'leaf-800'],
         ['leaf-700', 'leaf-50'],
+        // Guest footer button hover: leaf text on leaf-50 (#158).
+        ['leaf-600', 'leaf-50'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
 
     it.each([
+        // Also the Reports chart zero line on its bg-surface box (#158).
         ['line-strong', 'surface'],
         ['leaf-500', 'surface'],
         ['leaf-500', 'paper'],

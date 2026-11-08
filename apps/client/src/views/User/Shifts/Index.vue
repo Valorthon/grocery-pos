@@ -107,7 +107,7 @@
                         class="text-xs font-bold uppercase tracking-wider text-slate-400"
                         >Counted cash</span
                     >
-                    <span class="font-mono text-xl font-black text-primary-300">
+                    <span class="font-mono text-xl font-black text-leaf-300">
                         {{ formatCurrency(countedCash) }}
                     </span>
                 </div>

@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Roles & Permissions">
         <template #icon>
-            <ShieldCheck class="w-5 h-5 text-primary-600" />
+            <ShieldCheck class="w-5 h-5 text-leaf-600" />
         </template>
 
         <div class="p-5">
@@ -84,7 +84,7 @@ const LOOK: Record<
     [Role.Admin]: {
         label: 'Admin',
         icon: Crown,
-        avatarClass: 'bg-primary-50 text-primary-600',
+        avatarClass: 'bg-leaf-50 text-leaf-600',
         // Selling and cash shifts are `ownRoleOnly` in PERMISSIONS (#84).
         note: 'To sell, an admin also needs the Seller role.',
     },

@@ -220,10 +220,10 @@ const groups = computed(() => [
         kind: 'bills',
         title: 'Bills',
         icon: Banknote,
-        iconClass: 'text-primary-600',
-        subtotalClass: 'text-primary-950',
-        countClass: 'text-primary-600',
-        plusClass: 'text-primary-700 hover:bg-primary-50 active:bg-primary-100',
+        iconClass: 'text-leaf-600',
+        subtotalClass: 'text-leaf-950',
+        countClass: 'text-leaf-600',
+        plusClass: 'text-leaf-700 hover:bg-leaf-50 active:bg-leaf-100',
         denoms: PAPER_DENOMINATIONS,
         subtotal: subtotal(PAPER_DENOMINATIONS),
         pieces: pieces(PAPER_DENOMINATIONS),
@@ -259,7 +259,7 @@ function tileClass(kind: string, active: boolean, refused: boolean): string {
         return 'bg-slate-50/90 border-slate-200 hover:border-slate-300';
     }
     return kind === 'bills'
-        ? 'bg-primary-50/90 border-primary-300'
+        ? 'bg-leaf-50/90 border-leaf-300'
         : 'bg-amber-50/90 border-amber-400';
 }
 

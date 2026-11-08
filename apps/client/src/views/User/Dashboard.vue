@@ -255,7 +255,7 @@ const stats = computed(() => [
         title: 'Total Products',
         value: data.value?.totalProducts?.toLocaleString() ?? '-',
         icon: Package,
-        avatarClass: 'bg-primary-50 text-primary-600',
+        avatarClass: 'bg-leaf-50 text-leaf-600',
     },
     {
         title: 'Low Stock Items',

@@ -50,7 +50,7 @@
                         >
                             <div class="flex items-center gap-2.5 min-w-0">
                                 <div
-                                    class="w-9 h-9 rounded-xl bg-primary-600/10 text-primary-600 flex items-center justify-center border border-primary-600/20 shrink-0"
+                                    class="w-9 h-9 rounded-xl bg-leaf-600/10 text-leaf-600 flex items-center justify-center border border-leaf-600/20 shrink-0"
                                 >
                                     <Store class="w-5 h-5" />
                                 </div>
@@ -88,7 +88,7 @@
                         <button
                             v-else
                             type="button"
-                            class="w-11 h-11 rounded-xl bg-primary-600/10 text-primary-600 hover:bg-primary-600 hover:text-white flex items-center justify-center border border-primary-600/20 hover:border-primary-600 transition-all focus-ring"
+                            class="w-11 h-11 rounded-xl bg-leaf-600/10 text-leaf-600 hover:bg-leaf-600 hover:text-white flex items-center justify-center border border-leaf-600/20 hover:border-leaf-600 transition-all focus-ring"
                             aria-label="Expand sidebar"
                             data-testid="admin-sidebar-expand"
                             @click="collapsed = false"
@@ -132,7 +132,7 @@
                                             ? 'justify-center p-3'
                                             : 'justify-between min-h-11 px-3.5 py-2.5',
                                         isActive(item.name)
-                                            ? 'bg-primary-600 text-white font-bold shadow-xs'
+                                            ? 'bg-leaf-600 text-white font-bold shadow-xs'
                                             : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
                                     ]"
                                     :title="rail ? item.title : undefined"

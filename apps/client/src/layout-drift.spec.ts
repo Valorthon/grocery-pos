@@ -110,6 +110,75 @@ describe('layout drift (#26)', () => {
     });
 });
 
+/** A Tailwind arbitrary colour class such as `bg-[#075BAB]`. */
+const RAW_HEX_CLASS =
+    /\b(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|from|via|to|divide|decoration|accent|caret|placeholder|shadow)-\[(?:color:)?#[0-9a-f]{3,8}\]|\[[a-z-]*color:#[0-9a-f]{3,8}\]/i;
+/** The retired `primary-*` palette (alias of `leaf-*` until #158). */
+const PRIMARY_CLASS = /\bprimary-\d{2,3}\b/;
+
+describe('colour drift (#158)', () => {
+    it('has no raw hex colour class', () => {
+        expect(offending(RAW_HEX_CLASS)).toEqual([]);
+    });
+
+    it('uses no primary-* colour; leaf-* replaced it', () => {
+        expect(offending(PRIMARY_CLASS)).toEqual([]);
+    });
+
+    it('keeps the old brand blue out of the client, assets included', () => {
+        expect(indexHtml).not.toMatch(/#075bab/i);
+        expect(offending(/#075bab/i)).toEqual([]);
+        const assets = import.meta.glob<string>(
+            ['/src/**/*.svg', '/public/*.{svg,webmanifest}'],
+            { query: '?raw', import: 'default', eager: true },
+        );
+        expect(Object.keys(assets)).toEqual(
+            expect.arrayContaining([
+                '/public/favicon.svg',
+                '/public/manifest.webmanifest',
+                '/src/assets/logo-icon.svg',
+                '/src/assets/logo-white.svg',
+            ]),
+        );
+        expect(
+            Object.entries(assets)
+                .filter(([, text]) => /#075bab/i.test(text))
+                .map(([file]) => file),
+        ).toEqual([]);
+    });
+
+    it.each([
+        'bg-[#075BAB]',
+        'text-[#fff]',
+        'hover:border-[#f8fafc]',
+        'stroke-[#11223344]',
+        'bg-[color:#abc]',
+        'border-s-[#abcdef]',
+        '[background-color:#abcdef]',
+    ])('catches the raw hex class %s (the check itself)', (cls) => {
+        expect(RAW_HEX_CLASS.test(`<div class="${cls}" />`)).toBe(true);
+    });
+
+    it.each([
+        'bg-primary-600',
+        'hover:text-primary-700',
+        'focus-visible:ring-primary-500/40',
+        'border-l-primary-50',
+        '--color-primary-600: #000;',
+    ])('catches %s (the check itself)', (cls) => {
+        expect(PRIMARY_CLASS.test(cls)).toBe(true);
+    });
+
+    it.each([
+        'bg-leaf-600',
+        'bg-[var(--color-leaf-600)]',
+        "variant: 'primary'",
+        'text-[length:0.75rem]',
+    ])('lets %s through', (cls) => {
+        expect(RAW_HEX_CLASS.test(cls) || PRIMARY_CLASS.test(cls)).toBe(false);
+    });
+});
+
 describe('wording drift (#85)', () => {
     // Whole words only: "design in" is fine, "signed out" is not.
     const SIGN = /\bsign(?:ed|ing)?[\s-]?(out|in)\b/i;

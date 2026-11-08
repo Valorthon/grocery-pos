@@ -25,7 +25,7 @@
         </div>
 
         <!-- Right: form panel -->
-        <div class="flex items-center justify-center p-6 relative bg-[#f3f7ff]">
+        <div class="flex items-center justify-center p-6 relative bg-leaf-50">
             <router-link to="/" class="absolute top-6 right-6">
                 <img
                     :src="logo"
@@ -67,7 +67,7 @@
                             spellcheck="false"
                             placeholder="Username"
                             :disabled="loading"
-                            class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
+                            class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-leaf-600 focus:ring-2 focus:ring-leaf-600/10"
                         />
                     </div>
 
@@ -90,7 +90,7 @@
                             autocomplete="current-password"
                             placeholder="••••••••"
                             :disabled="loading"
-                            class="w-full pl-11 pr-11 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10"
+                            class="w-full pl-11 pr-11 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-leaf-600 focus:ring-2 focus:ring-leaf-600/10"
                         />
                         <button
                             type="button"

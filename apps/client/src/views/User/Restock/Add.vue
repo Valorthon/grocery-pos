@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Restock Draft">
         <template #icon>
-            <Truck class="w-5 h-5 text-primary-600" />
+            <Truck class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton size="sm" @click="openAddDialog">
@@ -85,7 +85,7 @@
                             <div class="flex justify-end gap-1">
                                 <button
                                     type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50"
                                     aria-label="Edit draft"
                                     @click="editDraft(item)"
                                 >

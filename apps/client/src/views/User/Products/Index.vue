@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Product List">
         <template #icon>
-            <List class="w-5 h-5 text-primary-600" />
+            <List class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton

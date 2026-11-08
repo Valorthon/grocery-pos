@@ -535,10 +535,8 @@ describe('UserLayout sidebar items are links (#143)', () => {
         );
         expect(current).toHaveLength(1);
         expect(current[0].textContent).toContain('Low Stock');
-        expect(current[0].className).toContain('bg-primary-600');
-        expect(navButton('Inventory').className).not.toContain(
-            'bg-primary-600',
-        );
+        expect(current[0].className).toContain('bg-leaf-600');
+        expect(navButton('Inventory').className).not.toContain('bg-leaf-600');
     });
 
     it('keeps a link per item in the collapsed rail, labelled', async () => {

@@ -29,7 +29,7 @@
                 <button
                     v-if="canSell"
                     type="button"
-                    class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all active:scale-[0.98] shadow-xs"
+                    class="inline-flex items-center gap-2 bg-leaf-600 hover:bg-leaf-700 active:bg-leaf-800 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all active:scale-[0.98] shadow-xs"
                     @click="router.push({ name: 'Sell' })"
                 >
                     <Plus class="w-4 h-4" />

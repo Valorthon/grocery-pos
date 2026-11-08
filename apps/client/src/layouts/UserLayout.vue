@@ -1,6 +1,6 @@
 <template>
     <div
-        class="h-screen w-screen overflow-hidden flex bg-[#f8fafc] text-slate-900 antialiased"
+        class="h-screen w-screen overflow-hidden flex bg-paper text-slate-900 antialiased"
     >
         <UserSidebar v-model="drawer" />
 

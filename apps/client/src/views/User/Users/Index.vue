@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Users">
         <template #icon>
-            <Users class="w-5 h-5 text-primary-600" />
+            <Users class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton size="sm" @click="openCreate">
@@ -70,7 +70,7 @@
                             )
                         "
                         type="button"
-                        class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-primary-600 focus-ring"
+                        class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-leaf-600 focus-ring"
                         :aria-label="`Manage PIN for ${item.name}`"
                         @click="pinUser = item"
                     >
@@ -78,7 +78,7 @@
                     </button>
                     <button
                         type="button"
-                        class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
+                        class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
                         :disabled="!canEdit(item)"
                         :title="
                             canEdit(item)

@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Specs and test helpers hold sample classes that must not ship (#158). */
+@source not '../**/*.spec.ts';
+@source not '../testing/**';
+
 /*
  * The Fresh market fonts, self-hosted from @fontsource-variable (#153). Only
  * the latin and latin-ext subsets are declared (the packages' own CSS would
@@ -123,22 +127,6 @@
     --color-info-bg: #e4eef7;
     --color-info-fg: #1d4f80;
     --color-info-border: #a9c6e2;
-
-    /*
-     * primary-* stays as an alias of leaf until the drift guard retires it
-     * (#175), so the existing classes keep resolving mid-phase.
-     */
-    --color-primary-50: var(--color-leaf-50);
-    --color-primary-100: var(--color-leaf-100);
-    --color-primary-200: var(--color-leaf-200);
-    --color-primary-300: var(--color-leaf-300);
-    --color-primary-400: var(--color-leaf-400);
-    --color-primary-500: var(--color-leaf-500);
-    --color-primary-600: var(--color-leaf-600);
-    --color-primary-700: var(--color-leaf-700);
-    --color-primary-800: var(--color-leaf-800);
-    --color-primary-900: var(--color-leaf-900);
-    --color-primary-950: var(--color-leaf-950);
 
     /*
      * Instrument Sans stops at 700, so extrabold/black are capped there:

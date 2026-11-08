@@ -93,7 +93,7 @@
                         <button
                             v-else
                             type="button"
-                            class="w-11 h-11 rounded-xl bg-primary-600/10 text-primary-600 hover:bg-primary-600 hover:text-white flex items-center justify-center border border-primary-600/20 hover:border-primary-600 transition-all duration-200 group relative focus-ring"
+                            class="w-11 h-11 rounded-xl bg-leaf-600/10 text-leaf-600 hover:bg-leaf-600 hover:text-white flex items-center justify-center border border-leaf-600/20 hover:border-leaf-600 transition-all duration-200 group relative focus-ring"
                             aria-label="Expand sidebar"
                             data-testid="sidebar-expand"
                             @click="toggle"
@@ -127,7 +127,7 @@
                                         ? 'justify-center p-3'
                                         : 'justify-between px-3.5 py-3',
                                     isActive(item.id)
-                                        ? 'bg-primary-600 text-white font-bold shadow-xs'
+                                        ? 'bg-leaf-600 text-white font-bold shadow-xs'
                                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
                                 ]"
                                 :title="isCollapsed ? item.label : undefined"
@@ -164,8 +164,8 @@
                                     class="text-xs font-black px-2 py-0.5 rounded-full"
                                     :class="
                                         isActive(item.id)
-                                            ? 'bg-white text-primary-600'
-                                            : 'bg-primary-600 text-white'
+                                            ? 'bg-white text-leaf-600'
+                                            : 'bg-leaf-600 text-white'
                                     "
                                 >
                                     {{ cartCount }}
