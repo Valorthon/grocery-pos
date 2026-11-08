@@ -57,6 +57,7 @@ describe('StatTile (#157)', () => {
     );
 
     it('neutral has no stripe or tone text; toneLabel overrides', async () => {
+        app?.unmount();
         const plain = await mount({ label: 'x', value: 1 });
         expect(plain.querySelector('[data-tone-stripe]')).toBeNull();
         expect(plain.querySelector('.sr-only')).toBeNull();
@@ -86,5 +87,16 @@ describe('StatTile (#157)', () => {
         expect(el.tagName).toBe('A');
         expect(el.getAttribute('href')).toBe('/low');
         expect(el.classList).toContain('focus-ring');
+    });
+
+    it('a linked tile shows a View cue and a hover border; a plain one none (#193)', async () => {
+        const link = await mount({ label: 'Low stock', value: 4, to: '/low' });
+        const cue = link.querySelector('[data-tile-link]');
+        expect(cue?.textContent).toBe('View');
+        expect(cue?.querySelector('svg')).not.toBeNull();
+        expect(link.classList).toContain('hover:border-leaf-600');
+        app?.unmount();
+        const plain = await mount({ label: 'Sales', value: 4 });
+        expect(plain.querySelector('[data-tile-link]')).toBeNull();
     });
 });

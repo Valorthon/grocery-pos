@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type App, createApp, defineComponent } from 'vue';
+import { type App, type Slots, createApp, defineComponent, h } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import { Role } from '@grocery-pos/contracts';
@@ -10,6 +10,23 @@ import { notFoundLink } from './not-found-link';
 import { pageTitle } from '@/router/page-title';
 
 vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
+
+// The real layouts need stores and the API; a stub with the same slot
+// shows which frame the page picked (#193).
+function layoutStub(name: string) {
+    return {
+        __esModule: true,
+        default: {
+            render(this: { $slots: Slots }) {
+                return h('div', { 'data-stub-layout': name }, [
+                    h('main', this.$slots.default?.()),
+                ]);
+            },
+        },
+    };
+}
+vi.mock('@/layouts/UserLayout.vue', () => layoutStub('user'));
+vi.mock('@/layouts/SellerLayout.vue', () => layoutStub('seller'));
 
 const Blank = defineComponent({ render: () => null });
 let app: App | null = null;
@@ -58,6 +75,24 @@ describe('NotFound view (#162)', () => {
         expect(link?.getAttribute('href')).toBe('/login');
         expect(link?.className).toContain('focus-ring');
         expect(link?.className).not.toContain('outline-none');
+        expect(host.querySelector('[data-stub-layout]')).toBeNull();
+        expect(host.querySelectorAll('main')).toHaveLength(1);
+    });
+
+    it('renders inside the admin layout for a manager (#193)', async () => {
+        const host = await mount([Role.Admin]);
+        const frame = host.querySelector('[data-stub-layout]');
+        expect(frame?.getAttribute('data-stub-layout')).toBe('user');
+        expect(frame?.querySelector('h1')?.textContent).toBe('Page not found');
+        expect(host.querySelectorAll('main')).toHaveLength(1);
+        expect(host.querySelectorAll('h1')).toHaveLength(1);
+    });
+
+    it('renders inside the seller layout for a cashier (#193)', async () => {
+        const host = await mount([Role.Seller]);
+        const frame = host.querySelector('[data-stub-layout]');
+        expect(frame?.getAttribute('data-stub-layout')).toBe('seller');
+        expect(frame?.querySelector('a')?.textContent).toBe('Go to register');
     });
 
     it('links an admin to the dashboard', async () => {

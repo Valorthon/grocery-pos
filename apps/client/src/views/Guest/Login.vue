@@ -16,7 +16,10 @@
                 :style="{ backgroundImage: `url('${LOGIN_HERO_URL}')` }"
             />
             <div class="absolute inset-0 hero-overlay" />
+            <!-- Only while there is no photo: over it the art reads as a
+                 stray overlay (#193). -->
             <svg
+                v-if="!heroPhotoLoaded"
                 data-testid="login-hero-art"
                 class="hidden lg:block absolute -top-6 -right-6 w-72 h-72 text-leaf-400 opacity-60"
                 viewBox="0 0 200 200"
@@ -194,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { onMounted, ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowRight, Eye, EyeOff, Lock, User as UserIcon } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -209,6 +212,16 @@ import { homeRouteFor } from '@/router/access';
 import { LOGIN_HERO_URL } from '@/constant';
 import logo from '@/assets/logo-icon.svg';
 import { loginErrorMessage } from './login-error';
+
+/** The optional hero photo loaded: the produce art then steps aside. */
+const heroPhotoLoaded = ref(false);
+onMounted(() => {
+    const probe = new Image();
+    probe.onload = () => {
+        heroPhotoLoaded.value = true;
+    };
+    probe.src = LOGIN_HERO_URL;
+});
 
 const router = useRouter();
 const authStore = useAuthStore();

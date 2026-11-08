@@ -297,6 +297,32 @@ describe('Market-themed Login (#168)', () => {
         expect(logo!.closest('[data-testid="login-hero"]')).toBeNull();
     });
 
+    it('hides the produce art once the hero photo loads (#193)', async () => {
+        const probes: { onload: (() => void) | null; src: string }[] = [];
+        vi.stubGlobal(
+            'Image',
+            class {
+                onload: (() => void) | null = null;
+                src = '';
+                constructor() {
+                    probes.push(this);
+                }
+            },
+        );
+        try {
+            const host = await mount();
+            const art = () =>
+                host.querySelector('[data-testid="login-hero-art"]');
+            expect(art()).not.toBeNull();
+            expect(probes).toHaveLength(1);
+            probes[0].onload?.();
+            await nextTick();
+            expect(art()).toBeNull();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('puts the hero text on a dark scrim that holds AA over any photo', async () => {
         const host = await mount();
         const text = host.querySelector('[data-testid="login-hero-text"]');

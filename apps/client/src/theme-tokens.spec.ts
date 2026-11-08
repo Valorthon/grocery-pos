@@ -125,6 +125,9 @@ describe('theme tokens (#153)', () => {
         // Also the seller sidebar's active cart badge (#161).
         ['surface', 'leaf-800'],
         ['leaf-700', 'leaf-50'],
+        // Linked StatTile "View" cue, at rest and on hover (#193).
+        ['leaf-700', 'surface'],
+        ['leaf-700', 'paper'],
         // Guest footer button hover: leaf text on leaf-50 (#158).
         ['leaf-600', 'leaf-50'],
         // Dark leaf admin sidebar (#160): items, headings, icons, brand,
