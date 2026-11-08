@@ -18,11 +18,11 @@
                 >
                     Total Opening Float ({{ totalPieces }} pieces)
                 </div>
-                <div class="text-2xl font-black font-mono text-primary-300">
+                <div class="text-2xl font-black font-mono text-leaf-300">
                     {{ currency(total) }}
                 </div>
             </div>
-            <ShieldCheck class="w-5 h-5 text-primary-300" />
+            <ShieldCheck class="w-5 h-5 text-leaf-300" />
         </div>
 
         <p

@@ -58,7 +58,7 @@
                     Total Physical Counted Cash ({{ totalPieces }} pieces)
                 </div>
                 <div
-                    class="text-2xl font-mono font-black text-primary-300 mt-0.5"
+                    class="text-2xl font-mono font-black text-leaf-300 mt-0.5"
                     data-testid="counted-cash"
                 >
                     {{ currency(countedCash) }}

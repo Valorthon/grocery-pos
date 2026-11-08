@@ -43,7 +43,7 @@
                         :class="
                             errors.amount
                                 ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                                : 'border-slate-300 focus:border-primary-500 focus:ring-primary-500'
+                                : 'border-slate-300 focus:border-leaf-500 focus:ring-leaf-500'
                         "
                     />
                 </div>
@@ -109,7 +109,7 @@
                     :class="
                         errors.reason
                             ? 'border-red-400 focus:border-red-500'
-                            : 'border-slate-300 focus:border-primary-500'
+                            : 'border-slate-300 focus:border-leaf-500'
                     "
                 />
                 <p

@@ -39,7 +39,7 @@
                 >
                     Grand Total
                 </div>
-                <div class="text-sm font-bold text-primary-600">
+                <div class="text-sm font-bold text-leaf-600">
                     {{ item.totalCost }}
                 </div>
             </div>

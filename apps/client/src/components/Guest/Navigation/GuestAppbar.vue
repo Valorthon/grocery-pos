@@ -1,6 +1,6 @@
 <template>
     <header
-        class="bg-[#075BAB] h-[68px] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30"
+        class="bg-leaf-600 h-[68px] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30"
     >
         <div class="flex items-center">
             <img :src="logoPath" alt="Grocery POS" class="h-9 w-auto" />

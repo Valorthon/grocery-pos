@@ -1,10 +1,10 @@
 <template>
-    <footer class="bg-[#075BAB] text-white text-sm px-6 sm:px-12 py-8 relative">
+    <footer class="bg-leaf-600 text-white text-sm px-6 sm:px-12 py-8 relative">
         <div class="flex justify-between items-center w-full py-4">
             <img :src="logo" alt="Grocery POS Logo" class="h-14 w-auto" />
             <router-link
                 to="/login"
-                class="rounded-xl bg-white text-[#075BAB] px-5 py-2.5 font-bold hover:bg-slate-100 transition-colors"
+                class="rounded-xl bg-white text-leaf-600 px-5 py-2.5 font-bold hover:bg-leaf-50 transition-colors"
             >
                 Get Started
             </router-link>

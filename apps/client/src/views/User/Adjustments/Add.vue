@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Adjustment Draft">
         <template #icon>
-            <ClipboardEdit class="w-5 h-5 text-primary-600" />
+            <ClipboardEdit class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton size="sm" @click="openAddDialog">
@@ -70,7 +70,7 @@
                             <div class="flex justify-end gap-1">
                                 <button
                                     type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50"
                                     aria-label="Edit draft"
                                     @click="editDraft(item)"
                                 >

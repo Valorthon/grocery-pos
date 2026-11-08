@@ -36,12 +36,12 @@
                         @click="follow($event, navigate)"
                     >
                         <div
-                            class="w-8 h-8 rounded-lg bg-primary-600/10 text-primary-600 flex items-center justify-center border border-primary-600/20 group-hover:bg-primary-600/20 transition-colors"
+                            class="w-8 h-8 rounded-lg bg-leaf-600/10 text-leaf-600 flex items-center justify-center border border-leaf-600/20 group-hover:bg-leaf-600/20 transition-colors"
                         >
                             <Store class="w-5 h-5" />
                         </div>
                         <span
-                            class="text-xl font-extrabold tracking-tight text-primary-600 hidden sm:inline"
+                            class="text-xl font-extrabold tracking-tight text-leaf-600 hidden sm:inline"
                         >
                             GroceryPOS
                         </span>
@@ -102,8 +102,8 @@
                     class="min-h-11 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold flex items-center gap-2 transition-all active:scale-[0.98] shadow-xs focus-ring"
                     :class="
                         isRegister
-                            ? 'bg-primary-700 text-white ring-2 ring-primary-600/30'
-                            : 'bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white'
+                            ? 'bg-leaf-700 text-white ring-2 ring-leaf-600/30'
+                            : 'bg-leaf-600 hover:bg-leaf-700 active:bg-leaf-800 text-white'
                     "
                     @click="shiftStore.goToRegister()"
                 >
@@ -111,7 +111,7 @@
                     <span>Sell</span>
                     <span
                         v-if="cartCount > 0"
-                        class="ml-0.5 bg-white text-primary-600 text-xs font-black px-1.5 py-0.2 rounded-full"
+                        class="ml-0.5 bg-white text-leaf-600 text-xs font-black px-1.5 py-0.2 rounded-full"
                     >
                         {{ cartCount }}
                     </span>
@@ -174,7 +174,7 @@
                                 class="w-full min-h-11 flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm transition-all focus-ring"
                                 :class="
                                     item.active
-                                        ? 'bg-primary-600 text-white font-bold shadow-xs'
+                                        ? 'bg-leaf-600 text-white font-bold shadow-xs'
                                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold'
                                 "
                                 :aria-current="item.active ? 'page' : undefined"

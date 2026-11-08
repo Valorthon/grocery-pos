@@ -27,7 +27,7 @@
             >
                 <div class="flex items-center gap-2.5 min-w-0">
                     <div
-                        class="w-8 h-8 rounded-lg bg-primary-600 text-white font-bold text-xs flex items-center justify-center shrink-0"
+                        class="w-8 h-8 rounded-lg bg-leaf-600 text-white font-bold text-xs flex items-center justify-center shrink-0"
                     >
                         {{ initials }}
                     </div>
@@ -74,7 +74,7 @@
             >
                 <div class="flex items-center gap-3">
                     <div
-                        class="w-8 h-8 rounded-lg bg-primary-600 text-white font-bold text-xs flex items-center justify-center shrink-0"
+                        class="w-8 h-8 rounded-lg bg-leaf-600 text-white font-bold text-xs flex items-center justify-center shrink-0"
                     >
                         {{ initials }}
                     </div>

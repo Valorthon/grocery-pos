@@ -23,12 +23,12 @@
                 @click="router.push({ name: 'Dashboard' })"
             >
                 <div
-                    class="w-8 h-8 rounded-lg bg-primary-600/10 text-primary-600 flex items-center justify-center border border-primary-600/20"
+                    class="w-8 h-8 rounded-lg bg-leaf-600/10 text-leaf-600 flex items-center justify-center border border-leaf-600/20"
                 >
                     <Store class="w-5 h-5" />
                 </div>
                 <span
-                    class="text-xl font-extrabold tracking-tight text-primary-600 hidden sm:inline"
+                    class="text-xl font-extrabold tracking-tight text-leaf-600 hidden sm:inline"
                 >
                     GroceryPOS
                 </span>

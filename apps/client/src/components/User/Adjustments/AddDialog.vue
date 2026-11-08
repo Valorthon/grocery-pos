@@ -47,7 +47,7 @@
                     v-model="formData.reason"
                     :maxlength="STRING_LIMITS.REASON"
                     rows="3"
-                    class="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 text-sm focus:outline-none focus:border-primary-600 focus:bg-white resize-none transition-all"
+                    class="w-full px-3.5 py-2 rounded-xl border border-slate-300 bg-slate-50 text-sm focus:outline-none focus:border-leaf-600 focus:bg-white resize-none transition-all"
                 />
                 <p v-if="errors.reason" class="mt-1 text-xs text-red-600">
                     {{ errors.reason }}

@@ -1,6 +1,6 @@
 <template>
     <div
-        class="flex-1 overflow-y-auto bg-[#f8fafc] p-6 sm:p-10 flex flex-col justify-start"
+        class="flex-1 overflow-y-auto bg-paper p-6 sm:p-10 flex flex-col justify-start"
     >
         <div class="max-w-5xl mx-auto w-full space-y-8 mt-2">
             <div class="flex flex-wrap items-center justify-between gap-4">
@@ -49,7 +49,7 @@
                 <button
                     v-if="!shiftStore.activeShift && shiftStore.loaded"
                     type="button"
-                    class="group text-left bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white rounded-2xl p-5 shadow-xs hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 flex flex-col justify-between w-64 h-36 sm:h-40"
+                    class="group text-left bg-leaf-600 hover:bg-leaf-700 active:bg-leaf-800 text-white rounded-2xl p-5 shadow-xs hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 flex flex-col justify-between w-64 h-36 sm:h-40"
                     @click="shiftStore.shiftInOpen = true"
                 >
                     <div
@@ -73,7 +73,7 @@
                 <template v-else-if="shiftStore.activeShift">
                     <button
                         type="button"
-                        class="group text-left bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white rounded-2xl p-5 shadow-xs hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 flex flex-col justify-between w-64 h-36 sm:h-40"
+                        class="group text-left bg-leaf-600 hover:bg-leaf-700 active:bg-leaf-800 text-white rounded-2xl p-5 shadow-xs hover:shadow-md hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 flex flex-col justify-between w-64 h-36 sm:h-40"
                         @click="router.push({ name: 'Sell' })"
                     >
                         <div

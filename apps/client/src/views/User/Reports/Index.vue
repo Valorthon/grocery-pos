@@ -164,12 +164,12 @@
                         :y1="chartZero"
                         x2="590"
                         :y2="chartZero"
-                        stroke="gray"
+                        class="stroke-line-strong"
                     />
                     <polyline
                         :points="chartPoints"
                         fill="none"
-                        stroke="teal"
+                        class="stroke-leaf-600"
                         stroke-width="3"
                     />
                 </svg>
@@ -315,7 +315,7 @@
                     </p>
                     <RouterLink
                         :to="{ name: 'Shifts' }"
-                        class="font-bold text-primary-700 underline"
+                        class="font-bold text-leaf-700 underline"
                         >Review original Z-reads and late addenda</RouterLink
                     >
                 </details>

@@ -1,7 +1,7 @@
 <template>
     <PageCard title="Adjustment History">
         <template #icon>
-            <ClipboardEdit class="w-5 h-5 text-primary-600" />
+            <ClipboardEdit class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton

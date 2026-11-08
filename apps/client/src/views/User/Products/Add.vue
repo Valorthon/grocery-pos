@@ -1,7 +1,7 @@
 <template>
     <PageCard title="New Products Draft">
         <template #icon>
-            <List class="w-5 h-5 text-primary-600" />
+            <List class="w-5 h-5 text-leaf-600" />
         </template>
         <template #actions>
             <BaseButton size="sm" :disabled="saving" @click="openAddDialog">
@@ -80,7 +80,7 @@
                             <div class="flex justify-end gap-1">
                                 <button
                                     type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-primary-600 hover:bg-primary-50 disabled:opacity-40"
+                                    class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50 disabled:opacity-40"
                                     :disabled="saving"
                                     aria-label="Edit draft"
                                     @click="editDraft(item)"
