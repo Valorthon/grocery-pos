@@ -3,7 +3,7 @@
         data-testid="toast"
         :data-color="toast.color"
         :class="[
-            'flex items-start gap-2.5 rounded-xl px-4 py-3 shadow-lg border text-sm font-bold',
+            'flex items-start gap-2.5 rounded-card px-4 py-3 shadow-raised border text-sm font-bold',
             colorClass(toast.color),
         ]"
     >
@@ -31,7 +31,7 @@
         </template>
         <button
             type="button"
-            class="ml-1 shrink-0 text-current opacity-60 hover:opacity-100"
+            class="ml-1 shrink-0 rounded-control text-current opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-ring"
             aria-label="Dismiss notification"
             @click="emit('dismiss')"
         >
@@ -50,11 +50,11 @@ const emit = defineEmits<{ (e: 'dismiss'): void }>();
 function colorClass(color: Color): string {
     switch (color) {
         case Color.SUCCESS:
-            return 'bg-emerald-50 border-emerald-200 text-emerald-800';
+            return 'bg-success-bg border-success-border text-success-fg';
         case Color.ERROR:
-            return 'bg-red-50 border-red-200 text-red-800';
+            return 'bg-danger-bg border-danger-border text-danger-fg';
         default:
-            return 'bg-slate-900 border-slate-700 text-white';
+            return 'bg-ink border-ink text-surface';
     }
 }
 

@@ -159,3 +159,22 @@ describe('BaseDropdown (issue #22)', () => {
         expect(open.value).toBe(false);
     });
 });
+
+describe('BaseDropdown tokens (#156)', () => {
+    it('draws the menu on surface tokens', async () => {
+        mount();
+        el('trigger').dispatchEvent(
+            new MouseEvent('click', { bubbles: true, detail: 1 }),
+        );
+        await flush();
+        const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
+        expect(menu.className.split(/\s+/)).toEqual(
+            expect.arrayContaining([
+                'bg-surface',
+                'border-line',
+                'shadow-overlay',
+            ]),
+        );
+        expect(menu.className).not.toMatch(/slate|rounded-2xl/);
+    });
+});

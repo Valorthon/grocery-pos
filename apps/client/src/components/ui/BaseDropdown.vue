@@ -30,7 +30,7 @@
                 ref="menuRef"
                 role="menu"
                 :class="[
-                    'absolute z-50 mt-2 rounded-2xl bg-white shadow-xl border border-slate-200 p-1.5',
+                    'absolute z-50 mt-2 rounded-card bg-surface shadow-overlay border border-line p-1.5',
                     align === 'right' ? 'right-0' : 'left-0',
                     widthClass,
                 ]"
