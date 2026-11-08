@@ -1,59 +1,111 @@
 <template>
-    <div class="min-h-screen grid grid-cols-1 md:grid-cols-2">
+    <div class="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-paper">
         <!--
-            Left: image panel. The photo is self-hosted (#26) and not in the
-            repo (README, "Login hero photo"); the gradient under it keeps
-            the panel intentional when the file is missing.
+            Left: market panel. A Fresh market gradient (tokens, scoped CSS)
+            with CSS/SVG produce artwork; the optional self-hosted photo
+            (#26, README "Login hero photo") sits over it and simply does not
+            show when the file is missing.
         -->
         <div
             data-testid="login-hero"
-            class="hidden md:flex items-start relative bg-cover bg-center"
-            :style="{
-                backgroundColor: '#0a303c',
-                backgroundImage: `url('${LOGIN_HERO_URL}'), linear-gradient(160deg, #11606f 0%, #0a303c 100%)`,
-            }"
+            class="hidden md:flex relative overflow-hidden hero-gradient text-surface"
         >
+            <div
+                data-testid="login-hero-photo"
+                class="absolute inset-0 bg-cover bg-center"
+                :style="{ backgroundImage: `url('${LOGIN_HERO_URL}')` }"
+            />
             <div class="absolute inset-0 hero-overlay" />
-            <div class="relative z-10 p-10 pb-14 text-white text-start">
-                <div class="font-bold mb-3 hero-title">
-                    Smart Grocery<br />Management
-                </div>
-                <p class="font-medium hero-tagline">
-                    Efficient POS solutions for your store.
+            <svg
+                data-testid="login-hero-art"
+                class="hidden lg:block absolute -top-6 -right-6 w-72 h-72 text-leaf-400 opacity-60"
+                viewBox="0 0 200 200"
+                fill="none"
+                aria-hidden="true"
+                focusable="false"
+            >
+                <!-- Basket of produce: leaf, citrus and a crate. -->
+                <circle cx="70" cy="92" r="30" class="fill-citrus-400" />
+                <path
+                    d="M70 62c4-10 12-14 20-14-2 9-9 14-20 14z"
+                    fill="currentColor"
+                />
+                <circle cx="128" cy="98" r="24" class="fill-citrus-500" />
+                <path
+                    d="M104 70c18-26 52-28 70-18-14 4-26 14-34 30-12-6-24-10-36-12z"
+                    fill="currentColor"
+                />
+                <rect
+                    x="30"
+                    y="112"
+                    width="140"
+                    height="64"
+                    rx="10"
+                    class="fill-leaf-800"
+                />
+                <path
+                    d="M30 134h140M30 156h140M64 112v64M100 112v64M136 112v64"
+                    stroke="currentColor"
+                    stroke-width="4"
+                />
+            </svg>
+            <div class="relative z-10 flex flex-col justify-between p-10 pb-14">
+                <p
+                    class="inline-flex self-start items-center gap-2 rounded-full bg-leaf-800 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-leaf-100"
+                >
+                    Fresh market point of sale
                 </p>
+                <!-- Scrim: keeps AA over any photo (#168). -->
+                <div
+                    data-testid="login-hero-text"
+                    class="rounded-card bg-leaf-950/85 p-6"
+                >
+                    <p class="font-bold mb-3 hero-title">
+                        Fresh stock,<br />fast checkout.
+                    </p>
+                    <p class="font-medium text-leaf-100 max-w-sm">
+                        Sales, shifts and inventory for your grocery, in one
+                        place.
+                    </p>
+                </div>
             </div>
         </div>
 
-        <!-- Right: form panel -->
-        <div class="flex items-center justify-center p-6 relative bg-leaf-50">
-            <router-link to="/" class="absolute top-6 right-6">
-                <img
-                    :src="logo"
-                    alt="Grocery POS Logo"
-                    class="h-14 w-auto cursor-pointer"
-                />
-            </router-link>
-
+        <!-- Right: form panel, on the same paper background as the app. -->
+        <div class="flex items-center justify-center p-6">
             <div class="w-full max-w-md">
+                <router-link
+                    to="/"
+                    class="inline-flex mb-8 rounded-control focus-ring"
+                >
+                    <img
+                        :src="logo"
+                        alt="Grocery POS home"
+                        class="h-14 w-auto"
+                    />
+                </router-link>
+
                 <div class="mb-8">
-                    <h1 class="text-2xl font-bold text-slate-800">
-                        Welcome Back!
-                    </h1>
-                    <p class="mt-1 text-slate-500 font-medium">
-                        Log in to your account.
+                    <h1 class="text-2xl font-bold text-ink">Welcome back</h1>
+                    <p class="mt-1 text-muted font-medium">
+                        Log in with your store account to open your register or
+                        dashboard.
                     </p>
-                    <hr class="mt-4" />
                 </div>
 
-                <form @submit.prevent="handleLogin">
-                    <label
-                        for="login-username"
-                        class="block mb-1.5 text-sm font-semibold text-slate-700"
+                <form
+                    class="rounded-card border border-line bg-surface p-6"
+                    @submit.prevent="handleLogin"
+                >
+                    <label for="login-username" :class="FIELD_LABEL"
                         >Username</label
                     >
-                    <div class="relative mb-3">
+                    <div class="relative mb-4">
                         <span
-                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                            :class="[
+                                'absolute left-3.5 top-1/2 -translate-y-1/2',
+                                FIELD_ICON,
+                            ]"
                         >
                             <UserIcon class="w-5 h-5" />
                         </span>
@@ -65,20 +117,21 @@
                             autocomplete="username"
                             autocapitalize="none"
                             spellcheck="false"
-                            placeholder="Username"
+                            placeholder="e.g. juan"
                             :disabled="loading"
-                            class="w-full pl-11 pr-4 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-leaf-600 focus:ring-2 focus:ring-leaf-600/10"
+                            :class="[FIELD_BASE, FIELD_OK, 'pl-11 pr-4']"
                         />
                     </div>
 
-                    <label
-                        for="login-password"
-                        class="block mb-1.5 text-sm font-semibold text-slate-700"
+                    <label for="login-password" :class="FIELD_LABEL"
                         >Password</label
                     >
-                    <div class="relative mb-1">
+                    <div class="relative mb-2">
                         <span
-                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                            :class="[
+                                'absolute left-3.5 top-1/2 -translate-y-1/2',
+                                FIELD_ICON,
+                            ]"
                         >
                             <Lock class="w-5 h-5" />
                         </span>
@@ -90,11 +143,15 @@
                             autocomplete="current-password"
                             placeholder="••••••••"
                             :disabled="loading"
-                            class="w-full pl-11 pr-11 py-2.5 rounded-xl border border-slate-300 bg-white text-sm focus:outline-none focus:border-leaf-600 focus:ring-2 focus:ring-leaf-600/10"
+                            :class="[
+                                FIELD_BASE,
+                                FIELD_OK,
+                                'pl-11 pr-12 min-h-11',
+                            ]"
                         />
                         <button
                             type="button"
-                            class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            class="absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-11 h-11 rounded-control text-muted hover:text-ink focus-ring"
                             :aria-label="
                                 showPassword ? 'Hide password' : 'Show password'
                             "
@@ -106,7 +163,7 @@
                     </div>
 
                     <p
-                        class="mb-5 text-sm text-slate-500"
+                        class="mb-5 text-sm text-muted"
                         data-testid="forgot-password"
                     >
                         Forgot your password? Ask an admin to reset it.
@@ -116,7 +173,7 @@
                         v-if="errorMsg"
                         role="alert"
                         data-testid="login-error"
-                        class="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium"
+                        class="mb-4 px-4 py-3 rounded-control bg-danger-bg border border-danger-border text-danger-fg text-sm font-medium"
                     >
                         {{ errorMsg }}
                     </div>
@@ -141,6 +198,12 @@ import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowRight, Eye, EyeOff, Lock, User as UserIcon } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import {
+    FIELD_BASE,
+    FIELD_ICON,
+    FIELD_LABEL,
+    FIELD_OK,
+} from '@/components/ui/field-style';
 import { useAuthStore } from '@/stores/auth';
 import { homeRouteFor } from '@/router/access';
 import { LOGIN_HERO_URL } from '@/constant';
@@ -188,21 +251,26 @@ const handleLogin = async () => {
     through the CSSOM).
 -->
 <style scoped>
+/* Fresh market tokens only (#168): no raw colours on the login page. */
+.hero-gradient {
+    background-color: var(--color-leaf-900);
+    background-image: linear-gradient(
+        160deg,
+        var(--color-leaf-700) 0%,
+        var(--color-leaf-950) 100%
+    );
+}
+
 .hero-overlay {
     background: linear-gradient(
         160deg,
-        rgba(10, 48, 60, 0.55) 0%,
-        rgba(10, 48, 60, 0.3) 100%
+        color-mix(in srgb, var(--color-leaf-950) 55%, transparent) 0%,
+        color-mix(in srgb, var(--color-leaf-950) 30%, transparent) 100%
     );
 }
 
 .hero-title {
-    line-height: 1.5;
+    line-height: 1.3;
     font-size: clamp(1.8rem, 3.5vw, 2.8rem);
-    text-shadow: 2px 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.hero-tagline {
-    text-shadow: 1px 2px 8px rgba(0, 0, 0, 0.4);
 }
 </style>
