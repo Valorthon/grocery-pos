@@ -39,6 +39,21 @@ async function exact(text: string) {
     button.click();
     await flush();
 }
+/** Opens Farm's action menu (#172) and picks one of its items. */
+async function rowAction(label: string) {
+    const trigger = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Farm"]',
+    );
+    if (!trigger) throw new Error('no row menu');
+    trigger.click();
+    await flush();
+    const item = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'),
+    ].find((b) => b.textContent?.trim() === label);
+    if (!item) throw new Error(label);
+    item.click();
+    await flush();
+}
 function deferred() {
     let resolve!: (value: unknown) => void, reject!: (value: unknown) => void;
     const promise = new Promise((yes, no) => {
@@ -94,7 +109,7 @@ describe('supplier administration', () => {
     });
     it('edits and clears optional contact fields without losing the supplier identity', async () => {
         await mount();
-        await exact('Edit');
+        await rowAction('Edit');
         await type('Supplier name', 'Fresh Farm');
         await type('Email', '');
         await exact('Save');
@@ -146,7 +161,7 @@ describe('supplier administration', () => {
     });
     it('confirms archiving and restoring while retaining history rows', async () => {
         await mount();
-        await exact('Archive');
+        await rowAction('Archive');
         expect(api.patch).not.toHaveBeenCalled();
         await exact('Archive');
         expect(api.patch).toHaveBeenCalledWith(`/suppliers/${row._id}`, {
@@ -158,7 +173,7 @@ describe('supplier administration', () => {
             data: { data: [{ ...row, isActive: false }], totalItems: 1 },
         });
         await mount();
-        await exact('Restore');
+        await rowAction('Restore');
         await exact('Restore');
         expect(api.patch).toHaveBeenCalledWith(`/suppliers/${row._id}`, {
             isActive: true,
@@ -167,7 +182,7 @@ describe('supplier administration', () => {
     it('reports referenced deletion failure without losing supplier rows', async () => {
         api.delete.mockRejectedValue(new Error('Referenced'));
         await mount();
-        await exact('Delete');
+        await rowAction('Delete');
         await exact('Delete');
         expect(api.delete).toHaveBeenCalledWith(`/suppliers/${row._id}`);
         expect(document.body.textContent).toContain('Farm');
@@ -178,20 +193,20 @@ describe('supplier administration', () => {
         await mount();
         expect(document.querySelector('[role=alert]')).not.toBeNull();
         await exact('Retry');
-        await exact('Delete');
+        await rowAction('Delete');
         await exact('Delete');
         expect(api.delete).toHaveBeenCalled();
     });
     it('reports archive errors and lets cancelled confirmation return to list', async () => {
         api.patch.mockRejectedValue(new Error('offline'));
         await mount();
-        await exact('Archive');
+        await rowAction('Archive');
         await exact('Cancel');
         await vi.waitFor(() =>
             expect(document.querySelector('[role=dialog]')).toBeNull(),
         );
         expect(api.patch).not.toHaveBeenCalled();
-        await exact('Archive');
+        await rowAction('Archive');
         await exact('Archive');
         expect(useUIStore().toasts.length).toBeGreaterThan(0);
     });
@@ -204,5 +219,42 @@ describe('supplier administration', () => {
         pending.resolve({ data: { data: [row], totalItems: 1 } });
         await flush();
         expect(document.body.textContent).not.toContain('Farm');
+    });
+});
+
+describe('columns and row menu (#172)', () => {
+    it('splits contact details into columns and collapses actions into one menu', async () => {
+        await mount();
+        const titles = [...document.querySelectorAll('thead th')].map((th) =>
+            th.textContent?.trim(),
+        );
+        expect(titles).toEqual([
+            'Supplier',
+            'Contact person',
+            'Phone',
+            'Email',
+            'Status',
+            'Actions',
+        ]);
+        const cells = [
+            ...document.querySelectorAll('tbody tr:first-child > *'),
+        ].map((td) => td.textContent?.trim());
+        expect(cells.slice(0, 4)).toEqual([
+            'Farm',
+            'Ana',
+            '123',
+            'ana@example.com',
+        ]);
+        const trigger = document.querySelector<HTMLButtonElement>(
+            'button[aria-label="Actions for Farm"]',
+        )!;
+        expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+        trigger.click();
+        await flush();
+        expect(
+            [...document.querySelectorAll('[role=menuitem]')].map((b) =>
+                b.textContent?.trim(),
+            ),
+        ).toEqual(['Edit', 'Archive', 'Delete']);
     });
 });
