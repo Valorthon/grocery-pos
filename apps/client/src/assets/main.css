@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+/* Specs and test helpers hold sample classes that must not ship (#158). */
+@source not '../**/*.spec.ts';
+@source not '../testing/**';
+
 /*
  * The Fresh market fonts, self-hosted from @fontsource-variable (#153). Only
  * the latin and latin-ext subsets are declared (the packages' own CSS would

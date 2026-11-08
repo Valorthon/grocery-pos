@@ -112,7 +112,7 @@ describe('layout drift (#26)', () => {
 
 /** A Tailwind arbitrary colour class such as `bg-[#075BAB]`. */
 const RAW_HEX_CLASS =
-    /\b(?:bg|text|border(?:-[trblxy])?|ring|ring-offset|outline|fill|stroke|from|via|to|divide|decoration|accent|caret|placeholder|shadow)-\[#[0-9a-f]{3,8}\]/i;
+    /\b(?:bg|text|border(?:-[trblxyse])?|ring|ring-offset|outline|fill|stroke|from|via|to|divide|decoration|accent|caret|placeholder|shadow)-\[(?:color:)?#[0-9a-f]{3,8}\]|\[[a-z-]*color:#[0-9a-f]{3,8}\]/i;
 /** The retired `primary-*` palette (alias of `leaf-*` until #158). */
 const PRIMARY_CLASS = /\bprimary-\d{2,3}\b/;
 
@@ -125,9 +125,26 @@ describe('colour drift (#158)', () => {
         expect(offending(PRIMARY_CLASS)).toEqual([]);
     });
 
-    it('keeps the old brand blue out of index.html', () => {
+    it('keeps the old brand blue out of the client, assets included', () => {
         expect(indexHtml).not.toMatch(/#075bab/i);
         expect(offending(/#075bab/i)).toEqual([]);
+        const assets = import.meta.glob<string>(
+            ['/src/**/*.svg', '/public/*.{svg,webmanifest}'],
+            { query: '?raw', import: 'default', eager: true },
+        );
+        expect(Object.keys(assets)).toEqual(
+            expect.arrayContaining([
+                '/public/favicon.svg',
+                '/public/manifest.webmanifest',
+                '/src/assets/logo-icon.svg',
+                '/src/assets/logo-white.svg',
+            ]),
+        );
+        expect(
+            Object.entries(assets)
+                .filter(([, text]) => /#075bab/i.test(text))
+                .map(([file]) => file),
+        ).toEqual([]);
     });
 
     it.each([
@@ -135,6 +152,9 @@ describe('colour drift (#158)', () => {
         'text-[#fff]',
         'hover:border-[#f8fafc]',
         'stroke-[#11223344]',
+        'bg-[color:#abc]',
+        'border-s-[#abcdef]',
+        '[background-color:#abcdef]',
     ])('catches the raw hex class %s (the check itself)', (cls) => {
         expect(RAW_HEX_CLASS.test(`<div class="${cls}" />`)).toBe(true);
     });

@@ -123,14 +123,14 @@ describe('theme tokens (#153)', () => {
         ['surface', 'leaf-700'],
         ['surface', 'leaf-800'],
         ['leaf-700', 'leaf-50'],
-        // Guest footer button: leaf text on white, leaf-50 on hover (#158).
-        ['leaf-600', 'surface'],
+        // Guest footer button hover: leaf text on leaf-50 (#158).
         ['leaf-600', 'leaf-50'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
 
     it.each([
+        // Also the Reports chart zero line on its bg-surface box (#158).
         ['line-strong', 'surface'],
         ['leaf-500', 'surface'],
         ['leaf-500', 'paper'],

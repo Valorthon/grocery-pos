@@ -157,7 +157,7 @@
                     viewBox="0 0 600 180"
                     role="img"
                     aria-label="Daily net sales trend"
-                    class="h-48 w-full rounded-xl border border-slate-200 bg-slate-50"
+                    class="h-48 w-full rounded-xl border border-slate-200 bg-surface"
                 >
                     <line
                         x1="10"
