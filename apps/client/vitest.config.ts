@@ -11,6 +11,9 @@ export default defineConfig({
     },
     test: {
         environment: 'jsdom',
+        // theme-tokens.spec.ts reads main.css as ?raw; Vitest blanks CSS
+        // files it does not process.
+        css: { include: [/assets\/main\.css/] },
         include: ['src/**/*.spec.ts'],
         // Vitest 4's restoreMocks only restores vi.spyOn spies; mockReset also
         // resets every vi.fn() (calls and queued returns) between tests, as

@@ -647,8 +647,9 @@ requestId}`. A 5xx never carries details or internals.
   buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear. No text
   below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for classes
   and CSS `font-size`.
-- No third-party runtime assets: Poppins (400–900) comes from
-  `@fontsource/poppins`, and the login photo is
+- No third-party runtime assets: Instrument Sans (UI) and Bricolage
+  Grotesque (display, and the ₱ sign via a `U+20B1`-only `Peso Sign` face)
+  come from `@fontsource-variable/*` (#153), and the login photo is
   `public/images/login-hero.jpg`, fetched by the client Docker build (best
   effort, `LOGIN_HERO_URL`) or the README curl, over a gradient, gitignored,
   never committed.

@@ -1,22 +1,102 @@
 @import 'tailwindcss';
 
+/*
+ * The ₱ sign (U+20B1) is drawn by Bricolage Grotesque: Instrument Sans has no
+ * glyph for it (#152). This face covers only that code point, so it can sit
+ * first in every font stack without touching any other character.
+ */
+@font-face {
+    font-family: 'Peso Sign';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 200 800;
+    src: url('@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-ext-wght-normal.woff2')
+        format('woff2-variations');
+    unicode-range: U+20B1;
+}
+
+/*
+ * Fresh market tokens, as approved on the Phase 0 style tile (#152). The
+ * pairs used for text are checked for AA contrast in theme-tokens.spec.ts.
+ */
 @theme {
     --font-sans:
-        'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        'Peso Sign', 'Instrument Sans Variable', system-ui, -apple-system,
+        'Segoe UI', Roboto, sans-serif;
+    --font-display:
+        'Bricolage Grotesque Variable', 'Instrument Sans Variable', system-ui,
+        -apple-system, 'Segoe UI', Roboto, sans-serif;
 
-    --color-primary-50: #eef6fd;
-    --color-primary-100: #d6ecfb;
-    --color-primary-200: #b3daf7;
-    --color-primary-300: #7cc0f0;
-    --color-primary-400: #3d9ee5;
-    --color-primary-500: #1882d0;
-    --color-primary-600: #075bab;
-    --color-primary-700: #064a8a;
-    --color-primary-800: #073e72;
-    --color-primary-900: #08345f;
-    --color-primary-950: #05223f;
+    --color-paper: #faf7f0;
+    --color-surface: #ffffff;
+    --color-line: #e8e2d4;
+    --color-line-strong: #8a958c;
+    --color-ink: #1d2a22;
+    --color-muted: #536359;
 
-    --color-teal-dark: #0a303c;
+    --color-leaf-50: #eef6ef;
+    --color-leaf-100: #d6ead9;
+    --color-leaf-200: #aed5b5;
+    --color-leaf-300: #7fba8a;
+    --color-leaf-400: #4f9a60;
+    --color-leaf-500: #2f8046;
+    --color-leaf-600: #1f6b3a;
+    --color-leaf-700: #19572f;
+    --color-leaf-800: #154626;
+    --color-leaf-900: #11391f;
+    --color-leaf-950: #0a2213;
+
+    --color-citrus-50: #fff7e6;
+    --color-citrus-100: #feebbf;
+    --color-citrus-400: #f5b83d;
+    --color-citrus-500: #f2a516;
+    --color-citrus-600: #d68a06;
+    --color-citrus-700: #8a5604;
+
+    --color-success-bg: #e6f2e8;
+    --color-success-fg: #1a5c32;
+    --color-success-border: #a9d1b2;
+    --color-warning-bg: #fdf1d8;
+    --color-warning-fg: #7a4a00;
+    --color-warning-border: #efc87a;
+    --color-danger-bg: #fbe7e4;
+    --color-danger-fg: #a3261b;
+    --color-danger-border: #eeb1a8;
+    --color-danger-solid: #b42318;
+    --color-info-bg: #e4eef7;
+    --color-info-fg: #1d4f80;
+    --color-info-border: #a9c6e2;
+
+    /*
+     * primary-* stays as an alias of leaf until the drift guard retires it
+     * (#175), so the existing classes keep resolving mid-phase.
+     */
+    --color-primary-50: var(--color-leaf-50);
+    --color-primary-100: var(--color-leaf-100);
+    --color-primary-200: var(--color-leaf-200);
+    --color-primary-300: var(--color-leaf-300);
+    --color-primary-400: var(--color-leaf-400);
+    --color-primary-500: var(--color-leaf-500);
+    --color-primary-600: var(--color-leaf-600);
+    --color-primary-700: var(--color-leaf-700);
+    --color-primary-800: var(--color-leaf-800);
+    --color-primary-900: var(--color-leaf-900);
+    --color-primary-950: var(--color-leaf-950);
+
+    --radius-control: 8px;
+    --radius-card: 12px;
+
+    --shadow-card:
+        0 1px 2px rgb(29 42 34 / 0.06), 0 1px 1px rgb(29 42 34 / 0.04);
+    --shadow-raised:
+        0 2px 6px rgb(29 42 34 / 0.08), 0 1px 2px rgb(29 42 34 / 0.06);
+    --shadow-overlay:
+        0 8px 20px rgb(29 42 34 / 0.12), 0 2px 6px rgb(29 42 34 / 0.08);
+}
+
+/* Tabular figures, so money and quantities line up in columns. */
+@utility num {
+    font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -25,21 +105,15 @@
  */
 @utility focus-ring {
     &:focus-visible {
-        outline: 2px solid var(--color-primary-500);
+        outline: 2px solid var(--color-leaf-500);
         outline-offset: 2px;
     }
 }
 
 body {
-    font-family:
-        'Poppins',
-        system-ui,
-        -apple-system,
-        'Segoe UI',
-        Roboto,
-        sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
+    font-family: var(--font-sans);
+    background-color: var(--color-paper);
+    color: var(--color-ink);
     margin: 0;
     padding: 0;
     -webkit-font-smoothing: antialiased;
