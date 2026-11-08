@@ -18,7 +18,7 @@
             <div class="absolute inset-0 hero-overlay" />
             <svg
                 data-testid="login-hero-art"
-                class="absolute -bottom-6 -right-6 w-80 h-80 lg:w-96 lg:h-96 text-leaf-400 opacity-60"
+                class="hidden lg:block absolute -top-6 -right-6 w-72 h-72 text-leaf-400 opacity-60"
                 viewBox="0 0 200 200"
                 fill="none"
                 aria-hidden="true"
@@ -55,7 +55,11 @@
                 >
                     Fresh market point of sale
                 </p>
-                <div>
+                <!-- Scrim: keeps AA over any photo (#168). -->
+                <div
+                    data-testid="login-hero-text"
+                    class="rounded-card bg-leaf-950/85 p-6"
+                >
                     <p class="font-bold mb-3 hero-title">
                         Fresh stock,<br />fast checkout.
                     </p>
@@ -139,7 +143,11 @@
                             autocomplete="current-password"
                             placeholder="••••••••"
                             :disabled="loading"
-                            :class="[FIELD_BASE, FIELD_OK, 'pl-11 pr-12']"
+                            :class="[
+                                FIELD_BASE,
+                                FIELD_OK,
+                                'pl-11 pr-12 min-h-11',
+                            ]"
                         />
                         <button
                             type="button"

@@ -297,6 +297,13 @@ describe('Market-themed Login (#168)', () => {
         expect(logo!.closest('[data-testid="login-hero"]')).toBeNull();
     });
 
+    it('puts the hero text on a dark scrim that holds AA over any photo', async () => {
+        const host = await mount();
+        const text = host.querySelector('[data-testid="login-hero-text"]');
+        expect(text?.className).toMatch(/\bbg-leaf-950\/(8\d|9\d)\b/);
+        expect(text?.textContent).toContain('Fresh stock');
+    });
+
     it('uses the shared field style with a keyboard focus ring', async () => {
         const host = await mount();
         for (const name of ['username', 'password']) {
