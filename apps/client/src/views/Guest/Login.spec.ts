@@ -267,14 +267,45 @@ describe('loginErrorMessage', () => {
 });
 
 describe('Login hero photo (#26)', () => {
-    it('is self-hosted, over a solid colour for when the file is missing', async () => {
+    it('is self-hosted, on its own layer over the token gradient', async () => {
         const host = await mount();
         const hero = host.querySelector<HTMLElement>(
             '[data-testid="login-hero"]',
         )!;
+        const photo = host.querySelector<HTMLElement>(
+            '[data-testid="login-hero-photo"]',
+        )!;
 
-        expect(hero.style.backgroundImage).toContain('/images/login-hero.jpg');
-        expect(hero.style.backgroundImage).not.toContain('unsplash');
-        expect(hero.style.backgroundColor).not.toBe('');
+        expect(photo.style.backgroundImage).toContain('/images/login-hero.jpg');
+        expect(photo.style.backgroundImage).not.toContain('unsplash');
+        // Works without the file: the gradient is a class, not the photo layer.
+        expect(hero.classList.contains('hero-gradient')).toBe(true);
+        expect(hero.getAttribute('style') ?? '').toBe('');
+    });
+});
+
+describe('Market-themed Login (#168)', () => {
+    it('has one h1, decorative artwork and the logo in the form column', async () => {
+        const host = await mount();
+
+        expect(host.querySelectorAll('h1')).toHaveLength(1);
+        const art = host.querySelector('[data-testid="login-hero-art"]');
+        expect(art?.getAttribute('aria-hidden')).toBe('true');
+        const logo = host.querySelector('img[alt="Grocery POS home"]');
+        expect(logo).not.toBeNull();
+        expect(logo!.closest('form')).toBeNull();
+        expect(logo!.closest('[data-testid="login-hero"]')).toBeNull();
+    });
+
+    it('uses the shared field style with a keyboard focus ring', async () => {
+        const host = await mount();
+        for (const name of ['username', 'password']) {
+            const cls = input(host, name).className;
+            expect(cls).toContain('focus-ring');
+            expect(cls).not.toMatch(/outline-none/);
+        }
+        const toggle = host.querySelector('button[aria-label="Show password"]');
+        expect(toggle?.className).toContain('focus-ring');
+        expect(toggle?.className).toContain('w-11');
     });
 });

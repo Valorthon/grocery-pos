@@ -136,6 +136,11 @@ describe('theme tokens (#153)', () => {
         ['leaf-100', 'leaf-800'],
         ['surface', 'leaf-900'],
         ['danger-border', 'leaf-900'],
+        // Login market panel (#168): text over its leaf-700 → leaf-950 gradient.
+        ['leaf-100', 'leaf-700'],
+        ['leaf-100', 'leaf-950'],
+        ['surface', 'leaf-950'],
+        ['danger-fg', 'danger-bg'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
