@@ -1,17 +1,16 @@
 <template>
     <div class="relative">
-        <label
-            v-if="label"
-            :for="id"
-            class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5"
-        >
+        <label v-if="label" :for="id" :class="FIELD_LABEL">
             {{ label }}
         </label>
 
         <div class="relative">
             <span
                 v-if="icon"
-                class="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"
+                :class="[
+                    'absolute left-3.5 top-1/2 -translate-y-1/2',
+                    FIELD_ICON,
+                ]"
             >
                 <slot name="icon" />
             </span>
@@ -33,13 +32,9 @@
                         : undefined
                 "
                 :class="[
-                    'w-full py-2.5 rounded-xl border text-sm bg-white text-slate-900 placeholder-slate-400 focus:outline-none focus:border-primary-600 focus:ring-2 focus:ring-primary-600/10 transition-all',
+                    FIELD_BASE,
                     icon ? 'pl-10 pr-10' : 'px-3.5 pr-10',
-                    error
-                        ? 'border-red-500 bg-red-50'
-                        : selected
-                          ? 'border-emerald-500 bg-white'
-                          : 'border-slate-300 bg-slate-50 focus:bg-white',
+                    error ? FIELD_ERROR : selected ? FIELD_SELECTED : FIELD_OK,
                 ]"
                 @input="onInput"
                 @keydown.down.prevent="moveSelection(1)"
@@ -52,20 +47,23 @@
             <Spinner
                 v-if="loading"
                 size="sm"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                :class="[
+                    'absolute right-3 top-1/2 -translate-y-1/2',
+                    FIELD_ICON,
+                ]"
             />
             <CircleCheck
                 v-else-if="selected"
                 :size="16"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-600"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-leaf-600"
             />
         </div>
 
-        <p v-if="error" class="text-xs text-red-600 mt-1">{{ error }}</p>
+        <p v-if="error" :class="FIELD_ERROR_TEXT">{{ error }}</p>
         <p
             v-else-if="selected"
             data-testid="combobox-selected"
-            class="mt-1 text-xs text-emerald-700"
+            :class="FIELD_HINT_TEXT"
         >
             Selected:
             <span class="font-bold">{{ selected.label }}</span>
@@ -78,7 +76,7 @@
             ref="list"
             role="listbox"
             :aria-label="label || placeholder || undefined"
-            class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+            class="absolute z-30 mt-1 w-full max-h-64 overflow-y-auto rounded-control border border-line bg-surface shadow-overlay"
         >
             <li
                 v-for="(opt, index) in options"
@@ -86,12 +84,12 @@
                 :key="opt.value"
                 role="option"
                 :aria-selected="index === highlighted"
-                class="cursor-pointer px-3.5 py-2.5 text-sm hover:bg-slate-50"
-                :class="index === highlighted ? 'bg-slate-100' : ''"
+                class="cursor-pointer px-3.5 py-2.5 text-sm hover:bg-leaf-50"
+                :class="index === highlighted ? 'bg-leaf-100' : ''"
                 @mousedown.prevent="select(opt)"
             >
-                <div class="font-bold text-slate-900">{{ opt.label }}</div>
-                <div v-if="opt.subtitle" class="text-xs text-slate-500">
+                <div class="font-bold text-ink">{{ opt.label }}</div>
+                <div v-if="opt.subtitle" class="text-xs text-muted">
                     {{ opt.subtitle }}
                 </div>
             </li>
@@ -99,7 +97,7 @@
 
         <div
             v-else-if="isOpen && !loading && !error && modelValue"
-            class="absolute z-30 mt-1 w-full rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-lg"
+            class="absolute z-30 mt-1 w-full rounded-control border border-line bg-surface p-4 text-sm text-muted shadow-overlay"
         >
             No matching products.
         </div>
@@ -107,6 +105,16 @@
 </template>
 
 <script setup lang="ts">
+import {
+    FIELD_BASE,
+    FIELD_ERROR,
+    FIELD_ERROR_TEXT,
+    FIELD_HINT_TEXT,
+    FIELD_ICON,
+    FIELD_LABEL,
+    FIELD_OK,
+    FIELD_SELECTED,
+} from './field-style';
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
 import { CircleCheck } from '@lucide/vue';
 import Spinner from './Spinner.vue';

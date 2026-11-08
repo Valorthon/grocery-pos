@@ -33,11 +33,16 @@ export function field(text: string): HTMLInputElement {
     return el;
 }
 
-/** The error shown under the field whose label contains `text`, or ''. */
+/**
+ * The error shown under the field whose label contains `text`, or ''.
+ * The Base* fields use the danger token (#154); raw page fields not yet
+ * restyled still use text-red-600.
+ */
 export function fieldError(text: string): string {
     return (
-        labelled(text).querySelector('p.text-red-600')?.textContent?.trim() ??
-        ''
+        labelled(text)
+            .querySelector('p.text-danger-fg, p.text-red-600')
+            ?.textContent?.trim() ?? ''
     );
 }
 
