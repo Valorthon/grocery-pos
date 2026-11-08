@@ -35,9 +35,9 @@
                 ]"
                 :inert="hiddenDrawer || undefined"
                 :aria-hidden="hiddenDrawer ? 'true' : undefined"
-                :role="isLarge ? undefined : 'dialog'"
-                :aria-modal="isLarge ? undefined : 'true'"
-                :aria-label="isLarge ? undefined : 'Navigation menu'"
+                :role="drawerOpen ? 'dialog' : undefined"
+                :aria-modal="drawerOpen ? 'true' : undefined"
+                :aria-label="drawerOpen ? 'Navigation menu' : undefined"
             >
                 <div class="flex-1 overflow-y-auto">
                     <div

@@ -316,6 +316,36 @@ describe('CheckoutModal', () => {
             expect(confirmButton().disabled).toBe(false);
         });
 
+        it('moves the focus to Confirm after Exact, so Enter confirms once (#197)', async () => {
+            const submit = vi.fn(() => new Promise(() => {}));
+            mount(submit, { initialCash: null });
+            await flush();
+            quickCashButtons()[0].click();
+            await flush();
+            expect(document.activeElement).toBe(confirmButton());
+            // Confirm reads out the change along with the total.
+            const described = confirmButton().getAttribute('aria-describedby');
+            expect(document.getElementById(described!)?.textContent).toContain(
+                'Change Due:',
+            );
+
+            // jsdom can't press Enter on the button, so this fires the
+            // form's submit twice: still one sale.
+            await pressEnter();
+            await pressEnter();
+            expect(submit).toHaveBeenCalledTimes(1);
+        });
+
+        it('moves the focus to Confirm after a quick amount too (#197)', async () => {
+            mount(vi.fn(), { initialCash: null });
+            await flush();
+            quickCashButtons()
+                .find((b) => b.textContent?.trim() === '₱500.00')!
+                .click();
+            await flush();
+            expect(document.activeElement).toBe(confirmButton());
+        });
+
         it('shows the GCash reference format error inline and holds Confirm', async () => {
             mount(vi.fn());
             await flush();
@@ -371,6 +401,36 @@ describe('CheckoutModal', () => {
                 paymentType: PaymentType.CASH,
                 tenders: [{ type: 'CASH', amount: 50000 }],
             });
+        });
+
+        function splitBill(label: string) {
+            return [
+                ...document.querySelectorAll<HTMLButtonElement>('button'),
+            ].find((b) => b.textContent?.trim() === label)!;
+        }
+
+        it('moves the focus to Confirm after a split bill that covers the total (#197)', async () => {
+            mount(vi.fn(), { initialMethod: PaymentType.SPLIT });
+            await flush();
+            splitBill('₱500.00').click();
+            await flush();
+            expect(confirmButton().disabled).toBe(false);
+            expect(document.activeElement).toBe(confirmButton());
+            const described = confirmButton().getAttribute('aria-describedby');
+            expect(document.getElementById(described!)?.textContent).toContain(
+                '₱50.00',
+            );
+        });
+
+        it('moves the focus to the reference after a split bill short of the total (#197)', async () => {
+            mount(vi.fn(), { initialMethod: PaymentType.SPLIT });
+            await flush();
+            splitBill('₱100.00').click();
+            await flush();
+            expect(confirmButton().disabled).toBe(true);
+            expect(document.activeElement).toBe(
+                field('GCash reference number'),
+            );
         });
 
         it('shows no change on a real split, and GCash the rest', async () => {
