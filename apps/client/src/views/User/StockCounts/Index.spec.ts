@@ -346,6 +346,7 @@ describe('physical stock count workflow', () => {
         await enter('0.450');
         expect(variance().className.split(' ')).toContain('text-danger-fg');
         await enter('1.200');
+        expect(variance().textContent).toBe('+0.200 kg');
         expect(variance().className.split(' ')).toContain('text-success-fg');
         await enter('1');
         expect(variance().className).toBe('text-muted');
@@ -380,6 +381,32 @@ describe('physical stock count workflow', () => {
             scope: 'category',
             category: 'category',
         });
+    });
+    it('shows the empty state only after a successful empty load (#169)', async () => {
+        const pending = deferred();
+        api.get.mockImplementation((url: string) =>
+            url === '/stock-counts'
+                ? pending.promise
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        expect(document.body.textContent).not.toContain('No stock counts yet');
+        pending.resolve({ data: { data: [], totalItems: 0 } });
+        await flush();
+        expect(document.body.textContent).toContain('No stock counts yet');
+    });
+    it('never says there are no counts after a failed first load (#169)', async () => {
+        api.get.mockImplementation((url: string) =>
+            url === '/stock-counts'
+                ? Promise.reject(new Error('network'))
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        expect(document.body.textContent).toContain('Reload');
+        expect(document.body.textContent).not.toContain('No stock counts yet');
+        expect(document.body.textContent).toContain(
+            'Stock counts could not be loaded.',
+        );
     });
     it('shows list loading errors with retry and paginates sessions', async () => {
         let failed = false;

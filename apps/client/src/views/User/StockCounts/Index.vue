@@ -51,8 +51,12 @@
                     when approved. If your shelf count already includes those
                     movements, start a fresh count at a quiet reference point.
                 </p>
-                <p v-if="busy">Loading…</p>
-                <BaseTable :headers="listHeaders" :items="listRows">
+                <p v-if="busy && !(listLoading && !rows.length)">Loading…</p>
+                <BaseTable
+                    :headers="listHeaders"
+                    :items="listRows"
+                    :loading="listLoading && !rows.length"
+                >
                     <template #cell-createdAt="{ item }">
                         {{ formatStoreDateTime(item.createdAt) }}
                     </template>
@@ -73,7 +77,12 @@
                         >
                     </template>
                     <template #empty>
+                        <!-- A failed load shows the Reload banner, never "none" (#18). -->
+                        <p v-if="error" class="py-6 text-center text-muted">
+                            Stock counts could not be loaded.
+                        </p>
                         <EmptyState
+                            v-else
                             title="No stock counts yet"
                             hint="Start a count to compare shelves with recorded stock."
                         >
@@ -282,6 +291,7 @@ const rows = ref<StockCountView[]>([]),
 const page = ref(1),
     total = ref(0),
     busy = ref(false),
+    listLoading = ref(false),
     dirty = ref(false),
     error = ref(''),
     validation = ref('');
@@ -357,9 +367,9 @@ function varianceClass(variance: number | null): string {
 }
 function varianceText(line: StockCountLineView): string {
     const variance = displayedVariance(line);
-    return variance === null
-        ? 'Not counted'
-        : formatQuantity(variance, line.unit);
+    if (variance === null) return 'Not counted';
+    const text = formatQuantity(variance, line.unit);
+    return variance > 0 ? `+${text}` : text;
 }
 function live(turn: number, owner: string | undefined) {
     return turn === generation && auth.user?.userId === owner;
@@ -417,6 +427,15 @@ async function run(
     }
 }
 async function refresh() {
+    if (busy.value) return;
+    listLoading.value = true;
+    try {
+        await refreshList();
+    } finally {
+        listLoading.value = false;
+    }
+}
+async function refreshList() {
     await run(async (turn, owner) => {
         const { data } = await api.get<Paginated<StockCountView>>(
             '/stock-counts',

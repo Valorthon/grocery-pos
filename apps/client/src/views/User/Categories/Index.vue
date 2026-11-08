@@ -6,7 +6,7 @@
         <BaseTable
             :headers="headers"
             :items="rows"
-            :loading="loading"
+            :loading="loading && !rows.length"
             :error="error"
             @retry="refresh"
         >
