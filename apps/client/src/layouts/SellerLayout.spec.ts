@@ -315,6 +315,9 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(sidebar().hasAttribute('inert')).toBe(true);
             expect(sidebar().className).toContain('-translate-x-full');
             expect(backdrop()).toBeNull();
+            // Closed, it is no dialog (#197): role and aria-modal only while open.
+            expect(sidebar().hasAttribute('role')).toBe(false);
+            expect(sidebar().hasAttribute('aria-modal')).toBe(false);
 
             menuButton().click();
             await flush();
@@ -475,6 +478,8 @@ describe('SellerLayout sidebar (issue #26)', () => {
             await flush();
 
             expect(isClosed()).toBe(true);
+            expect(sidebar().hasAttribute('role')).toBe(false);
+            expect(sidebar().hasAttribute('aria-modal')).toBe(false);
         });
 
         it('closes on navigation', async () => {

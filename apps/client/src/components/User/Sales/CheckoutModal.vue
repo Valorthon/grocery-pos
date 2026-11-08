@@ -114,7 +114,7 @@
                     <button
                         type="button"
                         class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
-                        @click="amountTendered = centavosToPesoInput(total)"
+                        @click="pickQuickCash(total)"
                     >
                         Exact
                     </button>
@@ -123,7 +123,7 @@
                         :key="amount"
                         type="button"
                         class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
-                        @click="amountTendered = centavosToPesoInput(amount)"
+                        @click="pickQuickCash(amount)"
                     >
                         {{ currency(amount) }}
                     </button>
@@ -374,6 +374,7 @@
                 >Back</BaseButton
             >
             <BaseButton
+                :id="confirmId"
                 type="submit"
                 :form="formId"
                 class="flex-1"
@@ -507,6 +508,23 @@ const payment = computed(() =>
 );
 
 const canConfirm = computed(() => payment.value !== null);
+const confirmId = `${formId}-confirm`;
+
+/**
+ * A quick-cash button fills the amount, then hands the focus to Confirm
+ * when the payment is valid (#197), so Enter confirms instead of pressing
+ * the quick amount again; otherwise back to the amount field. Confirm is
+ * the form's submit button and `finish` ignores a second submit while
+ * processing, so Enter can't send the sale twice.
+ */
+async function pickQuickCash(amount: number) {
+    amountTendered.value = centavosToPesoInput(amount);
+    await nextTick();
+    const target = canConfirm.value
+        ? document.getElementById(confirmId)
+        : fields.value?.querySelector<HTMLElement>('[data-autofocus]');
+    target?.focus();
+}
 
 function currency(value: number): string {
     return formatCurrency(value);

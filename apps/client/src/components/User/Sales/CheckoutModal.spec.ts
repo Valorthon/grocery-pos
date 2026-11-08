@@ -316,6 +316,31 @@ describe('CheckoutModal', () => {
             expect(confirmButton().disabled).toBe(false);
         });
 
+        it('moves the focus to Confirm after Exact, so Enter confirms once (#197)', async () => {
+            const submit = vi.fn(() => new Promise(() => {}));
+            mount(submit, { initialCash: null });
+            await flush();
+            quickCashButtons()[0].click();
+            await flush();
+            expect(document.activeElement).toBe(confirmButton());
+
+            // Enter on the focused submit button submits its form; twice
+            // still sends one sale.
+            await pressEnter();
+            await pressEnter();
+            expect(submit).toHaveBeenCalledTimes(1);
+        });
+
+        it('moves the focus to Confirm after a quick amount too (#197)', async () => {
+            mount(vi.fn(), { initialCash: null });
+            await flush();
+            quickCashButtons()
+                .find((b) => b.textContent?.trim() === '₱500.00')!
+                .click();
+            await flush();
+            expect(document.activeElement).toBe(confirmButton());
+        });
+
         it('shows the GCash reference format error inline and holds Confirm', async () => {
             mount(vi.fn());
             await flush();
