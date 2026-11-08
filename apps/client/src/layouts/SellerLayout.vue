@@ -3,46 +3,41 @@
         class="h-screen w-screen overflow-hidden flex flex-col bg-paper text-slate-900 antialiased"
     >
         <OfflineStatus />
-        <template v-if="isDashboard">
-            <Navigation />
-            <main class="flex-1 overflow-hidden">
-                <router-view />
-            </main>
-        </template>
-
-        <template v-else>
-            <div class="flex-1 flex flex-row min-h-0 w-full overflow-hidden">
-                <CollapsibleSidebar v-model="drawer" />
-                <div class="flex-1 flex flex-col min-h-0 min-w-0">
-                    <!-- Below lg the sidebar is a drawer (#26): its menu button. -->
-                    <header
-                        class="lg:hidden h-14 shrink-0 flex items-center gap-2 px-2 bg-white border-b border-slate-200"
+        <div class="flex-1 flex flex-row min-h-0 w-full overflow-hidden">
+            <CollapsibleSidebar v-model="drawer" />
+            <div class="flex-1 flex flex-col min-h-0 min-w-0">
+                <!--
+                    One navigation on every seller page, the dashboard
+                    included (#161). Below lg the sidebar is a drawer
+                    (#26): its menu button.
+                -->
+                <header
+                    class="lg:hidden h-14 shrink-0 flex items-center gap-2 px-2 bg-white border-b border-slate-200"
+                >
+                    <button
+                        type="button"
+                        class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 transition-colors focus-ring"
+                        aria-label="Open navigation menu"
+                        aria-controls="seller-sidebar"
+                        :aria-expanded="drawer"
+                        data-testid="seller-menu"
+                        @click="drawer = true"
                     >
-                        <button
-                            type="button"
-                            class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 transition-colors focus-ring"
-                            aria-label="Open navigation menu"
-                            aria-controls="seller-sidebar"
-                            :aria-expanded="drawer"
-                            data-testid="seller-menu"
-                            @click="drawer = true"
-                        >
-                            <Menu class="w-6 h-6" aria-hidden="true" />
-                        </button>
-                        <span
-                            class="text-base font-extrabold tracking-tight text-slate-900"
-                        >
-                            GroceryPOS
-                        </span>
-                    </header>
-                    <main
-                        class="flex-1 flex flex-col min-h-0 overflow-hidden min-w-0"
+                        <Menu class="w-6 h-6" aria-hidden="true" />
+                    </button>
+                    <span
+                        class="text-base font-extrabold tracking-tight text-slate-900"
                     >
-                        <router-view />
-                    </main>
-                </div>
+                        GroceryPOS
+                    </span>
+                </header>
+                <main
+                    class="flex-1 flex flex-col min-h-0 overflow-hidden min-w-0"
+                >
+                    <router-view />
+                </main>
             </div>
-        </template>
+        </div>
 
         <ShiftInModal />
         <DrawerActionModal />
@@ -54,17 +49,9 @@
 <script setup lang="ts">
 import { useStoreSettings } from '@/composables/useStoreSettings';
 useStoreSettings();
-import {
-    computed,
-    onBeforeUnmount,
-    onMounted,
-    ref,
-    watch,
-    watchEffect,
-} from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch, watchEffect } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Menu } from '@lucide/vue';
-import Navigation from '@/components/User/Sales/Navigation.vue';
 import CollapsibleSidebar from '@/components/User/Sales/CollapsibleSidebar.vue';
 import ShiftInModal from '@/components/User/Sales/ShiftInModal.vue';
 import DrawerActionModal from '@/components/User/Sales/DrawerActionModal.vue';
@@ -83,8 +70,6 @@ const uiStore = useUIStore();
 
 /** The sidebar drawer below lg (#26). */
 const drawer = ref(false);
-
-const isDashboard = computed(() => route.name === 'SellerDashboard');
 
 // Toasts sit bottom-center here, clear of the register's scan box and
 // ticket; on the register, above its sticky Tender footer (#85). The admin

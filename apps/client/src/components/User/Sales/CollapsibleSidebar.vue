@@ -29,7 +29,7 @@
                 id="seller-sidebar"
                 ref="aside"
                 data-testid="seller-sidebar"
-                class="bg-white border-r border-slate-200/90 flex flex-col justify-between shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
+                class="bg-leaf-900 border-r border-leaf-800 flex flex-col justify-between shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
                 :class="[
                     isCollapsed ? 'lg:w-20' : 'lg:w-64',
                     drawerOpen ? 'translate-x-0' : '-translate-x-full',
@@ -43,7 +43,7 @@
                 <div class="overflow-hidden">
                     <!-- Brand + collapse toggle -->
                     <div
-                        class="h-16 flex items-center border-b border-slate-100 px-4"
+                        class="h-16 flex items-center border-b border-leaf-800 px-4"
                         :class="
                             isCollapsed ? 'justify-center' : 'justify-between'
                         "
@@ -54,12 +54,12 @@
                         >
                             <div class="shrink-0 whitespace-nowrap">
                                 <span
-                                    class="text-base font-extrabold tracking-tight text-slate-900 leading-tight block"
+                                    class="text-base font-extrabold tracking-tight text-white leading-tight block"
                                 >
                                     GroceryPOS
                                 </span>
                                 <span
-                                    class="text-xs text-slate-400 font-bold uppercase tracking-wider block"
+                                    class="text-xs text-leaf-200 font-bold uppercase tracking-wider block"
                                 >
                                     {{ terminal }} Terminal
                                 </span>
@@ -68,7 +68,7 @@
                             <button
                                 v-if="isLarge"
                                 type="button"
-                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-leaf-200 hover:text-white hover:bg-leaf-800 transition-colors shrink-0 focus-ring-inverse"
                                 aria-label="Collapse sidebar"
                                 data-testid="sidebar-collapse"
                                 @click="toggle"
@@ -81,7 +81,7 @@
                             <button
                                 v-else
                                 type="button"
-                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-leaf-200 hover:text-white hover:bg-leaf-800 transition-colors shrink-0 focus-ring-inverse"
                                 aria-label="Close navigation menu"
                                 data-testid="sidebar-close"
                                 @click="closeDrawer"
@@ -93,7 +93,7 @@
                         <button
                             v-else
                             type="button"
-                            class="w-11 h-11 rounded-xl bg-leaf-600/10 text-leaf-600 hover:bg-leaf-600 hover:text-white flex items-center justify-center border border-leaf-600/20 hover:border-leaf-600 transition-all duration-200 group relative focus-ring"
+                            class="w-11 h-11 rounded-xl bg-leaf-800 text-leaf-100 hover:bg-leaf-700 hover:text-white flex items-center justify-center border border-leaf-700 transition-all duration-200 group relative focus-ring-inverse"
                             aria-label="Expand sidebar"
                             data-testid="sidebar-expand"
                             @click="toggle"
@@ -121,14 +121,14 @@
                         >
                             <a
                                 :href="href"
-                                class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
+                                class="w-full flex items-center rounded-xl transition-all group relative focus-ring-inverse"
                                 :class="[
                                     isCollapsed
                                         ? 'justify-center p-3'
-                                        : 'justify-between px-3.5 py-3',
+                                        : 'justify-between min-h-11 px-3.5 py-3',
                                     isActive(item.id)
-                                        ? 'bg-leaf-600 text-white font-bold shadow-xs'
-                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
+                                        ? 'bg-leaf-700 text-white font-bold'
+                                        : 'text-leaf-100 hover:bg-leaf-800 hover:text-white font-semibold',
                                 ]"
                                 :title="isCollapsed ? item.label : undefined"
                                 :aria-label="
@@ -146,7 +146,7 @@
                                         :class="
                                             isActive(item.id)
                                                 ? 'text-white'
-                                                : 'text-slate-500 group-hover:text-slate-900'
+                                                : 'text-leaf-300 group-hover:text-white'
                                         "
                                     />
                                     <span
@@ -164,7 +164,7 @@
                                     class="text-xs font-black px-2 py-0.5 rounded-full"
                                     :class="
                                         isActive(item.id)
-                                            ? 'bg-white text-leaf-600'
+                                            ? 'bg-white text-leaf-800'
                                             : 'bg-leaf-600 text-white'
                                     "
                                 >
@@ -175,8 +175,11 @@
                     </nav>
                 </div>
 
-                <div class="p-3 border-t border-slate-200/80">
-                    <UserProfileMenu :variant="isCollapsed ? 'icon' : 'box'" />
+                <div class="p-3 border-t border-leaf-800">
+                    <UserProfileMenu
+                        :variant="isCollapsed ? 'icon' : 'box'"
+                        tone="dark"
+                    />
                 </div>
             </aside>
         </div>

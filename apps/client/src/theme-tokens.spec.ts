@@ -121,6 +121,7 @@ describe('theme tokens (#153)', () => {
         ['ink', 'citrus-600'],
         ['surface', 'danger-fg'],
         ['surface', 'leaf-700'],
+        // Also the seller sidebar's active cart badge (#161).
         ['surface', 'leaf-800'],
         ['leaf-700', 'leaf-50'],
         // Guest footer button hover: leaf text on leaf-50 (#158).
