@@ -10,35 +10,18 @@
             :error="error"
             @retry="refresh"
         >
-            <template #cell-contact="{ item }">
-                {{ item.contactPerson }} {{ item.phone }} {{ item.email }}
-            </template>
+            <template #cell-contactPerson="{ item }">{{
+                item.contactPerson || '—'
+            }}</template>
+            <template #cell-phone="{ item }">{{ item.phone || '—' }}</template>
+            <template #cell-email="{ item }">{{ item.email || '—' }}</template>
             <template #cell-status="{ item }">
                 <Badge :color="item.isActive ? 'success' : 'neutral'">{{
                     item.isActive ? 'Active' : 'Archived'
                 }}</Badge>
             </template>
             <template #cell-actions="{ item }">
-                <div class="flex gap-2">
-                    <BaseButton
-                        size="sm"
-                        :disabled="saving"
-                        @click="begin(item)"
-                        >Edit</BaseButton
-                    ><BaseButton
-                        size="sm"
-                        variant="outline"
-                        :disabled="saving"
-                        @click="toggle(item)"
-                        >{{ item.isActive ? 'Archive' : 'Restore' }}</BaseButton
-                    ><BaseButton
-                        size="sm"
-                        variant="outline"
-                        :disabled="saving"
-                        @click="remove(item)"
-                        >Delete</BaseButton
-                    >
-                </div>
+                <RowActions :label="item.name" :actions="rowActions(item)" />
             </template>
             <template #empty>
                 <EmptyState
@@ -118,6 +101,8 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
 import { Truck } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import RowActions from '@/components/ui/RowActions.vue';
+import type { RowAction } from '@/components/ui/row-actions';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -128,8 +113,10 @@ import { apiErrorText } from '@/utils/api-error';
 const { suppliers, loading, error, refresh } = useSuppliers();
 const { request, confirm, answer } = useConfirm();
 const headers: TableHeader[] = [
-    { key: 'name', title: 'Supplier' },
-    { key: 'contact', title: 'Contact' },
+    { key: 'name', title: 'Supplier', rowHeader: true },
+    { key: 'contactPerson', title: 'Contact person' },
+    { key: 'phone', title: 'Phone' },
+    { key: 'email', title: 'Email' },
     { key: 'status', title: 'Status' },
     { key: 'actions', title: 'Actions' },
 ];
@@ -223,5 +210,22 @@ async function remove(row: SupplierView) {
     } finally {
         saving.value = false;
     }
+}
+/** Edit, Archive/Restore and Delete, with their confirmations, as before. */
+function rowActions(row: SupplierView): RowAction[] {
+    return [
+        { label: 'Edit', disabled: saving.value, onSelect: () => begin(row) },
+        {
+            label: row.isActive ? 'Archive' : 'Restore',
+            disabled: saving.value,
+            onSelect: () => void toggle(row),
+        },
+        {
+            label: 'Delete',
+            disabled: saving.value,
+            danger: true,
+            onSelect: () => void remove(row),
+        },
+    ];
 }
 </script>

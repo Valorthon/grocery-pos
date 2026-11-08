@@ -56,6 +56,22 @@ async function mount() {
     await flush();
 }
 
+/** Opens the row's action menu (#172) and picks one of its items. */
+async function rowAction(label: string, row = 'milk') {
+    const trigger = document.querySelector<HTMLButtonElement>(
+        `button[aria-label="Actions for ${row}"]`,
+    );
+    if (!trigger) throw new Error(`no menu for ${row}`);
+    trigger.click();
+    await flush();
+    const item = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'),
+    ].find((b) => b.textContent?.trim() === label);
+    if (!item) throw new Error(label);
+    item.click();
+    await flush();
+}
+
 const params = () => api.get.mock.calls.map(([, config]) => config?.params);
 
 describe('product list FilterBar (#171)', () => {
@@ -212,7 +228,7 @@ describe('product editing and archival', () => {
     });
     it('sends changed prices in integer centavos and closes only after save', async () => {
         await mount();
-        await click('Edit');
+        await rowAction('Edit');
         await type('Product name', 'new milk');
         await type('Selling price (₱)', '65.25');
         await click('Save');
@@ -236,7 +252,7 @@ describe('product editing and archival', () => {
                     }),
             );
             await mount();
-            await click('Edit');
+            await rowAction('Edit');
             await type('Selling price (₱)', '65.25');
             await click('Save');
             expect(api.patch).toHaveBeenCalledTimes(1);
@@ -279,7 +295,7 @@ describe('product editing and archival', () => {
             roles: [Role.Restocker],
         };
         await mount();
-        await click('Edit');
+        await rowAction('Edit');
         expect(document.body.textContent).not.toContain('Selling price (₱)');
         await type('Product name', 'renamed milk');
         await click('Save');
@@ -290,17 +306,17 @@ describe('product editing and archival', () => {
     it('keeps failed edits open with an error', async () => {
         api.patch.mockRejectedValue(new Error('network'));
         await mount();
-        await click('Edit');
+        await rowAction('Edit');
         await click('Save');
         expect(document.querySelector('[role=dialog]')).not.toBeNull();
         expect(document.querySelector('[role=alert]')).not.toBeNull();
     });
     it('confirms archiving and cancellation does not write', async () => {
         await mount();
-        await click('Archive');
+        await rowAction('Archive');
         await click('Cancel');
         expect(api.patch).not.toHaveBeenCalled();
-        await click('Archive');
+        await rowAction('Archive');
         const buttons = [...document.querySelectorAll('[role=dialog] button')];
         (
             buttons.find(
@@ -321,7 +337,7 @@ it('validates product names and prices before saving', async () => {
         roles: [Role.Admin],
     };
     await mount();
-    await click('Edit');
+    await rowAction('Edit');
     await type('Product name', ' ');
     await click('Save');
     expect(api.patch).not.toHaveBeenCalled();
@@ -357,7 +373,7 @@ it('restores archived products after confirmation', async () => {
         },
     });
     await mount();
-    await click('Restore');
+    await rowAction('Restore');
     const confirm = [...document.querySelectorAll('[role=dialog] button')].find(
         (b) => b.textContent?.trim() === 'Restore',
     ) as HTMLButtonElement;
@@ -389,7 +405,7 @@ it('restocker sets measured reorder settings without gaining price permission', 
         },
     });
     await mount();
-    await click('Edit');
+    await rowAction('Edit', 'rice');
     expect(document.body.textContent).not.toContain('Selling price (₱)');
     await type('Reorder level (kg)', '0.450');
     await type('Restock quantity (kg)', '2.500');
@@ -414,7 +430,7 @@ it('rejects fractional pieces, negative levels and blank reorder quantities befo
         roles: [Role.Restocker],
     };
     await mount();
-    await click('Edit');
+    await rowAction('Edit');
     for (const [label, value] of [
         ['Reorder level (pc)', '0.5'],
         ['Reorder level (pc)', '-1'],
@@ -429,4 +445,78 @@ it('rejects fractional pieces, negative levels and blank reorder quantities befo
             'reorder',
         );
     }
+});
+
+describe('columns and row menu (#172)', () => {
+    const menuItems = () =>
+        [...document.querySelectorAll('[role=menuitem]')].map((b) =>
+            b.textContent?.trim(),
+        );
+    it('puts Name first, then Category and Price', async () => {
+        await mount();
+        const titles = [...document.querySelectorAll('thead th')].map((th) =>
+            th.textContent?.trim(),
+        );
+        expect(titles.slice(0, 3)).toEqual(['Name', 'Category', 'Price']);
+        expect(titles).not.toContain('History');
+    });
+    it('offers an Adjuster only Stock history, which opens the history', async () => {
+        useAuthStore().user = {
+            userId: 'a',
+            username: 'a',
+            roles: [Role.Adjuster],
+        };
+        await mount();
+        const trigger = document.querySelector<HTMLButtonElement>(
+            'button[aria-label="Actions for milk"]',
+        )!;
+        expect(trigger.className).toContain('w-11 h-11');
+        trigger.click();
+        await flush();
+        expect(menuItems()).toEqual(['Stock history']);
+        await rowAction('Stock history');
+        expect(document.querySelector('[role=dialog]')?.textContent).toContain(
+            'Stock history — milk',
+        );
+    });
+    it('opens from the keyboard and gives the focus back to the trigger', async () => {
+        useAuthStore().user = {
+            userId: 'admin',
+            username: 'admin',
+            roles: [Role.Admin],
+        };
+        await mount();
+        const trigger = document.querySelector<HTMLButtonElement>(
+            'button[aria-label="Actions for milk"]',
+        )!;
+        trigger.focus();
+        trigger.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
+        );
+        await flush();
+        expect(menuItems()).toEqual(['Stock history', 'Edit', 'Archive']);
+        expect(document.activeElement?.textContent?.trim()).toBe(
+            'Stock history',
+        );
+        document.activeElement!.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+        await flush();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        expect(document.activeElement).toBe(trigger);
+        trigger.click();
+        await flush();
+        const archive = [
+            ...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'),
+        ].find((b) => b.textContent?.trim() === 'Archive')!;
+        archive.focus();
+        archive.click();
+        await flush();
+        expect(trigger.getAttribute('aria-expanded')).toBe('false');
+        // The confirmation still asks before anything is written.
+        expect(document.querySelector('[role=dialog]')).not.toBeNull();
+        expect(api.patch).not.toHaveBeenCalled();
+        await click('Cancel');
+        await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    });
 });

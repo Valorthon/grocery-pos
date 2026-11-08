@@ -16,29 +16,40 @@
             :trigger="triggerAttrs"
         />
 
-        <Transition
-            enter-active-class="transition duration-100 ease-out"
-            enter-from-class="opacity-0 scale-95"
-            enter-to-class="opacity-100 scale-100"
-            leave-active-class="transition duration-100 ease-in"
-            leave-from-class="opacity-100 scale-100"
-            leave-to-class="opacity-0 scale-95"
-        >
-            <div
-                v-if="modelValue"
-                :id="menuId"
-                ref="menuRef"
-                role="menu"
-                :class="[
-                    'absolute z-50 mt-2 rounded-card bg-surface shadow-overlay border border-line p-1.5',
-                    align === 'right' ? 'right-0' : 'left-0',
-                    widthClass,
-                ]"
-                @click="onMenuClick"
+        <Teleport to="body" :disabled="!floating">
+            <Transition
+                enter-active-class="transition duration-100 ease-out"
+                enter-from-class="opacity-0 scale-95"
+                enter-to-class="opacity-100 scale-100"
+                leave-active-class="transition duration-100 ease-in"
+                leave-from-class="opacity-100 scale-100"
+                leave-to-class="opacity-0 scale-95"
             >
-                <slot name="menu" :close="close" />
-            </div>
-        </Transition>
+                <div
+                    v-if="modelValue"
+                    :id="menuId"
+                    ref="menuRef"
+                    role="menu"
+                    :class="[
+                        'z-50 rounded-card bg-surface shadow-overlay border border-line p-1.5',
+                        floating
+                            ? 'fixed'
+                            : [
+                                  'absolute mt-2',
+                                  align === 'right' ? 'right-0' : 'left-0',
+                              ],
+                        widthClass,
+                    ]"
+                    :style="floating ? floatingStyle : undefined"
+                    :data-placement="floating ? placement : undefined"
+                    @click="onMenuClick"
+                    @keydown="floating ? onKeydown($event) : undefined"
+                    @focusout="floating ? onFocusOut($event) : undefined"
+                >
+                    <slot name="menu" :close="close" />
+                </div>
+            </Transition>
+        </Teleport>
     </div>
 </template>
 
@@ -50,6 +61,7 @@ import {
     onMounted,
     ref,
     useId,
+    watch,
 } from 'vue';
 
 /**
@@ -70,10 +82,17 @@ const props = withDefaults(
         modelValue: boolean;
         align?: 'left' | 'right';
         widthClass?: string;
+        /**
+         * Teleport the panel to the body with fixed positioning, flipped
+         * above the trigger when there is no room below (#172): for menus
+         * inside a scrolling/clipping box such as a table.
+         */
+        floating?: boolean;
     }>(),
     {
         align: 'right',
         widthClass: 'w-56',
+        floating: false,
     },
 );
 
@@ -84,6 +103,51 @@ const menuRef = ref<HTMLElement | null>(null);
 const menuId = useId();
 
 const ITEM = '[role="menuitem"], button:not(:disabled), a[href]';
+/** What arrow keys and opening focus: never a disabled item (#172). */
+const FOCUSABLE_ITEM = ':is([role="menuitem"], button, a[href]):not(:disabled)';
+
+const placement = ref<'below' | 'above'>('below');
+const floatingStyle = ref<Record<string, string>>({});
+const GAP = 8;
+
+/** Places the floating panel from the trigger's box; flips up if needed. */
+function place() {
+    const trigger = triggerEl();
+    const menu = menuRef.value;
+    if (!trigger || !menu) return;
+    const box = trigger.getBoundingClientRect();
+    const height = menu.offsetHeight;
+    const below = window.innerHeight - box.bottom;
+    const up = below < height + GAP && box.top > below;
+    placement.value = up ? 'above' : 'below';
+    const style: Record<string, string> = up
+        ? { bottom: `${window.innerHeight - box.top + GAP}px` }
+        : { top: `${box.bottom + GAP}px` };
+    if (props.align === 'right')
+        style.right = `${document.documentElement.clientWidth - box.right}px`;
+    else style.left = `${box.left}px`;
+    floatingStyle.value = style;
+}
+
+function contains(node: Node): boolean {
+    return !!rootRef.value?.contains(node) || !!menuRef.value?.contains(node);
+}
+
+watch(
+    () => props.modelValue,
+    async (open) => {
+        if (!props.floating) return;
+        if (open) {
+            await nextTick();
+            place();
+            window.addEventListener('scroll', place, true);
+            window.addEventListener('resize', place);
+        } else {
+            window.removeEventListener('scroll', place, true);
+            window.removeEventListener('resize', place);
+        }
+    },
+);
 
 const triggerAttrs = computed(() => ({
     type: 'button' as const,
@@ -103,7 +167,7 @@ function triggerEl(): HTMLElement | null {
 
 function items(): HTMLElement[] {
     return menuRef.value
-        ? [...menuRef.value.querySelectorAll<HTMLElement>(ITEM)]
+        ? [...menuRef.value.querySelectorAll<HTMLElement>(FOCUSABLE_ITEM)]
         : [];
 }
 
@@ -183,17 +247,13 @@ function onMenuClick(event: MouseEvent) {
 
 function onFocusOut(event: FocusEvent) {
     const next = event.relatedTarget;
-    if (
-        props.modelValue &&
-        next instanceof Node &&
-        !rootRef.value?.contains(next)
-    ) {
+    if (props.modelValue && next instanceof Node && !contains(next)) {
         close();
     }
 }
 
 function onClickOutside(event: MouseEvent) {
-    if (rootRef.value && !rootRef.value.contains(event.target as Node)) {
+    if (rootRef.value && !contains(event.target as Node)) {
         emit('update:modelValue', false);
     }
 }
@@ -204,5 +264,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     document.removeEventListener('mousedown', onClickOutside);
+    window.removeEventListener('scroll', place, true);
+    window.removeEventListener('resize', place);
 });
 </script>

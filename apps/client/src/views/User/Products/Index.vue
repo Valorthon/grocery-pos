@@ -99,29 +99,11 @@
                     categories.find((row) => row._id === item.category)?.name ??
                     (item.category ? 'Unavailable category' : 'Uncategorized')
                 }}</template>
-                <template #cell-history="{ item }"
-                    ><BaseButton
-                        size="sm"
-                        variant="outline"
-                        @click="history = item"
-                        >Stock history</BaseButton
-                    ></template
-                >
                 <template #cell-actions="{ item }">
-                    <div v-if="canAddProducts" class="flex gap-2">
-                        <BaseButton size="sm" @click="editing = item"
-                            >Edit</BaseButton
-                        >
-                        <BaseButton
-                            size="sm"
-                            variant="outline"
-                            :disabled="saving"
-                            @click="archive(item)"
-                            >{{
-                                item.isActive === false ? 'Restore' : 'Archive'
-                            }}</BaseButton
-                        >
-                    </div>
+                    <RowActions
+                        :label="item.name"
+                        :actions="rowActions(item)"
+                    />
                 </template>
             </BaseTable>
             <StockHistory
@@ -168,6 +150,8 @@ import { apiErrorText } from '@/utils/api-error';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import RowActions from '@/components/ui/RowActions.vue';
+import type { RowAction } from '@/components/ui/row-actions';
 import { formatCurrency } from '@/utils/currency';
 import type { Paginated, ProductView } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
@@ -241,7 +225,12 @@ const { applied, apply: applySearch } = useAppliedFilters(
     search,
 );
 
+// Name first, then Category and Price (#172). The list API returns no
+// stock, so Stock is not a column here (recorded on #172).
 const headers = [
+    { key: 'name', title: 'Name', rowHeader: true },
+    { key: 'category', title: 'Category' },
+    { key: 'price', title: 'Price', align: 'right' as const },
     ...(authStore.user?.roles.includes(Role.Admin)
         ? [
               {
@@ -251,13 +240,27 @@ const headers = [
               },
           ]
         : []),
-    { key: 'history', title: 'History' },
     { key: 'EAN', title: 'EAN' },
-    { key: 'name', title: 'Name' },
-    { key: 'category', title: 'Category' },
-    { key: 'price', title: 'Price', align: 'right' as const },
     { key: 'actions', title: 'Actions' },
 ];
+
+/** History for everyone here; Edit and Archive/Restore as before (#83). */
+function rowActions(item: ProductListRow): RowAction[] {
+    return [
+        { label: 'Stock history', onSelect: () => (history.value = item) },
+        ...(canAddProducts.value
+            ? [
+                  { label: 'Edit', onSelect: () => (editing.value = item) },
+                  {
+                      label: item.isActive === false ? 'Restore' : 'Archive',
+                      disabled: saving.value,
+                      danger: item.isActive !== false,
+                      onSelect: () => void archive(item),
+                  },
+              ]
+            : []),
+    ];
+}
 
 /** A row of the products table. */
 interface ProductListRow extends ProductView {
