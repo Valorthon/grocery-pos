@@ -77,7 +77,6 @@
                     :headers="saleHeaders"
                     :items="saleRows"
                     :loading="loading && !data"
-                    :error="data ? '' : (loadError ?? '')"
                     :skeleton-rows="5"
                     empty-text="No sales yet"
                     @retry="loadDashboard"
@@ -256,7 +255,6 @@ const tileLinks = computed<Partial<Record<StatKey, RouteLocationRaw>>>(() =>
     hasRouter && canOpenInventory.value
         ? {
               expiring: { name: 'Inventories', query: { expiring: 'true' } },
-              products: { name: 'Products' },
               lowStock: { name: 'Inventories', query: { lowStock: 'true' } },
           }
         : {},
@@ -301,7 +299,9 @@ const stats = computed<Stat[]>(() => {
             tone: 'neutral',
         },
     ];
-    if (showsMoney.value) {
+    // An ADMIN's revenue skeleton holds its place during the first load,
+    // so the grid does not reflow; no figure shows before the answer.
+    if (showsMoney.value || (!d && authStore.isAdmin && loading.value)) {
         list.push({
             key: 'todayRevenue',
             title: "Today's Revenue",
@@ -318,10 +318,11 @@ const tilesLoading = computed(() => loading.value && !data.value);
 
 /**
  * The sales table shows for an ADMIN while the first load runs (its
- * skeleton), then exactly when the API sent money figures.
+ * skeleton), then exactly when the API sent money figures. A failed
+ * load has one error and Retry: the page banner.
  */
 const showsSalesTable = computed(() =>
-    data.value ? showsMoney.value : authStore.isAdmin,
+    data.value ? showsMoney.value : authStore.isAdmin && loading.value,
 );
 
 const saleHeaders: TableHeader[] = [

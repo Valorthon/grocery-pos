@@ -277,7 +277,7 @@ function tileLinks(): Record<string, string | null> {
 describe('Dashboard tiles per role (issue #166)', () => {
     const INVENTORY_LINKS = {
         expiring: '/inventory?expiring=true',
-        products: '/products',
+        products: null,
         lowStock: '/inventory?lowStock=true',
         outOfStock: null,
         todaySales: null,
@@ -340,6 +340,55 @@ describe('Dashboard tiles per role (issue #166)', () => {
                 .querySelector('[data-stat="products"]')
                 ?.querySelector('[data-tone-stripe]'),
         ).toBeNull();
+        const out = document.querySelector('[data-stat="outOfStock"]');
+        expect(out?.querySelector('.sr-only')?.textContent).toContain(
+            'needs attention',
+        );
+    });
+
+    it('drops the tone when the count is zero', async () => {
+        await renderWithRouter(['ADJUSTER'], {
+            ...STATS,
+            lowStockCount: 0,
+            outOfStockCount: 0,
+        });
+        for (const key of ['lowStock', 'outOfStock']) {
+            expect(
+                document
+                    .querySelector(`[data-stat="${key}"]`)
+                    ?.querySelector('[data-tone-stripe]'),
+            ).toBeNull();
+        }
+    });
+
+    it('gives an admin one alert and one Retry when the first load fails', async () => {
+        const { useAuthStore } = await import('@/stores/auth');
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        useAuthStore().user = {
+            userId: 'a',
+            username: 'a',
+            roles: ['ADMIN'] as never,
+        };
+        get.mockRejectedValue(new Error('down'));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Dashboard);
+        app.use(pinia);
+        app.mount(host);
+        for (let i = 0; i < 5; i++) {
+            await Promise.resolve();
+            await nextTick();
+        }
+        expect(document.querySelectorAll('[role="alert"]')).toHaveLength(1);
+        expect(
+            [...document.querySelectorAll('button')].filter((b) =>
+                b.textContent?.includes('Retry'),
+            ),
+        ).toHaveLength(1);
+        expect(
+            document.querySelector('[data-testid="recent-sales"]'),
+        ).toBeNull();
     });
 });
 
@@ -362,7 +411,7 @@ describe('Dashboard loading (issue #166)', () => {
         await nextTick();
 
         const tiles = [...document.querySelectorAll('[data-stat]')];
-        expect(tiles).toHaveLength(5);
+        expect(tiles).toHaveLength(6);
         for (const t of tiles) {
             expect(t.querySelector('[data-skeleton]')).not.toBeNull();
             expect(t.getAttribute('aria-busy')).toBe('true');
@@ -377,18 +426,29 @@ describe('Dashboard loading (issue #166)', () => {
         expect(host.textContent).not.toContain('₱');
     });
 
-    it('hides the sales skeleton from a non-admin', async () => {
-        get.mockReturnValue(new Promise(() => {}));
-        const host = document.createElement('div');
-        document.body.appendChild(host);
-        app = createApp(Dashboard);
-        app.use(createPinia());
-        app.mount(host);
-        await nextTick();
-        expect(
-            document.querySelector('[data-testid="recent-sales"]'),
-        ).toBeNull();
-    });
+    it.each([['RESTOCKER'], ['ADJUSTER'], ['USER_MANAGER']])(
+        'hides the sales and revenue skeletons from %s',
+        async (role) => {
+            const { useAuthStore } = await import('@/stores/auth');
+            const pinia = createPinia();
+            setActivePinia(pinia);
+            useAuthStore().user = {
+                userId: 'u',
+                username: 'u',
+                roles: [role] as never,
+            };
+            get.mockReturnValue(new Promise(() => {}));
+            const host = document.createElement('div');
+            document.body.appendChild(host);
+            app = createApp(Dashboard);
+            app.use(pinia);
+            app.mount(host);
+            await nextTick();
+            expect(
+                document.querySelector('[data-testid="recent-sales"]'),
+            ).toBeNull();
+        },
+    );
 });
 
 it('links the low-stock tile to the filtered inventory list for inventory roles', async () => {
