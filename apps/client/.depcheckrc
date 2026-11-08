@@ -1,3 +1,6 @@
 ignores:
     # loaded via `@import 'tailwindcss'` in src/assets/main.css, which depcheck cannot see
     - tailwindcss
+    # font files referenced by url() in the @font-face rules of src/assets/main.css (#153)
+    - '@fontsource-variable/bricolage-grotesque'
+    - '@fontsource-variable/instrument-sans'

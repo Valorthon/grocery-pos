@@ -11,6 +11,11 @@ export default defineConfig({
     },
     test: {
         environment: 'jsdom',
+        // theme-tokens.spec.ts and layout-drift.spec.ts read the CSS files
+        // as ?raw; Vitest blanks any CSS it does not process, so they would
+        // silently check nothing. Only .css files: Vue <style> blocks stay
+        // unprocessed, as before.
+        css: { include: [/\/src\/[^?]*\.css(\?raw)?$/] },
         include: ['src/**/*.spec.ts'],
         // Vitest 4's restoreMocks only restores vi.spyOn spies; mockReset also
         // resets every vi.fn() (calls and queued returns) between tests, as

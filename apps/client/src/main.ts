@@ -3,15 +3,8 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from '@/router';
 import { useAuthStore } from '@/stores/auth';
-// Poppins is bundled with the app, not loaded from Google Fonts (#26): the
-// client has no external runtime assets. The weights are the ones used:
-// font-normal to font-black (400-900).
-import '@fontsource/poppins/latin-400.css';
-import '@fontsource/poppins/latin-500.css';
-import '@fontsource/poppins/latin-600.css';
-import '@fontsource/poppins/latin-700.css';
-import '@fontsource/poppins/latin-800.css';
-import '@fontsource/poppins/latin-900.css';
+// The Fresh market fonts are declared in assets/main.css (#153): bundled
+// with the app, latin and latin-ext only, never from Google Fonts (#26).
 import './assets/main.css';
 
 const app = createApp(App);
