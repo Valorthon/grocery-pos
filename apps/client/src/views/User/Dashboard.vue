@@ -6,7 +6,7 @@
             v-if="loadError"
             role="alert"
             data-testid="dashboard-error"
-            class="flex flex-wrap items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-800"
+            class="flex flex-wrap items-center gap-3 rounded-card border border-danger-border bg-danger-bg px-5 py-4 text-sm text-danger-fg"
         >
             <AlertCircle :size="18" class="shrink-0" aria-hidden="true" />
             <p class="flex-1 font-bold">
@@ -23,138 +23,111 @@
             </BaseButton>
         </div>
 
-        <!-- Stat cards -->
+        <!-- Stat tiles: keyed by `stat.key`, never by their titles. -->
         <div
             class="grid grid-cols-1 sm:grid-cols-2 gap-4"
             :class="stats.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'"
         >
-            <component
-                :is="
-                    (stat.title === 'Low Stock Items' ||
-                        stat.title === 'Expiring / expired batches') &&
-                    canOpenInventory
-                        ? 'router-link'
-                        : 'div'
-                "
+            <StatTile
                 v-for="stat in stats"
-                :key="stat.title"
-                :to="
-                    (stat.title === 'Low Stock Items' ||
-                        stat.title === 'Expiring / expired batches') &&
-                    canOpenInventory
-                        ? {
-                              name: 'Inventories',
-                              query:
-                                  stat.title === 'Low Stock Items'
-                                      ? { lowStock: 'true' }
-                                      : { expiring: 'true' },
-                          }
-                        : undefined
-                "
-                class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs"
+                :key="stat.key"
+                :data-stat="stat.key"
+                :label="stat.title"
+                :value="stat.value"
+                :tone="stat.tone"
+                :to="stat.to"
+                :loading="tilesLoading"
             >
-                <div class="flex items-center justify-between mb-4">
-                    <div
-                        class="w-11 h-11 rounded-xl flex items-center justify-center"
-                        :class="stat.avatarClass"
-                    >
-                        <component :is="stat.icon" :size="22" />
-                    </div>
-                </div>
-                <div class="text-2xl font-extrabold text-slate-900">
-                    {{ stat.value }}
-                </div>
-                <div class="text-xs text-slate-500 mt-1">{{ stat.title }}</div>
-            </component>
+                <template #icon>
+                    <component :is="stat.icon" :size="18" />
+                </template>
+            </StatTile>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <p v-if="showsMoney" class="text-sm text-slate-600">
+            <p v-if="showsMoney" class="text-sm text-muted md:col-span-3">
                 Today's dashboard totals use original sale-day amounts and
                 exclude sales now reversed. Sales Reports use event dates: later
                 voids/refunds affect their own day.
             </p>
             <!-- Recent sales: ADMIN only, absent from the API otherwise -->
-            <div
-                v-if="showsMoney"
+            <section
+                v-if="showsSalesTable"
                 data-testid="recent-sales"
-                class="md:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden"
+                aria-labelledby="recent-sales-title"
+                class="md:col-span-2 flex flex-col gap-3"
             >
-                <div
-                    class="px-5 py-4 border-b border-slate-200 text-sm font-bold text-slate-900"
+                <div class="flex items-center justify-between gap-2">
+                    <h2
+                        id="recent-sales-title"
+                        class="font-display text-base font-bold text-ink"
+                    >
+                        Recent Sales
+                    </h2>
+                    <RouterLink
+                        v-if="hasRouter"
+                        :to="{ name: 'SalesHistory' }"
+                        data-testid="recent-sales-all"
+                        class="inline-flex min-h-11 items-center rounded-control px-2 text-sm font-semibold text-leaf-700 hover:underline focus-ring"
+                    >
+                        View all sales
+                    </RouterLink>
+                </div>
+                <BaseTable
+                    :headers="saleHeaders"
+                    :items="saleRows"
+                    :loading="loading && !data"
+                    :skeleton-rows="5"
+                    empty-text="No sales yet"
+                    @retry="loadDashboard"
                 >
-                    Recent Sales
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse text-sm">
-                        <thead>
-                            <tr
-                                class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
-                            >
-                                <th class="py-2.5 px-5">Cashier</th>
-                                <th class="py-2.5 px-5">Amount</th>
-                                <th class="py-2.5 px-5">Payment</th>
-                                <th class="py-2.5 px-5">Date</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100">
-                            <tr v-if="loading">
-                                <td colspan="4" class="py-4 text-center">
-                                    <Spinner class="mx-auto text-slate-400" />
-                                </td>
-                            </tr>
-                            <tr v-else-if="recentSales.length === 0">
-                                <td
-                                    colspan="4"
-                                    class="py-4 text-center text-slate-400"
-                                >
-                                    No sales yet
-                                </td>
-                            </tr>
-                            <tr v-for="sale in recentSales" :key="sale._id">
-                                <td class="py-3 px-5 font-medium">
-                                    {{ sale.cashier?.name ?? 'N/A' }}
-                                </td>
-                                <td class="py-3 px-5 font-medium">
-                                    {{ formatCurrency(sale.amount ?? 0) }}
-                                </td>
-                                <td class="py-3 px-5">
-                                    <Badge
-                                        :color="
-                                            sale.paymentType ===
-                                            PaymentType.CASH
-                                                ? 'success'
-                                                : 'info'
-                                        "
-                                        >{{ sale.paymentType }}</Badge
-                                    >
-                                    <Badge
-                                        v-if="
-                                            sale.status &&
-                                            sale.status !== SaleStatus.COMPLETED
-                                        "
-                                        color="error"
-                                        class="ml-1"
-                                        >{{ sale.status }}</Badge
-                                    >
-                                </td>
-                                <td class="py-3 px-5 text-xs text-slate-500">
-                                    {{ formatDate(sale.createdAt) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+                    <template #cell-cashier="{ item }">
+                        <span class="font-medium">{{ item.cashier }}</span>
+                    </template>
+                    <template #cell-amount="{ item }">
+                        <span class="font-display num font-semibold">{{
+                            item.amount
+                        }}</span>
+                    </template>
+                    <template #cell-paymentType="{ item }">
+                        <Badge
+                            :color="
+                                item.paymentType === PaymentType.CASH
+                                    ? 'success'
+                                    : 'info'
+                            "
+                            >{{ item.paymentType }}</Badge
+                        >
+                        <Badge
+                            v-if="
+                                item.status &&
+                                item.status !== SaleStatus.COMPLETED
+                            "
+                            color="error"
+                            class="ml-1"
+                            >{{ item.status }}</Badge
+                        >
+                    </template>
+                    <template #cell-createdAt="{ item }">
+                        <span class="text-xs text-muted">{{
+                            item.createdAt
+                        }}</span>
+                    </template>
+                </BaseTable>
+            </section>
 
             <!-- Recent activity -->
-            <div
-                :class="showsMoney ? '' : 'md:col-span-3'"
-                class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5"
+            <section
+                :class="showsSalesTable ? '' : 'md:col-span-3'"
+                aria-labelledby="recent-activity-title"
+                class="rounded-card border border-line bg-surface p-5 shadow-card"
             >
-                <div class="text-sm font-bold text-slate-900 mb-4">
+                <h2
+                    id="recent-activity-title"
+                    class="font-display mb-4 text-base font-bold text-ink"
+                >
                     Recent Activity
-                </div>
+                </h2>
                 <div v-if="activities.length" class="space-y-4">
                     <div
                         v-for="act in activities"
@@ -167,32 +140,38 @@
                             :class="dotClass(act.color)"
                         />
                         <div>
-                            <div class="text-sm font-medium text-slate-900">
+                            <div class="text-sm font-medium text-ink">
                                 {{ act.title }}
                             </div>
-                            <div class="text-xs text-slate-500">
+                            <div class="text-xs text-muted">
                                 {{ act.time }}
                             </div>
                         </div>
                     </div>
                 </div>
-                <div v-else-if="loading" class="py-2">
-                    <Spinner class="mx-auto text-slate-400" />
+                <div
+                    v-else-if="loading"
+                    class="space-y-4"
+                    aria-busy="true"
+                    data-skeleton
+                >
+                    <span class="sr-only">Loading</span>
+                    <div
+                        v-for="i in 3"
+                        :key="i"
+                        class="h-8 animate-pulse rounded-control bg-line"
+                    />
                 </div>
-                <div v-else-if="!data" class="text-slate-400 text-sm">
-                    Unavailable
-                </div>
-                <div v-else class="text-slate-400 text-sm">
-                    No recent activity
-                </div>
-            </div>
+                <p v-else-if="!data" class="text-sm text-muted">Unavailable</p>
+                <EmptyState v-else title="No recent activity" />
+            </section>
         </div>
     </PageFrame>
 </template>
 
 <script setup lang="ts">
 import PageFrame from '@/components/ui/PageFrame.vue';
-import { ref, computed } from 'vue';
+import { ref, computed, inject, type Component } from 'vue';
 import {
     AlertCircle,
     Banknote,
@@ -203,7 +182,11 @@ import {
 } from '@lucide/vue';
 import api from '@/axios';
 import Badge from '@/components/ui/Badge.vue';
-import Spinner from '@/components/ui/Spinner.vue';
+import StatTile from '@/components/ui/StatTile.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import type { TableHeader } from '@/components/ui/types';
+import { RouterLink, routerKey, type RouteLocationRaw } from 'vue-router';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { useListFetch } from '@/composables/useListFetch';
 import { useAuthStore, Role } from '@/stores/auth';
@@ -234,48 +217,131 @@ const data = ref<DashboardView | null>(null);
 /** Whether the API sent money figures, i.e. the caller is an ADMIN. */
 const showsMoney = computed(() => data.value?.todayRevenue !== undefined);
 
-const stats = computed(() => [
-    {
-        title: 'Expiring / expired batches',
-        value: data.value?.expiringBatchCount?.toLocaleString() ?? '-',
-        icon: AlertCircle,
-        avatarClass: 'bg-amber-50 text-amber-600',
-    },
-    {
-        title: 'Total Products',
-        value: data.value?.totalProducts?.toLocaleString() ?? '-',
-        icon: Package,
-        avatarClass: 'bg-leaf-50 text-leaf-600',
-    },
-    {
-        title: 'Low Stock Items',
-        value: data.value?.lowStockCount?.toLocaleString() ?? '-',
-        icon: AlertCircle,
-        avatarClass: 'bg-red-50 text-red-600',
-    },
-    {
-        title: 'Out of Stock Items',
-        value: data.value?.outOfStockCount?.toLocaleString() ?? '-',
-        icon: PackageX,
-        avatarClass: 'bg-slate-100 text-slate-700',
-    },
-    {
-        title: "Today's Sales",
-        value: data.value?.todaySalesCount?.toLocaleString() ?? '-',
-        icon: ShoppingCart,
-        avatarClass: 'bg-emerald-50 text-emerald-600',
-    },
-    ...(showsMoney.value
-        ? [
-              {
-                  title: "Today's Revenue",
-                  value: formatCurrency(data.value?.todayRevenue ?? 0),
-                  icon: Banknote,
-                  avatarClass: 'bg-amber-50 text-amber-600',
-              },
-          ]
-        : []),
-]);
+type StatKey =
+    | 'expiring'
+    | 'products'
+    | 'lowStock'
+    | 'outOfStock'
+    | 'todaySales'
+    | 'todayRevenue';
+
+interface Stat {
+    key: StatKey;
+    title: string;
+    value: string;
+    icon: Component;
+    tone: 'neutral' | 'warning' | 'danger';
+    /** Only for roles that may open the list behind the tile. */
+    to?: RouteLocationRaw;
+}
+
+/** Tests mount the view without a router: no links then. */
+const hasRouter = inject(routerKey, null) !== null;
+
+function count(n: number | undefined): string {
+    return n === undefined ? '-' : n.toLocaleString();
+}
+
+/** Warning or danger only while something needs attention. */
+function attention(
+    n: number | undefined,
+    tone: 'warning' | 'danger',
+): Stat['tone'] {
+    return n !== undefined && n > 0 ? tone : 'neutral';
+}
+
+/** Where each tile's list lives, for the roles that may open it. */
+const tileLinks = computed<Partial<Record<StatKey, RouteLocationRaw>>>(() =>
+    hasRouter && canOpenInventory.value
+        ? {
+              expiring: { name: 'Inventories', query: { expiring: 'true' } },
+              lowStock: { name: 'Inventories', query: { lowStock: 'true' } },
+          }
+        : {},
+);
+
+const stats = computed<Stat[]>(() => {
+    const d = data.value;
+    const list: Stat[] = [
+        {
+            key: 'expiring',
+            title: 'Expiring / expired batches',
+            value: count(d?.expiringBatchCount),
+            icon: AlertCircle,
+            tone: attention(d?.expiringBatchCount, 'warning'),
+        },
+        {
+            key: 'products',
+            title: 'Total Products',
+            value: count(d?.totalProducts),
+            icon: Package,
+            tone: 'neutral',
+        },
+        {
+            key: 'lowStock',
+            title: 'Low Stock Items',
+            value: count(d?.lowStockCount),
+            icon: AlertCircle,
+            tone: attention(d?.lowStockCount, 'warning'),
+        },
+        {
+            key: 'outOfStock',
+            title: 'Out of Stock Items',
+            value: count(d?.outOfStockCount),
+            icon: PackageX,
+            tone: attention(d?.outOfStockCount, 'danger'),
+        },
+        {
+            key: 'todaySales',
+            title: "Today's Sales",
+            value: count(d?.todaySalesCount),
+            icon: ShoppingCart,
+            tone: 'neutral',
+        },
+    ];
+    // An ADMIN's revenue skeleton holds its place during the first load,
+    // so the grid does not reflow; no figure shows before the answer.
+    if (showsMoney.value || (!d && authStore.isAdmin && loading.value)) {
+        list.push({
+            key: 'todayRevenue',
+            title: "Today's Revenue",
+            value: formatCurrency(d?.todayRevenue ?? 0),
+            icon: Banknote,
+            tone: 'neutral',
+        });
+    }
+    return list.map((stat) => ({ ...stat, to: tileLinks.value[stat.key] }));
+});
+
+/** Skeletons until the first answer; a reload keeps the last figures. */
+const tilesLoading = computed(() => loading.value && !data.value);
+
+/**
+ * The sales table shows for an ADMIN while the first load runs (its
+ * skeleton), then exactly when the API sent money figures. A failed
+ * load has one error and Retry: the page banner.
+ */
+const showsSalesTable = computed(() =>
+    data.value ? showsMoney.value : authStore.isAdmin && loading.value,
+);
+
+const saleHeaders: TableHeader[] = [
+    { key: 'cashier', title: 'Cashier' },
+    { key: 'amount', title: 'Amount', align: 'right' },
+    { key: 'paymentType', title: 'Payment' },
+    { key: 'createdAt', title: 'Date' },
+];
+
+const saleRows = computed(() =>
+    recentSales.value.map((sale) => ({
+        id: sale._id,
+        cashier: sale.cashier?.name ?? 'N/A',
+        amount: formatCurrency(sale.amount ?? 0),
+        paymentType: sale.paymentType,
+        status: sale.status,
+        createdAt: formatDate(sale.createdAt),
+    })),
+);
 
 const recentSales = computed(() => data.value?.recentSales ?? []);
 
@@ -344,13 +410,13 @@ function timestamp(iso: string): number {
 function dotClass(color: string) {
     switch (color) {
         case 'success':
-            return 'bg-emerald-500';
+            return 'bg-success-fg';
         case 'info':
-            return 'bg-sky-500';
+            return 'bg-info-fg';
         case 'warning':
-            return 'bg-amber-500';
+            return 'bg-warning-fg';
         default:
-            return 'bg-slate-400';
+            return 'bg-line-strong';
     }
 }
 
