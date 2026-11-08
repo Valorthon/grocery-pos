@@ -1,12 +1,12 @@
 <template>
     <header
-        class="w-full bg-white border-b border-slate-200 h-16 shrink-0 z-30 flex items-center justify-between px-2 sm:px-4"
+        class="w-full bg-surface border-b border-line h-16 shrink-0 z-30 flex items-center justify-between px-2 sm:px-4"
     >
         <div class="flex items-center gap-2 sm:gap-3">
             <!-- Below lg the sidebar is a drawer (#89): its menu button. -->
             <button
                 type="button"
-                class="lg:hidden min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors focus-ring"
+                class="lg:hidden min-h-11 min-w-11 flex items-center justify-center rounded-lg text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 aria-label="Open navigation menu"
                 aria-controls="admin-sidebar"
                 :aria-expanded="drawerOpen"
@@ -39,34 +39,44 @@
             <button
                 v-if="canAddProduct"
                 type="button"
-                class="w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg lg:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 title="Add Product"
                 aria-label="Add Product"
                 @click="router.push({ name: 'Products/Add' })"
             >
-                <TagPlus class="w-5 h-5" />
+                <TagPlus class="w-5 h-5 shrink-0" aria-hidden="true" />
+                <span class="hidden lg:inline whitespace-nowrap"
+                    >Add Product</span
+                >
             </button>
 
             <button
                 v-if="canRestock"
                 type="button"
-                class="w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg lg:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 title="Restock Inventory"
                 aria-label="Restock Inventory"
                 @click="router.push({ name: 'Restocks/Add' })"
             >
-                <PackagePlus class="w-5 h-5" />
+                <PackagePlus class="w-5 h-5 shrink-0" aria-hidden="true" />
+                <span class="hidden lg:inline whitespace-nowrap">Restock</span>
             </button>
 
             <button
                 v-if="canAdjust"
                 type="button"
-                class="w-11 h-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg lg:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 title="Adjust Stock"
                 aria-label="Adjust Stock"
                 @click="router.push({ name: 'Adjustments/Add' })"
             >
-                <SlidersHorizontal class="w-5 h-5" />
+                <SlidersHorizontal
+                    class="w-5 h-5 shrink-0"
+                    aria-hidden="true"
+                />
+                <span class="hidden lg:inline whitespace-nowrap"
+                    >Adjust Stock</span
+                >
             </button>
 
             <UserProfileMenu variant="bar" />

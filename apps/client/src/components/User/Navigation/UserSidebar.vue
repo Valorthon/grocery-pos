@@ -28,7 +28,7 @@
                 id="admin-sidebar"
                 ref="aside"
                 data-testid="admin-sidebar"
-                class="bg-white border-r border-slate-200/90 flex flex-col shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
+                class="bg-leaf-900 border-r border-leaf-800 flex flex-col shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
                 :class="[
                     rail ? 'lg:w-20' : 'lg:w-64',
                     drawerOpen ? 'translate-x-0' : '-translate-x-full',
@@ -41,7 +41,7 @@
             >
                 <div class="flex-1 overflow-y-auto">
                     <div
-                        class="h-16 flex items-center border-b border-slate-100 px-4"
+                        class="h-16 flex items-center border-b border-leaf-800 px-4"
                         :class="rail ? 'justify-center' : 'justify-between'"
                     >
                         <div
@@ -50,12 +50,12 @@
                         >
                             <div class="flex items-center gap-2.5 min-w-0">
                                 <div
-                                    class="w-9 h-9 rounded-xl bg-leaf-600/10 text-leaf-600 flex items-center justify-center border border-leaf-600/20 shrink-0"
+                                    class="w-9 h-9 rounded-xl bg-leaf-800 text-leaf-100 flex items-center justify-center border border-leaf-700 shrink-0"
                                 >
                                     <Store class="w-5 h-5" />
                                 </div>
                                 <span
-                                    class="text-base font-extrabold tracking-tight text-slate-900 truncate"
+                                    class="text-base font-extrabold tracking-tight text-white truncate"
                                 >
                                     GroceryPOS
                                 </span>
@@ -63,7 +63,7 @@
                             <button
                                 v-if="isLarge"
                                 type="button"
-                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-leaf-200 hover:text-white hover:bg-leaf-800 transition-colors shrink-0 focus-ring-inverse"
                                 aria-label="Collapse sidebar"
                                 data-testid="admin-sidebar-collapse"
                                 @click="collapsed = true"
@@ -76,7 +76,7 @@
                             <button
                                 v-else
                                 type="button"
-                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors shrink-0 focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-leaf-200 hover:text-white hover:bg-leaf-800 transition-colors shrink-0 focus-ring-inverse"
                                 aria-label="Close navigation menu"
                                 data-testid="admin-sidebar-close"
                                 @click="closeDrawer"
@@ -88,7 +88,7 @@
                         <button
                             v-else
                             type="button"
-                            class="w-11 h-11 rounded-xl bg-leaf-600/10 text-leaf-600 hover:bg-leaf-600 hover:text-white flex items-center justify-center border border-leaf-600/20 hover:border-leaf-600 transition-all focus-ring"
+                            class="w-11 h-11 rounded-xl bg-leaf-800 text-leaf-100 hover:bg-leaf-700 hover:text-white flex items-center justify-center border border-leaf-700 transition-all focus-ring-inverse"
                             aria-label="Expand sidebar"
                             data-testid="admin-sidebar-expand"
                             @click="collapsed = false"
@@ -97,7 +97,7 @@
                         </button>
                     </div>
 
-                    <nav class="p-3 space-y-1">
+                    <nav class="px-3 pb-3 space-y-0.5">
                         <template
                             v-for="section in sections"
                             :key="section.title"
@@ -107,7 +107,7 @@
                                     !rail &&
                                     section.items.some((i) => i.visible)
                                 "
-                                class="px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-400"
+                                class="px-3 pt-4 pb-1.5 text-xs font-bold uppercase tracking-wider text-leaf-300"
                             >
                                 {{ section.title }}
                             </div>
@@ -126,14 +126,14 @@
                                 <a
                                     v-show="item.visible"
                                     :href="href"
-                                    class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
+                                    class="w-full flex items-center rounded-xl transition-all group relative focus-ring-inverse"
                                     :class="[
                                         rail
                                             ? 'justify-center p-3'
                                             : 'justify-between min-h-11 px-3.5 py-2.5',
                                         isActive(item.name)
-                                            ? 'bg-leaf-600 text-white font-bold shadow-xs'
-                                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 font-semibold',
+                                            ? 'bg-leaf-700 text-white font-bold'
+                                            : 'text-leaf-100 hover:bg-leaf-800 hover:text-white font-semibold',
                                     ]"
                                     :title="rail ? item.title : undefined"
                                     :aria-label="rail ? item.title : undefined"
@@ -151,7 +151,7 @@
                                             :class="
                                                 isActive(item.name)
                                                     ? 'text-white'
-                                                    : 'text-slate-500 group-hover:text-slate-900'
+                                                    : 'text-leaf-300 group-hover:text-white'
                                             "
                                         />
                                         <span
@@ -164,7 +164,7 @@
                                                 item.name === 'LowStock' &&
                                                 !rail
                                             "
-                                            class="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800"
+                                            class="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-bold text-danger-fg num"
                                             aria-label="Low stock count"
                                             >{{
                                                 stockAlerts.count ?? '?'
@@ -178,12 +178,12 @@
                     <div
                         v-if="canViewInventory && stockAlerts.error && !rail"
                         role="alert"
-                        class="px-3 text-xs text-red-700"
+                        class="px-3 text-xs text-danger-border"
                     >
                         Stock alert count unavailable.
                         <button
                             type="button"
-                            class="min-h-11 underline"
+                            class="min-h-11 underline focus-ring-inverse"
                             @click="stockAlerts.refresh"
                         >
                             Retry
@@ -191,8 +191,11 @@
                     </div>
                 </div>
 
-                <div class="p-3 border-t border-slate-200/80">
-                    <UserProfileMenu :variant="rail ? 'icon' : 'box'" />
+                <div class="p-3 border-t border-leaf-800">
+                    <UserProfileMenu
+                        :variant="rail ? 'icon' : 'box'"
+                        tone="dark"
+                    />
                 </div>
             </aside>
         </div>
@@ -203,19 +206,26 @@
 import { computed, ref, useTemplateRef, watch } from 'vue';
 import { RouterLink, type RouteLocationRaw, useRoute } from 'vue-router';
 import {
-    ClipboardEdit,
+    ChartColumn,
+    ClipboardCheck,
+    ClipboardList,
     Clock,
     LayoutDashboard,
-    List,
     Package,
+    PackagePlus,
     PanelLeftClose,
     Receipt,
+    ScrollText,
+    Settings,
     Shield,
+    SlidersHorizontal,
     Store,
+    Tag,
+    Tags,
+    TriangleAlert,
     Truck,
     Users,
     X,
-    ClipboardList,
 } from '@lucide/vue';
 import { useStockAlertsStore } from '@/stores/stockAlerts';
 import { useAuthStore, Role } from '@/stores/auth';
@@ -286,9 +296,10 @@ const canViewUsers = computed(
     () => authStore.hasRole(Role.UserManager) || authStore.isAdmin,
 );
 
+/** Grouped by task (#160); who sees an entry is unchanged. */
 const sections = computed(() => [
     {
-        title: 'Main',
+        title: 'Overview',
         items: [
             {
                 name: 'Dashboard',
@@ -296,24 +307,11 @@ const sections = computed(() => [
                 icon: LayoutDashboard,
                 visible: canViewDashboard(authStore.user?.roles ?? []),
             },
-            {
-                name: 'Settings',
-                title: 'Store Settings',
-                icon: Receipt,
-                visible: authStore.isAdmin,
-            },
-            {
-                name: 'AuditLog',
-                title: 'Audit Log',
-                icon: Receipt,
-                visible: authStore.isAdmin,
-            },
-            {
-                name: 'Reports',
-                title: 'Sales Reports',
-                icon: Receipt,
-                visible: authStore.isAdmin,
-            },
+        ],
+    },
+    {
+        title: 'Sales',
+        items: [
             {
                 name: 'SalesHistory',
                 title: 'Sales History',
@@ -326,33 +324,21 @@ const sections = computed(() => [
                 icon: Clock,
                 visible: authStore.isAdmin,
             },
+            {
+                name: 'Reports',
+                title: 'Sales Reports',
+                icon: ChartColumn,
+                visible: authStore.isAdmin,
+            },
         ],
     },
     {
-        title: 'Inventory Management',
+        title: 'Stock',
         items: [
-            {
-                name: 'Suppliers',
-                title: 'Suppliers',
-                icon: Truck,
-                visible: authStore.isAdmin || authStore.hasRole(Role.Restocker),
-            },
-            {
-                name: 'PurchaseOrders',
-                title: 'Purchase Orders',
-                icon: ClipboardList,
-                visible: authStore.isAdmin || authStore.hasRole(Role.Restocker),
-            },
-            {
-                name: 'Categories',
-                title: 'Categories',
-                icon: List,
-                visible: authStore.isAdmin,
-            },
             {
                 name: 'Products',
                 title: 'Product List',
-                icon: List,
+                icon: Tag,
                 visible: canViewProducts.value,
             },
             {
@@ -364,26 +350,49 @@ const sections = computed(() => [
             {
                 name: 'LowStock',
                 title: 'Low Stock',
-                icon: Package,
+                icon: TriangleAlert,
                 visible: canViewInventory.value,
-            },
-            {
-                name: 'Restocks',
-                title: 'Restock History',
-                icon: Truck,
-                visible: canViewRestocks.value,
             },
             {
                 name: 'StockCounts',
                 title: 'Stock Counts',
-                icon: ClipboardEdit,
+                icon: ClipboardCheck,
                 visible: canViewAdjustments.value,
             },
             {
                 name: 'Adjustments',
                 title: 'Adjustment History',
-                icon: ClipboardEdit,
+                icon: SlidersHorizontal,
                 visible: canViewAdjustments.value,
+            },
+        ],
+    },
+    {
+        title: 'Purchasing',
+        items: [
+            {
+                name: 'PurchaseOrders',
+                title: 'Purchase Orders',
+                icon: ClipboardList,
+                visible: canViewRestocks.value,
+            },
+            {
+                name: 'Restocks',
+                title: 'Restock History',
+                icon: PackagePlus,
+                visible: canViewRestocks.value,
+            },
+            {
+                name: 'Suppliers',
+                title: 'Suppliers',
+                icon: Truck,
+                visible: canViewRestocks.value,
+            },
+            {
+                name: 'Categories',
+                title: 'Categories',
+                icon: Tags,
+                visible: authStore.isAdmin,
             },
         ],
     },
@@ -401,6 +410,18 @@ const sections = computed(() => [
                 title: 'Roles',
                 icon: Shield,
                 visible: canViewUsers.value,
+            },
+            {
+                name: 'AuditLog',
+                title: 'Audit Log',
+                icon: ScrollText,
+                visible: authStore.isAdmin,
+            },
+            {
+                name: 'Settings',
+                title: 'Store Settings',
+                icon: Settings,
+                visible: authStore.isAdmin,
             },
         ],
     },

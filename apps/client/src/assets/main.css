@@ -164,6 +164,17 @@
     }
 }
 
+/*
+ * The same ring on a dark leaf surface (the admin sidebar, #160), where
+ * leaf-500 is under 3:1: use `focus-ring-inverse` there instead.
+ */
+@utility focus-ring-inverse {
+    &:focus-visible {
+        outline: 2px solid var(--color-leaf-200);
+        outline-offset: 2px;
+    }
+}
+
 body {
     font-family: var(--font-sans);
     background-color: var(--color-paper);
