@@ -383,3 +383,18 @@ describe('stacked BaseModals and focus (issue #22)', () => {
         expect(document.activeElement).toBe(trigger);
     });
 });
+
+describe('BaseModal tokens (#156)', () => {
+    it('draws the panel on surface tokens, with no raw palette classes', async () => {
+        await mountOne();
+        const [dialog] = dialogs();
+        expect(dialog.className.split(/\s+/)).toEqual(
+            expect.arrayContaining([
+                'bg-surface',
+                'rounded-card',
+                'shadow-overlay',
+            ]),
+        );
+        expect(document.body.innerHTML).not.toMatch(/\b(?:slate|red)-\d/);
+    });
+});

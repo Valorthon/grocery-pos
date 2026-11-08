@@ -1,24 +1,31 @@
 <template>
     <div
-        class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs"
+        class="bg-surface rounded-card border border-line overflow-hidden shadow-card"
     >
-        <div class="overflow-x-auto">
+        <!--
+            The header sticks while the rows scroll (#156): sticky needs
+            this box to be the vertical scroller too, hence the max height.
+        -->
+        <div class="overflow-auto max-h-[70vh]">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr
-                        class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
+                        class="text-xs font-semibold uppercase tracking-wider text-muted"
                     >
                         <th
                             v-for="header in headers"
                             :key="header.key"
-                            :class="['py-3 px-5', alignClass(header.align)]"
+                            :class="[
+                                'sticky top-0 z-10 py-3 px-5 bg-paper border-b border-line',
+                                alignClass(header.align),
+                            ]"
                         >
                             {{ header.title }}
                         </th>
                     </tr>
                 </thead>
 
-                <tbody class="divide-y divide-slate-100 text-xs sm:text-sm">
+                <tbody class="divide-y divide-line text-xs sm:text-sm text-ink">
                     <template v-if="loading">
                         <tr v-for="i in skeletonRows" :key="`sk-${i}`">
                             <td
@@ -27,7 +34,7 @@
                                 class="py-3.5 px-5"
                             >
                                 <div
-                                    class="h-4 bg-slate-100 rounded animate-pulse"
+                                    class="h-4 bg-line rounded animate-pulse"
                                     :style="{
                                         width: `${50 + ((i * 7) % 40)}%`,
                                     }"
@@ -49,10 +56,10 @@
                                 >
                                     <AlertCircle
                                         :size="32"
-                                        class="text-red-400"
+                                        class="text-danger-fg"
                                         aria-hidden="true"
                                     />
-                                    <p class="font-bold text-slate-800 text-sm">
+                                    <p class="font-bold text-ink text-sm">
                                         {{ error }}
                                     </p>
                                     <BaseButton
@@ -72,16 +79,17 @@
                         <tr>
                             <td
                                 :colspan="headers.length"
-                                class="py-16 text-center text-slate-500"
+                                class="py-16 text-center text-muted"
                             >
                                 <div class="flex flex-col items-center gap-2">
                                     <component
                                         :is="emptyIcon"
-                                        v-if="emptyIcon"
+                                        data-testid="table-empty-icon"
                                         :size="32"
-                                        class="text-slate-300"
+                                        class="text-muted"
+                                        aria-hidden="true"
                                     />
-                                    <p class="font-bold text-slate-800 text-sm">
+                                    <p class="font-bold text-ink text-sm">
                                         {{ emptyText }}
                                     </p>
                                 </div>
@@ -94,7 +102,7 @@
                             v-for="(row, index) in items"
                             :key="row.id ?? index"
                             :class="[
-                                'hover:bg-slate-50/80 transition-colors',
+                                'hover:bg-paper transition-colors',
                                 rowClick ? 'cursor-pointer' : '',
                             ]"
                             @click="rowClick && emit('click:row', row)"
@@ -124,30 +132,20 @@
         <!-- No pager beside an error: its page count is from the last load. -->
         <div
             v-if="itemsLength > 0 && !error"
-            class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-slate-100"
+            class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t border-line"
         >
-            <div class="flex items-center gap-2 text-xs text-slate-500">
+            <div class="flex items-center gap-2 text-xs text-muted">
                 <label :for="rowsPerPageId">Rows per page:</label>
-                <select
+                <BaseSelect
                     :id="rowsPerPageId"
-                    :value="itemsPerPage"
-                    class="px-2 py-1 rounded-lg border border-slate-200 bg-white text-xs font-bold cursor-pointer"
-                    @change="
-                        emit(
-                            'update:itemsPerPage',
-                            Number(($event.target as HTMLSelectElement).value),
-                        )
+                    class="w-20"
+                    :model-value="itemsPerPage"
+                    :options="pageSizeOptions"
+                    @update:model-value="
+                        emit('update:itemsPerPage', Number($event))
                     "
-                >
-                    <option
-                        v-for="n in itemsPerPageOptions"
-                        :key="n"
-                        :value="n"
-                    >
-                        {{ n }}
-                    </option>
-                </select>
-                <span>
+                />
+                <span class="num">
                     {{ rangeLabel }}
                 </span>
             </div>
@@ -161,7 +159,7 @@
                 >
                     Prev
                 </BaseButton>
-                <span class="text-xs font-bold text-slate-700">
+                <span class="text-xs font-bold text-ink num">
                     Page {{ page }} / {{ totalPages }}
                 </span>
                 <BaseButton
@@ -179,8 +177,9 @@
 
 <script setup lang="ts" generic="T extends TableRow">
 import { computed, useId } from 'vue';
-import { AlertCircle, RotateCw } from '@lucide/vue';
+import { AlertCircle, Inbox, RotateCw } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
+import BaseSelect from './BaseSelect.vue';
 import type { Component } from 'vue';
 import type { TableHeader, TableRow } from './types';
 
@@ -213,7 +212,7 @@ const props = withDefaults(
         itemsPerPage: 5,
         itemsPerPageOptions: () => [5, 10, 25, 50],
         skeletonRows: 5,
-        emptyIcon: undefined,
+        emptyIcon: () => Inbox,
     },
 );
 
@@ -239,13 +238,18 @@ function cell(row: T, key: string): unknown {
 function alignClass(align?: string): string {
     switch (align) {
         case 'right':
-            return 'text-right';
+            // Numbers line up by digit in a right-aligned column (#156).
+            return 'text-right num';
         case 'center':
             return 'text-center';
         default:
             return 'text-left';
     }
 }
+
+const pageSizeOptions = computed(() =>
+    props.itemsPerPageOptions.map((n) => ({ label: String(n), value: n })),
+);
 
 const totalPages = computed(() =>
     Math.max(1, Math.ceil(props.itemsLength / props.itemsPerPage)),

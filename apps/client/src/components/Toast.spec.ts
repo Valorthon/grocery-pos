@@ -247,3 +247,28 @@ describe('Toast placement (#85)', () => {
         expect(stack().contains(error)).toBe(true);
     });
 });
+
+describe('ToastItem tokens (#156)', () => {
+    it('colours each kind with the status tokens', async () => {
+        const ui = useUIStore();
+        ui.queueMessage(Color.SUCCESS, 'ok');
+        ui.queueMessage(Color.ERROR, 'bad');
+        ui.queueMessage(Color.INFO, 'fyi');
+        await nextTick();
+        const cls = (color: string) =>
+            toasts()
+                .find((t) => t.dataset.color === color)!
+                .className.split(/\s+/);
+        const [ok, bad, fyi] = ['success', 'error', 'info'].map(cls);
+        expect(ok).toEqual(
+            expect.arrayContaining(['bg-success-bg', 'text-success-fg']),
+        );
+        expect(bad).toEqual(
+            expect.arrayContaining(['bg-danger-bg', 'text-danger-fg']),
+        );
+        expect(fyi).toEqual(expect.arrayContaining(['bg-ink', 'text-surface']));
+        for (const t of toasts()) {
+            expect(t.outerHTML).not.toMatch(/\b(?:slate|red|emerald)-\d/);
+        }
+    });
+});

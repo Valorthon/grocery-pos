@@ -11,7 +11,7 @@
             <div
                 v-if="modelValue"
                 ref="backdrop"
-                class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/40 backdrop-blur-sm"
+                class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-ink/40 backdrop-blur-sm"
                 @mousedown.self="dismiss"
             >
                 <Transition
@@ -36,7 +36,7 @@
                         "
                         tabindex="-1"
                         :class="[
-                            'bg-white rounded-2xl w-full shadow-2xl border border-slate-200 flex flex-col overflow-hidden focus:outline-none',
+                            'bg-surface rounded-card w-full shadow-overlay border border-line flex flex-col overflow-hidden focus:outline-none',
                             scrollable ? 'max-h-[92vh]' : '',
                         ]"
                         :style="{ maxWidth }"
@@ -45,7 +45,7 @@
                             v-if="
                                 title || subtitle || closable || $slots.header
                             "
-                            class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50"
+                            class="flex items-center justify-between px-5 py-3.5 border-b border-line bg-paper"
                         >
                             <div v-if="$slots.header" :id="titleId">
                                 <slot name="header" />
@@ -54,14 +54,14 @@
                                 <h2
                                     v-if="title"
                                     :id="titleId"
-                                    class="text-base sm:text-lg font-extrabold text-slate-900"
+                                    class="font-display text-base sm:text-lg font-bold text-ink"
                                 >
                                     {{ title }}
                                 </h2>
                                 <p
                                     v-if="subtitle"
                                     :id="subtitleId"
-                                    class="text-xs text-slate-500 mt-0.5"
+                                    class="text-xs text-muted mt-0.5"
                                 >
                                     {{ subtitle }}
                                 </p>
@@ -75,7 +75,7 @@
                                 type="button"
                                 aria-label="Close"
                                 data-modal-close
-                                class="w-11 h-11 -my-2 -mr-2 ml-2 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors shrink-0 focus-ring"
+                                class="w-11 h-11 -my-2 -mr-2 ml-2 rounded-control flex items-center justify-center text-muted hover:text-ink hover:bg-line transition-colors shrink-0 focus-ring"
                                 @click="dismiss"
                             >
                                 <X :size="16" aria-hidden="true" />
@@ -93,7 +93,7 @@
 
                         <div
                             v-if="$slots.footer"
-                            class="px-4 sm:px-5 py-3.5 border-t border-slate-100 bg-slate-50 flex gap-2.5 items-center"
+                            class="px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex gap-2.5 items-center"
                         >
                             <slot name="footer" />
                         </div>
