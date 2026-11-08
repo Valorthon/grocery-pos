@@ -57,10 +57,13 @@ describe('admin page frame (#159)', () => {
     it.each(ADMIN_VIEWS)(
         '%s has one PageFrame (its one h1) and no h1 of its own',
         (file) => {
-            const text = readFileSync(resolve(__dirname, '..', file), 'utf8');
+            const text = readFileSync(
+                resolve(__dirname, '..', file),
+                'utf8',
+            ).replace(/<!--[\s\S]*?-->/g, '');
             expect(text.match(/<PageFrame\b/g)).toHaveLength(1);
             expect(text).not.toMatch(/<h1\b/);
-            expect(text).not.toMatch(/<PageCard\s+title=/);
+            expect(text).not.toMatch(/<PageCard\b[^>]*\btitle=/s);
         },
     );
 });

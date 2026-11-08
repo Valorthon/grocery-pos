@@ -9,49 +9,53 @@
                     {{ error }} <BaseButton @click="refresh">Retry</BaseButton>
                 </p>
                 <p v-if="loading">Loading suppliers…</p>
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="text-left">Supplier</th>
-                            <th>Contact</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in suppliers"
-                            :key="row._id"
-                            class="border-t"
-                        >
-                            <td>{{ row.name }}</td>
-                            <td>
-                                {{ row.contactPerson }} {{ row.phone }}
-                                {{ row.email }}
-                            </td>
-                            <td>{{ row.isActive ? 'Active' : 'Archived' }}</td>
-                            <td class="flex gap-2 py-2">
-                                <BaseButton
-                                    :disabled="saving"
-                                    @click="begin(row)"
-                                    >Edit</BaseButton
-                                ><BaseButton
-                                    variant="outline"
-                                    :disabled="saving"
-                                    @click="toggle(row)"
-                                    >{{
-                                        row.isActive ? 'Archive' : 'Restore'
-                                    }}</BaseButton
-                                ><BaseButton
-                                    variant="outline"
-                                    :disabled="saving"
-                                    @click="remove(row)"
-                                    >Delete</BaseButton
-                                >
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr>
+                                <th class="text-left">Supplier</th>
+                                <th>Contact</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in suppliers"
+                                :key="row._id"
+                                class="border-t"
+                            >
+                                <td>{{ row.name }}</td>
+                                <td>
+                                    {{ row.contactPerson }} {{ row.phone }}
+                                    {{ row.email }}
+                                </td>
+                                <td>
+                                    {{ row.isActive ? 'Active' : 'Archived' }}
+                                </td>
+                                <td class="flex gap-2 py-2">
+                                    <BaseButton
+                                        :disabled="saving"
+                                        @click="begin(row)"
+                                        >Edit</BaseButton
+                                    ><BaseButton
+                                        variant="outline"
+                                        :disabled="saving"
+                                        @click="toggle(row)"
+                                        >{{
+                                            row.isActive ? 'Archive' : 'Restore'
+                                        }}</BaseButton
+                                    ><BaseButton
+                                        variant="outline"
+                                        :disabled="saving"
+                                        @click="remove(row)"
+                                        >Delete</BaseButton
+                                    >
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <BaseModal
                 v-model="open"

@@ -141,100 +141,102 @@
                         {{ validation }}
                     </p>
 
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr>
-                                <th class="text-left">Product</th>
-                                <th class="text-right">Ordered</th>
-                                <th v-if="!isDraft" class="text-right">
-                                    Received
-                                </th>
-                                <th v-if="!isDraft" class="text-right">
-                                    Outstanding
-                                </th>
-                                <th class="text-right">Expected cost</th>
-                                <th v-if="isDraft">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody v-if="isDraft">
-                            <tr
-                                v-for="(line, index) in draft"
-                                :key="line.product"
-                                class="border-t"
-                            >
-                                <td>{{ line.name }} ({{ line.EAN }})</td>
-                                <td class="text-right">
-                                    <BaseInput
-                                        v-model="line.quantity"
-                                        :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
-                                        :inputmode="
-                                            decimalUnit(line.unit)
-                                                ? 'decimal'
-                                                : 'numeric'
-                                        "
-                                        :error="lineErrors[index]?.quantity"
-                                        :disabled="busy"
-                                    />
-                                </td>
-                                <td class="text-right">
-                                    <BaseInput
-                                        v-model="line.cost"
-                                        :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
-                                        inputmode="decimal"
-                                        :error="lineErrors[index]?.cost"
-                                        :disabled="busy"
-                                    />
-                                </td>
-                                <td class="text-center">
-                                    <BaseButton
-                                        size="sm"
-                                        variant="outline"
-                                        :disabled="busy"
-                                        @click="removeLine(index)"
-                                        >Remove</BaseButton
-                                    >
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tbody v-else-if="current">
-                            <tr
-                                v-for="line in current.lines"
-                                :key="line._id"
-                                class="border-t"
-                            >
-                                <td>{{ line.name }} ({{ line.EAN }})</td>
-                                <td class="text-right">
-                                    {{
-                                        formatQuantity(
-                                            line.orderedQty,
-                                            line.unit,
-                                        )
-                                    }}
-                                </td>
-                                <td class="text-right">
-                                    {{
-                                        formatQuantity(
-                                            line.receivedQty,
-                                            line.unit,
-                                        )
-                                    }}
-                                </td>
-                                <td class="text-right">
-                                    {{
-                                        formatQuantity(
-                                            line.outstandingQty,
-                                            line.unit,
-                                        )
-                                    }}
-                                </td>
-                                <td class="text-right">
-                                    {{ formatCurrency(line.expectedCost) }}/{{
-                                        unitLabel(line.unit)
-                                    }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Product</th>
+                                    <th class="text-right">Ordered</th>
+                                    <th v-if="!isDraft" class="text-right">
+                                        Received
+                                    </th>
+                                    <th v-if="!isDraft" class="text-right">
+                                        Outstanding
+                                    </th>
+                                    <th class="text-right">Expected cost</th>
+                                    <th v-if="isDraft">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody v-if="isDraft">
+                                <tr
+                                    v-for="(line, index) in draft"
+                                    :key="line.product"
+                                    class="border-t"
+                                >
+                                    <td>{{ line.name }} ({{ line.EAN }})</td>
+                                    <td class="text-right">
+                                        <BaseInput
+                                            v-model="line.quantity"
+                                            :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
+                                            :inputmode="
+                                                decimalUnit(line.unit)
+                                                    ? 'decimal'
+                                                    : 'numeric'
+                                            "
+                                            :error="lineErrors[index]?.quantity"
+                                            :disabled="busy"
+                                        />
+                                    </td>
+                                    <td class="text-right">
+                                        <BaseInput
+                                            v-model="line.cost"
+                                            :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
+                                            inputmode="decimal"
+                                            :error="lineErrors[index]?.cost"
+                                            :disabled="busy"
+                                        />
+                                    </td>
+                                    <td class="text-center">
+                                        <BaseButton
+                                            size="sm"
+                                            variant="outline"
+                                            :disabled="busy"
+                                            @click="removeLine(index)"
+                                            >Remove</BaseButton
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody v-else-if="current">
+                                <tr
+                                    v-for="line in current.lines"
+                                    :key="line._id"
+                                    class="border-t"
+                                >
+                                    <td>{{ line.name }} ({{ line.EAN }})</td>
+                                    <td class="text-right">
+                                        {{
+                                            formatQuantity(
+                                                line.orderedQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td class="text-right">
+                                        {{
+                                            formatQuantity(
+                                                line.receivedQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td class="text-right">
+                                        {{
+                                            formatQuantity(
+                                                line.outstandingQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td class="text-right">
+                                        {{
+                                            formatCurrency(line.expectedCost)
+                                        }}/{{ unitLabel(line.unit) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                     <p class="text-sm text-right font-bold">
                         Expected total:
                         {{

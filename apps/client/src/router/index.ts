@@ -57,7 +57,7 @@ const routes: RouteRecordRaw[] = [
                 path: 'orders',
                 name: 'Sales',
                 component: () => import('@/views/User/Sales/Index.vue'),
-                meta: { title: 'Orders & transactions' },
+                meta: { title: 'Sales history' },
             },
         ],
     },
@@ -132,7 +132,7 @@ const routes: RouteRecordRaw[] = [
                 name: 'Products',
                 component: () => import('@/views/User/Products/Index.vue'),
                 meta: {
-                    title: 'Products',
+                    title: 'Product list',
                     roles: [Role.Restocker, Role.Adjuster, Role.Admin],
                 },
             },
@@ -229,7 +229,7 @@ const routes: RouteRecordRaw[] = [
                 name: 'Roles',
                 component: () => import('@/views/User/Roles/Index.vue'),
                 meta: {
-                    title: 'Roles & permissions',
+                    title: 'Roles',
                     roles: [Role.UserManager, Role.Admin],
                 },
             },

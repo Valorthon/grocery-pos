@@ -18,13 +18,14 @@ const api = vi.hoisted(() => ({
     post: vi.fn<ApiSend>(),
 }));
 vi.mock('@/axios', () => ({ default: api }));
+const routeState = vi.hoisted(() => ({
+    name: 'SalesHistory',
+    meta: { title: 'Sales history' },
+    query: {},
+}));
 vi.mock('vue-router', () => ({
     useRouter: () => ({ push: vi.fn() }),
-    useRoute: () => ({
-        name: 'X',
-        meta: { title: 'Sales history' },
-        query: {},
-    }),
+    useRoute: () => routeState,
 }));
 
 const OWN_SHIFT = 'shift-own';
@@ -584,5 +585,35 @@ describe('sales-history applied filters and receipt identity', () => {
             cashier: 'user',
             category: 'cat',
         });
+    });
+});
+
+describe('page frame per layout (#159)', () => {
+    afterEach(() => {
+        routeState.name = 'SalesHistory';
+    });
+
+    async function rootClasses(name: string) {
+        routeState.name = name;
+        serve(CASH_SALE, []);
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+        expect(host.querySelectorAll('h1')).toHaveLength(1);
+        return (host.firstElementChild as HTMLElement).classList;
+    }
+
+    it('scrolls itself in the seller layout, whose main does not scroll', async () => {
+        const classes = await rootClasses('Sales');
+        expect(classes).toContain('overflow-y-auto');
+        expect(classes).toContain('min-h-0');
+    });
+
+    it('leaves scrolling to the admin layout main', async () => {
+        const classes = await rootClasses('SalesHistory');
+        expect(classes).not.toContain('overflow-y-auto');
     });
 });

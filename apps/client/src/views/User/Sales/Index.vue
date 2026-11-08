@@ -1,7 +1,11 @@
 <template>
     <!-- The seller layout's main does not scroll; the admin one does. -->
-    <div :class="inSellerLayout ? 'h-full overflow-y-auto p-4 sm:p-6' : ''">
-        <PageFrame>
+    <div
+        :class="
+            inSellerLayout ? 'flex-1 min-h-0 overflow-y-auto p-4 sm:p-6' : ''
+        "
+    >
+        <PageFrame description="View transaction history">
             <template #actions>
                 <div
                     class="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl text-right"

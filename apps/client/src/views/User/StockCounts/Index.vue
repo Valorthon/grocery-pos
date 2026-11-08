@@ -69,36 +69,38 @@
                         reference point.
                     </p>
                     <p v-if="busy">Loading…</p>
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr>
-                                <th class="text-left">Opened</th>
-                                <th>Status</th>
-                                <th>Lines</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in rows"
-                                :key="row._id"
-                                class="border-t"
-                            >
-                                <td>
-                                    {{ formatStoreDateTime(row.createdAt) }}
-                                </td>
-                                <td>{{ row.status }}</td>
-                                <td>{{ row.lines.length }}</td>
-                                <td>
-                                    <BaseButton
-                                        :disabled="busy"
-                                        @click="load(row._id)"
-                                        >Open count</BaseButton
-                                    >
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Opened</th>
+                                    <th>Status</th>
+                                    <th>Lines</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="row in rows"
+                                    :key="row._id"
+                                    class="border-t"
+                                >
+                                    <td>
+                                        {{ formatStoreDateTime(row.createdAt) }}
+                                    </td>
+                                    <td>{{ row.status }}</td>
+                                    <td>{{ row.lines.length }}</td>
+                                    <td>
+                                        <BaseButton
+                                            :disabled="busy"
+                                            @click="load(row._id)"
+                                            >Open count</BaseButton
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                     <div class="flex items-center gap-3">
                         <BaseButton
                             :disabled="busy || page === 1"
@@ -139,116 +141,123 @@
                         @keydown.enter.prevent="focusBarcode"
                     />
                     <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead>
-                                <tr>
-                                    <th class="text-left">Product / batch</th>
-                                    <th>Opening</th>
-                                    <th>Current</th>
-                                    <th>Counted</th>
-                                    <th>Variance</th>
-                                    <th
-                                        v-if="
-                                            selected.status ===
-                                            StockCountStatus.SUBMITTED
-                                        "
-                                    >
-                                        Projected balance
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="line in selected.lines"
-                                    :key="line._id"
-                                    class="border-t"
-                                    :class="{
-                                        'bg-amber-50':
-                                            displayedVariance(line) !== null &&
-                                            displayedVariance(line) !== 0,
-                                    }"
-                                >
-                                    <td class="py-2">
-                                        {{ line.name }}<br /><span
-                                            class="text-xs text-slate-500"
-                                            >{{ line.EAN
-                                            }}<template
-                                                v-if="line.tracksExpiry"
-                                            >
-                                                ·
-                                                {{
-                                                    line.batchNo ||
-                                                    'Unnumbered batch'
-                                                }}
-                                                ·
-                                                {{
-                                                    line.expiryDate ||
-                                                    'Reconciliation / no expiry'
-                                                }}</template
-                                            ></span
-                                        >
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatQuantity(
-                                                line.expectedQty,
-                                                line.unit,
-                                            )
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            line.currentQty === undefined
-                                                ? '—'
-                                                : formatQuantity(
-                                                      line.currentQty,
-                                                      line.unit,
-                                                  )
-                                        }}
-                                    </td>
-                                    <td>
-                                        <input
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead>
+                                    <tr>
+                                        <th class="text-left">
+                                            Product / batch
+                                        </th>
+                                        <th>Opening</th>
+                                        <th>Current</th>
+                                        <th>Counted</th>
+                                        <th>Variance</th>
+                                        <th
                                             v-if="
                                                 selected.status ===
-                                                StockCountStatus.OPEN
+                                                StockCountStatus.SUBMITTED
                                             "
-                                            :id="`count-${line._id}`"
-                                            v-model="entries[line._id]"
-                                            class="min-h-11 w-28 rounded border p-2"
-                                            :aria-label="`Count ${line.name} ${line.batchNo || line._id}`"
-                                            inputmode="decimal"
-                                            :disabled="busy"
-                                            @input="dirty = true"
-                                        /><span v-else>{{
-                                            line.countedQty === undefined
-                                                ? 'Not counted'
-                                                : formatQuantity(
-                                                      line.countedQty,
-                                                      line.unit,
-                                                  )
-                                        }}</span>
-                                    </td>
-                                    <td>
-                                        {{
-                                            displayedVariance(line) === null
-                                                ? 'Not counted'
-                                                : formatQuantity(
-                                                      displayedVariance(line)!,
-                                                      line.unit,
-                                                  )
-                                        }}
-                                    </td>
-                                    <td
-                                        v-if="
-                                            selected.status ===
-                                            StockCountStatus.SUBMITTED
-                                        "
+                                        >
+                                            Projected balance
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr
+                                        v-for="line in selected.lines"
+                                        :key="line._id"
+                                        class="border-t"
+                                        :class="{
+                                            'bg-amber-50':
+                                                displayedVariance(line) !==
+                                                    null &&
+                                                displayedVariance(line) !== 0,
+                                        }"
                                     >
-                                        {{ projected(line) }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                        <td class="py-2">
+                                            {{ line.name }}<br /><span
+                                                class="text-xs text-slate-500"
+                                                >{{ line.EAN
+                                                }}<template
+                                                    v-if="line.tracksExpiry"
+                                                >
+                                                    ·
+                                                    {{
+                                                        line.batchNo ||
+                                                        'Unnumbered batch'
+                                                    }}
+                                                    ·
+                                                    {{
+                                                        line.expiryDate ||
+                                                        'Reconciliation / no expiry'
+                                                    }}</template
+                                                ></span
+                                            >
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatQuantity(
+                                                    line.expectedQty,
+                                                    line.unit,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                line.currentQty === undefined
+                                                    ? '—'
+                                                    : formatQuantity(
+                                                          line.currentQty,
+                                                          line.unit,
+                                                      )
+                                            }}
+                                        </td>
+                                        <td>
+                                            <input
+                                                v-if="
+                                                    selected.status ===
+                                                    StockCountStatus.OPEN
+                                                "
+                                                :id="`count-${line._id}`"
+                                                v-model="entries[line._id]"
+                                                class="min-h-11 w-28 rounded border p-2"
+                                                :aria-label="`Count ${line.name} ${line.batchNo || line._id}`"
+                                                inputmode="decimal"
+                                                :disabled="busy"
+                                                @input="dirty = true"
+                                            /><span v-else>{{
+                                                line.countedQty === undefined
+                                                    ? 'Not counted'
+                                                    : formatQuantity(
+                                                          line.countedQty,
+                                                          line.unit,
+                                                      )
+                                            }}</span>
+                                        </td>
+                                        <td>
+                                            {{
+                                                displayedVariance(line) === null
+                                                    ? 'Not counted'
+                                                    : formatQuantity(
+                                                          displayedVariance(
+                                                              line,
+                                                          )!,
+                                                          line.unit,
+                                                      )
+                                            }}
+                                        </td>
+                                        <td
+                                            v-if="
+                                                selected.status ===
+                                                StockCountStatus.SUBMITTED
+                                            "
+                                        >
+                                            {{ projected(line) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     <div class="flex flex-wrap gap-3">
                         <BaseButton
