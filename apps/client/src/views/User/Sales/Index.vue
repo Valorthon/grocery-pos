@@ -632,10 +632,19 @@ const chips = computed<FilterChip[]>(() => {
 });
 /*
  * Removing a chip drops that filter only: the search box goes back to
- * its applied text first, so typed-but-unsearched text is never sent.
+ * its applied text and every input to its applied value first, so
+ * typed-but-unsearched text or a refused range is never sent.
  */
 function removeFilter(key: string) {
-    filters.saleNumber = appliedFilters.value.saleNumber ?? '';
+    const a = appliedFilters.value;
+    Object.assign(filters, {
+        saleNumber: a.saleNumber ?? '',
+        dateFrom: a.dateFrom ?? '',
+        dateTo: a.dateTo ?? '',
+        paymentType: a.paymentType ?? null,
+        cashier: a.cashier ?? null,
+        category: a.category ?? null,
+    });
     if (key === 'saleNumber' || key === 'dateFrom' || key === 'dateTo')
         filters[key] = '';
     else if (key === 'paymentType' || key === 'cashier' || key === 'category')

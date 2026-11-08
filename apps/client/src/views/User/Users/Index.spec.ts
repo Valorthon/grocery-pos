@@ -306,6 +306,28 @@ describe('users search and create errors (issue #20 review)', () => {
         ]);
     });
 
+    it('removes the name chip with one request, and its form submits (#171)', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        expect(
+            field('Search Name').form?.querySelector('button[type="submit"]'),
+        ).not.toBeNull();
+        await type('Search Name', 'Ana');
+        await click('Search');
+        api.get.mockClear();
+
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Remove filter Name: Ana"]',
+            )!
+            .click();
+        await flush();
+
+        expect(api.get.mock.calls.map(([, c]) => c?.params)).toEqual([
+            expect.objectContaining({ page: 1, name: '' }),
+        ]);
+    });
+
     it('clears each Save error once its field is edited', async () => {
         api.get.mockResolvedValue({ data: USERS });
         await mount();

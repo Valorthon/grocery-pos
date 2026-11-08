@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import {
+    AUDIT_ACTION_LABELS,
     AuditAction,
     Role,
     STRING_LIMITS,
@@ -93,6 +94,34 @@ it('pages and retries applied filters rather than unsearched edits', async () =>
     expect(
         api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
     ).toMatchObject({ from: undefined, page: 1 });
+});
+it('removes one chip with one request and never sends unsearched text (#171)', async () => {
+    await mount();
+    expect(
+        field('Username').form?.querySelector('button[type="submit"]'),
+    ).not.toBeNull();
+    input('Username', 'maria');
+    await click('Search');
+    const select = document.querySelector('select')!;
+    select.value = AuditAction.USER_CREATED;
+    select.dispatchEvent(new Event('change'));
+    await flush();
+    input('Username', 'jose');
+    await flush();
+    const before = api.get.mock.calls.length;
+
+    document
+        .querySelector<HTMLButtonElement>(
+            `button[aria-label="Remove filter Action: ${AUDIT_ACTION_LABELS[AuditAction.USER_CREATED]}"]`,
+        )!
+        .click();
+    await flush();
+
+    expect(api.get.mock.calls.length).toBe(before + 1);
+    expect(
+        api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
+    ).toMatchObject({ username: 'maria', action: undefined, page: 1 });
+    expect(field('Username').value).toBe('maria');
 });
 it('validates date ordering and applies exact action selection', async () => {
     await mount();

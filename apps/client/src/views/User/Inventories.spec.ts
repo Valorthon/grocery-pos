@@ -3,7 +3,7 @@ import { createApp, reactive, type App } from 'vue';
 import type { RouteMeta } from 'vue-router';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
-import { click, field, flush } from '@/testing/form-dom';
+import { click, field, flush, type } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
@@ -205,13 +205,64 @@ describe('receipt-cost restock defaults', () => {
     });
 });
 
+describe('inventory FilterBar (#171)', () => {
+    it('removes the low-stock chip with one load and one route change', async () => {
+        await mount();
+        api.get.mockClear();
+        nav.replace.mockClear();
+
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Remove filter Low stock"]',
+            )!
+            .click();
+        await flush();
+        // The router then drops the query; its watcher must not reload.
+        route.query = {};
+        await flush();
+
+        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            lowStock: undefined,
+        });
+        expect(nav.replace).toHaveBeenCalledTimes(1);
+        expect(nav.replace).toHaveBeenCalledWith({
+            query: { lowStock: undefined },
+        });
+    });
+
+    it('removes the name chip with one load, keeping the low-stock filter', async () => {
+        await mount();
+        await type('Product Name', 'rice');
+        field('Product Name').form!.requestSubmit();
+        await flush();
+        await type('Product Name', 'bread');
+        api.get.mockClear();
+
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Remove filter Name: rice"]',
+            )!
+            .click();
+        await flush();
+
+        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            name: '',
+            lowStock: true,
+        });
+    });
+});
+
 describe('low-stock frame (#159)', () => {
     const meta: RouteMeta = {
         title: 'Inventory',
         queryTitle: { key: 'lowStock', value: 'true', title: 'Low stock' },
     };
 
-    it('titles the low-stock list and shows its "Filtered: low stock" chip', async () => {
+    it('titles the low-stock list and shows its FilterBar chip (#171)', async () => {
         route = reactive({
             name: 'Inventories',
             query: { lowStock: 'true' },
@@ -221,10 +272,15 @@ describe('low-stock frame (#159)', () => {
         const h1s = document.querySelectorAll('h1');
         expect(h1s).toHaveLength(1);
         expect(h1s[0].textContent?.trim()).toBe('Low stock');
+        // The FilterBar chip replaced the header badge (#171).
         expect(
-            document.querySelector('[data-testid="low-stock-chip"]')
-                ?.textContent,
-        ).toBe('Filtered: low stock');
+            document.querySelector('[data-testid="low-stock-chip"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector(
+                'button[aria-label="Remove filter Low stock"]',
+            ),
+        ).not.toBeNull();
     });
 
     it('shows plain Inventory without the chip', async () => {
@@ -234,7 +290,9 @@ describe('low-stock frame (#159)', () => {
             'Inventory',
         );
         expect(
-            document.querySelector('[data-testid="low-stock-chip"]'),
+            document.querySelector(
+                'button[aria-label="Remove filter Low stock"]',
+            ),
         ).toBeNull();
     });
 });

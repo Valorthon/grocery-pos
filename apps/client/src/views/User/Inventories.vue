@@ -32,11 +32,6 @@
                 Adjust
             </BaseButton>
         </template>
-        <template v-if="applied.lowStock" #chips>
-            <Badge color="warning" size="md" data-testid="low-stock-chip"
-                >Filtered: low stock</Badge
-            >
-        </template>
         <PageCard>
             <FilterBar
                 v-model:search="searchName"
@@ -125,7 +120,6 @@ import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
-import Badge from '@/components/ui/Badge.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';

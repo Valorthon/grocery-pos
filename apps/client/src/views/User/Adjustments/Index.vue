@@ -52,11 +52,6 @@
                 </div>
             </FilterBar>
 
-            <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
-                Showing source {{ sourceId }}. Clear Filters to view all
-                history.
-            </p>
-
             <BaseTable
                 v-model:page="page"
                 v-model:items-per-page="limit"
