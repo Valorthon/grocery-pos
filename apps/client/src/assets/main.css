@@ -1,6 +1,63 @@
 @import 'tailwindcss';
 
 /*
+ * The Fresh market fonts, self-hosted from @fontsource-variable (#153). Only
+ * the latin and latin-ext subsets are declared (the packages' own CSS would
+ * add Vietnamese files the service worker precaches for nothing).
+ */
+@font-face {
+    font-family: 'Instrument Sans Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400 700;
+    src: url('@fontsource-variable/instrument-sans/files/instrument-sans-latin-ext-wght-normal.woff2')
+        format('woff2-variations');
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+        U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+        U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Instrument Sans Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400 700;
+    src: url('@fontsource-variable/instrument-sans/files/instrument-sans-latin-wght-normal.woff2')
+        format('woff2-variations');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'Bricolage Grotesque Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 200 800;
+    src: url('@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-ext-wght-normal.woff2')
+        format('woff2-variations');
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+        U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+        U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Bricolage Grotesque Variable';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 200 800;
+    src: url('@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2')
+        format('woff2-variations');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
  * The ₱ sign (U+20B1) is drawn by Bricolage Grotesque: Instrument Sans has no
  * glyph for it (#152). This face covers only that code point, so it can sit
  * first in every font stack without touching any other character.
@@ -82,6 +139,15 @@
     --color-primary-800: var(--color-leaf-800);
     --color-primary-900: var(--color-leaf-900);
     --color-primary-950: var(--color-leaf-950);
+
+    /*
+     * Instrument Sans stops at 700, so extrabold/black are capped there:
+     * the browser would pick the 700 face anyway, and the ₱ (Bricolage, up
+     * to 800) would then be heavier than the digits beside it. Restoring the
+     * heavier hierarchy (font-display for big figures) is a #175 follow-up.
+     */
+    --font-weight-extrabold: 700;
+    --font-weight-black: 700;
 
     --radius-control: 8px;
     --radius-card: 12px;

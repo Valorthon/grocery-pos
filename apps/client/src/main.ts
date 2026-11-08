@@ -3,11 +3,8 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from '@/router';
 import { useAuthStore } from '@/stores/auth';
-// The Fresh market fonts are bundled with the app, not loaded from Google
-// Fonts (#26, #153): the client has no external runtime assets. Each is one
-// variable file per subset, covering every weight.
-import '@fontsource-variable/instrument-sans';
-import '@fontsource-variable/bricolage-grotesque';
+// The Fresh market fonts are declared in assets/main.css (#153): bundled
+// with the app, latin and latin-ext only, never from Google Fonts (#26).
 import './assets/main.css';
 
 const app = createApp(App);

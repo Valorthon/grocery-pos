@@ -111,6 +111,7 @@ describe('theme tokens (#153)', () => {
         ['muted', 'surface'],
         ['muted', 'line'],
         ['surface', 'leaf-600'],
+        ['leaf-600', 'paper'],
         ['leaf-100', 'leaf-900'],
         ['ink', 'citrus-500'],
         ['citrus-700', 'paper'],
@@ -140,6 +141,16 @@ describe('theme tokens (#153)', () => {
         );
         expect(css).toMatch(/--font-display:\s*'Bricolage Grotesque Variable'/);
         expect(css).not.toMatch(/Poppins/);
+    });
+
+    it('declares only latin and latin-ext font files, and caps weights at 700', () => {
+        const files = [...css.matchAll(/files\/([\w-]+)\.woff2/g)].map(
+            ([, f]) => f,
+        );
+        expect(files.length).toBeGreaterThan(0);
+        for (const f of files) expect(f).toMatch(/-latin(-ext)?-wght-normal$/);
+        expect(css).toMatch(/--font-weight-extrabold: 700;/);
+        expect(css).toMatch(/--font-weight-black: 700;/);
     });
 
     it('has a tabular-figures utility and a leaf focus ring', () => {

@@ -145,7 +145,8 @@ Runtime variables:
       CSP allows. Templates must not use static `style="…"` attributes: use a
       class or a `<style>` block (`layout-drift.spec.ts` enforces it).
     - `img-src data:` covers the small SVGs Vite inlines (the logo). Fonts
-      (`@fontsource/poppins`) and the login photo are same-origin.
+      (`@fontsource-variable/instrument-sans` and
+      `@fontsource-variable/bricolage-grotesque`) and the login photo are same-origin.
     - Violations are reported to the API (see
       [CSP violation reports](#csp-violation-reports)).
 - `Reporting-Endpoints: csp-endpoint="<API origin>/v1/csp-report"`, the
