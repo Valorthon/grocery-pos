@@ -125,10 +125,15 @@ describe('theme tokens (#153)', () => {
         ['leaf-700', 'leaf-50'],
         // Guest footer button hover: leaf text on leaf-50 (#158).
         ['leaf-600', 'leaf-50'],
-        // Admin sidebar active and hover items (#160).
-        ['leaf-800', 'leaf-50'],
-        ['muted', 'leaf-50'],
-        ['ink', 'leaf-50'],
+        // Dark leaf admin sidebar (#160): items, headings, icons, brand,
+        // error line and the profile box (hover leaf-700).
+        ['leaf-300', 'leaf-900'],
+        ['leaf-200', 'leaf-900'],
+        ['leaf-200', 'leaf-800'],
+        ['leaf-200', 'leaf-700'],
+        ['leaf-100', 'leaf-800'],
+        ['surface', 'leaf-900'],
+        ['danger-border', 'leaf-900'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
@@ -142,6 +147,9 @@ describe('theme tokens (#153)', () => {
         ['success-fg', 'surface'],
         ['warning-fg', 'surface'],
         ['danger-fg', 'surface'],
+        // focus-ring-inverse on the dark sidebar and its hover (#160).
+        ['leaf-200', 'leaf-900'],
+        ['leaf-200', 'leaf-800'],
     ])('%s on %s passes AA for non-text (3:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
     });
@@ -172,5 +180,11 @@ describe('theme tokens (#153)', () => {
             /@utility num\s*\{\s*font-variant-numeric: tabular-nums;/,
         );
         expect(css).toMatch(/outline: 2px solid var\(--color-leaf-500\)/);
+    });
+
+    it('has a leaf-200 inverse focus ring for dark surfaces (#160)', () => {
+        expect(css).toMatch(
+            /@utility focus-ring-inverse\s*\{\s*&:focus-visible\s*\{\s*outline: 2px solid var\(--color-leaf-200\);/,
+        );
     });
 });

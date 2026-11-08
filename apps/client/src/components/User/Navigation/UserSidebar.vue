@@ -28,7 +28,7 @@
                 id="admin-sidebar"
                 ref="aside"
                 data-testid="admin-sidebar"
-                class="bg-surface border-r border-line flex flex-col shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
+                class="bg-leaf-900 border-r border-leaf-800 flex flex-col shrink-0 transition-[width,translate] duration-300 select-none fixed inset-y-0 left-0 z-50 w-64 h-full lg:static lg:z-30 lg:translate-x-0"
                 :class="[
                     rail ? 'lg:w-20' : 'lg:w-64',
                     drawerOpen ? 'translate-x-0' : '-translate-x-full',
@@ -41,7 +41,7 @@
             >
                 <div class="flex-1 overflow-y-auto">
                     <div
-                        class="h-16 flex items-center border-b border-line px-4"
+                        class="h-16 flex items-center border-b border-leaf-800 px-4"
                         :class="rail ? 'justify-center' : 'justify-between'"
                     >
                         <div
@@ -50,12 +50,12 @@
                         >
                             <div class="flex items-center gap-2.5 min-w-0">
                                 <div
-                                    class="w-9 h-9 rounded-xl bg-leaf-600/10 text-leaf-600 flex items-center justify-center border border-leaf-600/20 shrink-0"
+                                    class="w-9 h-9 rounded-xl bg-leaf-800 text-leaf-100 flex items-center justify-center border border-leaf-700 shrink-0"
                                 >
                                     <Store class="w-5 h-5" />
                                 </div>
                                 <span
-                                    class="text-base font-extrabold tracking-tight text-ink truncate"
+                                    class="text-base font-extrabold tracking-tight text-white truncate"
                                 >
                                     GroceryPOS
                                 </span>
@@ -63,7 +63,7 @@
                             <button
                                 v-if="isLarge"
                                 type="button"
-                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-muted hover:text-ink hover:bg-leaf-50 transition-colors shrink-0 focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-leaf-200 hover:text-white hover:bg-leaf-800 transition-colors shrink-0 focus-ring-inverse"
                                 aria-label="Collapse sidebar"
                                 data-testid="admin-sidebar-collapse"
                                 @click="collapsed = true"
@@ -76,7 +76,7 @@
                             <button
                                 v-else
                                 type="button"
-                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-muted hover:text-ink hover:bg-leaf-50 transition-colors shrink-0 focus-ring"
+                                class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-leaf-200 hover:text-white hover:bg-leaf-800 transition-colors shrink-0 focus-ring-inverse"
                                 aria-label="Close navigation menu"
                                 data-testid="admin-sidebar-close"
                                 @click="closeDrawer"
@@ -88,7 +88,7 @@
                         <button
                             v-else
                             type="button"
-                            class="w-11 h-11 rounded-xl bg-leaf-600/10 text-leaf-600 hover:bg-leaf-600 hover:text-white flex items-center justify-center border border-leaf-600/20 hover:border-leaf-600 transition-all focus-ring"
+                            class="w-11 h-11 rounded-xl bg-leaf-800 text-leaf-100 hover:bg-leaf-700 hover:text-white flex items-center justify-center border border-leaf-700 transition-all focus-ring-inverse"
                             aria-label="Expand sidebar"
                             data-testid="admin-sidebar-expand"
                             @click="collapsed = false"
@@ -107,7 +107,7 @@
                                     !rail &&
                                     section.items.some((i) => i.visible)
                                 "
-                                class="px-3 pt-4 pb-1.5 text-xs font-bold uppercase tracking-wider text-leaf-700"
+                                class="px-3 pt-4 pb-1.5 text-xs font-bold uppercase tracking-wider text-leaf-300"
                             >
                                 {{ section.title }}
                             </div>
@@ -126,14 +126,14 @@
                                 <a
                                     v-show="item.visible"
                                     :href="href"
-                                    class="w-full flex items-center rounded-xl transition-all group relative focus-ring"
+                                    class="w-full flex items-center rounded-xl transition-all group relative focus-ring-inverse"
                                     :class="[
                                         rail
                                             ? 'justify-center p-3'
                                             : 'justify-between min-h-11 px-3.5 py-2.5',
                                         isActive(item.name)
-                                            ? 'bg-leaf-50 text-leaf-800 font-bold'
-                                            : 'text-muted hover:bg-leaf-50 hover:text-ink font-semibold',
+                                            ? 'bg-leaf-700 text-white font-bold'
+                                            : 'text-leaf-100 hover:bg-leaf-800 hover:text-white font-semibold',
                                     ]"
                                     :title="rail ? item.title : undefined"
                                     :aria-label="rail ? item.title : undefined"
@@ -150,8 +150,8 @@
                                             class="w-5 h-5 shrink-0"
                                             :class="
                                                 isActive(item.name)
-                                                    ? 'text-leaf-700'
-                                                    : 'text-muted group-hover:text-leaf-700'
+                                                    ? 'text-white'
+                                                    : 'text-leaf-300 group-hover:text-white'
                                             "
                                         />
                                         <span
@@ -164,7 +164,7 @@
                                                 item.name === 'LowStock' &&
                                                 !rail
                                             "
-                                            class="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-bold text-danger-fg tabular-nums"
+                                            class="rounded-full bg-danger-bg px-2 py-0.5 text-xs font-bold text-danger-fg num"
                                             aria-label="Low stock count"
                                             >{{
                                                 stockAlerts.count ?? '?'
@@ -178,12 +178,12 @@
                     <div
                         v-if="canViewInventory && stockAlerts.error && !rail"
                         role="alert"
-                        class="px-3 text-xs text-danger-fg"
+                        class="px-3 text-xs text-danger-border"
                     >
                         Stock alert count unavailable.
                         <button
                             type="button"
-                            class="min-h-11 underline focus-ring"
+                            class="min-h-11 underline focus-ring-inverse"
                             @click="stockAlerts.refresh"
                         >
                             Retry
@@ -191,8 +191,11 @@
                     </div>
                 </div>
 
-                <div class="p-3 border-t border-line">
-                    <UserProfileMenu :variant="rail ? 'icon' : 'box'" />
+                <div class="p-3 border-t border-leaf-800">
+                    <UserProfileMenu
+                        :variant="rail ? 'icon' : 'box'"
+                        tone="dark"
+                    />
                 </div>
             </aside>
         </div>

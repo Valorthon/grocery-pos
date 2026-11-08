@@ -39,31 +39,33 @@
             <button
                 v-if="canAddProduct"
                 type="button"
-                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg md:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
+                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg lg:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 title="Add Product"
                 aria-label="Add Product"
                 @click="router.push({ name: 'Products/Add' })"
             >
                 <TagPlus class="w-5 h-5 shrink-0" aria-hidden="true" />
-                <span class="hidden md:inline">Add Product</span>
+                <span class="hidden lg:inline whitespace-nowrap"
+                    >Add Product</span
+                >
             </button>
 
             <button
                 v-if="canRestock"
                 type="button"
-                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg md:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
+                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg lg:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 title="Restock Inventory"
                 aria-label="Restock Inventory"
                 @click="router.push({ name: 'Restocks/Add' })"
             >
                 <PackagePlus class="w-5 h-5 shrink-0" aria-hidden="true" />
-                <span class="hidden md:inline">Restock</span>
+                <span class="hidden lg:inline whitespace-nowrap">Restock</span>
             </button>
 
             <button
                 v-if="canAdjust"
                 type="button"
-                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg md:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
+                class="min-h-11 min-w-11 flex items-center justify-center gap-2 rounded-lg lg:px-3 text-sm font-semibold text-muted hover:text-ink hover:bg-leaf-50 transition-colors focus-ring"
                 title="Adjust Stock"
                 aria-label="Adjust Stock"
                 @click="router.push({ name: 'Adjustments/Add' })"
@@ -72,7 +74,9 @@
                     class="w-5 h-5 shrink-0"
                     aria-hidden="true"
                 />
-                <span class="hidden md:inline">Adjust Stock</span>
+                <span class="hidden lg:inline whitespace-nowrap"
+                    >Adjust Stock</span
+                >
             </button>
 
             <UserProfileMenu variant="bar" />
