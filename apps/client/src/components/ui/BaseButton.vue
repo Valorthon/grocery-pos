@@ -61,8 +61,7 @@ const variants: Record<string, string> = {
         'bg-surface text-ink border border-line-strong hover:bg-paper shadow-card',
     ghost: 'text-ink hover:bg-paper',
     danger: 'text-danger-fg hover:bg-danger-bg',
-    'danger-solid':
-        'bg-danger-solid text-white hover:bg-danger-fg active:bg-danger-fg shadow-card',
+    'danger-solid': 'bg-danger-solid text-white hover:bg-danger-fg shadow-card',
 };
 
 const sizes: Record<string, string> = {

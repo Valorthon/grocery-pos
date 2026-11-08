@@ -120,6 +120,13 @@ describe('theme tokens (#153)', () => {
         ['warning-fg', 'warning-bg'],
         ['danger-fg', 'danger-bg'],
         ['info-fg', 'info-bg'],
+        // BaseButton hover/active and Badge primary (#155).
+        ['ink', 'citrus-400'],
+        ['ink', 'citrus-600'],
+        ['surface', 'danger-fg'],
+        ['surface', 'leaf-700'],
+        ['surface', 'leaf-800'],
+        ['leaf-700', 'leaf-50'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
