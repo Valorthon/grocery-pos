@@ -10,6 +10,7 @@ import {
 } from 'axios';
 import { Role } from '@grocery-pos/contracts';
 import Login from './Login.vue';
+import { stubMatchMedia } from '@/testing/match-media';
 import { LOGIN_ERRORS, loginErrorMessage } from './login-error';
 
 const auth = vi.hoisted(() => ({
@@ -320,6 +321,26 @@ describe('Market-themed Login (#168)', () => {
             expect(art()).toBeNull();
         } finally {
             vi.unstubAllGlobals();
+        }
+    });
+
+    it('does not fetch the hero photo below lg (#193 review)', async () => {
+        const media = stubMatchMedia(false);
+        const probes: unknown[] = [];
+        vi.stubGlobal(
+            'Image',
+            class {
+                constructor() {
+                    probes.push(this);
+                }
+            },
+        );
+        try {
+            await mount();
+            expect(probes).toHaveLength(0);
+        } finally {
+            vi.unstubAllGlobals();
+            media.restore();
         }
     });
 

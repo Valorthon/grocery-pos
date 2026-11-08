@@ -197,7 +197,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue';
+import { onBeforeUnmount, ref, reactive, watch } from 'vue';
+import { useIsLarge } from '@/composables/useMediaQuery';
 import { useRouter } from 'vue-router';
 import { ArrowRight, Eye, EyeOff, Lock, User as UserIcon } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -213,14 +214,28 @@ import { LOGIN_HERO_URL } from '@/constant';
 import logo from '@/assets/logo-icon.svg';
 import { loginErrorMessage } from './login-error';
 
-/** The optional hero photo loaded: the produce art then steps aside. */
+/**
+ * The optional hero photo loaded: the produce art then steps aside (#193).
+ * Probed only from lg, where the art shows, so a phone never downloads the
+ * photo its hidden panel would not fetch either.
+ */
 const heroPhotoLoaded = ref(false);
-onMounted(() => {
-    const probe = new Image();
-    probe.onload = () => {
-        heroPhotoLoaded.value = true;
-    };
-    probe.src = LOGIN_HERO_URL;
+const isLarge = useIsLarge();
+let probe: HTMLImageElement | null = null;
+watch(
+    isLarge,
+    (large) => {
+        if (!large || probe) return;
+        probe = new Image();
+        probe.onload = () => {
+            heroPhotoLoaded.value = true;
+        };
+        probe.src = LOGIN_HERO_URL;
+    },
+    { immediate: true },
+);
+onBeforeUnmount(() => {
+    if (probe) probe.onload = null;
 });
 
 const router = useRouter();
