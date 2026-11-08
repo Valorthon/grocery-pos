@@ -424,6 +424,33 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(sidebar().textContent).toContain('Register (Sale)');
         });
 
+        it('opens as a modal drawer on the dashboard, and Escape gives the focus back (#161)', async () => {
+            await mountAt('/seller');
+            expect(menuButton()).not.toBeNull();
+            menuButton().focus();
+            menuButton().click();
+            await flush();
+
+            expect(sidebar().getAttribute('role')).toBe('dialog');
+            expect(sidebar().getAttribute('aria-modal')).toBe('true');
+            expect(sidebar().hasAttribute('inert')).toBe(false);
+            expect(
+                document.querySelector('main')!.closest('[inert]'),
+            ).not.toBeNull();
+            expect(anyModalOpen.value).toBe(true);
+
+            document.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+            );
+            await flush();
+
+            expect(isClosed()).toBe(true);
+            expect(
+                document.querySelector('main')!.closest('[inert]'),
+            ).toBeNull();
+            expect(document.activeElement).toBe(menuButton());
+        });
+
         it('closes on Escape and gives the focus back', async () => {
             await mountAt('/seller/register');
             menuButton().focus();
@@ -572,7 +599,7 @@ describe('SellerLayout sidebar (issue #26)', () => {
             expect(
                 document.querySelector('[inert]:not(#seller-sidebar)'),
             ).toBeNull();
-            expect(document.activeElement).not.toBe(document.body);
+            expect(document.activeElement).toBe(menuButton());
         });
     });
 });

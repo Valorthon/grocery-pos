@@ -7,10 +7,10 @@
             <CollapsibleSidebar v-model="drawer" />
             <div class="flex-1 flex flex-col min-h-0 min-w-0">
                 <!--
-                        One navigation on every seller page, the dashboard
-                        included (#161). Below lg the sidebar is a drawer
-                        (#26): its menu button.
-                    -->
+                    One navigation on every seller page, the dashboard
+                    included (#161). Below lg the sidebar is a drawer
+                    (#26): its menu button.
+                -->
                 <header
                     class="lg:hidden h-14 shrink-0 flex items-center gap-2 px-2 bg-white border-b border-slate-200"
                 >

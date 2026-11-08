@@ -632,7 +632,8 @@ requestId}`. A 5xx never carries details or internals.
   there; storage errors fall back to expanded). Below `lg` it is a modal
   drawer on the modal stack (menu button, backdrop, X, Escape, navigation
   close it); the register behind it is inert and its keys pause.
-- The admin `UserSidebar` is the same drawer below `lg`. Both are `role=dialog` + `aria-modal` only while they are drawers, and use
+- The admin `UserSidebar` is the same drawer below `lg`. Both are
+  `role=dialog` + `aria-modal` only while they are drawers, and use
   `useModalDrawer`: the page behind is inert, the focus goes back to the
   menu button, growing past the breakpoint closes the drawer, and an
   unmount while open (e.g. Back swapping the layout) leaves nothing on the

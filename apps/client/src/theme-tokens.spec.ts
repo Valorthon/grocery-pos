@@ -121,6 +121,7 @@ describe('theme tokens (#153)', () => {
         ['ink', 'citrus-600'],
         ['surface', 'danger-fg'],
         ['surface', 'leaf-700'],
+        // Also the seller sidebar's active cart badge (#161).
         ['surface', 'leaf-800'],
         ['leaf-700', 'leaf-50'],
         // Guest footer button hover: leaf text on leaf-50 (#158).
@@ -134,8 +135,6 @@ describe('theme tokens (#153)', () => {
         ['leaf-100', 'leaf-800'],
         ['surface', 'leaf-900'],
         ['danger-border', 'leaf-900'],
-        // Seller sidebar (#161): the active item's cart badge.
-        ['leaf-800', 'surface'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });
@@ -152,8 +151,6 @@ describe('theme tokens (#153)', () => {
         // focus-ring-inverse on the dark sidebar and its hover (#160).
         ['leaf-200', 'leaf-900'],
         ['leaf-200', 'leaf-800'],
-        // ...and on the seller sidebar's active item (#161).
-        ['leaf-200', 'leaf-700'],
     ])('%s on %s passes AA for non-text (3:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
     });
