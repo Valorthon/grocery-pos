@@ -1,61 +1,44 @@
 <template>
-    <div class="flex-1 flex flex-col overflow-hidden bg-slate-100">
-        <header
-            class="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-5 bg-white border-b border-slate-200 gap-4"
-        >
-            <div>
-                <h1
-                    class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight"
-                >
-                    Shifts
-                </h1>
-                <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-                    Every cashier's shifts, newest first, with their close
-                    reports
-                </p>
-            </div>
-
+    <PageFrame
+        description="Every cashier's shifts, newest first, with their close reports"
+    >
+        <template #actions>
             <BaseSelect
                 v-model="statusFilter"
                 class="w-40"
                 aria-label="Status"
                 :options="statusOptions"
             />
-        </header>
-
-        <div class="flex-1 overflow-y-auto p-6">
-            <BaseTable
-                v-model:page="page"
-                v-model:items-per-page="limit"
-                :headers="headers"
-                :items="rows"
-                :loading="loading"
-                :error="loadError"
-                empty-text="No shifts found"
-                :items-length="totalItems"
-                row-click
-                @click:row="select"
-                @retry="fetchShifts"
-            >
-                <template #cell-status="{ value }">
-                    <Badge
-                        :color="
-                            value === ShiftStatus.OPEN ? 'success' : 'neutral'
-                        "
-                        >{{ value }}</Badge
-                    >
-                </template>
-                <template #cell-overShort="{ item }">
-                    <span
-                        v-if="item.shift.report"
-                        class="font-bold"
-                        :class="overShortClass(item.shift.report)"
-                        >{{ signed(item.shift.report.drawer.overShort) }}</span
-                    >
-                    <span v-else class="text-slate-400">—</span>
-                </template>
-            </BaseTable>
-        </div>
+        </template>
+        <BaseTable
+            v-model:page="page"
+            v-model:items-per-page="limit"
+            :headers="headers"
+            :items="rows"
+            :loading="loading"
+            :error="loadError"
+            empty-text="No shifts found"
+            :items-length="totalItems"
+            row-click
+            @click:row="select"
+            @retry="fetchShifts"
+        >
+            <template #cell-status="{ value }">
+                <Badge
+                    :color="value === ShiftStatus.OPEN ? 'success' : 'neutral'"
+                    >{{ value }}</Badge
+                >
+            </template>
+            <template #cell-overShort="{ item }">
+                <span
+                    v-if="item.shift.report"
+                    class="font-bold"
+                    :class="overShortClass(item.shift.report)"
+                    >{{ signed(item.shift.report.drawer.overShort) }}</span
+                >
+                <span v-else class="text-slate-400">—</span>
+            </template>
+        </BaseTable>
 
         <BaseModal
             v-model="isDialogOpen"
@@ -140,10 +123,11 @@
             </template>
         </BaseModal>
         <ConfirmDialog :request="request" @answer="answer" />
-    </div>
+    </PageFrame>
 </template>
 
 <script setup lang="ts">
+import PageFrame from '@/components/ui/PageFrame.vue';
 import { computed, ref, watch } from 'vue';
 import {
     billCountTotal,

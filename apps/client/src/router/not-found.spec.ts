@@ -64,7 +64,7 @@ describe('not-found route (#162)', () => {
         document.title = 'sentinel';
         await router.push('/admin/users');
         expect(router.currentRoute.value.name).toBe('Login');
-        expect(document.title).toBe('Grocery POS');
+        expect(document.title).toBe('Log in · Grocery POS');
         const { useUIStore } = await import('@/stores/ui');
         expect(useUIStore().toasts.map((t) => t.lines)).toContainEqual([
             'Please log in to continue',
@@ -91,12 +91,12 @@ describe('not-found route (#162)', () => {
         },
     );
 
-    it('restores the base title when leaving the page', async () => {
+    it("replaces the not-found title with the next page's", async () => {
         const router = await freshRouter([Role.Admin]);
         await router.push('/nope');
         expect(document.title).toBe('Page not found · Grocery POS');
         await router.push('/admin');
         expect(router.currentRoute.value.name).toBe('Dashboard');
-        expect(document.title).toBe('Grocery POS');
+        expect(document.title).toBe('Dashboard · Grocery POS');
     });
 });

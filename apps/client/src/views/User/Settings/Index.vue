@@ -1,6 +1,6 @@
 <template>
-    <div class="space-y-5">
-        <PageCard title="Store Settings">
+    <PageFrame narrow>
+        <PageCard heading="Store identity">
             <div class="p-5 space-y-4">
                 <p class="text-sm text-slate-600">
                     Store identity appears on new on-screen receipts and closing
@@ -85,7 +85,7 @@
                 </form>
             </div>
         </PageCard>
-        <PageCard title="This register">
+        <PageCard heading="This register">
             <div class="p-5 space-y-4">
                 <BaseInput
                     id="settings-terminal"
@@ -110,7 +110,7 @@
             </div>
         </PageCard>
         <ConfirmDialog :request="request" @answer="answer" />
-    </div>
+    </PageFrame>
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -120,6 +120,7 @@ import {
     type UpdateStoreSettingsRequest,
 } from '@grocery-pos/contracts';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';

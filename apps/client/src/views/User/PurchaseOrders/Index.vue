@@ -1,5 +1,5 @@
 <template>
-    <PageCard title="Purchase orders">
+    <PageFrame>
         <template #actions>
             <BaseButton v-if="!editing" size="sm" @click="startNew([])"
                 >New purchase order</BaseButton
@@ -13,371 +13,395 @@
                 >Back to list</BaseButton
             >
         </template>
-        <div class="space-y-4 p-5">
-            <template v-if="!editing">
-                <div class="flex flex-wrap items-end gap-3">
-                    <BaseSelect
-                        v-model="statusFilter"
-                        label="Status"
-                        all-label="All statuses"
-                        :options="statusOptions"
-                        @update:model-value="apply"
-                    />
-                </div>
-                <BaseTable
-                    v-model:page="page"
-                    v-model:items-per-page="limit"
-                    :headers="headers"
-                    :items="rows"
-                    :loading="listLoading"
-                    :error="listError"
-                    empty-text="No purchase orders"
-                    :items-length="totalItems"
-                    @retry="load"
-                >
-                    <template #cell-reference="{ item }">
-                        {{ purchaseOrderReference(item._id) }}
-                    </template>
-                    <template #cell-createdAt="{ item }">
-                        {{ formatDate(item.createdAt) }}
-                    </template>
-                    <template #cell-supplier="{ item }">
-                        {{ supplierLabel(item) }}
-                    </template>
-                    <template #cell-status="{ item }">
-                        {{ STATUS_LABELS[item.status] }}
-                        <span
-                            v-if="draftSendBlockers(item).length"
-                            class="block text-xs font-medium text-amber-700"
-                            >Needs review before sending</span
-                        >
-                    </template>
-                    <template #cell-lines="{ item }">
-                        {{ item.lines.length }}
-                    </template>
-                    <template #cell-expectedTotal="{ item }">
-                        {{ formatCurrency(item.expectedTotal) }}
-                    </template>
-                    <template #cell-action="{ item }">
-                        <BaseButton size="sm" @click="open(item)"
-                            >Open</BaseButton
-                        >
-                    </template>
-                </BaseTable>
-            </template>
-            <template v-else>
-                <div v-if="current" class="text-sm text-slate-700 space-y-1">
-                    <p>
-                        <strong>{{
-                            purchaseOrderReference(current._id)
-                        }}</strong>
-                        ·
-                        <strong>{{ STATUS_LABELS[current.status] }}</strong>
-                        · created {{ formatDate(current.createdAt) }}
-                        <span v-if="current.createdBy">
-                            by {{ current.createdBy.name }}</span
-                        >
-                    </p>
-                    <p v-if="current.closedShort">
-                        Cancelled after a partial receipt: the outstanding
-                        quantities were closed short.
-                    </p>
-                    <p v-if="current.receipts.length">
-                        {{ current.receipts.length }} linked
-                        {{
-                            current.receipts.length === 1
-                                ? 'receipt'
-                                : 'receipts'
-                        }}
-                        in Restock History.
-                        <BaseButton
-                            size="sm"
-                            variant="outline"
-                            @click="viewReceipts(current._id)"
-                            >View receipts</BaseButton
-                        >
-                    </p>
-                </div>
-                <div
-                    v-if="blockers.length"
-                    role="status"
-                    class="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"
-                >
-                    <p class="font-medium">
-                        This draft can't be sent as it stands.
-                    </p>
-                    <p v-for="text in blockers" :key="text">{{ text }}</p>
-                    <p>
-                        Choose an active supplier or remove the archived
-                        products, then save.
-                    </p>
-                </div>
-                <template v-if="isDraft">
-                    <SupplierSelect v-model="supplier" :disabled="busy" />
-                    <BaseInput
-                        v-model="note"
-                        label="Note (optional)"
-                        :maxlength="PURCHASE_ORDER_LIMITS.NOTE"
-                        :disabled="busy"
-                    />
-                </template>
-                <template v-else-if="current">
-                    <p class="text-sm">
-                        Supplier: {{ supplierLabel(current) }}
-                    </p>
-                    <p v-if="current.note" class="text-sm">
-                        Note: {{ current.note }}
-                    </p>
-                </template>
-                <p v-if="validation" role="alert" class="text-sm text-red-700">
-                    {{ validation }}
-                </p>
-
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="text-left">Product</th>
-                            <th class="text-right">Ordered</th>
-                            <th v-if="!isDraft" class="text-right">Received</th>
-                            <th v-if="!isDraft" class="text-right">
-                                Outstanding
-                            </th>
-                            <th class="text-right">Expected cost</th>
-                            <th v-if="isDraft">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody v-if="isDraft">
-                        <tr
-                            v-for="(line, index) in draft"
-                            :key="line.product"
-                            class="border-t"
-                        >
-                            <td>{{ line.name }} ({{ line.EAN }})</td>
-                            <td class="text-right">
-                                <BaseInput
-                                    v-model="line.quantity"
-                                    :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
-                                    :inputmode="
-                                        decimalUnit(line.unit)
-                                            ? 'decimal'
-                                            : 'numeric'
-                                    "
-                                    :error="lineErrors[index]?.quantity"
-                                    :disabled="busy"
-                                />
-                            </td>
-                            <td class="text-right">
-                                <BaseInput
-                                    v-model="line.cost"
-                                    :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
-                                    inputmode="decimal"
-                                    :error="lineErrors[index]?.cost"
-                                    :disabled="busy"
-                                />
-                            </td>
-                            <td class="text-center">
-                                <BaseButton
-                                    size="sm"
-                                    variant="outline"
-                                    :disabled="busy"
-                                    @click="removeLine(index)"
-                                    >Remove</BaseButton
-                                >
-                            </td>
-                        </tr>
-                    </tbody>
-                    <tbody v-else-if="current">
-                        <tr
-                            v-for="line in current.lines"
-                            :key="line._id"
-                            class="border-t"
-                        >
-                            <td>{{ line.name }} ({{ line.EAN }})</td>
-                            <td class="text-right">
-                                {{ formatQuantity(line.orderedQty, line.unit) }}
-                            </td>
-                            <td class="text-right">
-                                {{
-                                    formatQuantity(line.receivedQty, line.unit)
-                                }}
-                            </td>
-                            <td class="text-right">
-                                {{
-                                    formatQuantity(
-                                        line.outstandingQty,
-                                        line.unit,
-                                    )
-                                }}
-                            </td>
-                            <td class="text-right">
-                                {{ formatCurrency(line.expectedCost) }}/{{
-                                    unitLabel(line.unit)
-                                }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <p class="text-sm text-right font-bold">
-                    Expected total:
-                    {{
-                        formatCurrency(
-                            isDraft
-                                ? draftTotal(draft)
-                                : (current?.expectedTotal ?? 0),
-                        )
-                    }}
-                </p>
-
-                <div v-if="isDraft" class="flex flex-wrap items-end gap-3">
-                    <BaseCombobox
-                        v-model="searchText"
-                        v-model:selected="picked"
-                        :options="matchOptions"
-                        label="Add product (EAN or name)"
-                        :maxlength="STRING_LIMITS.PRODUCT_NAME"
-                        :loading="matchesLoading"
-                        :error="matchError"
-                        :disabled="busy"
-                        @search="debouncedSearch"
-                    />
-                </div>
-
-                <div class="flex flex-wrap gap-2">
-                    <template v-if="isDraft">
-                        <BaseButton :disabled="busy" @click="saveDraft"
-                            >Save draft</BaseButton
-                        >
-                        <BaseButton
-                            v-if="current"
-                            :disabled="busy || dirty"
-                            @click="send"
-                            >Mark as sent</BaseButton
-                        >
-                    </template>
-                    <BaseButton
-                        v-if="isOpen"
-                        :disabled="busy"
-                        @click="openReceive"
-                        >Receive</BaseButton
-                    >
-                    <BaseButton
-                        v-if="current && (isDraft || isOpen)"
-                        variant="outline"
-                        :disabled="busy"
-                        @click="cancelOrder"
-                        >Cancel order</BaseButton
-                    >
-                </div>
-                <p
-                    v-if="isDraft && current && dirty"
-                    class="text-sm text-slate-600"
-                >
-                    Save the draft before marking it as sent.
-                </p>
-            </template>
-        </div>
-
-        <BaseModal
-            v-model="receiving"
-            title="Receive purchase order"
-            :closable="!busy"
-            max-width="48rem"
-            scrollable
-        >
-            <div class="space-y-3">
-                <p class="text-sm text-slate-600">
-                    Enter what arrived, at the invoice's actual unit cost. Leave
-                    a quantity blank or 0 to skip a line. Extra goods beyond the
-                    outstanding quantity go through a normal restock.
-                </p>
-                <div
-                    v-for="(line, index) in receipt"
-                    :key="line.line"
-                    class="border-t pt-2 space-y-2"
-                >
-                    <p class="text-sm font-medium">
-                        {{ line.name }} · outstanding
-                        {{ formatQuantity(line.outstandingQty, line.unit) }}
-                    </p>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <BaseInput
-                            v-model="line.quantity"
-                            :label="`Received (${unitLabel(line.unit)})`"
-                            :inputmode="
-                                decimalUnit(line.unit) ? 'decimal' : 'numeric'
-                            "
-                            :error="receiptErrs[index]?.quantity"
-                            :disabled="busy"
-                        />
-                        <BaseInput
-                            v-model="line.cost"
-                            :label="`Actual unit cost (₱/${unitLabel(line.unit)})`"
-                            inputmode="decimal"
-                            :error="receiptErrs[index]?.cost"
-                            :disabled="busy"
+        <PageCard>
+            <div class="space-y-4 p-5">
+                <template v-if="!editing">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <BaseSelect
+                            v-model="statusFilter"
+                            label="Status"
+                            all-label="All statuses"
+                            :options="statusOptions"
+                            @update:model-value="apply"
                         />
                     </div>
-                    <p class="text-xs text-slate-600">
-                        Expected {{ formatCurrency(line.expectedCost) }} ·
-                        {{ varianceText(line) }}
+                    <BaseTable
+                        v-model:page="page"
+                        v-model:items-per-page="limit"
+                        :headers="headers"
+                        :items="rows"
+                        :loading="listLoading"
+                        :error="listError"
+                        empty-text="No purchase orders"
+                        :items-length="totalItems"
+                        @retry="load"
+                    >
+                        <template #cell-reference="{ item }">
+                            {{ purchaseOrderReference(item._id) }}
+                        </template>
+                        <template #cell-createdAt="{ item }">
+                            {{ formatDate(item.createdAt) }}
+                        </template>
+                        <template #cell-supplier="{ item }">
+                            {{ supplierLabel(item) }}
+                        </template>
+                        <template #cell-status="{ item }">
+                            {{ STATUS_LABELS[item.status] }}
+                            <span
+                                v-if="draftSendBlockers(item).length"
+                                class="block text-xs font-medium text-amber-700"
+                                >Needs review before sending</span
+                            >
+                        </template>
+                        <template #cell-lines="{ item }">
+                            {{ item.lines.length }}
+                        </template>
+                        <template #cell-expectedTotal="{ item }">
+                            {{ formatCurrency(item.expectedTotal) }}
+                        </template>
+                        <template #cell-action="{ item }">
+                            <BaseButton size="sm" @click="open(item)"
+                                >Open</BaseButton
+                            >
+                        </template>
+                    </BaseTable>
+                </template>
+                <template v-else>
+                    <div
+                        v-if="current"
+                        class="text-sm text-slate-700 space-y-1"
+                    >
+                        <p>
+                            <strong>{{
+                                purchaseOrderReference(current._id)
+                            }}</strong>
+                            ·
+                            <strong>{{ STATUS_LABELS[current.status] }}</strong>
+                            · created {{ formatDate(current.createdAt) }}
+                            <span v-if="current.createdBy">
+                                by {{ current.createdBy.name }}</span
+                            >
+                        </p>
+                        <p v-if="current.closedShort">
+                            Cancelled after a partial receipt: the outstanding
+                            quantities were closed short.
+                        </p>
+                        <p v-if="current.receipts.length">
+                            {{ current.receipts.length }} linked
+                            {{
+                                current.receipts.length === 1
+                                    ? 'receipt'
+                                    : 'receipts'
+                            }}
+                            in Restock History.
+                            <BaseButton
+                                size="sm"
+                                variant="outline"
+                                @click="viewReceipts(current._id)"
+                                >View receipts</BaseButton
+                            >
+                        </p>
+                    </div>
+                    <div
+                        v-if="blockers.length"
+                        role="status"
+                        class="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"
+                    >
+                        <p class="font-medium">
+                            This draft can't be sent as it stands.
+                        </p>
+                        <p v-for="text in blockers" :key="text">{{ text }}</p>
+                        <p>
+                            Choose an active supplier or remove the archived
+                            products, then save.
+                        </p>
+                    </div>
+                    <template v-if="isDraft">
+                        <SupplierSelect v-model="supplier" :disabled="busy" />
+                        <BaseInput
+                            v-model="note"
+                            label="Note (optional)"
+                            :maxlength="PURCHASE_ORDER_LIMITS.NOTE"
+                            :disabled="busy"
+                        />
+                    </template>
+                    <template v-else-if="current">
+                        <p class="text-sm">
+                            Supplier: {{ supplierLabel(current) }}
+                        </p>
+                        <p v-if="current.note" class="text-sm">
+                            Note: {{ current.note }}
+                        </p>
+                    </template>
+                    <p
+                        v-if="validation"
+                        role="alert"
+                        class="text-sm text-red-700"
+                    >
+                        {{ validation }}
+                    </p>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Product</th>
+                                    <th class="text-right">Ordered</th>
+                                    <th v-if="!isDraft" class="text-right">
+                                        Received
+                                    </th>
+                                    <th v-if="!isDraft" class="text-right">
+                                        Outstanding
+                                    </th>
+                                    <th class="text-right">Expected cost</th>
+                                    <th v-if="isDraft">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody v-if="isDraft">
+                                <tr
+                                    v-for="(line, index) in draft"
+                                    :key="line.product"
+                                    class="border-t"
+                                >
+                                    <td>{{ line.name }} ({{ line.EAN }})</td>
+                                    <td class="text-right">
+                                        <BaseInput
+                                            v-model="line.quantity"
+                                            :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
+                                            :inputmode="
+                                                decimalUnit(line.unit)
+                                                    ? 'decimal'
+                                                    : 'numeric'
+                                            "
+                                            :error="lineErrors[index]?.quantity"
+                                            :disabled="busy"
+                                        />
+                                    </td>
+                                    <td class="text-right">
+                                        <BaseInput
+                                            v-model="line.cost"
+                                            :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
+                                            inputmode="decimal"
+                                            :error="lineErrors[index]?.cost"
+                                            :disabled="busy"
+                                        />
+                                    </td>
+                                    <td class="text-center">
+                                        <BaseButton
+                                            size="sm"
+                                            variant="outline"
+                                            :disabled="busy"
+                                            @click="removeLine(index)"
+                                            >Remove</BaseButton
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody v-else-if="current">
+                                <tr
+                                    v-for="line in current.lines"
+                                    :key="line._id"
+                                    class="border-t"
+                                >
+                                    <td>{{ line.name }} ({{ line.EAN }})</td>
+                                    <td class="text-right">
+                                        {{
+                                            formatQuantity(
+                                                line.orderedQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td class="text-right">
+                                        {{
+                                            formatQuantity(
+                                                line.receivedQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td class="text-right">
+                                        {{
+                                            formatQuantity(
+                                                line.outstandingQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td class="text-right">
+                                        {{
+                                            formatCurrency(line.expectedCost)
+                                        }}/{{ unitLabel(line.unit) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-sm text-right font-bold">
+                        Expected total:
+                        {{
+                            formatCurrency(
+                                isDraft
+                                    ? draftTotal(draft)
+                                    : (current?.expectedTotal ?? 0),
+                            )
+                        }}
+                    </p>
+
+                    <div v-if="isDraft" class="flex flex-wrap items-end gap-3">
+                        <BaseCombobox
+                            v-model="searchText"
+                            v-model:selected="picked"
+                            :options="matchOptions"
+                            label="Add product (EAN or name)"
+                            :maxlength="STRING_LIMITS.PRODUCT_NAME"
+                            :loading="matchesLoading"
+                            :error="matchError"
+                            :disabled="busy"
+                            @search="debouncedSearch"
+                        />
+                    </div>
+
+                    <div class="flex flex-wrap gap-2">
+                        <template v-if="isDraft">
+                            <BaseButton :disabled="busy" @click="saveDraft"
+                                >Save draft</BaseButton
+                            >
+                            <BaseButton
+                                v-if="current"
+                                :disabled="busy || dirty"
+                                @click="send"
+                                >Mark as sent</BaseButton
+                            >
+                        </template>
+                        <BaseButton
+                            v-if="isOpen"
+                            :disabled="busy"
+                            @click="openReceive"
+                            >Receive</BaseButton
+                        >
+                        <BaseButton
+                            v-if="current && (isDraft || isOpen)"
+                            variant="outline"
+                            :disabled="busy"
+                            @click="cancelOrder"
+                            >Cancel order</BaseButton
+                        >
+                    </div>
+                    <p
+                        v-if="isDraft && current && dirty"
+                        class="text-sm text-slate-600"
+                    >
+                        Save the draft before marking it as sent.
+                    </p>
+                </template>
+            </div>
+
+            <BaseModal
+                v-model="receiving"
+                title="Receive purchase order"
+                :closable="!busy"
+                max-width="48rem"
+                scrollable
+            >
+                <div class="space-y-3">
+                    <p class="text-sm text-slate-600">
+                        Enter what arrived, at the invoice's actual unit cost.
+                        Leave a quantity blank or 0 to skip a line. Extra goods
+                        beyond the outstanding quantity go through a normal
+                        restock.
                     </p>
                     <div
-                        v-if="line.tracksExpiry"
-                        class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                        v-for="(line, index) in receipt"
+                        :key="line.line"
+                        class="border-t pt-2 space-y-2"
                     >
-                        <BaseInput
-                            v-model="line.expiryDate"
-                            type="date"
-                            label="Expiry date (required)"
-                            :error="receiptErrs[index]?.expiryDate"
-                            :disabled="busy"
-                        />
-                        <BaseInput
-                            v-model="line.batchNo"
-                            label="Batch number (optional)"
-                            :maxlength="EXPIRY_LIMITS.BATCH_NO"
-                            :disabled="busy"
-                        />
+                        <p class="text-sm font-medium">
+                            {{ line.name }} · outstanding
+                            {{ formatQuantity(line.outstandingQty, line.unit) }}
+                        </p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <BaseInput
+                                v-model="line.quantity"
+                                :label="`Received (${unitLabel(line.unit)})`"
+                                :inputmode="
+                                    decimalUnit(line.unit)
+                                        ? 'decimal'
+                                        : 'numeric'
+                                "
+                                :error="receiptErrs[index]?.quantity"
+                                :disabled="busy"
+                            />
+                            <BaseInput
+                                v-model="line.cost"
+                                :label="`Actual unit cost (₱/${unitLabel(line.unit)})`"
+                                inputmode="decimal"
+                                :error="receiptErrs[index]?.cost"
+                                :disabled="busy"
+                            />
+                        </div>
+                        <p class="text-xs text-slate-600">
+                            Expected {{ formatCurrency(line.expectedCost) }} ·
+                            {{ varianceText(line) }}
+                        </p>
+                        <div
+                            v-if="line.tracksExpiry"
+                            class="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                        >
+                            <BaseInput
+                                v-model="line.expiryDate"
+                                type="date"
+                                label="Expiry date (required)"
+                                :error="receiptErrs[index]?.expiryDate"
+                                :disabled="busy"
+                            />
+                            <BaseInput
+                                v-model="line.batchNo"
+                                label="Batch number (optional)"
+                                :maxlength="EXPIRY_LIMITS.BATCH_NO"
+                                :disabled="busy"
+                            />
+                        </div>
                     </div>
+                    <BaseInput
+                        v-model="invoiceNumber"
+                        label="Supplier invoice / DR number (optional)"
+                        :maxlength="SUPPLIER_LIMITS.INVOICE"
+                        :disabled="busy"
+                    />
+                    <BaseInput
+                        v-model="description"
+                        label="Description (optional)"
+                        :maxlength="STRING_LIMITS.DESCRIPTION"
+                        :disabled="busy"
+                    />
+                    <p
+                        v-if="receiveError"
+                        role="alert"
+                        class="text-sm text-red-700"
+                    >
+                        {{ receiveError }}
+                    </p>
                 </div>
-                <BaseInput
-                    v-model="invoiceNumber"
-                    label="Supplier invoice / DR number (optional)"
-                    :maxlength="SUPPLIER_LIMITS.INVOICE"
-                    :disabled="busy"
-                />
-                <BaseInput
-                    v-model="description"
-                    label="Description (optional)"
-                    :maxlength="STRING_LIMITS.DESCRIPTION"
-                    :disabled="busy"
-                />
-                <p
-                    v-if="receiveError"
-                    role="alert"
-                    class="text-sm text-red-700"
-                >
-                    {{ receiveError }}
-                </p>
-            </div>
-            <template #footer>
-                <BaseButton
-                    variant="outline"
-                    :disabled="busy"
-                    @click="receiving = false"
-                    >Close</BaseButton
-                >
-                <BaseButton
-                    class="flex-1"
-                    :disabled="busy"
-                    @click="submitReceive"
-                >
-                    {{ busy ? 'Receiving…' : 'Record receipt' }}
-                </BaseButton>
-            </template>
-        </BaseModal>
-        <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
-    </PageCard>
+                <template #footer>
+                    <BaseButton
+                        variant="outline"
+                        :disabled="busy"
+                        @click="receiving = false"
+                        >Close</BaseButton
+                    >
+                    <BaseButton
+                        class="flex-1"
+                        :disabled="busy"
+                        @click="submitReceive"
+                    >
+                        {{ busy ? 'Receiving…' : 'Record receipt' }}
+                    </BaseButton>
+                </template>
+            </BaseModal>
+            <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
+        </PageCard>
+    </PageFrame>
 </template>
 
 <script setup lang="ts">
@@ -403,6 +427,7 @@ import {
 import { useRouter } from 'vue-router';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';

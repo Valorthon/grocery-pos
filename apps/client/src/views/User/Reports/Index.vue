@@ -1,5 +1,5 @@
 <template>
-    <PageCard title="Sales reports">
+    <PageFrame>
         <template #actions
             ><BaseButton
                 :disabled="loading || exporting || !report"
@@ -7,321 +7,376 @@
                 >{{ exporting ? 'Exporting…' : 'Export CSV' }}</BaseButton
             ></template
         >
-        <div class="space-y-5 p-5">
-            <p class="text-sm text-slate-600">
-                Event-date reports: sales use their original time; voids and
-                refunds affect the day they happened. Costs use latest-receipt
-                estimates.
-            </p>
-            <p v-if="options" class="text-sm">
-                Store timezone: {{ options.timeZone }} · Maximum
-                {{ options.maxDays }} days. Weeks start Monday.
-            </p>
-            <form
-                class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-                @submit.prevent="apply"
-            >
-                <BaseSelect
-                    id="report-preset"
-                    v-model="preset"
-                    label="Date preset"
-                    :options="
-                        REPORT_PRESETS.map((value) => ({ label: value, value }))
-                    "
-                    @update:model-value="choosePreset"
-                />
-                <BaseInput
-                    id="report-from"
-                    v-model="filters.from"
-                    type="date"
-                    label="From"
-                    @input="preset = 'Custom'"
-                />
-                <BaseInput
-                    id="report-to"
-                    v-model="filters.to"
-                    type="date"
-                    label="To (inclusive)"
-                    @input="preset = 'Custom'"
-                />
-                <BaseSelect
-                    id="report-group"
-                    v-model="filters.groupBy"
-                    label="Group by"
-                    :options="
-                        Object.values(SalesReportGroup).map((value) => ({
-                            label: GROUP_LABELS[value],
-                            value,
-                        }))
-                    "
-                />
-                <BaseSelect
-                    id="report-cashier"
-                    v-model="filters.cashier"
-                    label="Cashier"
-                    all-label="All cashiers"
-                    :options="
-                        cashiers.map((row) => ({
-                            label: row.name,
-                            value: row._id,
-                        }))
-                    "
-                />
-                <BaseSelect
-                    id="report-payment"
-                    v-model="filters.paymentType"
-                    label="Payment"
-                    all-label="All payments"
-                    :options="
-                        Object.values(PaymentType).map((value) => ({
-                            label: value,
-                            value,
-                        }))
-                    "
-                />
-                <BaseSelect
-                    id="report-category"
-                    v-model="filters.category"
-                    label="Category"
-                    all-label="All categories"
-                    :options="
-                        categories.map((row) => ({
-                            label:
-                                row.name + (row.isActive ? '' : ' (archived)'),
-                            value: row._id,
-                        }))
-                    "
-                />
-                <BaseButton type="submit" :disabled="loading || !options">{{
-                    loading ? 'Loading…' : 'Run report'
-                }}</BaseButton>
-            </form>
-            <p v-if="filterError" role="alert" class="text-sm text-red-700">
-                {{ filterError }}
-                <BaseButton variant="outline" @click="refreshFilters"
-                    >Retry filters</BaseButton
-                >
-            </p>
-            <p v-if="error" role="alert" class="text-sm text-red-700">
-                {{ error }}
-                <BaseButton variant="outline" :disabled="loading" @click="retry"
-                    >Retry report</BaseButton
-                >
-            </p>
-            <p v-if="exportError" role="alert" class="text-sm text-red-700">
-                {{ exportError }}
-            </p>
-            <template v-if="report">
-                <p class="text-sm font-semibold" data-testid="report-applied">
-                    {{ report.from }} through {{ report.to }} ·
-                    {{ GROUP_LABELS[report.groupBy] }} · {{ report.timeZone }}
+        <PageCard>
+            <div class="space-y-5 p-5">
+                <p class="text-sm text-slate-600">
+                    Event-date reports: sales use their original time; voids and
+                    refunds affect the day they happened. Costs use
+                    latest-receipt estimates.
                 </p>
-                <div class="grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-xl border border-slate-200 p-3">
-                        <p class="text-sm">Net sales</p>
-                        <p class="text-xl font-bold">
-                            {{ formatCurrency(report.totals.netSales) }}
-                        </p>
+                <p v-if="options" class="text-sm">
+                    Store timezone: {{ options.timeZone }} · Maximum
+                    {{ options.maxDays }} days. Weeks start Monday.
+                </p>
+                <form
+                    class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                    @submit.prevent="apply"
+                >
+                    <BaseSelect
+                        id="report-preset"
+                        v-model="preset"
+                        label="Date preset"
+                        :options="
+                            REPORT_PRESETS.map((value) => ({
+                                label: value,
+                                value,
+                            }))
+                        "
+                        @update:model-value="choosePreset"
+                    />
+                    <BaseInput
+                        id="report-from"
+                        v-model="filters.from"
+                        type="date"
+                        label="From"
+                        @input="preset = 'Custom'"
+                    />
+                    <BaseInput
+                        id="report-to"
+                        v-model="filters.to"
+                        type="date"
+                        label="To (inclusive)"
+                        @input="preset = 'Custom'"
+                    />
+                    <BaseSelect
+                        id="report-group"
+                        v-model="filters.groupBy"
+                        label="Group by"
+                        :options="
+                            Object.values(SalesReportGroup).map((value) => ({
+                                label: GROUP_LABELS[value],
+                                value,
+                            }))
+                        "
+                    />
+                    <BaseSelect
+                        id="report-cashier"
+                        v-model="filters.cashier"
+                        label="Cashier"
+                        all-label="All cashiers"
+                        :options="
+                            cashiers.map((row) => ({
+                                label: row.name,
+                                value: row._id,
+                            }))
+                        "
+                    />
+                    <BaseSelect
+                        id="report-payment"
+                        v-model="filters.paymentType"
+                        label="Payment"
+                        all-label="All payments"
+                        :options="
+                            Object.values(PaymentType).map((value) => ({
+                                label: value,
+                                value,
+                            }))
+                        "
+                    />
+                    <BaseSelect
+                        id="report-category"
+                        v-model="filters.category"
+                        label="Category"
+                        all-label="All categories"
+                        :options="
+                            categories.map((row) => ({
+                                label:
+                                    row.name +
+                                    (row.isActive ? '' : ' (archived)'),
+                                value: row._id,
+                            }))
+                        "
+                    />
+                    <BaseButton type="submit" :disabled="loading || !options">{{
+                        loading ? 'Loading…' : 'Run report'
+                    }}</BaseButton>
+                </form>
+                <p v-if="filterError" role="alert" class="text-sm text-red-700">
+                    {{ filterError }}
+                    <BaseButton variant="outline" @click="refreshFilters"
+                        >Retry filters</BaseButton
+                    >
+                </p>
+                <p v-if="error" role="alert" class="text-sm text-red-700">
+                    {{ error }}
+                    <BaseButton
+                        variant="outline"
+                        :disabled="loading"
+                        @click="retry"
+                        >Retry report</BaseButton
+                    >
+                </p>
+                <p v-if="exportError" role="alert" class="text-sm text-red-700">
+                    {{ exportError }}
+                </p>
+                <template v-if="report">
+                    <p
+                        class="text-sm font-semibold"
+                        data-testid="report-applied"
+                    >
+                        {{ report.from }} through {{ report.to }} ·
+                        {{ GROUP_LABELS[report.groupBy] }} ·
+                        {{ report.timeZone }}
+                    </p>
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        <div class="rounded-xl border border-slate-200 p-3">
+                            <p class="text-sm">Net sales</p>
+                            <p class="text-xl font-bold">
+                                {{ formatCurrency(report.totals.netSales) }}
+                            </p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 p-3">
+                            <p class="text-sm">Known COGS · latest receipt</p>
+                            <p class="text-xl font-bold">
+                                {{ formatCurrency(report.totals.knownCogs) }}
+                            </p>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 p-3">
+                            <p class="text-sm">Gross margin estimate</p>
+                            <p class="text-xl font-bold">
+                                {{
+                                    report.totals.grossMargin === null
+                                        ? 'Incomplete cost coverage'
+                                        : formatCurrency(
+                                              report.totals.grossMargin,
+                                          )
+                                }}
+                            </p>
+                        </div>
                     </div>
-                    <div class="rounded-xl border border-slate-200 p-3">
-                        <p class="text-sm">Known COGS · latest receipt</p>
-                        <p class="text-xl font-bold">
-                            {{ formatCurrency(report.totals.knownCogs) }}
-                        </p>
-                    </div>
-                    <div class="rounded-xl border border-slate-200 p-3">
-                        <p class="text-sm">Gross margin estimate</p>
-                        <p class="text-xl font-bold">
+                    <p class="text-sm" data-testid="cost-coverage">
+                        {{ report.totals.knownCostLines }} known-cost /
+                        {{ report.totals.unknownCostLines }} unknown-cost event
+                        lines.
+                        <span v-if="!report.totals.costCoverageComplete"
+                            >Known-cost portion margin:
                             {{
-                                report.totals.grossMargin === null
-                                    ? 'Incomplete cost coverage'
-                                    : formatCurrency(report.totals.grossMargin)
-                            }}
+                                formatCurrency(report.totals.knownGrossMargin)
+                            }}. Missing costs are not zero.</span
+                        >
+                    </p>
+                    <svg
+                        v-if="
+                            report.groupBy === SalesReportGroup.DAY &&
+                            chartPoints
+                        "
+                        viewBox="0 0 600 180"
+                        role="img"
+                        aria-label="Daily net sales trend"
+                        class="h-48 w-full rounded-xl border border-slate-200 bg-surface"
+                    >
+                        <line
+                            x1="10"
+                            :y1="chartZero"
+                            x2="590"
+                            :y2="chartZero"
+                            class="stroke-line-strong"
+                        />
+                        <polyline
+                            :points="chartPoints"
+                            fill="none"
+                            class="stroke-leaf-600"
+                            stroke-width="3"
+                        />
+                    </svg>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <caption class="pb-2 text-left">
+                                All amounts are pesos. Quantities remain
+                                separated by unit. A transaction can appear in
+                                several product/category groups; totals count it
+                                once.
+                            </caption>
+                            <thead>
+                                <tr>
+                                    <th>Group</th>
+                                    <th>Sales / reversals</th>
+                                    <th>Quantity (net)</th>
+                                    <th>Gross</th>
+                                    <th>Discounts</th>
+                                    <th>Voids</th>
+                                    <th>Refunds</th>
+                                    <th>Net</th>
+                                    <th>Known COGS</th>
+                                    <th>Margin estimate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="row in report.rows"
+                                    :key="row.key"
+                                    class="border-t border-slate-200"
+                                >
+                                    <th class="py-3">{{ row.label }}</th>
+                                    <td>
+                                        {{ row.transactions }} /
+                                        {{ row.reversalTransactions }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            row.quantities
+                                                .map((q) =>
+                                                    formatQuantity(
+                                                        q.net,
+                                                        q.unit,
+                                                    ),
+                                                )
+                                                .join(', ')
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{ formatCurrency(row.grossSales) }}
+                                    </td>
+                                    <td>{{ formatCurrency(row.discounts) }}</td>
+                                    <td>{{ formatCurrency(row.voids) }}</td>
+                                    <td>{{ formatCurrency(row.refunds) }}</td>
+                                    <td>{{ formatCurrency(row.netSales) }}</td>
+                                    <td>{{ formatCurrency(row.knownCogs) }}</td>
+                                    <td>
+                                        {{
+                                            row.grossMargin === null
+                                                ? 'Incomplete'
+                                                : formatCurrency(
+                                                      row.grossMargin,
+                                                  )
+                                        }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr
+                                    class="border-t-2 border-slate-300 font-bold"
+                                >
+                                    <th class="py-3">Total</th>
+                                    <td>
+                                        {{ report.totals.transactions }} /
+                                        {{ report.totals.reversalTransactions }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            report.totals.quantities
+                                                .map((q) =>
+                                                    formatQuantity(
+                                                        q.net,
+                                                        q.unit,
+                                                    ),
+                                                )
+                                                .join(', ')
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatCurrency(
+                                                report.totals.grossSales,
+                                            )
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatCurrency(
+                                                report.totals.discounts,
+                                            )
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatCurrency(report.totals.voids)
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatCurrency(
+                                                report.totals.refunds,
+                                            )
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatCurrency(
+                                                report.totals.netSales,
+                                            )
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatCurrency(
+                                                report.totals.knownCogs,
+                                            )
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            report.totals.grossMargin === null
+                                                ? 'Incomplete'
+                                                : formatCurrency(
+                                                      report.totals.grossMargin,
+                                                  )
+                                        }}
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        <p v-if="!report.rows.length" class="py-4 text-sm">
+                            No matching sales or reversal events.
                         </p>
                     </div>
-                </div>
-                <p class="text-sm" data-testid="cost-coverage">
-                    {{ report.totals.knownCostLines }} known-cost /
-                    {{ report.totals.unknownCostLines }} unknown-cost event
-                    lines.
-                    <span v-if="!report.totals.costCoverageComplete"
-                        >Known-cost portion margin:
-                        {{ formatCurrency(report.totals.knownGrossMargin) }}.
-                        Missing costs are not zero.</span
+                    <details
+                        class="rounded-xl border border-slate-200 p-3 text-sm"
                     >
-                </p>
-                <svg
-                    v-if="
-                        report.groupBy === SalesReportGroup.DAY && chartPoints
-                    "
-                    viewBox="0 0 600 180"
-                    role="img"
-                    aria-label="Daily net sales trend"
-                    class="h-48 w-full rounded-xl border border-slate-200 bg-surface"
-                >
-                    <line
-                        x1="10"
-                        :y1="chartZero"
-                        x2="590"
-                        :y2="chartZero"
-                        class="stroke-line-strong"
-                    />
-                    <polyline
-                        :points="chartPoints"
-                        fill="none"
-                        class="stroke-leaf-600"
-                        stroke-width="3"
-                    />
-                </svg>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left text-sm">
-                        <caption class="pb-2 text-left">
-                            All amounts are pesos. Quantities remain separated
-                            by unit. A transaction can appear in several
-                            product/category groups; totals count it once.
-                        </caption>
-                        <thead>
-                            <tr>
-                                <th>Group</th>
-                                <th>Sales / reversals</th>
-                                <th>Quantity (net)</th>
-                                <th>Gross</th>
-                                <th>Discounts</th>
-                                <th>Voids</th>
-                                <th>Refunds</th>
-                                <th>Net</th>
-                                <th>Known COGS</th>
-                                <th>Margin estimate</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in report.rows"
-                                :key="row.key"
-                                class="border-t border-slate-200"
-                            >
-                                <th class="py-3">{{ row.label }}</th>
-                                <td>
-                                    {{ row.transactions }} /
-                                    {{ row.reversalTransactions }}
-                                </td>
-                                <td>
-                                    {{
-                                        row.quantities
-                                            .map((q) =>
-                                                formatQuantity(q.net, q.unit),
-                                            )
-                                            .join(', ')
-                                    }}
-                                </td>
-                                <td>{{ formatCurrency(row.grossSales) }}</td>
-                                <td>{{ formatCurrency(row.discounts) }}</td>
-                                <td>{{ formatCurrency(row.voids) }}</td>
-                                <td>{{ formatCurrency(row.refunds) }}</td>
-                                <td>{{ formatCurrency(row.netSales) }}</td>
-                                <td>{{ formatCurrency(row.knownCogs) }}</td>
-                                <td>
-                                    {{
-                                        row.grossMargin === null
-                                            ? 'Incomplete'
-                                            : formatCurrency(row.grossMargin)
-                                    }}
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tfoot>
-                            <tr class="border-t-2 border-slate-300 font-bold">
-                                <th class="py-3">Total</th>
-                                <td>
-                                    {{ report.totals.transactions }} /
-                                    {{ report.totals.reversalTransactions }}
-                                </td>
-                                <td>
-                                    {{
-                                        report.totals.quantities
-                                            .map((q) =>
-                                                formatQuantity(q.net, q.unit),
-                                            )
-                                            .join(', ')
-                                    }}
-                                </td>
-                                <td>
-                                    {{
-                                        formatCurrency(report.totals.grossSales)
-                                    }}
-                                </td>
-                                <td>
-                                    {{
-                                        formatCurrency(report.totals.discounts)
-                                    }}
-                                </td>
-                                <td>
-                                    {{ formatCurrency(report.totals.voids) }}
-                                </td>
-                                <td>
-                                    {{ formatCurrency(report.totals.refunds) }}
-                                </td>
-                                <td>
-                                    {{ formatCurrency(report.totals.netSales) }}
-                                </td>
-                                <td>
-                                    {{
-                                        formatCurrency(report.totals.knownCogs)
-                                    }}
-                                </td>
-                                <td>
-                                    {{
-                                        report.totals.grossMargin === null
-                                            ? 'Incomplete'
-                                            : formatCurrency(
-                                                  report.totals.grossMargin,
-                                              )
-                                    }}
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
-                    <p v-if="!report.rows.length" class="py-4 text-sm">
-                        No matching sales or reversal events.
-                    </p>
-                </div>
-                <details class="rounded-xl border border-slate-200 p-3 text-sm">
-                    <summary class="cursor-pointer font-bold">
-                        Reconcile with shift Z-reads
-                    </summary>
-                    <p class="mt-2">{{ report.reconciliation.note }}</p>
-                    <p>
-                        Original charged sales:
-                        {{ formatCurrency(report.reconciliation.chargedSales) }}
-                        · reversal events:
-                        {{
-                            formatCurrency(
-                                report.reconciliation.reversalAmount,
-                            )
-                        }}.
-                    </p>
-                    <p>
-                        Prior-period reversals:
-                        {{ report.reconciliation.priorPeriodReversals }} ({{
-                            formatCurrency(
-                                report.reconciliation.priorPeriodReversalAmount,
-                            )
-                        }}). Late offline occurrences:
-                        {{ report.reconciliation.lateOfflineTransactions }} ({{
-                            formatCurrency(
-                                report.reconciliation.lateOfflineNetSales,
-                            )
-                        }}).
-                    </p>
-                    <RouterLink
-                        :to="{ name: 'Shifts' }"
-                        class="font-bold text-leaf-700 underline"
-                        >Review original Z-reads and late addenda</RouterLink
-                    >
-                </details>
-            </template>
-        </div>
-    </PageCard>
+                        <summary class="cursor-pointer font-bold">
+                            Reconcile with shift Z-reads
+                        </summary>
+                        <p class="mt-2">{{ report.reconciliation.note }}</p>
+                        <p>
+                            Original charged sales:
+                            {{
+                                formatCurrency(
+                                    report.reconciliation.chargedSales,
+                                )
+                            }}
+                            · reversal events:
+                            {{
+                                formatCurrency(
+                                    report.reconciliation.reversalAmount,
+                                )
+                            }}.
+                        </p>
+                        <p>
+                            Prior-period reversals:
+                            {{ report.reconciliation.priorPeriodReversals }} ({{
+                                formatCurrency(
+                                    report.reconciliation
+                                        .priorPeriodReversalAmount,
+                                )
+                            }}). Late offline occurrences:
+                            {{ report.reconciliation.lateOfflineTransactions }}
+                            ({{
+                                formatCurrency(
+                                    report.reconciliation.lateOfflineNetSales,
+                                )
+                            }}).
+                        </p>
+                        <RouterLink
+                            :to="{ name: 'Shifts' }"
+                            class="font-bold text-leaf-700 underline"
+                            >Review original Z-reads and late
+                            addenda</RouterLink
+                        >
+                    </details>
+                </template>
+            </div>
+        </PageCard>
+    </PageFrame>
 </template>
 <script setup lang="ts">
 import { GROUP_LABELS } from './group-labels';
@@ -338,6 +393,7 @@ import {
 } from '@grocery-pos/contracts';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';

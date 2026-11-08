@@ -1,20 +1,12 @@
 <template>
-    <div class="flex-1 flex flex-col overflow-hidden bg-slate-100">
-        <header
-            class="flex flex-col sm:flex-row sm:items-center justify-between px-6 py-5 bg-white border-b border-slate-200 gap-4"
-        >
-            <div>
-                <h1
-                    class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight"
-                >
-                    Orders & Transactions
-                </h1>
-                <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
-                    View transaction history
-                </p>
-            </div>
-
-            <div class="flex items-center gap-3">
+    <!-- The seller layout's main does not scroll; the admin one does. -->
+    <div
+        :class="
+            inSellerLayout ? 'flex-1 min-h-0 overflow-y-auto p-4 sm:p-6' : ''
+        "
+    >
+        <PageFrame description="View transaction history">
+            <template #actions>
                 <div
                     class="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl text-right"
                 >
@@ -26,19 +18,14 @@
                         {{ totalItems }}
                     </p>
                 </div>
-                <button
+                <BaseButton
                     v-if="canSell"
-                    type="button"
-                    class="inline-flex items-center gap-2 bg-leaf-600 hover:bg-leaf-700 active:bg-leaf-800 text-white text-xs sm:text-sm font-bold px-4 py-2 rounded-xl transition-all active:scale-[0.98] shadow-xs"
                     @click="router.push({ name: 'Sell' })"
                 >
                     <Plus class="w-4 h-4" />
                     New Sale
-                </button>
-            </div>
-        </header>
-
-        <div class="flex-1 overflow-y-auto p-6">
+                </BaseButton>
+            </template>
             <form
                 class="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
                 @submit.prevent="applyFilters"
@@ -153,316 +140,331 @@
                     <Badge :color="statusColor(item.status)">{{ value }}</Badge>
                 </template>
             </BaseTable>
-        </div>
 
-        <BaseModal
-            v-model="isDialogOpen"
-            title="Sale Details"
-            max-width="36rem"
-            scrollable
-            :closable="!reversing"
-        >
-            <p class="mb-3 text-sm font-bold" data-testid="sale-full-id">
-                Sale #{{ saleNumber(selectedId) }} · {{ selectedId }}
-            </p>
-            <p v-if="selectedSale?.offline" class="text-sm mb-3 text-amber-900">
-                Offline cash sale · occurred {{ selectedSale.soldAt }}.
-                <strong v-if="selectedSale.stockShortfall"
-                    >Stock shortfall — reconcile inventory.</strong
+            <BaseModal
+                v-model="isDialogOpen"
+                title="Sale Details"
+                max-width="36rem"
+                scrollable
+                :closable="!reversing"
+            >
+                <p class="mb-3 text-sm font-bold" data-testid="sale-full-id">
+                    Sale #{{ saleNumber(selectedId) }} · {{ selectedId }}
+                </p>
+                <p
+                    v-if="selectedSale?.offline"
+                    class="text-sm mb-3 text-amber-900"
                 >
-                <span v-if="selectedSale.lateOffline"
-                    >Admin-recorded after shift close; shown as a separate
-                    closing-report addendum.</span
-                >
-            </p>
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr
-                        class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
+                    Offline cash sale · occurred {{ selectedSale.soldAt }}.
+                    <strong v-if="selectedSale.stockShortfall"
+                        >Stock shortfall — reconcile inventory.</strong
                     >
-                        <th class="py-2.5 px-4">Product</th>
-                        <th class="py-2.5 px-4">Qty</th>
-                        <th class="py-2.5 px-4 text-right">Unit Price</th>
-                        <th class="py-2.5 px-4 text-right">Total</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <tr v-if="detailsLoading">
-                        <td colspan="4" class="py-4 text-center">
-                            <Spinner class="mx-auto text-slate-400" />
-                        </td>
-                    </tr>
-                    <tr v-else-if="detailsError">
-                        <td colspan="4" class="py-4 text-center">
-                            <div
-                                role="alert"
-                                data-testid="details-error"
-                                class="flex flex-col items-center gap-2 text-sm"
-                            >
-                                <p class="font-bold text-red-700">
-                                    {{ detailsError }}
-                                </p>
-                                <BaseButton
-                                    variant="outline"
-                                    size="sm"
-                                    @click="loadDetails"
-                                    >Retry</BaseButton
-                                >
-                            </div>
-                        </td>
-                    </tr>
-                    <tr v-for="d in details" :key="d._id">
-                        <td class="py-3 px-4">
-                            {{ d.product?.name ?? 'N/A' }}
-                        </td>
-                        <td class="py-3 px-4">
-                            {{
-                                d.unit
-                                    ? formatQuantity(d.quantity, d.unit)
-                                    : d.quantity
-                            }}
-                        </td>
-                        <td class="py-3 px-4 text-right">
-                            {{ formatCurrency(d.unitPrice ?? 0) }}
-                        </td>
-                        <td class="py-3 px-4 text-right">
-                            {{
-                                formatCurrency(
-                                    quantityAmount(
-                                        d.unitPrice ?? 0,
-                                        d.quantity,
-                                        d.unit,
-                                    ),
-                                )
-                            }}
-                        </td>
-                    </tr>
-                </tbody>
-                <tfoot
-                    v-if="!detailsLoading && selectedSale"
-                    class="border-t border-slate-200 text-sm"
-                >
-                    <template v-if="selectedSale.discount">
-                        <tr>
-                            <td colspan="3" class="py-2 px-4 text-slate-500">
-                                Subtotal
+                    <span v-if="selectedSale.lateOffline"
+                        >Admin-recorded after shift close; shown as a separate
+                        closing-report addendum.</span
+                    >
+                </p>
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr
+                            class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
+                        >
+                            <th class="py-2.5 px-4">Product</th>
+                            <th class="py-2.5 px-4">Qty</th>
+                            <th class="py-2.5 px-4 text-right">Unit Price</th>
+                            <th class="py-2.5 px-4 text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr v-if="detailsLoading">
+                            <td colspan="4" class="py-4 text-center">
+                                <Spinner class="mx-auto text-slate-400" />
                             </td>
-                            <td class="py-2 px-4 text-right">
+                        </tr>
+                        <tr v-else-if="detailsError">
+                            <td colspan="4" class="py-4 text-center">
+                                <div
+                                    role="alert"
+                                    data-testid="details-error"
+                                    class="flex flex-col items-center gap-2 text-sm"
+                                >
+                                    <p class="font-bold text-red-700">
+                                        {{ detailsError }}
+                                    </p>
+                                    <BaseButton
+                                        variant="outline"
+                                        size="sm"
+                                        @click="loadDetails"
+                                        >Retry</BaseButton
+                                    >
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-for="d in details" :key="d._id">
+                            <td class="py-3 px-4">
+                                {{ d.product?.name ?? 'N/A' }}
+                            </td>
+                            <td class="py-3 px-4">
+                                {{
+                                    d.unit
+                                        ? formatQuantity(d.quantity, d.unit)
+                                        : d.quantity
+                                }}
+                            </td>
+                            <td class="py-3 px-4 text-right">
+                                {{ formatCurrency(d.unitPrice ?? 0) }}
+                            </td>
+                            <td class="py-3 px-4 text-right">
                                 {{
                                     formatCurrency(
-                                        selectedSale.amount +
-                                            selectedSale.discount.amount,
+                                        quantityAmount(
+                                            d.unitPrice ?? 0,
+                                            d.quantity,
+                                            d.unit,
+                                        ),
                                     )
                                 }}
                             </td>
                         </tr>
-                        <tr class="text-emerald-700">
-                            <td colspan="3" class="py-2 px-4">
-                                Discount ({{
-                                    discountLabel(selectedSale.discount)
-                                }}) &mdash; {{ selectedSale.discount.reason }}
-                            </td>
+                    </tbody>
+                    <tfoot
+                        v-if="!detailsLoading && selectedSale"
+                        class="border-t border-slate-200 text-sm"
+                    >
+                        <template v-if="selectedSale.discount">
+                            <tr>
+                                <td
+                                    colspan="3"
+                                    class="py-2 px-4 text-slate-500"
+                                >
+                                    Subtotal
+                                </td>
+                                <td class="py-2 px-4 text-right">
+                                    {{
+                                        formatCurrency(
+                                            selectedSale.amount +
+                                                selectedSale.discount.amount,
+                                        )
+                                    }}
+                                </td>
+                            </tr>
+                            <tr class="text-emerald-700">
+                                <td colspan="3" class="py-2 px-4">
+                                    Discount ({{
+                                        discountLabel(selectedSale.discount)
+                                    }}) &mdash;
+                                    {{ selectedSale.discount.reason }}
+                                </td>
+                                <td class="py-2 px-4 text-right">
+                                    -{{
+                                        formatCurrency(
+                                            selectedSale.discount.amount,
+                                        )
+                                    }}
+                                </td>
+                            </tr>
+                        </template>
+                        <tr class="font-bold text-slate-900">
+                            <td colspan="3" class="py-2 px-4">Total charged</td>
                             <td class="py-2 px-4 text-right">
-                                -{{
-                                    formatCurrency(selectedSale.discount.amount)
-                                }}
+                                {{ formatCurrency(selectedSale.amount) }}
                             </td>
                         </tr>
-                    </template>
-                    <tr class="font-bold text-slate-900">
-                        <td colspan="3" class="py-2 px-4">Total charged</td>
-                        <td class="py-2 px-4 text-right">
-                            {{ formatCurrency(selectedSale.amount) }}
-                        </td>
-                    </tr>
-                </tfoot>
-            </table>
+                    </tfoot>
+                </table>
 
-            <div
-                v-if="selectedSale"
-                class="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm"
-            >
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Status</span>
-                    <Badge :color="statusColor(selectedSale.status)">{{
-                        selectedSale.status
-                    }}</Badge>
-                </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Payment</span>
-                    <span class="font-semibold">{{
-                        paymentLabel(selectedSale.paymentType)
-                    }}</span>
-                </div>
                 <div
-                    v-for="tender in selectedSale.tenders"
-                    :key="tender.type"
-                    class="flex justify-between"
+                    v-if="selectedSale"
+                    class="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm"
                 >
-                    <span class="text-slate-500">{{
-                        tenderLabel(tender.type)
-                    }}</span>
-                    <span>{{ formatCurrency(tender.amount) }}</span>
-                </div>
-                <div
-                    v-if="selectedSale.changeGiven"
-                    class="flex justify-between"
-                >
-                    <span class="text-slate-500">Change</span>
-                    <span>{{ formatCurrency(selectedSale.changeGiven) }}</span>
-                </div>
-                <div
-                    v-if="selectedSale.referenceNumber"
-                    class="flex justify-between"
-                >
-                    <span class="text-slate-500">GCash Ref</span>
-                    <span class="font-mono"
-                        >#{{ selectedSale.referenceNumber }}</span
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Status</span>
+                        <Badge :color="statusColor(selectedSale.status)">{{
+                            selectedSale.status
+                        }}</Badge>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-500">Payment</span>
+                        <span class="font-semibold">{{
+                            paymentLabel(selectedSale.paymentType)
+                        }}</span>
+                    </div>
+                    <div
+                        v-for="tender in selectedSale.tenders"
+                        :key="tender.type"
+                        class="flex justify-between"
                     >
+                        <span class="text-slate-500">{{
+                            tenderLabel(tender.type)
+                        }}</span>
+                        <span>{{ formatCurrency(tender.amount) }}</span>
+                    </div>
+                    <div
+                        v-if="selectedSale.changeGiven"
+                        class="flex justify-between"
+                    >
+                        <span class="text-slate-500">Change</span>
+                        <span>{{
+                            formatCurrency(selectedSale.changeGiven)
+                        }}</span>
+                    </div>
+                    <div
+                        v-if="selectedSale.referenceNumber"
+                        class="flex justify-between"
+                    >
+                        <span class="text-slate-500">GCash Ref</span>
+                        <span class="font-mono"
+                            >#{{ selectedSale.referenceNumber }}</span
+                        >
+                    </div>
+                    <div
+                        v-if="selectedSale.reversal"
+                        class="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800"
+                    >
+                        {{ reversalLabel(selectedSale.reversal.type) }} on
+                        {{ formatDate(selectedSale.reversal.at) }}:
+                        {{ selectedSale.reversal.reason }}
+                        <template v-if="selectedSale.reversal.payoutAmount">
+                            ({{
+                                formatCurrency(
+                                    selectedSale.reversal.payoutAmount,
+                                )
+                            }}
+                            cash paid back)
+                        </template>
+                    </div>
                 </div>
-                <div
-                    v-if="selectedSale.reversal"
-                    class="mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-800"
-                >
-                    {{ reversalLabel(selectedSale.reversal.type) }} on
-                    {{ formatDate(selectedSale.reversal.at) }}:
-                    {{ selectedSale.reversal.reason }}
-                    <template v-if="selectedSale.reversal.payoutAmount">
-                        ({{
-                            formatCurrency(selectedSale.reversal.payoutAmount)
-                        }}
-                        cash paid back)
-                    </template>
-                </div>
-            </div>
 
-            <div
-                v-if="pendingReversal && selectedSale"
-                class="mt-4 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3"
-            >
-                <p class="text-sm font-bold text-red-800">
-                    {{ reversalLabel(pendingReversal) }} this sale of
-                    {{ formatCurrency(selectedSale.amount) }}?
-                </p>
-                <p class="text-xs text-red-700">
-                    Every item goes back into stock and the sale no longer
-                    counts toward revenue. This cannot be undone.
-                </p>
-                <p
-                    v-if="reversalCash === 0"
-                    class="text-xs text-red-700"
-                    data-testid="payout-none"
-                >
-                    No cash is paid back: the sale was paid by GCash.
-                </p>
-                <p
-                    v-else-if="loadingShifts"
-                    class="text-xs text-red-700"
-                    data-testid="payout-loading"
-                >
-                    Checking open shifts…
-                </p>
                 <div
-                    v-else-if="shiftsError"
-                    role="alert"
-                    class="flex flex-wrap items-center gap-2 text-xs font-bold text-red-800"
-                    data-testid="payout-shifts-error"
+                    v-if="pendingReversal && selectedSale"
+                    class="mt-4 space-y-2 rounded-xl border border-red-200 bg-red-50 p-3"
                 >
-                    <span class="flex-1"
-                        >Could not load open shifts: {{ shiftsError }}</span
-                    >
-                    <BaseButton
-                        variant="outline"
-                        size="sm"
-                        @click="loadPayoutShifts(payoutRequired)"
-                        >Retry</BaseButton
-                    >
-                </div>
-                <p
-                    v-else-if="!payoutRequired"
-                    class="text-xs text-red-700"
-                    data-testid="payout-own-shift"
-                >
-                    {{ formatCurrency(reversalCash) }} cash is paid back out of
-                    the drawer of the shift this sale was rung in.
-                </p>
-                <template v-else>
-                    <p
-                        v-if="openShifts.length === 0"
-                        class="text-xs font-bold text-red-800"
-                        data-testid="payout-no-open-shift"
-                    >
-                        {{ formatCurrency(reversalCash) }} cash must be paid
-                        back, but no shift is open to pay it from. Open a shift
-                        first.
+                    <p class="text-sm font-bold text-red-800">
+                        {{ reversalLabel(pendingReversal) }} this sale of
+                        {{ formatCurrency(selectedSale.amount) }}?
                     </p>
-                    <BaseSelect
-                        v-else
-                        id="payout-shift"
-                        v-model="payoutShiftId"
-                        :label="`Pay ${formatCurrency(reversalCash)} back from`"
-                        :options="payoutOptions"
-                        data-testid="payout-shift"
-                    />
-                </template>
-                <label
-                    class="block text-xs font-bold uppercase tracking-wider text-slate-600"
-                    for="reversal-reason"
-                    >Reason</label
-                >
-                <input
-                    id="reversal-reason"
-                    v-model="reversalReason"
-                    type="text"
-                    :maxlength="STRING_LIMITS.REASON"
-                    :placeholder="
-                        pendingReversal === ReversalType.VOID
-                            ? 'e.g. rang up twice'
-                            : 'e.g. customer returned the items'
-                    "
-                    class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-800 focus:outline-none"
-                />
-            </div>
-
-            <template #footer>
-                <template v-if="pendingReversal">
-                    <BaseButton
-                        variant="outline"
-                        :disabled="reversing"
-                        @click="cancelReversal"
-                        >Cancel</BaseButton
+                    <p class="text-xs text-red-700">
+                        Every item goes back into stock and the sale no longer
+                        counts toward revenue. This cannot be undone.
+                    </p>
+                    <p
+                        v-if="reversalCash === 0"
+                        class="text-xs text-red-700"
+                        data-testid="payout-none"
                     >
-                    <BaseButton
-                        variant="danger"
-                        class="flex-1"
-                        :loading="reversing"
-                        :disabled="!canConfirmReversal"
-                        @click="confirmReversal"
-                        >Confirm
-                        {{
-                            reversalLabel(pendingReversal).toLowerCase()
-                        }}</BaseButton
+                        No cash is paid back: the sale was paid by GCash.
+                    </p>
+                    <p
+                        v-else-if="loadingShifts"
+                        class="text-xs text-red-700"
+                        data-testid="payout-loading"
                     >
-                </template>
-                <template v-else>
-                    <template v-if="canReverse">
-                        <BaseButton
-                            variant="outline"
-                            @click="startReversal(ReversalType.VOID)"
-                            >Void sale</BaseButton
+                        Checking open shifts…
+                    </p>
+                    <div
+                        v-else-if="shiftsError"
+                        role="alert"
+                        class="flex flex-wrap items-center gap-2 text-xs font-bold text-red-800"
+                        data-testid="payout-shifts-error"
+                    >
+                        <span class="flex-1"
+                            >Could not load open shifts: {{ shiftsError }}</span
                         >
                         <BaseButton
                             variant="outline"
-                            @click="startReversal(ReversalType.REFUND)"
-                            >Refund sale</BaseButton
+                            size="sm"
+                            @click="loadPayoutShifts(payoutRequired)"
+                            >Retry</BaseButton
+                        >
+                    </div>
+                    <p
+                        v-else-if="!payoutRequired"
+                        class="text-xs text-red-700"
+                        data-testid="payout-own-shift"
+                    >
+                        {{ formatCurrency(reversalCash) }} cash is paid back out
+                        of the drawer of the shift this sale was rung in.
+                    </p>
+                    <template v-else>
+                        <p
+                            v-if="openShifts.length === 0"
+                            class="text-xs font-bold text-red-800"
+                            data-testid="payout-no-open-shift"
+                        >
+                            {{ formatCurrency(reversalCash) }} cash must be paid
+                            back, but no shift is open to pay it from. Open a
+                            shift first.
+                        </p>
+                        <BaseSelect
+                            v-else
+                            id="payout-shift"
+                            v-model="payoutShiftId"
+                            :label="`Pay ${formatCurrency(reversalCash)} back from`"
+                            :options="payoutOptions"
+                            data-testid="payout-shift"
+                        />
+                    </template>
+                    <label
+                        class="block text-xs font-bold uppercase tracking-wider text-slate-600"
+                        for="reversal-reason"
+                        >Reason</label
+                    >
+                    <input
+                        id="reversal-reason"
+                        v-model="reversalReason"
+                        type="text"
+                        :maxlength="STRING_LIMITS.REASON"
+                        :placeholder="
+                            pendingReversal === ReversalType.VOID
+                                ? 'e.g. rang up twice'
+                                : 'e.g. customer returned the items'
+                        "
+                        class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-slate-800 focus:outline-none"
+                    />
+                </div>
+
+                <template #footer>
+                    <template v-if="pendingReversal">
+                        <BaseButton
+                            variant="outline"
+                            :disabled="reversing"
+                            @click="cancelReversal"
+                            >Cancel</BaseButton
+                        >
+                        <BaseButton
+                            variant="danger"
+                            class="flex-1"
+                            :loading="reversing"
+                            :disabled="!canConfirmReversal"
+                            @click="confirmReversal"
+                            >Confirm
+                            {{
+                                reversalLabel(pendingReversal).toLowerCase()
+                            }}</BaseButton
                         >
                     </template>
-                    <BaseButton variant="outline" @click="isDialogOpen = false"
-                        >Close</BaseButton
-                    >
+                    <template v-else>
+                        <template v-if="canReverse">
+                            <BaseButton
+                                variant="outline"
+                                @click="startReversal(ReversalType.VOID)"
+                                >Void sale</BaseButton
+                            >
+                            <BaseButton
+                                variant="outline"
+                                @click="startReversal(ReversalType.REFUND)"
+                                >Refund sale</BaseButton
+                            >
+                        </template>
+                        <BaseButton
+                            variant="outline"
+                            @click="isDialogOpen = false"
+                            >Close</BaseButton
+                        >
+                    </template>
                 </template>
-            </template>
-        </BaseModal>
+            </BaseModal>
+        </PageFrame>
     </div>
     <ManagerOverrideDialog
         v-model="isApprovalOpen"
@@ -476,7 +478,8 @@
 <script setup lang="ts">
 import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
 import { computed, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import { Plus } from '@lucide/vue';
 import api from '@/axios';
 import { useOfflineStore } from '@/stores/offline';
@@ -573,6 +576,8 @@ const uiStore = useUIStore();
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
+const route = useRoute();
+const inSellerLayout = computed(() => route?.name === 'Sales');
 const { page, limit, search } = useListPaging(() => fetchSales());
 const {
     categories,

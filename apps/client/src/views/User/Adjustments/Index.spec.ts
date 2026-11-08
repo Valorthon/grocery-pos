@@ -8,7 +8,14 @@ import type { ApiGet } from '@/testing/api-mock';
 
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
 vi.mock('@/axios', () => ({ default: api }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({
+    useRouter: () => ({ push: vi.fn() }),
+    useRoute: () => ({
+        name: 'X',
+        meta: { title: 'Adjustment history' },
+        query: {},
+    }),
+}));
 
 const ADJUSTMENT = {
     _id: 'a1',

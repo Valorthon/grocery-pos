@@ -1,8 +1,5 @@
 <template>
-    <PageCard title="Inventory">
-        <template #icon>
-            <Package class="w-5 h-5 text-leaf-600" />
-        </template>
+    <PageFrame>
         <template #actions>
             <BaseButton
                 size="sm"
@@ -35,70 +32,80 @@
                 Adjust
             </BaseButton>
         </template>
-
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
-        >
-            <BaseInput
-                v-model="searchEAN"
-                label="EAN / Barcode"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
-            />
-            <BaseInput
-                v-model="searchName"
-                label="Product Name"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
-            />
-            <label class="flex items-center gap-2 text-sm"
-                ><input
-                    v-model="lowStock"
-                    type="checkbox"
-                    @change="toggleLowStock"
-                />Low stock</label
+        <template v-if="applied.lowStock" #chips>
+            <Badge color="warning" size="md" data-testid="low-stock-chip"
+                >Filtered: low stock</Badge
             >
-            <div class="flex items-end gap-2">
-                <BaseButton size="sm" @click="applySearch">
-                    <Search class="w-4 h-4" />
-                    Search
-                </BaseButton>
-                <BaseButton variant="outline" size="sm" @click="resetFilters">
-                    <X class="w-4 h-4" />
-                    Clear Filters
-                </BaseButton>
+        </template>
+        <PageCard>
+            <div
+                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
+            >
+                <BaseInput
+                    v-model="searchEAN"
+                    label="EAN / Barcode"
+                    clearable
+                    @enter="applySearch"
+                    @clear="applySearch"
+                />
+                <BaseInput
+                    v-model="searchName"
+                    label="Product Name"
+                    clearable
+                    @enter="applySearch"
+                    @clear="applySearch"
+                />
+                <label class="flex items-center gap-2 text-sm"
+                    ><input
+                        v-model="lowStock"
+                        type="checkbox"
+                        @change="toggleLowStock"
+                    />Low stock</label
+                >
+                <div class="flex items-end gap-2">
+                    <BaseButton size="sm" @click="applySearch">
+                        <Search class="w-4 h-4" />
+                        Search
+                    </BaseButton>
+                    <BaseButton
+                        variant="outline"
+                        size="sm"
+                        @click="resetFilters"
+                    >
+                        <X class="w-4 h-4" />
+                        Clear Filters
+                    </BaseButton>
+                </div>
             </div>
-        </div>
 
-        <BaseTable
-            v-model:page="page"
-            v-model:items-per-page="limit"
-            :headers="headers"
-            :items="serverItems"
-            :loading="loading"
-            :error="loadError"
-            empty-text="No inventory found"
-            :items-length="totalItems"
-            @retry="fetchInventory"
-        >
-            <template #cell-history="{ item }"
-                ><BaseButton
-                    size="sm"
-                    variant="outline"
-                    @click="
-                        history = {
-                            _id: item.id,
-                            name: item.name,
-                            unit: item.unit,
-                        }
-                    "
-                    >Stock history</BaseButton
-                ></template
+            <BaseTable
+                v-model:page="page"
+                v-model:items-per-page="limit"
+                :headers="headers"
+                :items="serverItems"
+                :loading="loading"
+                :error="loadError"
+                empty-text="No inventory found"
+                :items-length="totalItems"
+                @retry="fetchInventory"
             >
-        </BaseTable>
-    </PageCard>
+                <template #cell-history="{ item }"
+                    ><BaseButton
+                        size="sm"
+                        variant="outline"
+                        @click="
+                            history = {
+                                _id: item.id,
+                                name: item.name,
+                                unit: item.unit,
+                            }
+                        "
+                        >Stock history</BaseButton
+                    ></template
+                >
+            </BaseTable>
+        </PageCard>
+    </PageFrame>
     <InventoryBatches v-if="showBatches" />
     <StockHistory
         v-if="history"
@@ -115,12 +122,14 @@ import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Package, Pencil, Search, X } from '@lucide/vue';
+import { Pencil, Search, X } from '@lucide/vue';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
+import Badge from '@/components/ui/Badge.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
