@@ -12,8 +12,8 @@
             :class="[
                 FIELD_BASE,
                 FIELD_OK,
-                'px-3.5 cursor-pointer',
-                disabled ? FIELD_DISABLED : '',
+                'px-3.5',
+                disabled ? FIELD_DISABLED : 'cursor-pointer',
             ]"
             @change="onChange"
         >

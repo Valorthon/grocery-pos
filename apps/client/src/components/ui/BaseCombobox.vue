@@ -1,6 +1,6 @@
 <template>
     <div class="relative">
-        <label v-if="label" :for="id" :class="FIELD_LABEL">
+        <label v-if="label" :for="fieldId" :class="FIELD_LABEL">
             {{ label }}
         </label>
 
@@ -16,7 +16,9 @@
             </span>
 
             <input
-                :id="id"
+                :id="fieldId"
+                :aria-invalid="error ? true : undefined"
+                :aria-describedby="error ? errorId : undefined"
                 :value="modelValue"
                 :placeholder="placeholder"
                 :disabled="disabled"
@@ -35,6 +37,7 @@
                     FIELD_BASE,
                     icon ? 'pl-10 pr-10' : 'px-3.5 pr-10',
                     error ? FIELD_ERROR : selected ? FIELD_SELECTED : FIELD_OK,
+                    disabled ? FIELD_DISABLED : '',
                 ]"
                 @input="onInput"
                 @keydown.down.prevent="moveSelection(1)"
@@ -59,7 +62,7 @@
             />
         </div>
 
-        <p v-if="error" :class="FIELD_ERROR_TEXT">{{ error }}</p>
+        <p v-if="error" :id="errorId" :class="FIELD_ERROR_TEXT">{{ error }}</p>
         <p
             v-else-if="selected"
             data-testid="combobox-selected"
@@ -107,6 +110,7 @@
 <script setup lang="ts">
 import {
     FIELD_BASE,
+    FIELD_DISABLED,
     FIELD_ERROR,
     FIELD_ERROR_TEXT,
     FIELD_HINT_TEXT,
@@ -164,6 +168,9 @@ const isOpen = ref(false);
 const highlighted = ref(0);
 const listShown = computed(() => isOpen.value && props.options.length > 0);
 const listId = useId();
+const autoId = useId();
+const fieldId = computed(() => props.id || autoId);
+const errorId = `${autoId}-error`;
 const optionId = (index: number) => `${listId}-${index}`;
 const list = useTemplateRef<HTMLElement>('list');
 

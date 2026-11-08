@@ -17,6 +17,8 @@
 
             <input
                 :id="fieldId"
+                :aria-invalid="error ? true : undefined"
+                :aria-describedby="error ? errorId : undefined"
                 v-bind="inputAttrs()"
                 :type="type"
                 :maxlength="maxlength"
@@ -41,7 +43,7 @@
             </button>
         </div>
 
-        <p v-if="error" :class="FIELD_ERROR_TEXT">{{ error }}</p>
+        <p v-if="error" :id="errorId" :class="FIELD_ERROR_TEXT">{{ error }}</p>
     </div>
 </template>
 
@@ -113,6 +115,7 @@ const props = withDefaults(
  */
 const autoId = useId();
 const fieldId = computed(() => props.id || autoId);
+const errorId = `${autoId}-error`;
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;

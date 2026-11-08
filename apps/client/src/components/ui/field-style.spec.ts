@@ -8,11 +8,13 @@ import BaseSelect from './BaseSelect.vue';
 import {
     CHECKBOX_INPUT,
     FIELD_BASE,
+    FIELD_DISABLED,
     FIELD_ERROR,
     FIELD_ERROR_TEXT,
     FIELD_LABEL,
     FIELD_OK,
 } from './field-style';
+import * as styles from './field-style';
 
 let app: App | null = null;
 
@@ -56,7 +58,10 @@ describe('shared field style (#154)', () => {
             expect(control.className).not.toMatch(/slate|rounded-xl/);
 
             const label = host.querySelector('label')!;
+            expect(control.id).not.toBe('');
             expect(label.getAttribute('for')).toBe(control.id);
+            expect(control.classList).toContain('bg-surface');
+            expect(control.hasAttribute('aria-invalid')).toBe(false);
             expectClasses(label, FIELD_LABEL);
             expect(label.classList).not.toContain('uppercase');
             expect(label.textContent?.trim()).toBe('Product name');
@@ -70,11 +75,35 @@ describe('shared field style (#154)', () => {
             const control = host.querySelector('input')!;
             expectClasses(control, FIELD_ERROR);
             expect(control.classList).not.toContain('border-line-strong');
+            // bg-surface would beat bg-danger-bg in the built CSS.
+            expect(control.classList).not.toContain('bg-surface');
+            expect(control.getAttribute('aria-invalid')).toBe('true');
             const msg = [...host.querySelectorAll('p')].find(
                 (p) => p.textContent?.trim() === 'Required',
             )!;
             expectClasses(msg, FIELD_ERROR_TEXT);
+            expect(msg.id).not.toBe('');
+            expect(control.getAttribute('aria-describedby')).toBe(msg.id);
             expect(msg.classList).toContain('text-xs');
+        },
+    );
+
+    it('no field style turns off the outline that focus-ring draws', () => {
+        // .focus\:outline-none comes after .focus-ring in the built CSS
+        // and would hide the ring on keyboard focus.
+        for (const [name, value] of Object.entries(styles)) {
+            if (classes(value).includes('focus-ring'))
+                expect(value, name).not.toMatch(/outline-none/);
+        }
+    });
+
+    it.each(FIELDS)(
+        '%s looks disabled when disabled',
+        async (_name, comp, extra) => {
+            const host = await mount(comp, { disabled: true, ...extra });
+            const control = host.querySelector('input, select')!;
+            expectClasses(control, FIELD_DISABLED);
+            expect(control.classList).not.toContain('cursor-pointer');
         },
     );
 
