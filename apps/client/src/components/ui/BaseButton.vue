@@ -19,7 +19,13 @@ import Spinner from './Spinner.vue';
 
 const props = withDefaults(
     defineProps<{
-        variant?: 'primary' | 'outline' | 'ghost' | 'danger';
+        variant?:
+            | 'primary'
+            | 'accent'
+            | 'outline'
+            | 'ghost'
+            | 'danger'
+            | 'danger-solid';
         size?: 'sm' | 'md' | 'lg';
         type?: 'button' | 'submit';
         disabled?: boolean;
@@ -38,16 +44,24 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'click', ev: MouseEvent): void }>();
 
+/*
+ * Fresh market tokens (#155). Background colours live only in the variant
+ * classes, never in `base`: Tailwind's CSS order, not class order, decides
+ * which of two same-property classes wins.
+ */
 const base =
-    'inline-flex items-center justify-center font-bold rounded-xl transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none focus-ring';
+    'inline-flex items-center justify-center font-bold rounded-control transition-all duration-150 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none focus-ring';
 
 const variants: Record<string, string> = {
     primary:
-        'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 shadow-xs',
+        'bg-leaf-600 text-white hover:bg-leaf-700 active:bg-leaf-800 shadow-card',
+    // Citrus takes ink text: white on citrus fails WCAG AA.
+    accent: 'bg-citrus-500 text-ink hover:bg-citrus-400 active:bg-citrus-600 shadow-card',
     outline:
-        'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-xs',
-    ghost: 'text-slate-700 hover:bg-slate-100',
-    danger: 'text-red-600 hover:bg-red-50',
+        'bg-surface text-ink border border-line-strong hover:bg-paper shadow-card',
+    ghost: 'text-ink hover:bg-paper',
+    danger: 'text-danger-fg hover:bg-danger-bg',
+    'danger-solid': 'bg-danger-solid text-white hover:bg-danger-fg shadow-card',
 };
 
 const sizes: Record<string, string> = {
