@@ -4,7 +4,7 @@
             type="checkbox"
             :checked="modelValue"
             :disabled="disabled"
-            class="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 accent-primary-600"
+            :class="CHECKBOX_INPUT"
             @change="
                 emit(
                     'update:modelValue',
@@ -12,11 +12,12 @@
                 )
             "
         />
-        <span v-if="label" class="text-sm text-slate-700">{{ label }}</span>
+        <span v-if="label" :class="CHECKBOX_LABEL">{{ label }}</span>
     </label>
 </template>
 
 <script setup lang="ts">
+import { CHECKBOX_INPUT, CHECKBOX_LABEL } from './field-style';
 withDefaults(
     defineProps<{
         modelValue?: boolean;

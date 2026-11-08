@@ -1,10 +1,6 @@
 <template>
     <div>
-        <label
-            v-if="label"
-            :for="fieldId"
-            class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5"
-        >
+        <label v-if="label" :for="fieldId" :class="FIELD_LABEL">
             {{ label }}
         </label>
 
@@ -14,8 +10,10 @@
             :value="selected"
             :disabled="disabled"
             :class="[
-                'w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-sm text-slate-900 focus:outline-none focus:border-primary-600 focus:bg-white cursor-pointer transition-all',
-                disabled ? 'opacity-50 cursor-not-allowed' : '',
+                FIELD_BASE,
+                FIELD_OK,
+                'px-3.5',
+                disabled ? FIELD_DISABLED : 'cursor-pointer',
             ]"
             @change="onChange"
         >
@@ -28,6 +26,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+    FIELD_BASE,
+    FIELD_DISABLED,
+    FIELD_LABEL,
+    FIELD_OK,
+} from './field-style';
 import { computed, useId } from 'vue';
 
 const props = withDefaults(
