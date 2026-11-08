@@ -63,4 +63,22 @@ describe('PageHeader (#157)', () => {
         );
         expect(host.querySelector('button')?.textContent).toBe('Save');
     });
+
+    it('marks only the last crumb current, even a linked one', async () => {
+        const host = await mount({
+            title: 'Count #12',
+            breadcrumbs: [
+                { label: 'Inventory' },
+                { label: 'Stock counts', to: '/counts' },
+                { label: 'Count #12', to: '/counts/12' },
+            ],
+        });
+        const current = host.querySelectorAll('[aria-current="page"]');
+        expect(current).toHaveLength(1);
+        expect(current[0].textContent?.trim()).toBe('Count #12');
+        expect(current[0].tagName).toBe('SPAN');
+        expect(host.querySelectorAll('nav a')).toHaveLength(1);
+        for (const el of host.querySelectorAll('nav li > :not(svg)'))
+            expect(el.classList).toContain('min-h-6');
+    });
 });

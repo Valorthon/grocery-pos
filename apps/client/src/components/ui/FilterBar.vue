@@ -1,5 +1,10 @@
 <template>
-    <div class="flex flex-col gap-3">
+    <form
+        ref="root"
+        role="search"
+        class="flex flex-col gap-3"
+        @submit.prevent="emit('search')"
+    >
         <div class="flex flex-wrap items-end gap-2">
             <BaseInput
                 :model-value="search"
@@ -9,10 +14,9 @@
                 clearable
                 class="min-w-0 flex-1 basis-60"
                 @update:model-value="emit('update:search', $event)"
-                @enter="emit('search')"
                 @clear="emit('search')"
             />
-            <BaseButton class="min-h-11" @click="emit('search')">
+            <BaseButton type="submit" class="min-h-11">
                 <template #icon><SearchIcon :size="16" /></template>
                 Search
             </BaseButton>
@@ -27,10 +31,10 @@
                 <template #icon><SlidersHorizontal :size="16" /></template>
                 Filters
                 <span
-                    v-if="chips.length"
+                    v-if="panelCount"
                     class="num rounded-full bg-leaf-600 px-2 text-xs text-white"
                 >
-                    {{ chips.length }}<span class="sr-only"> active</span>
+                    {{ panelCount }}<span class="sr-only"> active</span>
                 </span>
             </BaseButton>
         </div>
@@ -49,12 +53,13 @@
             class="flex flex-wrap items-center gap-2"
             aria-label="Applied filters"
         >
-            <li v-for="chip in chips" :key="chip.key">
+            <li v-for="(chip, index) in chips" :key="chip.key">
                 <button
                     type="button"
                     class="inline-flex min-h-11 items-center gap-1 rounded-full border border-leaf-200 bg-leaf-50 px-3 text-xs font-semibold text-leaf-700 hover:border-leaf-500 focus-ring"
                     :aria-label="`Remove filter ${chip.label}`"
-                    @click="emit('remove', chip.key)"
+                    data-chip
+                    @click="removeChip(chip.key, index)"
                 >
                     {{ chip.label }}
                     <X :size="14" aria-hidden="true" />
@@ -64,13 +69,13 @@
                 <button
                     type="button"
                     class="min-h-11 rounded px-2 text-xs font-semibold text-muted hover:text-ink hover:underline focus-ring"
-                    @click="emit('clear')"
+                    @click="clearAll"
                 >
                     Clear all
                 </button>
             </li>
         </ul>
-    </div>
+    </form>
 </template>
 
 <script setup lang="ts">
@@ -78,12 +83,14 @@
  * Presentational only (#157): the page owns its live inputs and its
  * `useAppliedFilters`/`useListPaging` state. `search` is the typed text;
  * `chips` must be built from the *applied* snapshot, so a chip never shows
- * text that was typed but not searched. `search` is emitted on Enter, the
- * Search button and the clear (×); `remove`/`clear` ask the page to reset
+ * text that was typed but not searched. The root is a
+ * `<form role="search">`: Enter and the Search button submit it once, so
+ * never nest FilterBar in another form. `search` is also emitted on the
+ * clear (×); `remove`/`clear` ask the page to reset
  * that input and call its `apply()` once. Select/date controls in the
  * default slot keep applying on change, as the page wires them.
  */
-import { ref, useId } from 'vue';
+import { computed, nextTick, ref, useId } from 'vue';
 import { Search as SearchIcon, SlidersHorizontal, X } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import BaseInput from './BaseInput.vue';
@@ -116,5 +123,31 @@ const emit = defineEmits<{
 }>();
 
 const open = ref(props.initiallyOpen);
+const root = ref<HTMLFormElement | null>(null);
+const panelCount = computed(
+    () => props.chips.filter((chip) => chip.inPanel).length,
+);
+
+/*
+ * The focused chip unmounts once the page drops it, so focus goes to the
+ * chip now in its place, else the one before, else the search box.
+ */
+async function removeChip(key: string, index: number) {
+    emit('remove', key);
+    await nextTick();
+    const chips = root.value?.querySelectorAll<HTMLElement>('[data-chip]');
+    const next = chips?.[Math.min(index, chips.length - 1)];
+    (next ?? searchBox())?.focus();
+}
+
+async function clearAll() {
+    emit('clear');
+    await nextTick();
+    searchBox()?.focus();
+}
+
+function searchBox() {
+    return root.value?.querySelector<HTMLInputElement>('input') ?? null;
+}
 const panelId = useId();
 </script>

@@ -19,14 +19,20 @@
                             :size="12"
                             aria-hidden="true"
                         />
+                        <span
+                            v-if="i === breadcrumbs.length - 1"
+                            aria-current="page"
+                            class="inline-flex min-h-6 items-center"
+                            >{{ crumb.label }}</span
+                        >
                         <RouterLink
-                            v-if="crumb.to"
+                            v-else-if="crumb.to"
                             :to="crumb.to"
-                            class="rounded hover:text-ink hover:underline focus-ring"
+                            class="inline-flex min-h-6 items-center rounded px-0.5 hover:text-ink hover:underline focus-ring"
                         >
                             {{ crumb.label }}
                         </RouterLink>
-                        <span v-else aria-current="page">{{
+                        <span v-else class="inline-flex min-h-6 items-center">{{
                             crumb.label
                         }}</span>
                     </li>

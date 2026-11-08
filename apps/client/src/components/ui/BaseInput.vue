@@ -36,7 +36,8 @@
             <button
                 v-if="clearable && modelValue"
                 type="button"
-                class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted hover:text-ink rounded focus-ring"
+                aria-label="Clear"
+                class="absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center min-h-11 min-w-11 text-muted hover:text-ink rounded-control focus-ring"
                 @click="onClear"
             >
                 <X :size="16" />
@@ -126,7 +127,9 @@ const emit = defineEmits<{
 
 const inputClasses = computed(() => [
     FIELD_BASE,
-    props.icon ? 'pl-10 pr-3' : 'px-3.5',
+    props.icon ? 'pl-10' : 'pl-3.5',
+    // The 44px clear (x) sits over the right edge (#157 review).
+    props.clearable ? 'pr-11' : props.icon ? 'pr-3' : 'pr-3.5',
     props.mono ? 'font-mono font-bold' : '',
     props.error ? FIELD_ERROR : FIELD_OK,
     props.disabled ? FIELD_DISABLED : '',

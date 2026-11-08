@@ -6,6 +6,8 @@ export interface FilterChip {
     key: string;
     /** What the chip reads, e.g. `Category: Dairy`. */
     label: string;
+    /** Set inside the Filters panel; only these count on its badge. */
+    inPanel?: boolean;
 }
 
 /** One PageHeader breadcrumb; the last one usually has no `to`. */
