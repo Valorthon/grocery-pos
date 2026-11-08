@@ -1,190 +1,159 @@
 <template>
     <PageFrame>
-        <PageCard>
-            <div class="p-5 space-y-4">
-                <p class="text-sm">
-                    Sensitive actions recorded from deployment onward. Entries
-                    cannot be edited or deleted through the app. No automatic
-                    expiry is configured.
-                </p>
-                <div class="flex flex-wrap items-end gap-3">
-                    <div>
-                        <BaseInput
-                            v-model="username"
-                            label="Username"
-                            :maxlength="STRING_LIMITS.USERNAME"
-                            clearable
-                            aria-describedby="audit-username-hint"
-                            @keydown.enter="search"
-                            @clear="search"
-                        />
-                        <p
-                            id="audit-username-hint"
-                            class="text-xs text-slate-500"
-                        >
-                            Current username. Also finds that account's entries
-                            under earlier names, and failed logins typed with
-                            this name.
-                        </p>
-                    </div>
-                    <label class="text-sm"
-                        >Action<select
-                            v-model="action"
-                            class="block min-h-11 border rounded px-3"
-                            @change="search"
-                        >
-                            <option value="">All actions</option>
-                            <option
-                                v-for="value in actions"
-                                :key="value"
-                                :value="value"
-                            >
-                                {{ AUDIT_ACTION_LABELS[value] }}
-                            </option>
-                        </select></label
-                    >
+        <div class="space-y-4">
+            <p class="text-sm">
+                Sensitive actions recorded from deployment onward. Entries
+                cannot be edited or deleted through the app. No automatic expiry
+                is configured.
+            </p>
+            <div class="flex flex-wrap items-end gap-3">
+                <div>
                     <BaseInput
-                        v-model="from"
-                        label="From"
-                        type="date"
-                        @change="search"
+                        v-model="username"
+                        label="Username"
+                        :maxlength="STRING_LIMITS.USERNAME"
+                        clearable
+                        aria-describedby="audit-username-hint"
+                        @keydown.enter="search"
+                        @clear="search"
                     />
-                    <BaseInput
-                        v-model="to"
-                        label="To"
-                        type="date"
-                        :error="rangeError"
-                        @change="search"
-                    />
-                    <BaseButton :disabled="loading" @click="search"
-                        >Search</BaseButton
-                    >
-                    <BaseButton
-                        variant="outline"
-                        :disabled="loading"
-                        @click="clear"
-                        >Clear Filters</BaseButton
-                    >
-                </div>
-                <p v-if="validation" role="alert" class="text-sm text-red-700">
-                    {{ validation }}
-                </p>
-                <p v-if="error" role="alert" class="text-sm text-red-700">
-                    {{ error }} <BaseButton @click="load">Retry</BaseButton>
-                </p>
-                <p v-if="loading">Loading audit log…</p>
-                <div v-else class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr>
-                                <th>When</th>
-                                <th>Actor</th>
-                                <th>Action</th>
-                                <th>Target</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in rows"
-                                :key="row._id"
-                                class="border-t"
-                            >
-                                <td class="py-3">
-                                    {{ formatStoreDateTime(row.createdAt) }}
-                                </td>
-                                <td>
-                                    {{ row.actor?.name ?? 'Unauthenticated' }}
-                                </td>
-                                <td>
-                                    {{
-                                        AUDIT_ACTION_LABELS[row.action] ??
-                                        row.action
-                                    }}
-                                </td>
-                                <td>
-                                    {{ row.target.model }} {{ row.target.id }}
-                                </td>
-                                <td>
-                                    <BaseButton
-                                        variant="outline"
-                                        @click="selected = row"
-                                        >View</BaseButton
-                                    >
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <p v-if="!rows.length && !error">
-                        No matching audit events.
+                    <p id="audit-username-hint" class="text-xs text-muted">
+                        Current username. Also finds that account's entries
+                        under earlier names, and failed logins typed with this
+                        name.
                     </p>
                 </div>
-                <div v-if="!error" class="flex items-center gap-3 text-sm">
-                    <BaseButton
-                        variant="outline"
-                        :disabled="loading || page === 1"
-                        @click="
-                            page--;
-                            load();
-                        "
-                        >Previous</BaseButton
-                    ><span>Page {{ page }} · {{ total }} events</span
-                    ><BaseButton
-                        variant="outline"
-                        :disabled="loading || page * 20 >= total"
-                        @click="
-                            page++;
-                            load();
-                        "
-                        >Next</BaseButton
-                    >
-                </div>
+                <BaseSelect
+                    v-model="action"
+                    class="w-56"
+                    label="Action"
+                    all-label="All actions"
+                    :options="actionOptions"
+                    @update:model-value="search"
+                />
+                <BaseInput
+                    v-model="from"
+                    label="From"
+                    type="date"
+                    @change="search"
+                />
+                <BaseInput
+                    v-model="to"
+                    label="To"
+                    type="date"
+                    :error="rangeError"
+                    @change="search"
+                />
+                <BaseButton :disabled="loading" @click="search"
+                    >Search</BaseButton
+                >
+                <BaseButton variant="outline" :disabled="loading" @click="clear"
+                    >Clear Filters</BaseButton
+                >
             </div>
-            <BaseModal
-                v-if="selected"
-                :model-value="true"
-                title="Audit event"
-                scrollable
-                @update:model-value="
-                    (value) => {
-                        if (!value) selected = null;
-                    }
-                "
+            <p v-if="validation" role="alert" class="text-sm text-danger-fg">
+                {{ validation }}
+            </p>
+            <BaseTable
+                :headers="headers"
+                :items="tableRows"
+                :loading="loading"
+                :error="error"
+                @retry="load"
             >
-                <div class="p-5 space-y-3 text-sm">
-                    <p>
-                        {{
-                            AUDIT_ACTION_LABELS[selected.action] ??
-                            selected.action
-                        }}
-                        ·
-                        {{ formatStoreDateTime(selected.createdAt) }}
-                    </p>
-                    <p>
-                        Actor: {{ selected.actor?.name ?? 'Unauthenticated' }}
-                        {{ selected.actor?._id }}
-                    </p>
-                    <p>
-                        Target: {{ selected.target.model }}
-                        {{ selected.target.id }}
-                    </p>
-                    <p>
-                        Approved by:
-                        {{ selected.approvedBy ?? 'Not applicable' }}
-                    </p>
-                    <p>IP: {{ selected.ip ?? 'Unavailable' }}</p>
-                    <p>User agent: {{ selected.userAgent ?? 'Unavailable' }}</p>
-                    <h3 class="font-semibold">Before</h3>
-                    <pre class="whitespace-pre-wrap break-words">{{
-                        JSON.stringify(selected.before, null, 2)
-                    }}</pre>
-                    <h3 class="font-semibold">After</h3>
-                    <pre class="whitespace-pre-wrap break-words">{{
-                        JSON.stringify(selected.after, null, 2)
-                    }}</pre>
-                </div>
-            </BaseModal>
-        </PageCard>
+                <template #cell-when="{ item }">
+                    {{ formatStoreDateTime(item.createdAt) }}
+                </template>
+                <template #cell-actor="{ item }">
+                    {{ item.actor?.name ?? 'Unauthenticated' }}
+                </template>
+                <template #cell-action="{ item }">
+                    {{ AUDIT_ACTION_LABELS[item.action] ?? item.action }}
+                </template>
+                <template #cell-target="{ item }">
+                    {{ item.target.model }} {{ item.target.id }}
+                </template>
+                <template #cell-details="{ item }">
+                    <BaseButton
+                        size="sm"
+                        variant="outline"
+                        @click="selected = item"
+                        >View</BaseButton
+                    >
+                </template>
+                <template #empty>
+                    <EmptyState
+                        title="No matching audit events."
+                        hint="Try other filters or clear them."
+                    >
+                        <template #icon><ScrollText :size="24" /></template>
+                    </EmptyState>
+                </template>
+            </BaseTable>
+            <div v-if="!error" class="flex items-center gap-3 text-sm">
+                <BaseButton
+                    variant="outline"
+                    :disabled="loading || page === 1"
+                    @click="
+                        page--;
+                        load();
+                    "
+                    >Previous</BaseButton
+                ><span>Page {{ page }} · {{ total }} events</span
+                ><BaseButton
+                    variant="outline"
+                    :disabled="loading || page * 20 >= total"
+                    @click="
+                        page++;
+                        load();
+                    "
+                    >Next</BaseButton
+                >
+            </div>
+        </div>
+        <BaseModal
+            v-if="selected"
+            :model-value="true"
+            title="Audit event"
+            scrollable
+            @update:model-value="
+                (value) => {
+                    if (!value) selected = null;
+                }
+            "
+        >
+            <div class="p-5 space-y-3 text-sm">
+                <p>
+                    {{
+                        AUDIT_ACTION_LABELS[selected.action] ?? selected.action
+                    }}
+                    ·
+                    {{ formatStoreDateTime(selected.createdAt) }}
+                </p>
+                <p>
+                    Actor: {{ selected.actor?.name ?? 'Unauthenticated' }}
+                    {{ selected.actor?._id }}
+                </p>
+                <p>
+                    Target: {{ selected.target.model }}
+                    {{ selected.target.id }}
+                </p>
+                <p>
+                    Approved by:
+                    {{ selected.approvedBy ?? 'Not applicable' }}
+                </p>
+                <p>IP: {{ selected.ip ?? 'Unavailable' }}</p>
+                <p>User agent: {{ selected.userAgent ?? 'Unavailable' }}</p>
+                <h3 class="font-semibold">Before</h3>
+                <pre class="whitespace-pre-wrap break-words">{{
+                    JSON.stringify(selected.before, null, 2)
+                }}</pre>
+                <h3 class="font-semibold">After</h3>
+                <pre class="whitespace-pre-wrap break-words">{{
+                    JSON.stringify(selected.after, null, 2)
+                }}</pre>
+            </div>
+        </BaseModal>
     </PageFrame>
 </template>
 <script setup lang="ts">
@@ -198,7 +167,11 @@ import {
     type Paginated,
 } from '@grocery-pos/contracts';
 import api from '@/axios';
-import PageCard from '@/components/ui/PageCard.vue';
+import BaseSelect from '@/components/ui/BaseSelect.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import type { TableHeader } from '@/components/ui/types';
+import { ScrollText } from '@lucide/vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -209,7 +182,7 @@ import { formatStoreDateTime } from '@/utils/datetime';
 import { useAuthStore } from '@/stores/auth';
 const auth = useAuthStore();
 const username = ref(''),
-    action = ref<AuditAction | ''>(''),
+    action = ref<AuditAction | null>(null),
     from = ref(''),
     to = ref(''),
     page = ref(1),
@@ -219,7 +192,20 @@ const username = ref(''),
     loading = ref(false);
 const rows = ref<AuditLogView[]>([]),
     selected = ref<AuditLogView | null>(null);
-const actions = Object.values(AuditAction);
+const actionOptions = Object.values(AuditAction).map((value) => ({
+    value,
+    label: AUDIT_ACTION_LABELS[value],
+}));
+const headers: TableHeader[] = [
+    { key: 'when', title: 'When' },
+    { key: 'actor', title: 'Actor' },
+    { key: 'action', title: 'Action' },
+    { key: 'target', title: 'Target' },
+    { key: 'details', title: 'Details' },
+];
+const tableRows = computed(() =>
+    rows.value.map((row) => ({ ...row, id: row._id })),
+);
 const rangeError = computed(() => dateRangeError(from.value, to.value));
 let applied: Omit<AuditListQuery, 'page' | 'limit'> = {},
     generation = 0;
@@ -237,7 +223,7 @@ function search() {
 }
 function clear() {
     username.value = '';
-    action.value = '';
+    action.value = null;
     from.value = '';
     to.value = '';
     search();

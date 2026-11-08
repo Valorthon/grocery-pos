@@ -75,9 +75,17 @@
                         <tr>
                             <td
                                 :colspan="headers.length"
-                                class="py-16 text-center text-muted"
+                                :class="
+                                    $slots.empty
+                                        ? ''
+                                        : 'py-16 text-center text-muted'
+                                "
                             >
-                                <div class="flex flex-col items-center gap-2">
+                                <slot v-if="$slots.empty" name="empty" />
+                                <div
+                                    v-else
+                                    class="flex flex-col items-center gap-2"
+                                >
                                     <component
                                         :is="emptyIcon"
                                         data-testid="table-empty-icon"
@@ -224,7 +232,13 @@ const emit = defineEmits<{
 }>();
 
 defineSlots<
-    Record<`cell-${string}`, (props: { item: T; value: unknown }) => unknown>
+    {
+        /** Replaces the default empty row's content, e.g. an `EmptyState`. */
+        empty?: () => unknown;
+    } & Record<
+        `cell-${string}`,
+        (props: { item: T; value: unknown }) => unknown
+    >
 >();
 
 /** The row's `key` field, for a cell without a slot. */

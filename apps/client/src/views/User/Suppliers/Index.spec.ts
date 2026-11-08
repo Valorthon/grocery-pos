@@ -59,6 +59,11 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 describe('supplier administration', () => {
+    it('shows an empty state when there are no suppliers (#169)', async () => {
+        api.get.mockResolvedValue({ data: { data: [], totalItems: 0 } });
+        await mount();
+        expect(document.body.textContent).toContain('No suppliers yet');
+    });
     it('loads all pages and creates a supplier with trimmed contact details', async () => {
         api.get
             .mockResolvedValueOnce({ data: { data: [row], totalItems: 2 } })

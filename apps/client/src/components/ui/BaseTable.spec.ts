@@ -15,14 +15,20 @@ const TABLE_PROPS: Record<string, unknown> = {
     items: [{ id: '1', name: 'a' }],
     itemsLength: 20,
 };
-const table = (props: Record<string, unknown> = TABLE_PROPS) =>
-    h(BaseTable as Component, props);
+const table = (
+    props: Record<string, unknown> = TABLE_PROPS,
+    slots?: Record<string, () => unknown>,
+) => h(BaseTable as Component, props, slots);
 
 /** Mounts one or more tables in a fresh host. */
 function mountTables(...tables: Record<string, unknown>[]) {
+    return mountRender(() => tables.map((p) => table(p)));
+}
+
+function mountRender(render: () => unknown) {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    app = createApp({ render: () => tables.map((p) => table(p)) });
+    app = createApp({ render });
     app.mount(host);
     return host;
 }
@@ -103,5 +109,33 @@ describe('BaseTable restyle (issue #156)', () => {
         select.value = '25';
         select.dispatchEvent(new Event('change'));
         expect(sizes).toEqual([25]);
+    });
+});
+
+describe('BaseTable empty slot (issue #169)', () => {
+    function mountWithEmpty(items: unknown[]) {
+        return mountRender(() =>
+            table(
+                { headers: [{ title: 'Name', key: 'name' }], items },
+                {
+                    empty: () => h('p', { 'data-testid': 'custom' }, 'Nothing'),
+                },
+            ),
+        );
+    }
+
+    it('renders the empty slot instead of the default empty text', () => {
+        const host = mountWithEmpty([]);
+        expect(host.querySelector('[data-testid="custom"]')).not.toBeNull();
+        expect(
+            host.querySelector('[data-testid="table-empty-icon"]'),
+        ).toBeNull();
+        expect(host.querySelector('td')?.getAttribute('colspan')).toBe('1');
+    });
+
+    it('does not render the empty slot when there are rows', () => {
+        const host = mountWithEmpty([{ id: '1', name: 'a' }]);
+        expect(host.querySelector('[data-testid="custom"]')).toBeNull();
+        expect(host.textContent).toContain('a');
     });
 });
