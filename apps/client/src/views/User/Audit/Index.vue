@@ -1,170 +1,191 @@
 <template>
-    <PageCard title="Audit Log">
-        <div class="p-5 space-y-4">
-            <p class="text-sm">
-                Sensitive actions recorded from deployment onward. Entries
-                cannot be edited or deleted through the app. No automatic expiry
-                is configured.
-            </p>
-            <div class="flex flex-wrap items-end gap-3">
-                <div>
+    <PageFrame>
+        <PageCard>
+            <div class="p-5 space-y-4">
+                <p class="text-sm">
+                    Sensitive actions recorded from deployment onward. Entries
+                    cannot be edited or deleted through the app. No automatic
+                    expiry is configured.
+                </p>
+                <div class="flex flex-wrap items-end gap-3">
+                    <div>
+                        <BaseInput
+                            v-model="username"
+                            label="Username"
+                            :maxlength="STRING_LIMITS.USERNAME"
+                            clearable
+                            aria-describedby="audit-username-hint"
+                            @keydown.enter="search"
+                            @clear="search"
+                        />
+                        <p
+                            id="audit-username-hint"
+                            class="text-xs text-slate-500"
+                        >
+                            Current username. Also finds that account's entries
+                            under earlier names, and failed logins typed with
+                            this name.
+                        </p>
+                    </div>
+                    <label class="text-sm"
+                        >Action<select
+                            v-model="action"
+                            class="block min-h-11 border rounded px-3"
+                            @change="search"
+                        >
+                            <option value="">All actions</option>
+                            <option
+                                v-for="value in actions"
+                                :key="value"
+                                :value="value"
+                            >
+                                {{ AUDIT_ACTION_LABELS[value] }}
+                            </option>
+                        </select></label
+                    >
                     <BaseInput
-                        v-model="username"
-                        label="Username"
-                        :maxlength="STRING_LIMITS.USERNAME"
-                        clearable
-                        aria-describedby="audit-username-hint"
-                        @keydown.enter="search"
-                        @clear="search"
+                        v-model="from"
+                        label="From"
+                        type="date"
+                        @change="search"
                     />
-                    <p id="audit-username-hint" class="text-xs text-slate-500">
-                        Current username. Also finds that account's entries
-                        under earlier names, and failed logins typed with this
-                        name.
+                    <BaseInput
+                        v-model="to"
+                        label="To"
+                        type="date"
+                        :error="rangeError"
+                        @change="search"
+                    />
+                    <BaseButton :disabled="loading" @click="search"
+                        >Search</BaseButton
+                    >
+                    <BaseButton
+                        variant="outline"
+                        :disabled="loading"
+                        @click="clear"
+                        >Clear Filters</BaseButton
+                    >
+                </div>
+                <p v-if="validation" role="alert" class="text-sm text-red-700">
+                    {{ validation }}
+                </p>
+                <p v-if="error" role="alert" class="text-sm text-red-700">
+                    {{ error }} <BaseButton @click="load">Retry</BaseButton>
+                </p>
+                <p v-if="loading">Loading audit log…</p>
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr>
+                                <th>When</th>
+                                <th>Actor</th>
+                                <th>Action</th>
+                                <th>Target</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in rows"
+                                :key="row._id"
+                                class="border-t"
+                            >
+                                <td class="py-3">
+                                    {{ formatStoreDateTime(row.createdAt) }}
+                                </td>
+                                <td>
+                                    {{ row.actor?.name ?? 'Unauthenticated' }}
+                                </td>
+                                <td>
+                                    {{
+                                        AUDIT_ACTION_LABELS[row.action] ??
+                                        row.action
+                                    }}
+                                </td>
+                                <td>
+                                    {{ row.target.model }} {{ row.target.id }}
+                                </td>
+                                <td>
+                                    <BaseButton
+                                        variant="outline"
+                                        @click="selected = row"
+                                        >View</BaseButton
+                                    >
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-if="!rows.length && !error">
+                        No matching audit events.
                     </p>
                 </div>
-                <label class="text-sm"
-                    >Action<select
-                        v-model="action"
-                        class="block min-h-11 border rounded px-3"
-                        @change="search"
+                <div v-if="!error" class="flex items-center gap-3 text-sm">
+                    <BaseButton
+                        variant="outline"
+                        :disabled="loading || page === 1"
+                        @click="
+                            page--;
+                            load();
+                        "
+                        >Previous</BaseButton
+                    ><span>Page {{ page }} · {{ total }} events</span
+                    ><BaseButton
+                        variant="outline"
+                        :disabled="loading || page * 20 >= total"
+                        @click="
+                            page++;
+                            load();
+                        "
+                        >Next</BaseButton
                     >
-                        <option value="">All actions</option>
-                        <option
-                            v-for="value in actions"
-                            :key="value"
-                            :value="value"
-                        >
-                            {{ AUDIT_ACTION_LABELS[value] }}
-                        </option>
-                    </select></label
-                >
-                <BaseInput
-                    v-model="from"
-                    label="From"
-                    type="date"
-                    @change="search"
-                />
-                <BaseInput
-                    v-model="to"
-                    label="To"
-                    type="date"
-                    :error="rangeError"
-                    @change="search"
-                />
-                <BaseButton :disabled="loading" @click="search"
-                    >Search</BaseButton
-                >
-                <BaseButton variant="outline" :disabled="loading" @click="clear"
-                    >Clear Filters</BaseButton
-                >
+                </div>
             </div>
-            <p v-if="validation" role="alert" class="text-sm text-red-700">
-                {{ validation }}
-            </p>
-            <p v-if="error" role="alert" class="text-sm text-red-700">
-                {{ error }} <BaseButton @click="load">Retry</BaseButton>
-            </p>
-            <p v-if="loading">Loading audit log…</p>
-            <div v-else class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th>When</th>
-                            <th>Actor</th>
-                            <th>Action</th>
-                            <th>Target</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="row in rows" :key="row._id" class="border-t">
-                            <td class="py-3">
-                                {{ formatStoreDateTime(row.createdAt) }}
-                            </td>
-                            <td>{{ row.actor?.name ?? 'Unauthenticated' }}</td>
-                            <td>
-                                {{
-                                    AUDIT_ACTION_LABELS[row.action] ??
-                                    row.action
-                                }}
-                            </td>
-                            <td>{{ row.target.model }} {{ row.target.id }}</td>
-                            <td>
-                                <BaseButton
-                                    variant="outline"
-                                    @click="selected = row"
-                                    >View</BaseButton
-                                >
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <p v-if="!rows.length && !error">No matching audit events.</p>
-            </div>
-            <div v-if="!error" class="flex items-center gap-3 text-sm">
-                <BaseButton
-                    variant="outline"
-                    :disabled="loading || page === 1"
-                    @click="
-                        page--;
-                        load();
-                    "
-                    >Previous</BaseButton
-                ><span>Page {{ page }} · {{ total }} events</span
-                ><BaseButton
-                    variant="outline"
-                    :disabled="loading || page * 20 >= total"
-                    @click="
-                        page++;
-                        load();
-                    "
-                    >Next</BaseButton
-                >
-            </div>
-        </div>
-        <BaseModal
-            v-if="selected"
-            :model-value="true"
-            title="Audit event"
-            scrollable
-            @update:model-value="
-                (value) => {
-                    if (!value) selected = null;
-                }
-            "
-        >
-            <div class="p-5 space-y-3 text-sm">
-                <p>
-                    {{
-                        AUDIT_ACTION_LABELS[selected.action] ?? selected.action
-                    }}
-                    ·
-                    {{ formatStoreDateTime(selected.createdAt) }}
-                </p>
-                <p>
-                    Actor: {{ selected.actor?.name ?? 'Unauthenticated' }}
-                    {{ selected.actor?._id }}
-                </p>
-                <p>
-                    Target: {{ selected.target.model }} {{ selected.target.id }}
-                </p>
-                <p>
-                    Approved by: {{ selected.approvedBy ?? 'Not applicable' }}
-                </p>
-                <p>IP: {{ selected.ip ?? 'Unavailable' }}</p>
-                <p>User agent: {{ selected.userAgent ?? 'Unavailable' }}</p>
-                <h3 class="font-semibold">Before</h3>
-                <pre class="whitespace-pre-wrap break-words">{{
-                    JSON.stringify(selected.before, null, 2)
-                }}</pre>
-                <h3 class="font-semibold">After</h3>
-                <pre class="whitespace-pre-wrap break-words">{{
-                    JSON.stringify(selected.after, null, 2)
-                }}</pre>
-            </div>
-        </BaseModal>
-    </PageCard>
+            <BaseModal
+                v-if="selected"
+                :model-value="true"
+                title="Audit event"
+                scrollable
+                @update:model-value="
+                    (value) => {
+                        if (!value) selected = null;
+                    }
+                "
+            >
+                <div class="p-5 space-y-3 text-sm">
+                    <p>
+                        {{
+                            AUDIT_ACTION_LABELS[selected.action] ??
+                            selected.action
+                        }}
+                        ·
+                        {{ formatStoreDateTime(selected.createdAt) }}
+                    </p>
+                    <p>
+                        Actor: {{ selected.actor?.name ?? 'Unauthenticated' }}
+                        {{ selected.actor?._id }}
+                    </p>
+                    <p>
+                        Target: {{ selected.target.model }}
+                        {{ selected.target.id }}
+                    </p>
+                    <p>
+                        Approved by:
+                        {{ selected.approvedBy ?? 'Not applicable' }}
+                    </p>
+                    <p>IP: {{ selected.ip ?? 'Unavailable' }}</p>
+                    <p>User agent: {{ selected.userAgent ?? 'Unavailable' }}</p>
+                    <h3 class="font-semibold">Before</h3>
+                    <pre class="whitespace-pre-wrap break-words">{{
+                        JSON.stringify(selected.before, null, 2)
+                    }}</pre>
+                    <h3 class="font-semibold">After</h3>
+                    <pre class="whitespace-pre-wrap break-words">{{
+                        JSON.stringify(selected.after, null, 2)
+                    }}</pre>
+                </div>
+            </BaseModal>
+        </PageCard>
+    </PageFrame>
 </template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -178,6 +199,7 @@ import {
 } from '@grocery-pos/contracts';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';

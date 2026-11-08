@@ -1,287 +1,307 @@
 <template>
-    <PageCard title="Stock counts">
-        <div class="space-y-4 p-5">
-            <p v-if="error" role="alert" class="text-red-700">
-                {{ error }}
-                <BaseButton :disabled="busy" @click="retry">Reload</BaseButton>
-            </p>
-            <p v-if="validation" role="alert" class="text-red-700">
-                {{ validation }}
-            </p>
-            <template v-if="!selected">
-                <form
-                    class="flex flex-wrap items-end gap-3"
-                    @submit.prevent="create"
-                >
-                    <label class="text-sm"
-                        >Count scope<select
-                            v-model="scope"
-                            class="block min-h-11 rounded border p-2"
-                            :disabled="busy"
-                        >
-                            <option value="all">All active products</option>
-                            <option value="category">Category</option>
-                            <option value="products">Picked barcodes</option>
-                        </select></label
+    <PageFrame>
+        <PageCard>
+            <div class="space-y-4 p-5">
+                <p v-if="error" role="alert" class="text-red-700">
+                    {{ error }}
+                    <BaseButton :disabled="busy" @click="retry"
+                        >Reload</BaseButton
                     >
-                    <label v-if="scope === 'category'" class="text-sm"
-                        >Category<select
-                            v-model="category"
-                            class="block min-h-11 rounded border p-2"
-                            :disabled="busy"
-                        >
-                            <option value="">Choose category</option>
-                            <option
-                                v-for="row in categories"
-                                :key="row._id"
-                                :value="row._id"
+                </p>
+                <p v-if="validation" role="alert" class="text-red-700">
+                    {{ validation }}
+                </p>
+                <template v-if="!selected">
+                    <form
+                        class="flex flex-wrap items-end gap-3"
+                        @submit.prevent="create"
+                    >
+                        <label class="text-sm"
+                            >Count scope<select
+                                v-model="scope"
+                                class="block min-h-11 rounded border p-2"
+                                :disabled="busy"
                             >
-                                {{ row.name }}
-                            </option>
-                        </select></label
-                    >
-                    <BaseInput
-                        v-if="scope === 'products'"
-                        v-model="pickedCodes"
-                        label="Barcodes (comma or space separated)"
-                        :disabled="busy"
-                    />
-                    <BaseButton type="submit" :disabled="busy"
-                        >Start count</BaseButton
-                    >
-                </form>
-                <p v-if="categoryError" role="alert">
-                    {{ categoryError }}
-                    <BaseButton @click="refreshCategories"
-                        >Retry categories</BaseButton
-                    >
-                </p>
-                <p class="text-sm text-slate-600">
-                    Count at the opening reference time. Sales, deliveries,
-                    returns and adjustments after that reference are preserved
-                    when approved. If your shelf count already includes those
-                    movements, start a fresh count at a quiet reference point.
-                </p>
-                <p v-if="busy">Loading…</p>
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th class="text-left">Opened</th>
-                            <th>Status</th>
-                            <th>Lines</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="row in rows" :key="row._id" class="border-t">
-                            <td>{{ formatStoreDateTime(row.createdAt) }}</td>
-                            <td>{{ row.status }}</td>
-                            <td>{{ row.lines.length }}</td>
-                            <td>
-                                <BaseButton
-                                    :disabled="busy"
-                                    @click="load(row._id)"
-                                    >Open count</BaseButton
+                                <option value="all">All active products</option>
+                                <option value="category">Category</option>
+                                <option value="products">
+                                    Picked barcodes
+                                </option>
+                            </select></label
+                        >
+                        <label v-if="scope === 'category'" class="text-sm"
+                            >Category<select
+                                v-model="category"
+                                class="block min-h-11 rounded border p-2"
+                                :disabled="busy"
+                            >
+                                <option value="">Choose category</option>
+                                <option
+                                    v-for="row in categories"
+                                    :key="row._id"
+                                    :value="row._id"
                                 >
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="flex items-center gap-3">
-                    <BaseButton
-                        :disabled="busy || page === 1"
-                        @click="changePage(-1)"
-                        >Previous</BaseButton
-                    ><span>Page {{ page }}</span
-                    ><BaseButton
-                        :disabled="busy || page * 20 >= total"
-                        @click="changePage(1)"
-                        >Next</BaseButton
-                    >
-                </div>
-            </template>
-            <template v-else>
-                <div class="flex flex-wrap items-center gap-3">
-                    <BaseButton :disabled="busy" variant="outline" @click="back"
-                        >Back to counts</BaseButton
-                    ><strong>{{ selected.status }}</strong
-                    ><span class="text-sm"
-                        >Reference:
-                        {{ formatStoreDateTime(selected.createdAt) }}</span
-                    >
-                </div>
-                <p class="text-sm text-slate-600">
-                    The adjustment is counted quantity minus opening expected
-                    quantity. Later stock movements remain. Blank means not
-                    counted; enter 0 explicitly for an empty shelf. Tracked
-                    products are counted by batch; this does not invent expiry
-                    dates or new lots.
-                </p>
-                <BaseInput
-                    v-if="selected.status === StockCountStatus.OPEN"
-                    v-model="scan"
-                    label="Scan barcode to focus its count"
-                    @keydown.enter.prevent="focusBarcode"
-                />
-                <div class="overflow-x-auto">
+                                    {{ row.name }}
+                                </option>
+                            </select></label
+                        >
+                        <BaseInput
+                            v-if="scope === 'products'"
+                            v-model="pickedCodes"
+                            label="Barcodes (comma or space separated)"
+                            :disabled="busy"
+                        />
+                        <BaseButton type="submit" :disabled="busy"
+                            >Start count</BaseButton
+                        >
+                    </form>
+                    <p v-if="categoryError" role="alert">
+                        {{ categoryError }}
+                        <BaseButton @click="refreshCategories"
+                            >Retry categories</BaseButton
+                        >
+                    </p>
+                    <p class="text-sm text-slate-600">
+                        Count at the opening reference time. Sales, deliveries,
+                        returns and adjustments after that reference are
+                        preserved when approved. If your shelf count already
+                        includes those movements, start a fresh count at a quiet
+                        reference point.
+                    </p>
+                    <p v-if="busy">Loading…</p>
                     <table class="w-full text-sm">
                         <thead>
                             <tr>
-                                <th class="text-left">Product / batch</th>
-                                <th>Opening</th>
-                                <th>Current</th>
-                                <th>Counted</th>
-                                <th>Variance</th>
-                                <th
-                                    v-if="
-                                        selected.status ===
-                                        StockCountStatus.SUBMITTED
-                                    "
-                                >
-                                    Projected balance
-                                </th>
+                                <th class="text-left">Opened</th>
+                                <th>Status</th>
+                                <th>Lines</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr
-                                v-for="line in selected.lines"
-                                :key="line._id"
+                                v-for="row in rows"
+                                :key="row._id"
                                 class="border-t"
-                                :class="{
-                                    'bg-amber-50':
-                                        displayedVariance(line) !== null &&
-                                        displayedVariance(line) !== 0,
-                                }"
                             >
-                                <td class="py-2">
-                                    {{ line.name }}<br /><span
-                                        class="text-xs text-slate-500"
-                                        >{{ line.EAN
-                                        }}<template v-if="line.tracksExpiry">
-                                            ·
-                                            {{
-                                                line.batchNo ||
-                                                'Unnumbered batch'
-                                            }}
-                                            ·
-                                            {{
-                                                line.expiryDate ||
-                                                'Reconciliation / no expiry'
-                                            }}</template
-                                        ></span
-                                    >
-                                </td>
                                 <td>
-                                    {{
-                                        formatQuantity(
-                                            line.expectedQty,
-                                            line.unit,
-                                        )
-                                    }}
+                                    {{ formatStoreDateTime(row.createdAt) }}
                                 </td>
+                                <td>{{ row.status }}</td>
+                                <td>{{ row.lines.length }}</td>
                                 <td>
-                                    {{
-                                        line.currentQty === undefined
-                                            ? '—'
-                                            : formatQuantity(
-                                                  line.currentQty,
-                                                  line.unit,
-                                              )
-                                    }}
-                                </td>
-                                <td>
-                                    <input
-                                        v-if="
-                                            selected.status ===
-                                            StockCountStatus.OPEN
-                                        "
-                                        :id="`count-${line._id}`"
-                                        v-model="entries[line._id]"
-                                        class="min-h-11 w-28 rounded border p-2"
-                                        :aria-label="`Count ${line.name} ${line.batchNo || line._id}`"
-                                        inputmode="decimal"
+                                    <BaseButton
                                         :disabled="busy"
-                                        @input="dirty = true"
-                                    /><span v-else>{{
-                                        line.countedQty === undefined
-                                            ? 'Not counted'
-                                            : formatQuantity(
-                                                  line.countedQty,
-                                                  line.unit,
-                                              )
-                                    }}</span>
-                                </td>
-                                <td>
-                                    {{
-                                        displayedVariance(line) === null
-                                            ? 'Not counted'
-                                            : formatQuantity(
-                                                  displayedVariance(line)!,
-                                                  line.unit,
-                                              )
-                                    }}
-                                </td>
-                                <td
-                                    v-if="
-                                        selected.status ===
-                                        StockCountStatus.SUBMITTED
-                                    "
-                                >
-                                    {{ projected(line) }}
+                                        @click="load(row._id)"
+                                        >Open count</BaseButton
+                                    >
                                 </td>
                             </tr>
                         </tbody>
                     </table>
-                </div>
-                <div class="flex flex-wrap gap-3">
-                    <BaseButton
+                    <div class="flex items-center gap-3">
+                        <BaseButton
+                            :disabled="busy || page === 1"
+                            @click="changePage(-1)"
+                            >Previous</BaseButton
+                        ><span>Page {{ page }}</span
+                        ><BaseButton
+                            :disabled="busy || page * 20 >= total"
+                            @click="changePage(1)"
+                            >Next</BaseButton
+                        >
+                    </div>
+                </template>
+                <template v-else>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <BaseButton
+                            :disabled="busy"
+                            variant="outline"
+                            @click="back"
+                            >Back to counts</BaseButton
+                        ><strong>{{ selected.status }}</strong
+                        ><span class="text-sm"
+                            >Reference:
+                            {{ formatStoreDateTime(selected.createdAt) }}</span
+                        >
+                    </div>
+                    <p class="text-sm text-slate-600">
+                        The adjustment is counted quantity minus opening
+                        expected quantity. Later stock movements remain. Blank
+                        means not counted; enter 0 explicitly for an empty
+                        shelf. Tracked products are counted by batch; this does
+                        not invent expiry dates or new lots.
+                    </p>
+                    <BaseInput
                         v-if="selected.status === StockCountStatus.OPEN"
-                        :disabled="busy"
-                        @click="save"
-                        >Save progress</BaseButton
-                    >
-                    <BaseButton
-                        v-if="selected.status === StockCountStatus.OPEN"
-                        :disabled="busy"
-                        @click="submit"
-                        >Submit for approval</BaseButton
-                    >
-                    <BaseButton
-                        v-if="selected.status === StockCountStatus.SUBMITTED"
-                        :disabled="busy"
-                        @click="approve"
-                        >Manager approval and post</BaseButton
-                    >
-                    <BaseButton
-                        v-if="
-                            selected.status === StockCountStatus.OPEN ||
-                            selected.status === StockCountStatus.SUBMITTED
-                        "
-                        variant="outline"
-                        :disabled="busy"
-                        @click="cancel"
-                        >Cancel count</BaseButton
-                    >
-                    <a
-                        v-if="selected.adjustment"
-                        href="/admin/adjustments"
-                        class="min-h-11 p-2 text-teal-800 underline"
-                        >View adjustment history</a
-                    >
-                </div>
-            </template>
-        </div>
-        <ConfirmDialog :request="request" @answer="answer" />
-        <ManagerOverrideDialog
-            :model-value="isApprovalOpen"
-            :request="approvalRequest"
-            :summary="approvalSummary"
-            note="You stay logged in; the approval applies to this count only."
-            @approved="completeApproval"
-            @cancel="cancelApproval"
-            @update:model-value="(open) => !open && cancelApproval()"
-        />
-    </PageCard>
+                        v-model="scan"
+                        label="Scan barcode to focus its count"
+                        @keydown.enter.prevent="focusBarcode"
+                    />
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">Product / batch</th>
+                                    <th>Opening</th>
+                                    <th>Current</th>
+                                    <th>Counted</th>
+                                    <th>Variance</th>
+                                    <th
+                                        v-if="
+                                            selected.status ===
+                                            StockCountStatus.SUBMITTED
+                                        "
+                                    >
+                                        Projected balance
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="line in selected.lines"
+                                    :key="line._id"
+                                    class="border-t"
+                                    :class="{
+                                        'bg-amber-50':
+                                            displayedVariance(line) !== null &&
+                                            displayedVariance(line) !== 0,
+                                    }"
+                                >
+                                    <td class="py-2">
+                                        {{ line.name }}<br /><span
+                                            class="text-xs text-slate-500"
+                                            >{{ line.EAN
+                                            }}<template
+                                                v-if="line.tracksExpiry"
+                                            >
+                                                ·
+                                                {{
+                                                    line.batchNo ||
+                                                    'Unnumbered batch'
+                                                }}
+                                                ·
+                                                {{
+                                                    line.expiryDate ||
+                                                    'Reconciliation / no expiry'
+                                                }}</template
+                                            ></span
+                                        >
+                                    </td>
+                                    <td>
+                                        {{
+                                            formatQuantity(
+                                                line.expectedQty,
+                                                line.unit,
+                                            )
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            line.currentQty === undefined
+                                                ? '—'
+                                                : formatQuantity(
+                                                      line.currentQty,
+                                                      line.unit,
+                                                  )
+                                        }}
+                                    </td>
+                                    <td>
+                                        <input
+                                            v-if="
+                                                selected.status ===
+                                                StockCountStatus.OPEN
+                                            "
+                                            :id="`count-${line._id}`"
+                                            v-model="entries[line._id]"
+                                            class="min-h-11 w-28 rounded border p-2"
+                                            :aria-label="`Count ${line.name} ${line.batchNo || line._id}`"
+                                            inputmode="decimal"
+                                            :disabled="busy"
+                                            @input="dirty = true"
+                                        /><span v-else>{{
+                                            line.countedQty === undefined
+                                                ? 'Not counted'
+                                                : formatQuantity(
+                                                      line.countedQty,
+                                                      line.unit,
+                                                  )
+                                        }}</span>
+                                    </td>
+                                    <td>
+                                        {{
+                                            displayedVariance(line) === null
+                                                ? 'Not counted'
+                                                : formatQuantity(
+                                                      displayedVariance(line)!,
+                                                      line.unit,
+                                                  )
+                                        }}
+                                    </td>
+                                    <td
+                                        v-if="
+                                            selected.status ===
+                                            StockCountStatus.SUBMITTED
+                                        "
+                                    >
+                                        {{ projected(line) }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <BaseButton
+                            v-if="selected.status === StockCountStatus.OPEN"
+                            :disabled="busy"
+                            @click="save"
+                            >Save progress</BaseButton
+                        >
+                        <BaseButton
+                            v-if="selected.status === StockCountStatus.OPEN"
+                            :disabled="busy"
+                            @click="submit"
+                            >Submit for approval</BaseButton
+                        >
+                        <BaseButton
+                            v-if="
+                                selected.status === StockCountStatus.SUBMITTED
+                            "
+                            :disabled="busy"
+                            @click="approve"
+                            >Manager approval and post</BaseButton
+                        >
+                        <BaseButton
+                            v-if="
+                                selected.status === StockCountStatus.OPEN ||
+                                selected.status === StockCountStatus.SUBMITTED
+                            "
+                            variant="outline"
+                            :disabled="busy"
+                            @click="cancel"
+                            >Cancel count</BaseButton
+                        >
+                        <a
+                            v-if="selected.adjustment"
+                            href="/admin/adjustments"
+                            class="min-h-11 p-2 text-teal-800 underline"
+                            >View adjustment history</a
+                        >
+                    </div>
+                </template>
+            </div>
+            <ConfirmDialog :request="request" @answer="answer" />
+            <ManagerOverrideDialog
+                :model-value="isApprovalOpen"
+                :request="approvalRequest"
+                :summary="approvalSummary"
+                note="You stay logged in; the approval applies to this count only."
+                @approved="completeApproval"
+                @cancel="cancelApproval"
+                @update:model-value="(open) => !open && cancelApproval()"
+            />
+        </PageCard>
+    </PageFrame>
 </template>
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
@@ -303,6 +323,7 @@ import {
 } from '@grocery-pos/contracts';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';

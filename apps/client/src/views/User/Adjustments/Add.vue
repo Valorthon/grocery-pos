@@ -1,8 +1,5 @@
 <template>
-    <PageCard title="Adjustment Draft">
-        <template #icon>
-            <ClipboardEdit class="w-5 h-5 text-leaf-600" />
-        </template>
+    <PageFrame>
         <template #actions>
             <BaseButton size="sm" @click="openAddDialog">
                 <Plus class="w-4 h-4" />
@@ -13,84 +10,87 @@
                 Save
             </BaseButton>
         </template>
-
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
-        >
-            <BaseInput
-                v-model="search"
-                label="Search adjusted products..."
-                clearable
-                class="md:col-span-3"
-            />
-            <div class="flex items-end">
-                <BaseButton
-                    variant="outline"
-                    size="sm"
-                    block
-                    :disabled="items.length === 0"
-                    @click="confirmClear"
-                >
-                    <Trash2 class="w-4 h-4" />
-                    Clear Drafts
-                </BaseButton>
-            </div>
-        </div>
-
-        <div
-            v-if="filteredItems.length === 0"
-            class="py-16 text-center text-slate-400 text-sm"
-        >
-            No adjustments added yet. Click "Adjust Stock" to start.
-        </div>
-        <div v-else class="overflow-x-auto">
-            <table class="w-full text-left border-collapse text-sm">
-                <thead>
-                    <tr
-                        class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
+        <PageCard>
+            <div
+                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
+            >
+                <BaseInput
+                    v-model="search"
+                    label="Search adjusted products..."
+                    clearable
+                    class="md:col-span-3"
+                />
+                <div class="flex items-end">
+                    <BaseButton
+                        variant="outline"
+                        size="sm"
+                        block
+                        :disabled="items.length === 0"
+                        @click="confirmClear"
                     >
-                        <th class="py-2.5 px-5">EAN</th>
-                        <th class="py-2.5 px-5">Name</th>
-                        <th class="py-2.5 px-5 text-right">Change</th>
-                        <th class="py-2.5 px-5">Reason</th>
-                        <th class="py-2.5 px-5 text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                    <tr v-for="item in filteredItems" :key="item.draftId">
-                        <td class="py-3 px-5">{{ item.EAN }}</td>
-                        <td class="py-3 px-5 font-medium">{{ item.name }}</td>
-                        <td class="py-3 px-5 text-right">
-                            {{ formatQuantity(item.change, item.unit) }}
-                        </td>
-                        <td class="py-3 px-5 text-slate-500">
-                            {{ item.reason }}
-                        </td>
-                        <td class="py-3 px-5">
-                            <div class="flex justify-end gap-1">
-                                <button
-                                    type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50"
-                                    aria-label="Edit draft"
-                                    @click="editDraft(item)"
-                                >
-                                    <Pencil class="w-4 h-4" />
-                                </button>
-                                <button
-                                    type="button"
-                                    class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                    aria-label="Delete draft"
-                                    @click="deleteDraft(item)"
-                                >
-                                    <Trash2 class="w-4 h-4" />
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </PageCard>
+                        <Trash2 class="w-4 h-4" />
+                        Clear Drafts
+                    </BaseButton>
+                </div>
+            </div>
+
+            <div
+                v-if="filteredItems.length === 0"
+                class="py-16 text-center text-slate-400 text-sm"
+            >
+                No adjustments added yet. Click "Adjust Stock" to start.
+            </div>
+            <div v-else class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr
+                            class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
+                        >
+                            <th class="py-2.5 px-5">EAN</th>
+                            <th class="py-2.5 px-5">Name</th>
+                            <th class="py-2.5 px-5 text-right">Change</th>
+                            <th class="py-2.5 px-5">Reason</th>
+                            <th class="py-2.5 px-5 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <tr v-for="item in filteredItems" :key="item.draftId">
+                            <td class="py-3 px-5">{{ item.EAN }}</td>
+                            <td class="py-3 px-5 font-medium">
+                                {{ item.name }}
+                            </td>
+                            <td class="py-3 px-5 text-right">
+                                {{ formatQuantity(item.change, item.unit) }}
+                            </td>
+                            <td class="py-3 px-5 text-slate-500">
+                                {{ item.reason }}
+                            </td>
+                            <td class="py-3 px-5">
+                                <div class="flex justify-end gap-1">
+                                    <button
+                                        type="button"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50"
+                                        aria-label="Edit draft"
+                                        @click="editDraft(item)"
+                                    >
+                                        <Pencil class="w-4 h-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                        aria-label="Delete draft"
+                                        @click="deleteDraft(item)"
+                                    >
+                                        <Trash2 class="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </PageCard>
+    </PageFrame>
 
     <AdjustAddDialog
         v-model="isAddDialogOpen"
@@ -109,9 +109,10 @@ import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 import { formatQuantity } from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { ClipboardEdit, Pencil, Plus, Save, Trash2 } from '@lucide/vue';
+import { Pencil, Plus, Save, Trash2 } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';

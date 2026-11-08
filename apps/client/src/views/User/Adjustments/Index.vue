@@ -1,8 +1,5 @@
 <template>
-    <PageCard title="Adjustment History">
-        <template #icon>
-            <ClipboardEdit class="w-5 h-5 text-leaf-600" />
-        </template>
+    <PageFrame>
         <template #actions>
             <BaseButton
                 size="sm"
@@ -12,58 +9,64 @@
                 Adjust
             </BaseButton>
         </template>
-
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-3"
-        >
-            <BaseSelect
-                v-model="searchAdjustedBy"
-                :options="userOptions"
-                label="Adjusted By"
-                all-label="All users"
-                @update:model-value="applyFilters"
-            />
-            <BaseInput
-                v-model="searchDateStart"
-                label="From"
-                type="date"
-                :max="searchDateEnd || undefined"
-                @update:model-value="applyFilters"
-            />
-            <BaseInput
-                v-model="searchDateEnd"
-                label="To"
-                type="date"
-                :min="searchDateStart || undefined"
-                :error="rangeError"
-                @update:model-value="applyFilters"
-            />
-            <div class="md:col-span-2 flex items-end">
-                <BaseButton variant="outline" size="sm" @click="resetFilters">
-                    <X class="w-4 h-4" />
-                    Clear Filters
-                </BaseButton>
+        <PageCard>
+            <div
+                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-3"
+            >
+                <BaseSelect
+                    v-model="searchAdjustedBy"
+                    :options="userOptions"
+                    label="Adjusted By"
+                    all-label="All users"
+                    @update:model-value="applyFilters"
+                />
+                <BaseInput
+                    v-model="searchDateStart"
+                    label="From"
+                    type="date"
+                    :max="searchDateEnd || undefined"
+                    @update:model-value="applyFilters"
+                />
+                <BaseInput
+                    v-model="searchDateEnd"
+                    label="To"
+                    type="date"
+                    :min="searchDateStart || undefined"
+                    :error="rangeError"
+                    @update:model-value="applyFilters"
+                />
+                <div class="md:col-span-2 flex items-end">
+                    <BaseButton
+                        variant="outline"
+                        size="sm"
+                        @click="resetFilters"
+                    >
+                        <X class="w-4 h-4" />
+                        Clear Filters
+                    </BaseButton>
+                </div>
             </div>
-        </div>
 
-        <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
-            Showing source {{ sourceId }}. Clear Filters to view all history.
-        </p>
+            <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
+                Showing source {{ sourceId }}. Clear Filters to view all
+                history.
+            </p>
 
-        <BaseTable
-            v-model:page="page"
-            v-model:items-per-page="limit"
-            :headers="headers"
-            :items="serverItems"
-            :loading="loading"
-            :error="loadError"
-            empty-text="No adjustments found"
-            :items-length="totalItems"
-            row-click
-            @click:row="showDetails"
-            @retry="fetchAdjust"
-        />
-    </PageCard>
+            <BaseTable
+                v-model:page="page"
+                v-model:items-per-page="limit"
+                :headers="headers"
+                :items="serverItems"
+                :loading="loading"
+                :error="loadError"
+                empty-text="No adjustments found"
+                :items-length="totalItems"
+                row-click
+                @click:row="showDetails"
+                @retry="fetchAdjust"
+            />
+        </PageCard>
+    </PageFrame>
 
     <BaseModal
         v-model="isDialogOpen"
@@ -78,9 +81,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ClipboardEdit, Pencil, X } from '@lucide/vue';
+import { Pencil, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';

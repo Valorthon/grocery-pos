@@ -1,18 +1,7 @@
 <template>
-    <div class="space-y-6">
-        <div class="flex items-center justify-between">
-            <div>
-                <h1
-                    class="text-2xl font-extrabold text-slate-900 tracking-tight"
-                >
-                    Dashboard
-                </h1>
-                <p class="text-sm text-slate-500 mt-1">
-                    Welcome back, {{ authStore.user?.username }}!
-                </p>
-            </div>
-        </div>
-
+    <PageFrame
+        :description="`Welcome back, ${authStore.user?.username ?? ''}!`"
+    >
         <div
             v-if="loadError"
             role="alert"
@@ -198,10 +187,11 @@
                 </div>
             </div>
         </div>
-    </div>
+    </PageFrame>
 </template>
 
 <script setup lang="ts">
+import PageFrame from '@/components/ui/PageFrame.vue';
 import { ref, computed } from 'vue';
 import {
     AlertCircle,

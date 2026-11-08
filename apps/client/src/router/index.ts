@@ -8,7 +8,7 @@ import {
     homeRouteFor,
     type RouteAccessMeta,
 } from './access';
-import { pageTitle } from './page-title';
+import { pageTitle, routeTitle } from './page-title';
 
 const routes: RouteRecordRaw[] = [
     // GUEST LAYOUT
@@ -24,7 +24,12 @@ const routes: RouteRecordRaw[] = [
                 path: 'login',
                 name: 'Login',
                 component: () => import('@/views/Guest/Login.vue'),
-                meta: { guest: true, hideAppBar: true, hideFooter: true },
+                meta: {
+                    title: 'Log in',
+                    guest: true,
+                    hideAppBar: true,
+                    hideFooter: true,
+                },
             },
         ],
     },
@@ -40,16 +45,19 @@ const routes: RouteRecordRaw[] = [
                 name: 'SellerDashboard',
                 component: () =>
                     import('@/views/User/Sales/SellerDashboard.vue'),
+                meta: { title: 'Dashboard' },
             },
             {
                 path: 'register',
                 name: 'Sell',
                 component: () => import('@/views/User/Sales/Sell.vue'),
+                meta: { title: 'Register' },
             },
             {
                 path: 'orders',
                 name: 'Sales',
                 component: () => import('@/views/User/Sales/Index.vue'),
+                meta: { title: 'Orders & transactions' },
             },
         ],
     },
@@ -66,25 +74,25 @@ const routes: RouteRecordRaw[] = [
                 path: '',
                 name: 'Dashboard',
                 component: () => import('@/views/User/Dashboard.vue'),
-                meta: { roles: [...DASHBOARD_ROLES] },
+                meta: { title: 'Dashboard', roles: [...DASHBOARD_ROLES] },
             },
             {
                 path: 'settings',
                 name: 'Settings',
                 component: () => import('@/views/User/Settings/Index.vue'),
-                meta: { roles: [Role.Admin] },
+                meta: { title: 'Store settings', roles: [Role.Admin] },
             },
             {
                 path: 'audit',
                 name: 'AuditLog',
                 component: () => import('@/views/User/Audit/Index.vue'),
-                meta: { roles: [Role.Admin] },
+                meta: { title: 'Audit log', roles: [Role.Admin] },
             },
             {
                 path: 'reports',
                 name: 'Reports',
                 component: () => import('@/views/User/Reports/Index.vue'),
-                meta: { roles: [Role.Admin] },
+                meta: { title: 'Sales reports', roles: [Role.Admin] },
             },
             {
                 // Admins void and refund sales from here; sellers see the
@@ -92,7 +100,7 @@ const routes: RouteRecordRaw[] = [
                 path: 'sales',
                 name: 'SalesHistory',
                 component: () => import('@/views/User/Sales/Index.vue'),
-                meta: { roles: [Role.Admin] },
+                meta: { title: 'Sales history', roles: [Role.Admin] },
             },
             {
                 // Every cashier's shifts and Z-reads, and force-close
@@ -101,52 +109,75 @@ const routes: RouteRecordRaw[] = [
                 path: 'shifts',
                 name: 'Shifts',
                 component: () => import('@/views/User/Shifts/Index.vue'),
-                meta: { roles: [Role.Admin] },
+                meta: { title: 'Shifts', roles: [Role.Admin] },
             },
 
             {
                 path: 'suppliers',
                 name: 'Suppliers',
                 component: () => import('@/views/User/Suppliers/Index.vue'),
-                meta: { roles: [Role.Restocker, Role.Admin] },
+                meta: {
+                    title: 'Suppliers',
+                    roles: [Role.Restocker, Role.Admin],
+                },
             },
             {
                 path: 'categories',
                 name: 'Categories',
                 component: () => import('@/views/User/Categories/Index.vue'),
-                meta: { roles: [Role.Admin] },
+                meta: { title: 'Categories', roles: [Role.Admin] },
             },
             {
                 path: 'products',
                 name: 'Products',
                 component: () => import('@/views/User/Products/Index.vue'),
-                meta: { roles: [Role.Restocker, Role.Adjuster, Role.Admin] },
+                meta: {
+                    title: 'Products',
+                    roles: [Role.Restocker, Role.Adjuster, Role.Admin],
+                },
             },
             {
                 path: 'products/add',
                 name: 'Products/Add',
                 component: () => import('@/views/User/Products/Add.vue'),
-                meta: { roles: [Role.Restocker, Role.Admin] },
+                meta: {
+                    title: 'New products',
+                    roles: [Role.Restocker, Role.Admin],
+                },
             },
 
             {
                 path: 'inventories',
                 name: 'Inventories',
                 component: () => import('@/views/User/Inventories.vue'),
-                meta: { roles: [Role.Restocker, Role.Adjuster, Role.Admin] },
+                meta: {
+                    title: 'Inventory',
+                    queryTitle: {
+                        key: 'lowStock',
+                        value: 'true',
+                        title: 'Low stock',
+                    },
+                    roles: [Role.Restocker, Role.Adjuster, Role.Admin],
+                },
             },
 
             {
                 path: 'restocks',
                 name: 'Restocks',
                 component: () => import('@/views/User/Restock/Index.vue'),
-                meta: { roles: [Role.Restocker, Role.Admin] },
+                meta: {
+                    title: 'Restock history',
+                    roles: [Role.Restocker, Role.Admin],
+                },
             },
             {
                 path: 'restocks/add',
                 name: 'Restocks/Add',
                 component: () => import('@/views/User/Restock/Add.vue'),
-                meta: { roles: [Role.Restocker, Role.Admin] },
+                meta: {
+                    title: 'New restock',
+                    roles: [Role.Restocker, Role.Admin],
+                },
             },
 
             {
@@ -154,38 +185,53 @@ const routes: RouteRecordRaw[] = [
                 name: 'PurchaseOrders',
                 component: () =>
                     import('@/views/User/PurchaseOrders/Index.vue'),
-                meta: { roles: [Role.Restocker, Role.Admin] },
+                meta: {
+                    title: 'Purchase orders',
+                    roles: [Role.Restocker, Role.Admin],
+                },
             },
             {
                 path: 'stock-counts',
                 name: 'StockCounts',
                 component: () => import('@/views/User/StockCounts/Index.vue'),
-                meta: { roles: [Role.Adjuster, Role.Admin] },
+                meta: {
+                    title: 'Stock counts',
+                    roles: [Role.Adjuster, Role.Admin],
+                },
             },
             {
                 path: 'adjustments',
                 name: 'Adjustments',
                 component: () => import('@/views/User/Adjustments/Index.vue'),
-                meta: { roles: [Role.Adjuster, Role.Admin] },
+                meta: {
+                    title: 'Adjustment history',
+                    roles: [Role.Adjuster, Role.Admin],
+                },
             },
             {
                 path: 'adjustments/add',
                 name: 'Adjustments/Add',
                 component: () => import('@/views/User/Adjustments/Add.vue'),
-                meta: { roles: [Role.Adjuster, Role.Admin] },
+                meta: {
+                    title: 'New adjustment',
+                    roles: [Role.Adjuster, Role.Admin],
+                },
             },
 
             {
                 path: 'users',
                 name: 'Users',
                 component: () => import('@/views/User/Users/Index.vue'),
-                meta: { roles: [Role.UserManager, Role.Admin] },
+                meta: { title: 'Users', roles: [Role.UserManager, Role.Admin] },
             },
             {
                 path: 'roles',
                 name: 'Roles',
                 component: () => import('@/views/User/Roles/Index.vue'),
-                meta: { roles: [Role.UserManager, Role.Admin] },
+                meta: {
+                    title: 'Roles & permissions',
+                    roles: [Role.UserManager, Role.Admin],
+                },
             },
         ],
     },
@@ -278,7 +324,7 @@ router.beforeEach(async (to) => {
 // navigation (a draft guard's "Stay") keeps the current page's title.
 router.afterEach((to, _from, failure) => {
     if (failure) return;
-    document.title = pageTitle(to.meta.title);
+    document.title = pageTitle(routeTitle(to));
 });
 
 export default router;

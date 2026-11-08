@@ -1,103 +1,106 @@
 <template>
-    <PageCard title="Users">
-        <template #icon>
-            <Users class="w-5 h-5 text-leaf-600" />
-        </template>
+    <PageFrame>
         <template #actions>
             <BaseButton size="sm" @click="openCreate">
                 <Plus class="w-4 h-4" />
                 Add User
             </BaseButton>
         </template>
-
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
-        >
-            <BaseInput
-                v-model="searchName"
-                label="Search Name"
-                :maxlength="STRING_LIMITS.USERNAME"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
-            />
-            <div class="md:col-span-3 flex items-end gap-2">
-                <BaseButton size="sm" @click="applySearch">
-                    <Search class="w-4 h-4" />
-                    Search
-                </BaseButton>
-                <BaseButton variant="outline" size="sm" @click="resetFilters">
-                    <X class="w-4 h-4" />
-                    Clear Filters
-                </BaseButton>
+        <PageCard>
+            <div
+                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
+            >
+                <BaseInput
+                    v-model="searchName"
+                    label="Search Name"
+                    :maxlength="STRING_LIMITS.USERNAME"
+                    clearable
+                    @enter="applySearch"
+                    @clear="applySearch"
+                />
+                <div class="md:col-span-3 flex items-end gap-2">
+                    <BaseButton size="sm" @click="applySearch">
+                        <Search class="w-4 h-4" />
+                        Search
+                    </BaseButton>
+                    <BaseButton
+                        variant="outline"
+                        size="sm"
+                        @click="resetFilters"
+                    >
+                        <X class="w-4 h-4" />
+                        Clear Filters
+                    </BaseButton>
+                </div>
             </div>
-        </div>
 
-        <BaseTable
-            v-model:page="page"
-            v-model:items-per-page="limit"
-            :headers="headers"
-            :items="serverItems"
-            :loading="loading"
-            :error="loadError"
-            empty-text="No users found"
-            :items-length="totalItems"
-            @retry="fetchUsers"
-        >
-            <template #cell-roles="{ item }">
-                <div class="flex flex-wrap gap-1">
-                    <Badge
-                        v-for="role in item.roles"
-                        :key="role"
-                        color="primary"
-                        >{{ role }}</Badge
-                    >
-                </div>
-            </template>
-            <template #cell-isActive="{ item }">
-                <Badge :color="item.isActive ? 'success' : 'error'">{{
-                    item.isActive ? 'Active' : 'Inactive'
-                }}</Badge>
-            </template>
-            <template #cell-actions="{ item }">
-                <div class="flex justify-end gap-2">
-                    <button
-                        v-if="
-                            authStore.isAdmin &&
-                            item.roles.some(
-                                (r) =>
-                                    r === Role.Admin || r === Role.Supervisor,
-                            )
-                        "
-                        type="button"
-                        class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-leaf-600 focus-ring"
-                        :aria-label="`Manage PIN for ${item.name}`"
-                        @click="pinUser = item"
-                    >
-                        Manager PIN
-                    </button>
-                    <button
-                        type="button"
-                        class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
-                        :disabled="!canEdit(item)"
-                        :title="
-                            canEdit(item)
-                                ? 'Edit'
-                                : 'Only an admin can edit this user'
-                        "
-                        :aria-label="
-                            canEdit(item)
-                                ? `Edit ${item.name}`
-                                : `Edit ${item.name} (only an admin can edit this user)`
-                        "
-                        @click="openEdit(item)"
-                    >
-                        <Pencil class="w-4 h-4" aria-hidden="true" />
-                    </button>
-                </div>
-            </template>
-        </BaseTable>
-    </PageCard>
+            <BaseTable
+                v-model:page="page"
+                v-model:items-per-page="limit"
+                :headers="headers"
+                :items="serverItems"
+                :loading="loading"
+                :error="loadError"
+                empty-text="No users found"
+                :items-length="totalItems"
+                @retry="fetchUsers"
+            >
+                <template #cell-roles="{ item }">
+                    <div class="flex flex-wrap gap-1">
+                        <Badge
+                            v-for="role in item.roles"
+                            :key="role"
+                            color="primary"
+                            >{{ role }}</Badge
+                        >
+                    </div>
+                </template>
+                <template #cell-isActive="{ item }">
+                    <Badge :color="item.isActive ? 'success' : 'error'">{{
+                        item.isActive ? 'Active' : 'Inactive'
+                    }}</Badge>
+                </template>
+                <template #cell-actions="{ item }">
+                    <div class="flex justify-end gap-2">
+                        <button
+                            v-if="
+                                authStore.isAdmin &&
+                                item.roles.some(
+                                    (r) =>
+                                        r === Role.Admin ||
+                                        r === Role.Supervisor,
+                                )
+                            "
+                            type="button"
+                            class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-leaf-600 focus-ring"
+                            :aria-label="`Manage PIN for ${item.name}`"
+                            @click="pinUser = item"
+                        >
+                            Manager PIN
+                        </button>
+                        <button
+                            type="button"
+                            class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
+                            :disabled="!canEdit(item)"
+                            :title="
+                                canEdit(item)
+                                    ? 'Edit'
+                                    : 'Only an admin can edit this user'
+                            "
+                            :aria-label="
+                                canEdit(item)
+                                    ? `Edit ${item.name}`
+                                    : `Edit ${item.name} (only an admin can edit this user)`
+                            "
+                            @click="openEdit(item)"
+                        >
+                            <Pencil class="w-4 h-4" aria-hidden="true" />
+                        </button>
+                    </div>
+                </template>
+            </BaseTable>
+        </PageCard>
+    </PageFrame>
 
     <BaseModal
         v-model="createModel"
@@ -243,9 +246,10 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Pencil, Plus, Search, Users, X } from '@lucide/vue';
+import { Pencil, Plus, Search, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';

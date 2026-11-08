@@ -18,7 +18,14 @@ const api = vi.hoisted(() => ({
     post: vi.fn<ApiSend>(),
 }));
 vi.mock('@/axios', () => ({ default: api }));
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('vue-router', () => ({
+    useRouter: () => ({ push: vi.fn() }),
+    useRoute: () => ({
+        name: 'X',
+        meta: { title: 'Sales history' },
+        query: {},
+    }),
+}));
 
 const OWN_SHIFT = 'shift-own';
 const OTHER_SHIFT = 'shift-other';

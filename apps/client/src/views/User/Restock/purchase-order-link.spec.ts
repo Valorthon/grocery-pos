@@ -19,6 +19,7 @@ const nav = vi.hoisted(() => ({
     route: { value: { query: {} as Record<string, string> } },
 }));
 vi.mock('vue-router', () => ({
+    useRoute: () => ({ meta: { title: 'Restock history' }, query: {} }),
     useRouter: () => ({
         push: nav.push,
         replace: nav.replace,

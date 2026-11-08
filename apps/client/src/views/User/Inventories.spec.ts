@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, reactive, type App } from 'vue';
+import type { RouteMeta } from 'vue-router';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
 import { click, field, flush } from '@/testing/form-dom';
@@ -12,7 +13,11 @@ import RestockAdd from './Restock/Add.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), post: vi.fn() }));
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
-let route: { query: Record<string, string>; name: string };
+let route: {
+    query: Record<string, string>;
+    name: string;
+    meta?: RouteMeta;
+};
 vi.mock('vue-router', () => ({
     useRoute: () => route,
     useRouter: () => nav,
@@ -197,5 +202,39 @@ describe('receipt-cost restock defaults', () => {
         resolve({ data: [{ product: 'rice', lastCost: 12000 }] });
         await flush();
         expect(document.body.textContent).not.toContain('120.00');
+    });
+});
+
+describe('low-stock frame (#159)', () => {
+    const meta: RouteMeta = {
+        title: 'Inventory',
+        queryTitle: { key: 'lowStock', value: 'true', title: 'Low stock' },
+    };
+
+    it('titles the low-stock list and shows its "Filtered: low stock" chip', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { lowStock: 'true' },
+            meta,
+        });
+        await mount();
+        const h1s = document.querySelectorAll('h1');
+        expect(h1s).toHaveLength(1);
+        expect(h1s[0].textContent?.trim()).toBe('Low stock');
+        expect(
+            document.querySelector('[data-testid="low-stock-chip"]')
+                ?.textContent,
+        ).toBe('Filtered: low stock');
+    });
+
+    it('shows plain Inventory without the chip', async () => {
+        route = reactive({ name: 'Inventories', query: {}, meta });
+        await mount();
+        expect(document.querySelector('h1')?.textContent?.trim()).toBe(
+            'Inventory',
+        );
+        expect(
+            document.querySelector('[data-testid="low-stock-chip"]'),
+        ).toBeNull();
     });
 });

@@ -1,8 +1,5 @@
 <template>
-    <PageCard title="Restock History">
-        <template #icon>
-            <Truck class="w-5 h-5 text-leaf-600" />
-        </template>
+    <PageFrame>
         <template #actions>
             <BaseButton
                 size="sm"
@@ -12,78 +9,84 @@
                 Restock
             </BaseButton>
         </template>
-
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-3"
-        >
-            <BaseSelect
-                v-model="searchRestockedBy"
-                :options="userOptions"
-                label="Restocked By"
-                all-label="All users"
-                @update:model-value="applyFilters"
-            />
-            <BaseInput
-                v-model="searchDateStart"
-                label="From"
-                type="date"
-                :max="searchDateEnd || undefined"
-                @update:model-value="applyFilters"
-            />
-            <BaseInput
-                v-model="searchDateEnd"
-                label="To"
-                type="date"
-                :min="searchDateStart || undefined"
-                :error="rangeError"
-                @update:model-value="applyFilters"
-            />
-            <div class="md:col-span-2 flex items-end">
-                <BaseButton variant="outline" size="sm" @click="resetFilters">
-                    <X class="w-4 h-4" />
-                    Clear Filters
-                </BaseButton>
+        <PageCard>
+            <div
+                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-5 gap-3"
+            >
+                <BaseSelect
+                    v-model="searchRestockedBy"
+                    :options="userOptions"
+                    label="Restocked By"
+                    all-label="All users"
+                    @update:model-value="applyFilters"
+                />
+                <BaseInput
+                    v-model="searchDateStart"
+                    label="From"
+                    type="date"
+                    :max="searchDateEnd || undefined"
+                    @update:model-value="applyFilters"
+                />
+                <BaseInput
+                    v-model="searchDateEnd"
+                    label="To"
+                    type="date"
+                    :min="searchDateStart || undefined"
+                    :error="rangeError"
+                    @update:model-value="applyFilters"
+                />
+                <div class="md:col-span-2 flex items-end">
+                    <BaseButton
+                        variant="outline"
+                        size="sm"
+                        @click="resetFilters"
+                    >
+                        <X class="w-4 h-4" />
+                        Clear Filters
+                    </BaseButton>
+                </div>
             </div>
-        </div>
 
-        <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
-            Showing source {{ sourceId }}. Clear Filters to view all history.
-        </p>
-        <p v-if="purchaseOrderId" class="px-5 py-2 text-sm text-slate-600">
-            Showing receipts of
-            {{ purchaseOrderReference(purchaseOrderId) }}. Clear Filters to view
-            all history.
-        </p>
+            <p v-if="sourceId" class="px-5 py-2 text-sm text-slate-600">
+                Showing source {{ sourceId }}. Clear Filters to view all
+                history.
+            </p>
+            <p v-if="purchaseOrderId" class="px-5 py-2 text-sm text-slate-600">
+                Showing receipts of
+                {{ purchaseOrderReference(purchaseOrderId) }}. Clear Filters to
+                view all history.
+            </p>
 
-        <BaseTable
-            v-model:page="page"
-            v-model:items-per-page="limit"
-            :headers="headers"
-            :items="serverItems"
-            :loading="loading"
-            :error="loadError"
-            empty-text="No restocks found"
-            :items-length="totalItems"
-            row-click
-            @click:row="showDetails"
-            @retry="fetchRestock"
-        >
-            <template #cell-purchaseOrder="{ item }">
-                <button
-                    v-if="item.purchaseOrder && canOpenOrders"
-                    type="button"
-                    class="min-h-11 text-leaf-700 underline"
-                    @click.stop="openOrder(item.purchaseOrder)"
-                >
-                    {{ purchaseOrderReference(item.purchaseOrder) }}
-                </button>
-                <span v-else-if="item.purchaseOrder">{{
-                    purchaseOrderReference(item.purchaseOrder)
-                }}</span>
-                <span v-else>—</span>
-            </template>
-        </BaseTable>
-    </PageCard>
+            <BaseTable
+                v-model:page="page"
+                v-model:items-per-page="limit"
+                :headers="headers"
+                :items="serverItems"
+                :loading="loading"
+                :error="loadError"
+                empty-text="No restocks found"
+                :items-length="totalItems"
+                row-click
+                @click:row="showDetails"
+                @retry="fetchRestock"
+            >
+                <template #cell-purchaseOrder="{ item }">
+                    <button
+                        v-if="item.purchaseOrder && canOpenOrders"
+                        type="button"
+                        class="min-h-11 text-leaf-700 underline"
+                        @click.stop="openOrder(item.purchaseOrder)"
+                    >
+                        {{ purchaseOrderReference(item.purchaseOrder) }}
+                    </button>
+                    <span v-else-if="item.purchaseOrder">{{
+                        purchaseOrderReference(item.purchaseOrder)
+                    }}</span>
+                    <span v-else>—</span>
+                </template>
+            </BaseTable>
+        </PageCard>
+    </PageFrame>
 
     <BaseModal
         v-model="isDialogOpen"
@@ -102,6 +105,7 @@ import { useRouter } from 'vue-router';
 import { Truck, X } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
+import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';

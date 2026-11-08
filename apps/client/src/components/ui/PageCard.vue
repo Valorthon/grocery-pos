@@ -1,23 +1,26 @@
 <template>
-    <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-        <div
-            v-if="title || $slots.actions"
-            class="flex flex-wrap items-center justify-between gap-3 px-5 py-4 bg-slate-50 border-b border-slate-200"
+    <section
+        class="bg-white rounded-2xl border border-slate-200 overflow-hidden"
+        :aria-labelledby="heading ? headingId : undefined"
+    >
+        <h2
+            v-if="heading"
+            :id="headingId"
+            class="px-5 pt-5 font-display text-lg font-bold text-ink"
         >
-            <div class="flex items-center gap-2.5">
-                <slot name="icon" />
-                <h1 v-if="title" class="text-base font-bold text-slate-900">
-                    {{ title }}
-                </h1>
-            </div>
-            <div class="flex items-center gap-2">
-                <slot name="actions" />
-            </div>
-        </div>
+            {{ heading }}
+        </h2>
         <slot />
-    </div>
+    </section>
 </template>
 
 <script setup lang="ts">
-defineProps<{ title?: string }>();
+import { useId } from 'vue';
+
+/**
+ * A plain content section (#159). The page title lives in `PageFrame`'s
+ * PageHeader; `heading` names a section when a page has several.
+ */
+defineProps<{ heading?: string }>();
+const headingId = useId();
 </script>
