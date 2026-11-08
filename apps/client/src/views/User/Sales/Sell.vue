@@ -1,17 +1,17 @@
 <template>
     <!-- Any click on the page gives the focus back to the scan box (#22). -->
     <div
-        class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden bg-slate-100 text-slate-900"
+        class="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden bg-paper text-ink"
         @click="sticky.onPageClick"
     >
         <!-- LEFT: scan input + live ticket (+ the tender footer below lg) -->
         <div
             ref="ticketColumn"
-            class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-white"
+            class="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-surface"
         >
-            <div class="p-4 sm:p-5 bg-white shrink-0 border-b border-slate-200">
+            <div class="p-4 sm:p-5 bg-surface shrink-0 border-b border-line">
                 <div
-                    class="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-100"
+                    class="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-line"
                 >
                     <div>
                         <div class="flex flex-wrap items-center gap-2">
@@ -32,7 +32,7 @@
                             </span>
                         </div>
                         <h1
-                            class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-1"
+                            class="font-display text-xl sm:text-2xl font-extrabold text-ink tracking-tight mt-1"
                         >
                             Checkout Register
                         </h1>
@@ -167,17 +167,17 @@
             <div
                 v-if="!isLarge"
                 data-testid="tender-footer"
-                class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 flex items-center justify-between gap-3 shadow-[0_-2px_8px_rgba(15,23,42,0.06)]"
+                class="shrink-0 border-t border-line bg-surface px-4 py-3 flex items-center justify-between gap-3 shadow-overlay"
             >
                 <div class="min-w-0">
                     <p
-                        class="text-xs font-bold uppercase tracking-wider text-slate-500"
+                        class="num text-xs font-bold uppercase tracking-wider text-muted"
                     >
                         Amount Due · {{ cartStore.totalUnits }} Units
                     </p>
                     <p
                         data-testid="footer-total"
-                        class="text-2xl font-black text-slate-900 tracking-tight truncate"
+                        class="font-display num text-3xl font-[800] text-ink tracking-tight truncate"
                     >
                         {{ currency(total) }}
                     </p>
@@ -188,7 +188,7 @@
                     aria-haspopup="dialog"
                     :aria-expanded="tender.isSheet.value"
                     aria-controls="tender-panel"
-                    class="min-h-11 min-w-11 px-5 py-3 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] text-white rounded-xl font-extrabold text-base flex items-center justify-center gap-2 shadow-xs transition-all focus-ring shrink-0"
+                    class="min-h-11 min-w-11 px-5 py-3 bg-citrus-500 hover:bg-citrus-400 active:bg-citrus-600 active:scale-[0.98] text-ink rounded-card font-bold text-base flex items-center justify-center gap-2 shadow-card transition-all focus-ring shrink-0"
                     @click="tender.show()"
                 >
                     <CreditCard class="w-5 h-5" aria-hidden="true" />
@@ -224,7 +224,7 @@
                     :aria-modal="isLarge ? undefined : 'true'"
                     :aria-label="isLarge ? undefined : 'Tender'"
                     :tabindex="isLarge ? undefined : -1"
-                    class="w-full lg:w-[400px] bg-white lg:border-l border-slate-200 flex flex-col justify-between shrink-0 shadow-xs z-30 max-h-[90vh] overflow-y-auto rounded-t-2xl lg:max-h-none lg:overflow-visible lg:rounded-none focus:outline-none"
+                    class="w-full lg:w-[400px] bg-surface lg:border-l border-line flex flex-col justify-between shrink-0 shadow-xs z-30 max-h-[90vh] overflow-y-auto rounded-t-2xl lg:max-h-none lg:overflow-visible lg:rounded-none focus:outline-none"
                 >
                     <RegisterTenderPanel
                         ref="tenderControls"

@@ -2053,6 +2053,13 @@ describe('Sell below lg: sticky footer and tender sheet (#26)', () => {
         expect(footer()).not.toBeNull();
         expect(text('footer-total')).toContain('95.00');
         expect(isTouchSize(openButton())).toBe(true);
+        // #164: the footer's Tender is the citrus CTA while the panel is
+        // away, and its total is the display figure.
+        expect(openButton().className).toContain('bg-citrus-500');
+        expect(openButton().className).toContain('text-ink');
+        expect(
+            document.querySelector('[data-testid="footer-total"]')!.className,
+        ).toContain('font-display');
         // The panel waits under <body>, hidden, not beside the ticket.
         expect(document.querySelector('main')!.contains(panel())).toBe(false);
         expect(tenderRoot().parentElement).toBe(document.body);
