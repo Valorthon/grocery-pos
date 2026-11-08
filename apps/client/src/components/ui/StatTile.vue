@@ -1,0 +1,95 @@
+<template>
+    <component
+        :is="to ? RouterLink : 'div'"
+        :to="to"
+        :aria-busy="loading ? 'true' : undefined"
+        :class="[
+            'relative flex flex-col gap-1 overflow-hidden rounded-card border border-line bg-surface p-4 shadow-card',
+            to ? 'transition-colors hover:bg-paper focus-ring' : '',
+        ]"
+    >
+        <!-- Tone is a 4px *-fg stripe (3:1 on surface) plus sr-only text,
+             never colour alone (#157 review). -->
+        <span
+            v-if="tone !== 'neutral'"
+            data-tone-stripe
+            :class="['absolute inset-y-0 left-0 w-1', STRIPE[tone]]"
+            aria-hidden="true"
+        />
+        <div class="flex items-center justify-between gap-2">
+            <p class="text-xs font-semibold text-muted">
+                {{ label
+                }}<span v-if="tone !== 'neutral'" class="sr-only"
+                    >, {{ toneText }}</span
+                >
+            </p>
+            <span v-if="$slots.icon" class="text-muted" aria-hidden="true">
+                <slot name="icon" />
+            </span>
+        </div>
+        <p
+            v-if="loading"
+            class="h-8 w-24 animate-pulse rounded-control bg-line"
+            data-skeleton
+        >
+            <span class="sr-only">Loading</span>
+        </p>
+        <p
+            v-else
+            class="font-display num text-2xl font-extrabold text-ink leading-tight"
+        >
+            {{ value }}
+        </p>
+        <p v-if="hint" class="text-xs text-muted">{{ hint }}</p>
+        <slot />
+    </component>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue';
+import { RouterLink, type RouteLocationRaw } from 'vue-router';
+
+type Tone = 'neutral' | 'success' | 'warning' | 'danger';
+
+const STRIPE: Record<Exclude<Tone, 'neutral'>, string> = {
+    success: 'bg-success-fg',
+    warning: 'bg-warning-fg',
+    danger: 'bg-danger-fg',
+};
+
+const DEFAULT_TONE_TEXT: Record<Exclude<Tone, 'neutral'>, string> = {
+    success: 'good',
+    warning: 'warning',
+    danger: 'needs attention',
+};
+
+const props = withDefaults(
+    defineProps<{
+        label: string;
+        /** Already formatted (formatCurrency, quantity formatting, …). */
+        value?: string | number;
+        hint?: string;
+        tone?: Tone;
+        /** Screen-reader word for the tone; defaults per tone. */
+        toneLabel?: string;
+        /** Makes the whole tile a link. */
+        to?: RouteLocationRaw;
+        /** Shows a skeleton in place of the value. */
+        loading?: boolean;
+    }>(),
+    {
+        value: '',
+        hint: undefined,
+        tone: 'neutral',
+        toneLabel: undefined,
+        to: undefined,
+        loading: false,
+    },
+);
+
+const toneText = computed(() =>
+    props.tone === 'neutral'
+        ? ''
+        : (props.toneLabel ?? DEFAULT_TONE_TEXT[props.tone]),
+);
+</script>

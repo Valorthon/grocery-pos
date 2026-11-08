@@ -135,6 +135,10 @@ describe('theme tokens (#153)', () => {
         ['line-strong', 'surface'],
         ['leaf-500', 'surface'],
         ['leaf-500', 'paper'],
+        // StatTile tone stripes (#157).
+        ['success-fg', 'surface'],
+        ['warning-fg', 'surface'],
+        ['danger-fg', 'surface'],
     ])('%s on %s passes AA for non-text (3:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
     });
