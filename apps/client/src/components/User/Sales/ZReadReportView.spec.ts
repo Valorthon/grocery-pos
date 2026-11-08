@@ -110,9 +110,9 @@ describe('ZReadReportView money figures', () => {
     });
 
     it.each([
-        [0, 'VARIANCE (EXACT)', '₱0.00', 'text-emerald-700'],
-        [1_050, 'VARIANCE (OVER)', '+₱10.50', 'text-amber-700'],
-        [-1_050, 'VARIANCE (SHORT)', '-₱10.50', 'text-rose-700'],
+        [0, 'VARIANCE (EXACT)', '₱0.00', 'text-success-fg'],
+        [1_050, 'VARIANCE (OVER)', '+₱10.50', 'text-warning-fg'],
+        [-1_050, 'VARIANCE (SHORT)', '-₱10.50', 'text-danger-fg'],
     ])(
         'labels an over/short of %i centavos as %s, signed',
         async (overShort, label, amount, colour) => {

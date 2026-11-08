@@ -9,7 +9,7 @@
     <span
         v-else
         v-bind="$attrs"
-        class="inline-flex items-center justify-center font-mono font-black text-slate-700"
+        class="inline-flex items-center justify-center num font-bold text-muted"
         data-testid="denomination-fallback"
         >{{ name }}</span
     >

@@ -140,6 +140,10 @@ describe('theme tokens (#153)', () => {
         ['leaf-100', 'leaf-700'],
         ['leaf-100', 'leaf-950'],
         ['surface', 'leaf-950'],
+        // Register dialogs (#165): Shift In/Out totals card figure (labels
+        // are leaf-200/leaf-800, above) and the coin + pressed state.
+        ['leaf-300', 'leaf-800'],
+        ['warning-fg', 'citrus-100'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });

@@ -12,8 +12,8 @@
         initial-focus="dialog"
     >
         <template #header>
-            <div class="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 class="w-4 h-4 text-emerald-600" />
+            <div class="flex items-center gap-2 text-success-fg">
+                <CheckCircle2 class="w-4 h-4 text-success-fg" />
                 <span class="text-xs font-bold">Transaction Complete</span>
             </div>
         </template>
@@ -21,25 +21,26 @@
         <div
             v-if="notice"
             role="status"
-            class="mx-4 sm:mx-5 mt-4 p-3 rounded-xl border border-amber-200 bg-amber-50 text-xs font-semibold text-amber-800"
+            class="mx-4 sm:mx-5 mt-4 p-3 rounded-control border border-warning-border bg-warning-bg text-xs font-semibold text-warning-fg"
             data-testid="receipt-notice"
         >
             {{ notice }}
         </div>
         <div
-            class="p-4 sm:p-5 overflow-y-auto bg-slate-100 font-mono text-xs text-slate-900"
+            class="p-4 sm:p-5 overflow-y-auto bg-paper num text-xs text-ink drop-shadow-sm"
         >
             <div
-                class="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4"
+                class="receipt-paper max-w-xs mx-auto bg-surface px-5 py-7 space-y-4"
+                data-testid="receipt-paper"
             >
                 <div class="text-center space-y-1">
                     <div
-                        class="w-8 h-8 rounded-lg bg-slate-900 text-white font-extrabold text-sm flex items-center justify-center mx-auto"
+                        class="w-8 h-8 rounded-control bg-leaf-800 text-white font-bold text-sm flex items-center justify-center mx-auto"
                     >
                         {{ identity.storeName.charAt(0) || 'G' }}
                     </div>
                     <h3
-                        class="font-bold text-sm tracking-widest text-slate-900 uppercase"
+                        class="font-bold text-sm tracking-widest text-ink uppercase"
                     >
                         {{ identity.storeName }}
                     </h3>
@@ -52,7 +53,7 @@
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 text-xs space-y-1 text-slate-500"
+                    class="border-t border-dashed border-line-strong pt-3 text-xs space-y-1 text-muted"
                 >
                     <div class="flex justify-between gap-2">
                         <time
@@ -67,13 +68,13 @@
                     <div class="flex justify-between gap-2">
                         <span>Cashier: {{ receipt?.cashierName }}</span>
                         <span
-                            class="font-bold text-slate-900"
+                            class="font-bold text-ink"
                             data-testid="receipt-sale-number"
                             >Sale #{{ number }}</span
                         >
                     </div>
                     <div
-                        class="text-xs text-slate-600 break-all text-right"
+                        class="text-xs text-muted break-all text-right"
                         data-testid="receipt-sale-id"
                     >
                         ID {{ receipt?._id }}
@@ -81,10 +82,10 @@
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 space-y-2"
+                    class="border-t border-dashed border-line-strong pt-3 space-y-2"
                 >
                     <div
-                        class="flex justify-between font-bold text-xs text-slate-500 uppercase border-b border-slate-100 pb-1"
+                        class="flex justify-between font-bold text-xs text-muted uppercase border-b border-line pb-1"
                     >
                         <span>Item</span>
                         <span>Total</span>
@@ -95,10 +96,10 @@
                         class="flex justify-between text-xs items-start"
                     >
                         <div class="pr-2">
-                            <p class="font-bold text-slate-900">
+                            <p class="font-bold text-ink">
                                 {{ item.productName }}
                             </p>
-                            <p class="text-xs text-slate-400">
+                            <p class="text-xs text-muted">
                                 {{
                                     item.unit
                                         ? formatQuantity(
@@ -118,52 +119,52 @@
                                 }}
                             </p>
                         </div>
-                        <span class="font-bold text-slate-900">{{
+                        <span class="font-bold text-ink">{{
                             currency(item.amount)
                         }}</span>
                     </div>
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs"
+                    class="border-t border-dashed border-line-strong pt-3 space-y-1 text-xs"
                 >
-                    <div class="flex justify-between text-slate-600">
+                    <div class="flex justify-between text-muted">
                         <span
                             >Subtotal ({{ countOf(itemCount, 'Item') }}):</span
                         >
-                        <span class="font-bold text-slate-900">{{
+                        <span class="font-bold text-ink">{{
                             currency(receipt?.subtotal ?? 0)
                         }}</span>
                     </div>
                     <template v-if="receipt?.discount">
                         <div
-                            class="flex justify-between text-emerald-700 font-bold"
+                            class="flex justify-between text-success-fg font-bold"
                         >
                             <span>Discount ({{ discountLabel }}):</span>
                             <span
                                 >-{{ currency(receipt.discount.amount) }}</span
                             >
                         </div>
-                        <div class="text-xs text-slate-500">
+                        <div class="text-xs text-muted">
                             Reason: {{ receipt.discount.reason }}
                         </div>
                     </template>
                     <div
-                        class="flex justify-between text-sm font-black text-slate-900 pt-2 border-t border-slate-200"
+                        class="flex justify-between text-sm font-bold text-ink pt-2 border-t border-line"
                     >
                         <span>TOTAL:</span>
-                        <span class="text-base font-black">{{
+                        <span class="text-base font-bold">{{
                             currency(receipt?.totalAmount ?? 0)
                         }}</span>
                     </div>
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 space-y-1.5 text-xs text-slate-500"
+                    class="border-t border-dashed border-line-strong pt-3 space-y-1.5 text-xs text-muted"
                 >
                     <div class="flex justify-between">
                         <span>Payment Method:</span>
-                        <span class="font-bold text-slate-900">{{
+                        <span class="font-bold text-ink">{{
                             methodLabel
                         }}</span>
                     </div>
@@ -171,14 +172,14 @@
                     <div
                         v-for="tender in receipt?.tenders ?? []"
                         :key="tender.type"
-                        class="flex justify-between text-slate-800 font-semibold"
+                        class="flex justify-between text-ink font-semibold"
                     >
                         <span>{{ tenderLabel(tender.type) }}:</span>
                         <span>{{ currency(tender.amount) }}</span>
                     </div>
                     <div
                         v-if="receipt && hasCashTender(receipt)"
-                        class="flex justify-between text-emerald-700 font-bold"
+                        class="flex justify-between text-success-fg font-bold"
                         data-testid="receipt-change"
                     >
                         <span>Change:</span>
@@ -194,9 +195,9 @@
                 </div>
 
                 <div
-                    class="border-t border-dashed border-slate-300 pt-3 text-center space-y-1.5"
+                    class="border-t border-dashed border-line-strong pt-3 text-center space-y-1.5"
                 >
-                    <p class="text-xs text-slate-400">
+                    <p class="text-xs text-muted">
                         {{ identity.receiptFooter }}
                     </p>
                 </div>

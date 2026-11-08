@@ -3,7 +3,7 @@
         <div class="flex justify-end -mb-3">
             <button
                 type="button"
-                class="text-xs font-bold text-slate-600 hover:text-slate-900 hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
+                class="text-xs font-bold text-muted hover:text-ink hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
                 data-testid="count-clear-all"
                 :disabled="!hasAnything"
                 @click="clearAll"
@@ -14,10 +14,10 @@
 
         <div v-for="group in groups" :key="group.key" class="space-y-2">
             <div
-                class="flex items-center justify-between pb-1 border-b border-slate-200"
+                class="flex items-center justify-between pb-1 border-b border-line"
             >
                 <div
-                    class="flex items-center gap-1.5 text-xs font-extrabold text-slate-800 uppercase tracking-wider"
+                    class="flex items-center gap-1.5 text-xs font-bold text-ink uppercase tracking-wider"
                 >
                     <component
                         :is="group.icon"
@@ -26,9 +26,9 @@
                     />
                     <span>{{ group.title }}</span>
                 </div>
-                <span class="font-mono text-xs font-bold text-slate-600">
+                <span class="num text-xs font-bold text-muted">
                     <span
-                        class="font-sans text-xs font-semibold text-slate-500 mr-1.5"
+                        class="font-sans text-xs font-semibold text-muted mr-1.5"
                         :data-testid="`count-${group.key}-pieces`"
                         >{{ group.pieces }}
                         {{ group.pieces === 1 ? 'pc' : 'pcs' }} ·</span
@@ -43,7 +43,7 @@
                 <div
                     v-for="d in group.denoms"
                     :key="d.id"
-                    class="p-3 rounded-2xl border-2 transition-all flex flex-col justify-between gap-3"
+                    class="p-3 rounded-card border-2 transition-all flex flex-col justify-between gap-3"
                     :class="
                         tileClass(group.kind, count(d.id) > 0, !!errors[d.id])
                     "
@@ -68,7 +68,7 @@
                         <div class="h-5 flex items-center justify-center">
                             <span
                                 v-if="count(d.id) > 0"
-                                class="font-mono text-xs font-black"
+                                class="num text-xs font-bold"
                                 :class="group.subtotalClass"
                             >
                                 {{ formatCurrency(count(d.id) * d.value) }}
@@ -80,23 +80,23 @@
                                     {{ count(d.id) === 1 ? 'pc' : 'pcs' }})
                                 </span>
                             </span>
-                            <span
-                                v-else
-                                class="text-xs text-slate-400 font-medium"
+                            <span v-else class="text-xs text-muted font-medium"
                                 >0 pcs</span
                             >
                         </div>
                     </div>
 
                     <div
-                        class="flex items-center justify-between gap-0.5 bg-white border rounded-xl p-0.5 shadow-2xs"
+                        class="flex items-center justify-between gap-0.5 bg-surface border rounded-control p-0.5 shadow-2xs focus-within:outline-2"
                         :class="
-                            errors[d.id] ? 'border-red-400' : 'border-slate-300'
+                            errors[d.id]
+                                ? 'border-danger-border focus-within:outline-danger-fg'
+                                : 'border-line-strong focus-within:outline-leaf-500'
                         "
                     >
                         <button
                             type="button"
-                            class="w-11 h-11 shrink-0 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:bg-slate-200 rounded-lg disabled:opacity-30 text-sm font-black transition-colors"
+                            class="w-11 h-11 shrink-0 flex items-center justify-center text-muted hover:bg-leaf-50 active:bg-leaf-100 rounded-control disabled:opacity-30 text-sm font-bold transition-colors focus-ring"
                             :aria-label="`One less ${d.label} ${d.kind}`"
                             :data-testid="`count-minus-${d.id}`"
                             :disabled="count(d.id) <= 0"
@@ -108,9 +108,9 @@
                             type="text"
                             inputmode="numeric"
                             autocomplete="off"
-                            class="flex-1 w-full min-w-0 text-center font-mono font-black text-sm focus:outline-none"
+                            class="flex-1 w-full min-w-0 text-center num font-bold text-sm focus:outline-none"
                             :class="
-                                errors[d.id] ? 'text-red-700' : 'text-slate-900'
+                                errors[d.id] ? 'text-danger-fg' : 'text-ink'
                             "
                             :aria-label="`${d.label} ${d.kind} pieces`"
                             :aria-invalid="errors[d.id] ? 'true' : undefined"
@@ -124,7 +124,7 @@
                         />
                         <button
                             type="button"
-                            class="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg text-sm font-black transition-colors disabled:opacity-30"
+                            class="w-11 h-11 shrink-0 flex items-center justify-center rounded-control text-sm font-bold transition-colors disabled:opacity-30 focus-ring"
                             :class="group.plusClass"
                             :aria-label="`One more ${d.label} ${d.kind}`"
                             :data-testid="`count-plus-${d.id}`"
@@ -137,7 +137,7 @@
                     <p
                         v-if="errors[d.id]"
                         :id="`count-error-${d.id}`"
-                        class="-mt-1.5 text-xs font-semibold text-red-600 text-center"
+                        class="-mt-1.5 text-xs font-semibold text-danger-fg text-center"
                         :data-testid="`count-error-${d.id}`"
                     >
                         {{ errors[d.id] }}
@@ -233,10 +233,10 @@ const groups = computed(() => [
         kind: 'coins',
         title: 'Coins',
         icon: Coins,
-        iconClass: 'text-amber-600',
-        subtotalClass: 'text-amber-950',
-        countClass: 'text-amber-700',
-        plusClass: 'text-amber-700 hover:bg-amber-50 active:bg-amber-100',
+        iconClass: 'text-warning-fg',
+        subtotalClass: 'text-warning-fg',
+        countClass: 'text-warning-fg',
+        plusClass: 'text-warning-fg hover:bg-warning-bg active:bg-citrus-100',
         denoms: COIN_DENOMINATIONS,
         subtotal: subtotal(COIN_DENOMINATIONS),
         pieces: pieces(COIN_DENOMINATIONS),
@@ -254,13 +254,13 @@ function count(id: string): number {
 }
 
 function tileClass(kind: string, active: boolean, refused: boolean): string {
-    if (refused) return 'bg-red-50/80 border-red-300';
+    if (refused) return 'bg-danger-bg/80 border-danger-border';
     if (!active) {
-        return 'bg-slate-50/90 border-slate-200 hover:border-slate-300';
+        return 'bg-paper/90 border-line hover:border-line-strong';
     }
     return kind === 'bills'
         ? 'bg-leaf-50/90 border-leaf-300'
-        : 'bg-amber-50/90 border-amber-400';
+        : 'bg-warning-bg/90 border-warning-border';
 }
 
 /** Sets one denomination's pieces; 0 drops it from the counts. */

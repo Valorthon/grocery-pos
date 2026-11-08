@@ -6,25 +6,25 @@
         scrollable
         :closable="!busy"
     >
-        <p v-if="!cart.parked.length" class="text-sm text-slate-600">
+        <p v-if="!cart.parked.length" class="text-sm text-muted">
             No parked tickets.
         </p>
-        <p v-if="cart.items.length" class="mb-3 text-sm text-amber-800">
+        <p v-if="cart.items.length" class="mb-3 text-sm text-warning-fg">
             Park or clear the current ticket before resuming another.
         </p>
-        <p v-if="error" role="alert" class="mb-3 text-sm text-red-700">
+        <p v-if="error" role="alert" class="mb-3 text-sm text-danger-fg">
             {{ error }}
         </p>
         <ul class="space-y-3">
             <li
                 v-for="ticket in cart.parked"
                 :key="ticket.id"
-                class="rounded-xl border border-slate-200 p-3"
+                class="rounded-control border border-line p-3"
             >
                 <h3 class="font-bold text-sm break-words">
                     {{ ticket.label || 'Unnamed ticket' }}
                 </h3>
-                <p class="text-xs text-slate-600">
+                <p class="text-xs text-muted">
                     {{ new Date(ticket.parkedAt).toLocaleString() }} ·
                     {{ countOf(ticket.items.length, 'line') }} ·
                     {{
@@ -42,7 +42,7 @@
                         )
                     }}
                 </p>
-                <p class="text-xs text-slate-600">
+                <p class="text-xs text-muted">
                     Prices refresh on resume. Discounts need fresh admin
                     approval at checkout.
                 </p>
@@ -68,7 +68,7 @@
                 </div>
             </li>
         </ul>
-        <p v-if="!shift.activeShift" class="mt-3 text-sm text-amber-800">
+        <p v-if="!shift.activeShift" class="mt-3 text-sm text-warning-fg">
             Open a shift to resume a ticket.
         </p>
     </BaseModal>

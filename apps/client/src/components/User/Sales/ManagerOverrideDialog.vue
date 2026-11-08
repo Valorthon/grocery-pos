@@ -7,8 +7,8 @@
         @update:model-value="close"
     >
         <form class="space-y-4" @submit.prevent="approve">
-            <p class="text-sm text-slate-700">{{ summary }}</p>
-            <p class="text-xs text-slate-500">
+            <p class="text-sm text-muted">{{ summary }}</p>
+            <p class="text-xs text-muted">
                 {{
                     request?.action === OverrideAction.DISCOUNT
                         ? 'An admin must approve this discount.'
@@ -39,7 +39,7 @@
                     v-for="key in keys"
                     :key="key"
                     type="button"
-                    class="min-h-11 min-w-11 rounded-lg border border-slate-300 text-base font-semibold focus-ring disabled:opacity-40"
+                    class="min-h-11 min-w-11 rounded-control border border-line-strong text-base font-semibold focus-ring disabled:opacity-40"
                     :disabled="submitting"
                     :aria-label="
                         key === '⌫'
@@ -53,7 +53,7 @@
                     {{ key }}
                 </button>
             </div>
-            <p v-if="error" role="alert" class="text-sm text-red-600">
+            <p v-if="error" role="alert" class="text-sm text-danger-fg">
                 {{ error }}
             </p>
             <button class="sr-only" type="submit" :disabled="!canApprove">
