@@ -8,9 +8,9 @@
         :closable="!submitting"
     >
         <div
-            class="flex items-center gap-1.5 text-slate-600 font-semibold text-xs mb-3"
+            class="flex items-center gap-1.5 text-muted font-semibold text-xs mb-3"
         >
-            <ShieldCheck class="w-3.5 h-3.5 text-slate-500" />
+            <ShieldCheck class="w-3.5 h-3.5 text-muted" />
             <span
                 >Enter the cash you find in the drawer. The shift close report
                 shows how it compares once you submit.</span
@@ -19,13 +19,13 @@
 
         <fieldset
             v-if="cart.parked.length"
-            class="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3"
+            class="mb-4 rounded-control border border-warning-border bg-warning-bg p-3"
         >
             <legend class="text-sm font-bold">
                 {{ countOf(cart.parked.length, 'parked ticket') }}
                 {{ cart.parked.length === 1 ? 'is' : 'are' }} still open
             </legend>
-            <p class="text-xs text-slate-700">
+            <p class="text-xs text-muted">
                 Choose what happens to these drafts when this shift closes. They
                 have not reserved stock.
             </p>
@@ -49,24 +49,24 @@
         <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 
         <div
-            class="mt-4 bg-slate-900 text-white rounded-xl p-4 flex items-center justify-between"
+            class="mt-4 bg-leaf-800 text-white rounded-control p-4 flex items-center justify-between"
         >
             <div>
                 <div
-                    class="text-xs text-slate-400 font-bold uppercase tracking-wider"
+                    class="text-xs text-muted font-bold uppercase tracking-wider"
                 >
                     Total Physical Counted Cash ({{ totalPieces }} pieces)
                 </div>
                 <div
-                    class="text-2xl font-mono font-black text-leaf-300 mt-0.5"
+                    class="text-2xl font-display num font-[800] text-leaf-300 mt-0.5"
                     data-testid="counted-cash"
                 >
                     {{ currency(countedCash) }}
                 </div>
             </div>
             <div class="text-right">
-                <span class="text-xs text-slate-400">Cashier:</span>
-                <div class="text-xs font-bold text-slate-200">
+                <span class="text-xs text-muted">Cashier:</span>
+                <div class="text-xs font-bold text-leaf-100">
                     {{ shiftStore.activeShift?.cashierName }}
                 </div>
             </div>
@@ -75,7 +75,7 @@
         <p
             v-if="error"
             role="alert"
-            class="mt-3 text-xs font-semibold text-red-600"
+            class="mt-3 text-xs font-semibold text-danger-fg"
             data-testid="shift-out-error"
         >
             {{ error }}

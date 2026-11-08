@@ -17,15 +17,15 @@
         <!-- Disabled while the sale is in flight: what is sent cannot change. -->
         <fieldset ref="fields" :disabled="processing" class="contents">
             <div
-                class="p-3.5 sm:p-4 bg-slate-50 rounded-2xl border border-slate-200 text-center"
+                class="p-3.5 sm:p-4 bg-paper rounded-card border border-line text-center"
             >
                 <span
-                    class="text-xs font-bold uppercase tracking-wider text-slate-500"
+                    class="text-xs font-bold uppercase tracking-wider text-muted"
                 >
                     Total Due Amount
                 </span>
                 <div
-                    class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mt-0.5"
+                    class="min-w-0 text-2xl min-[360px]:text-3xl sm:text-4xl font-display num font-[800] text-ink tracking-tight mt-0.5"
                 >
                     {{ currency(total) }}
                 </div>
@@ -33,18 +33,18 @@
 
             <div class="mt-4">
                 <label
-                    class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2"
+                    class="block text-xs font-bold uppercase tracking-wider text-muted mb-2"
                 >
                     Select Payment Method
                 </label>
                 <div class="grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        class="min-h-11 py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                         :class="
                             method === PaymentType.CASH
-                                ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                ? 'bg-leaf-800 text-white border-ink shadow-2xs'
+                                : 'bg-surface text-muted border-line hover:bg-leaf-50'
                         "
                         @click="selectMethod(PaymentType.CASH)"
                     >
@@ -54,11 +54,11 @@
 
                     <button
                         type="button"
-                        class="min-h-11 py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                         :class="
                             method === PaymentType.GCASH
-                                ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                ? 'bg-leaf-800 text-white border-ink shadow-2xs'
+                                : 'bg-surface text-muted border-line hover:bg-leaf-50'
                         "
                         :disabled="cashOnly"
                         @click="selectMethod(PaymentType.GCASH)"
@@ -69,11 +69,11 @@
 
                     <button
                         type="button"
-                        class="min-h-11 py-3 px-2 rounded-xl border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
                         :class="
                             method === PaymentType.SPLIT
-                                ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
-                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                                ? 'bg-leaf-800 text-white border-ink shadow-2xs'
+                                : 'bg-surface text-muted border-line hover:bg-leaf-50'
                         "
                         :disabled="cashOnly"
                         @click="selectMethod(PaymentType.SPLIT)"
@@ -87,15 +87,15 @@
             <!-- CASH -->
             <div
                 v-if="method === PaymentType.CASH"
-                class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4"
+                class="space-y-3 bg-paper p-4 rounded-control border border-line mt-4"
             >
                 <div class="flex items-center justify-between">
                     <label
-                        class="text-xs font-bold uppercase tracking-wider text-slate-500"
+                        class="text-xs font-bold uppercase tracking-wider text-muted"
                     >
                         Amount Tendered
                     </label>
-                    <span class="text-xs font-bold text-slate-800"
+                    <span class="text-xs font-bold text-ink"
                         >Exact: {{ currency(total) }}</span
                     >
                 </div>
@@ -113,7 +113,7 @@
                 >
                     <button
                         type="button"
-                        class="min-h-11 min-w-11 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
+                        class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
                         @click="amountTendered = centavosToPesoInput(total)"
                     >
                         Exact
@@ -122,7 +122,7 @@
                         v-for="amount in quickCash"
                         :key="amount"
                         type="button"
-                        class="min-h-11 min-w-11 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
+                        class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
                         @click="amountTendered = centavosToPesoInput(amount)"
                     >
                         {{ currency(amount) }}
@@ -131,7 +131,7 @@
 
                 <div class="relative">
                     <span
-                        class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400"
+                        class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-muted"
                         >₱</span
                     >
                     <input
@@ -143,22 +143,22 @@
                         step="0.01"
                         min="0"
                         placeholder="0.00"
-                        class="w-full min-h-11 pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                        class="w-full min-h-11 pl-8 pr-4 py-2 rounded-control border border-line-strong bg-surface text-sm font-bold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
                     />
                 </div>
 
                 <div
-                    class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200"
+                    class="flex items-center justify-between p-2.5 bg-surface rounded-control border border-line"
                 >
-                    <span class="text-xs font-bold text-slate-500"
+                    <span class="text-xs font-bold text-muted"
                         >Change Due:</span
                     >
                     <span
-                        class="text-base font-extrabold"
+                        class="text-base font-bold"
                         :class="
                             isCashSufficient
-                                ? 'text-emerald-700'
-                                : 'text-red-600'
+                                ? 'text-success-fg'
+                                : 'text-danger-fg'
                         "
                     >
                         {{ currency(changeDue) }}
@@ -169,10 +169,10 @@
             <!-- GCASH -->
             <div
                 v-else-if="method === PaymentType.GCASH"
-                class="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200 mt-4"
+                class="space-y-3 bg-paper p-4 rounded-control border border-line mt-4"
             >
                 <label
-                    class="block text-xs font-bold uppercase tracking-wider text-slate-500"
+                    class="block text-xs font-bold uppercase tracking-wider text-muted"
                 >
                     Reference Number
                 </label>
@@ -189,18 +189,18 @@
                     :aria-describedby="
                         showReferenceError ? referenceErrorId : undefined
                     "
-                    class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                    class="w-full min-h-11 px-3 py-2 rounded-control border bg-surface text-sm font-bold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
                     :class="
                         showReferenceError
-                            ? 'border-red-400'
-                            : 'border-slate-300'
+                            ? 'border-danger-border'
+                            : 'border-line-strong'
                     "
                 />
                 <p
                     v-if="showReferenceError"
                     :id="referenceErrorId"
                     data-testid="reference-error"
-                    class="text-xs font-semibold text-red-600"
+                    class="text-xs font-semibold text-danger-fg"
                 >
                     {{ referenceError }}
                 </p>
@@ -209,15 +209,15 @@
             <!-- SPLIT -->
             <div v-else class="space-y-3 mt-4">
                 <div
-                    class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2.5"
+                    class="p-4 rounded-control border border-line bg-paper space-y-2.5"
                 >
                     <div class="flex items-center justify-between">
-                        <label class="text-xs font-extrabold text-slate-900"
+                        <label class="text-xs font-bold text-ink"
                             >1. Customer Cash Given:</label
                         >
-                        <span class="text-xs font-semibold text-slate-500"
+                        <span class="text-xs font-semibold text-muted"
                             >Total bill:
-                            <strong class="text-slate-800 font-mono">{{
+                            <strong class="text-ink num">{{
                                 currency(total)
                             }}</strong></span
                         >
@@ -228,7 +228,7 @@
                             v-for="bill in splitBills"
                             :key="bill"
                             type="button"
-                            class="min-h-11 min-w-11 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-100 active:scale-[0.98] focus-ring"
+                            class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
                             @click="splitCashGiven = centavosToPesoInput(bill)"
                         >
                             {{ currency(bill) }}
@@ -237,7 +237,7 @@
 
                     <div class="relative">
                         <span
-                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400"
+                            class="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-muted"
                             >₱</span
                         >
                         <input
@@ -249,21 +249,21 @@
                             step="0.01"
                             min="0"
                             placeholder="Enter cash handed by customer"
-                            class="w-full min-h-11 pl-8 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                            class="w-full min-h-11 pl-8 pr-4 py-2 rounded-control border border-line-strong bg-surface text-sm font-bold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
                         />
                     </div>
                 </div>
 
                 <template v-if="split.cash > 0">
                     <div
-                        class="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3"
+                        class="p-4 rounded-control border border-line bg-paper space-y-3"
                     >
                         <div class="flex items-center justify-between">
-                            <span class="text-xs font-extrabold text-slate-900"
+                            <span class="text-xs font-bold text-ink"
                                 >2. Calculated GCash / QR Due:</span
                             >
                             <span
-                                class="text-sm font-mono font-black text-slate-900"
+                                class="text-sm num font-bold text-ink"
                                 data-testid="split-gcash"
                                 >{{ currency(split.gcash) }}</span
                             >
@@ -271,7 +271,7 @@
 
                         <div v-if="!split.coversTotal" class="space-y-2">
                             <label
-                                class="block text-xs font-bold uppercase tracking-wider text-slate-500"
+                                class="block text-xs font-bold uppercase tracking-wider text-muted"
                             >
                                 Reference Number
                             </label>
@@ -289,18 +289,18 @@
                                         ? referenceErrorId
                                         : undefined
                                 "
-                                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-bold focus:outline-none focus:border-slate-800"
+                                class="w-full min-h-11 px-3 py-2 rounded-control border bg-surface text-sm font-bold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
                                 :class="
                                     showReferenceError
-                                        ? 'border-red-400'
-                                        : 'border-slate-300'
+                                        ? 'border-danger-border'
+                                        : 'border-line-strong'
                                 "
                             />
                             <p
                                 v-if="showReferenceError"
                                 :id="referenceErrorId"
                                 data-testid="reference-error"
-                                class="text-xs font-semibold text-red-600"
+                                class="text-xs font-semibold text-danger-fg"
                             >
                                 {{ referenceError }}
                             </p>
@@ -308,7 +308,7 @@
                         <div
                             v-else
                             data-testid="split-covered"
-                            class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold"
+                            class="p-3 bg-success-bg border border-success-border rounded-control text-xs text-success-fg font-semibold"
                         >
                             The cash covers the whole total, so no GCash is
                             needed and this is recorded as a cash sale.
@@ -322,13 +322,13 @@
                         out of the cash tender too (settleTenders).
                     -->
                     <div
-                        class="flex items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200"
+                        class="flex items-center justify-between p-2.5 bg-surface rounded-control border border-line"
                     >
-                        <span class="text-xs font-bold text-slate-500"
+                        <span class="text-xs font-bold text-muted"
                             >Change Due:</span
                         >
                         <span
-                            class="text-base font-extrabold text-emerald-700"
+                            class="text-base font-bold text-success-fg"
                             data-testid="split-change"
                         >
                             {{ currency(split.changeDue) }}
@@ -337,10 +337,10 @@
 
                     <div
                         v-if="!split.coversTotal"
-                        class="p-2.5 rounded-xl bg-slate-900 text-white flex items-center justify-between text-xs font-semibold"
+                        class="p-2.5 rounded-control bg-leaf-800 text-white flex items-center justify-between text-xs font-semibold"
                     >
                         <span>Split Breakdown:</span>
-                        <span class="font-mono text-xs">
+                        <span class="num text-xs">
                             Cash {{ currency(split.cash) }} + GCash
                             {{ currency(split.gcash) }} =
                             {{ currency(total) }}
@@ -349,7 +349,7 @@
                 </template>
                 <div
                     v-else
-                    class="p-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 text-center text-xs text-slate-500"
+                    class="p-4 rounded-control border border-dashed border-line-strong bg-paper text-center text-xs text-muted"
                 >
                     Enter the cash amount given by the customer above.
                 </div>
@@ -359,7 +359,7 @@
         <div
             v-if="error"
             role="alert"
-            class="mt-4 p-3 rounded-xl border border-red-200 bg-red-50 text-xs font-semibold text-red-700 flex items-start gap-2"
+            class="mt-4 p-3 rounded-control border border-danger-border bg-danger-bg text-xs font-semibold text-danger-fg flex items-start gap-2"
             data-testid="checkout-error"
         >
             <AlertCircle class="w-4 h-4 shrink-0 mt-px" />

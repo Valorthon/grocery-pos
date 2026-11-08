@@ -271,10 +271,14 @@
                 id="park-note"
                 v-model="parkNote"
                 :maxlength="PARKED_LABEL_MAX"
-                class="w-full min-h-11 border border-slate-300 rounded-xl px-3 text-sm focus-ring"
+                class="w-full min-h-11 border border-line-strong rounded-control px-3 text-sm focus-ring"
                 @keydown.enter.prevent="parkTicket"
             />
-            <p v-if="parkError" role="alert" class="mt-3 text-sm text-red-700">
+            <p
+                v-if="parkError"
+                role="alert"
+                class="mt-3 text-sm text-danger-fg"
+            >
                 {{ parkError }}
             </p>
             <template #footer

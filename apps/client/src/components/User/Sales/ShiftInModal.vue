@@ -10,15 +10,15 @@
         <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 
         <div
-            class="mt-4 bg-slate-900 text-white rounded-xl p-3.5 flex items-center justify-between"
+            class="mt-4 bg-leaf-800 text-white rounded-control p-3.5 flex items-center justify-between"
         >
             <div>
                 <div
-                    class="text-xs uppercase font-bold text-slate-400 tracking-wider"
+                    class="text-xs uppercase font-bold text-muted tracking-wider"
                 >
                     Total Opening Float ({{ totalPieces }} pieces)
                 </div>
-                <div class="text-2xl font-black font-mono text-leaf-300">
+                <div class="text-2xl font-display num font-[800] text-leaf-300">
                     {{ currency(total) }}
                 </div>
             </div>
@@ -28,7 +28,7 @@
         <p
             v-if="error"
             role="alert"
-            class="mt-3 text-xs font-semibold text-red-600"
+            class="mt-3 text-xs font-semibold text-danger-fg"
             data-testid="shift-in-error"
         >
             {{ error }}

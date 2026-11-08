@@ -1,10 +1,10 @@
 <template>
     <div
-        class="bg-white p-5 rounded-xl border border-slate-200 shadow-2xs space-y-4 font-mono text-xs text-slate-900"
+        class="bg-surface p-5 rounded-control border border-line shadow-2xs space-y-4 num text-xs text-ink"
     >
-        <div class="text-center border-b border-dashed border-slate-300 pb-3">
+        <div class="text-center border-b border-dashed border-line-strong pb-3">
             <div
-                class="font-sans font-black text-sm uppercase tracking-wider text-slate-900"
+                class="font-sans font-bold text-sm uppercase tracking-wider text-ink"
             >
                 {{ identity.storeName }}
             </div>
@@ -12,23 +12,23 @@
             <p v-if="identity.address">{{ identity.address }}</p>
             <p v-if="identity.contactNumber">{{ identity.contactNumber }}</p>
             <p v-if="identity.tin">TIN {{ identity.tin }}</p>
-            <div class="text-xs text-slate-500 font-sans mt-0.5">
+            <div class="text-xs text-muted font-sans mt-0.5">
                 <span data-testid="zread-terminal">{{ report.terminal }}</span>
                 • Shift Close Report (Z-Read)
             </div>
-            <div class="text-xs text-slate-400 mt-1">
+            <div class="text-xs text-muted mt-1">
                 {{ formatStoreDateTime(report.openedAt, identity.timezone) }} —
                 {{ formatStoreDateTime(report.closedAt, identity.timezone) }}
             </div>
             <div
-                class="text-xs font-bold text-slate-700 mt-1"
+                class="text-xs font-bold text-muted mt-1"
                 data-testid="zread-cashier"
             >
                 Cashier: {{ report.cashierName }}
             </div>
             <div
                 v-if="report.closedByAdmin"
-                class="mt-2 rounded-md bg-amber-50 border border-amber-200 px-2 py-1 text-xs font-sans font-bold text-amber-800"
+                class="mt-2 rounded-md bg-warning-bg border border-warning-border px-2 py-1 text-xs font-sans font-bold text-warning-fg"
                 data-testid="zread-closed-by-admin"
             >
                 Closed by admin {{ report.closedByName }}
@@ -37,7 +37,7 @@
 
         <p
             v-if="report.offlineAddendum"
-            class="rounded-lg border border-amber-200 bg-amber-50 p-3 font-sans text-sm"
+            class="rounded-control border border-warning-border bg-warning-bg p-3 font-sans text-sm"
             data-testid="offline-addendum"
         >
             Admin reconciliation addendum:
@@ -47,9 +47,9 @@
             below.
         </p>
         <section
-            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
+            class="space-y-1.5 border-b border-dashed border-line-strong pb-3 text-xs"
         >
-            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
+            <div class="font-sans font-bold text-ink uppercase text-xs">
                 Sales
             </div>
             <Row label="Transactions" :value="String(report.sales.count)" />
@@ -75,9 +75,9 @@
         </section>
 
         <section
-            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
+            class="space-y-1.5 border-b border-dashed border-line-strong pb-3 text-xs"
         >
-            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
+            <div class="font-sans font-bold text-ink uppercase text-xs">
                 By Tender
             </div>
             <Row
@@ -88,9 +88,9 @@
         </section>
 
         <section
-            class="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs"
+            class="space-y-1.5 border-b border-dashed border-line-strong pb-3 text-xs"
         >
-            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
+            <div class="font-sans font-bold text-ink uppercase text-xs">
                 Drawer
             </div>
             <Row
@@ -119,16 +119,16 @@
         </section>
 
         <div
-            class="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1.5 text-xs"
+            class="p-3 bg-paper rounded-control border border-line space-y-1.5 text-xs"
         >
-            <div class="flex justify-between font-bold text-slate-900">
+            <div class="flex justify-between font-bold text-ink">
                 <span>Physical Cash Counted:</span>
                 <span class="text-leaf-600">{{
                     currency(report.drawer.countedCash)
                 }}</span>
             </div>
             <div
-                class="flex justify-between font-black pt-1 border-t border-slate-300"
+                class="flex justify-between font-bold pt-1 border-t border-line-strong"
                 :class="varianceClass"
                 data-testid="zread-over-short"
             >
@@ -139,9 +139,9 @@
 
         <section
             v-if="report.movements.length > 0"
-            class="space-y-1 text-xs text-slate-600"
+            class="space-y-1 text-xs text-muted"
         >
-            <div class="font-sans font-bold text-slate-800 uppercase text-xs">
+            <div class="font-sans font-bold text-ink uppercase text-xs">
                 Drawer Movements
             </div>
             <div
@@ -157,7 +157,7 @@
             </div>
         </section>
 
-        <div class="text-center text-xs text-slate-400 font-sans pt-1">
+        <div class="text-center text-xs text-muted font-sans pt-1">
             --- END OF SHIFT CLOSE REPORT ---
         </div>
     </div>
@@ -190,13 +190,13 @@ const Row = defineComponent({
                 {
                     class: [
                         'flex justify-between',
-                        p.bold ? 'font-bold text-slate-900' : '',
-                        p.info ? 'pl-3 text-slate-500 italic' : '',
+                        p.bold ? 'font-bold text-ink' : '',
+                        p.info ? 'pl-3 text-muted italic' : '',
                     ],
                     'data-info': p.info ? 'true' : undefined,
                 },
                 [
-                    h('span', { class: p.info ? '' : 'text-slate-600' }, [
+                    h('span', { class: p.info ? '' : 'text-muted' }, [
                         `${p.label}:`,
                         p.note
                             ? h('span', { class: 'block' }, `(${p.note})`)
@@ -224,8 +224,8 @@ const varianceLabel = computed(() => {
 
 const varianceClass = computed(() => {
     const v = props.report.drawer.overShort;
-    if (v === 0) return 'text-emerald-700';
-    return v > 0 ? 'text-amber-700' : 'text-rose-700';
+    if (v === 0) return 'text-success-fg';
+    return v > 0 ? 'text-warning-fg' : 'text-danger-fg';
 });
 
 const MOVEMENT_LABELS: Record<DrawerMovementType, string> = {

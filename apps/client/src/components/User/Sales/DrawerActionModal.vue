@@ -18,13 +18,13 @@
             <div>
                 <label
                     for="drawer-amount"
-                    class="block font-bold text-slate-700 mb-1"
+                    class="block font-bold text-muted mb-1"
                 >
                     Amount to {{ isCashIn ? 'Add' : 'Drop' }} (₱)
                 </label>
                 <div class="relative">
                     <span
-                        class="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm"
+                        class="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-muted text-sm"
                         >₱</span
                     >
                     <input
@@ -39,18 +39,18 @@
                         :aria-describedby="
                             errors.amount ? 'drawer-amount-error' : undefined
                         "
-                        class="w-full pl-7 pr-3 py-2 text-base font-mono font-black text-slate-900 border rounded-xl focus:outline-none focus:ring-1"
+                        class="w-full pl-7 pr-3 py-2 text-base num font-bold text-ink border rounded-control focus:outline-2 focus:outline-offset-0"
                         :class="
                             errors.amount
-                                ? 'border-red-400 focus:border-red-500 focus:ring-red-500'
-                                : 'border-slate-300 focus:border-leaf-500 focus:ring-leaf-500'
+                                ? 'border-danger-border focus:outline-danger-fg'
+                                : 'border-line-strong focus:outline-leaf-500'
                         "
                     />
                 </div>
                 <p
                     v-if="errors.amount"
                     id="drawer-amount-error"
-                    class="mt-1 text-red-600"
+                    class="mt-1 text-danger-fg"
                     data-testid="drawer-amount-error"
                 >
                     {{ errors.amount }}
@@ -70,11 +70,11 @@
                         v-for="q in quickAmounts"
                         :key="q"
                         type="button"
-                        class="min-h-11 min-w-11 px-2.5 py-1 rounded-lg border font-bold text-xs transition-colors active:scale-[0.98] focus-ring"
+                        class="min-h-11 min-w-11 px-2.5 py-1 rounded-control border font-bold text-xs transition-colors active:scale-[0.98] focus-ring"
                         :class="
                             amountCentavos === q
-                                ? 'bg-slate-900 text-white border-slate-900'
-                                : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                                ? 'bg-leaf-800 text-white border-ink'
+                                : 'bg-paper hover:bg-leaf-50 border-line text-muted'
                         "
                         @click="amount = centavosToPesoInput(q)"
                     >
@@ -86,7 +86,7 @@
             <div>
                 <label
                     for="drawer-reason"
-                    class="block font-bold text-slate-700 mb-1"
+                    class="block font-bold text-muted mb-1"
                 >
                     Reason
                 </label>
@@ -105,17 +105,17 @@
                     :aria-describedby="
                         errors.reason ? 'drawer-reason-error' : undefined
                     "
-                    class="w-full px-3 py-2 text-xs text-slate-800 border rounded-xl focus:outline-none"
+                    class="w-full px-3 py-2 text-xs text-ink border rounded-control focus:outline-2 focus:outline-offset-0"
                     :class="
                         errors.reason
-                            ? 'border-red-400 focus:border-red-500'
-                            : 'border-slate-300 focus:border-leaf-500'
+                            ? 'border-danger-border focus:outline-danger-fg'
+                            : 'border-line-strong focus:outline-leaf-500'
                     "
                 />
                 <p
                     v-if="errors.reason"
                     id="drawer-reason-error"
-                    class="mt-1 text-red-600"
+                    class="mt-1 text-danger-fg"
                     data-testid="drawer-reason-error"
                 >
                     {{ errors.reason }}

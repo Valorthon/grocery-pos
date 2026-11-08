@@ -1,15 +1,15 @@
 <template>
     <BaseModal v-model="open" max-width="28rem" scrollable>
         <template #header>
-            <div class="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 class="w-4 h-4 text-emerald-600" />
+            <div class="flex items-center gap-2 text-success-fg">
+                <CheckCircle2 class="w-4 h-4 text-success-fg" />
                 <span class="text-xs font-bold"
                     >Shift Close Report (Z-Read)</span
                 >
             </div>
         </template>
 
-        <div class="p-4 sm:p-5 overflow-y-auto bg-slate-100">
+        <div class="p-4 sm:p-5 overflow-y-auto bg-leaf-50">
             <ZReadReportView v-if="report" :report="report" />
         </div>
 
