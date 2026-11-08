@@ -7,8 +7,12 @@
     >
         <div class="flex flex-wrap items-end gap-2">
             <BaseInput
+                v-if="searchable"
+                :id="searchId"
                 :model-value="search"
                 :label="searchLabel"
+                :error="searchError"
+                :aria-describedby="searchHint ? hintId : undefined"
                 :placeholder="placeholder"
                 :maxlength="maxlength"
                 clearable
@@ -16,7 +20,7 @@
                 @update:model-value="emit('update:search', $event)"
                 @clear="emit('search')"
             />
-            <BaseButton type="submit" class="min-h-11">
+            <BaseButton v-if="searchable" type="submit" class="min-h-11">
                 <template #icon><SearchIcon :size="16" /></template>
                 Search
             </BaseButton>
@@ -38,6 +42,14 @@
                 </span>
             </BaseButton>
         </div>
+
+        <p
+            v-if="searchable && searchHint"
+            :id="hintId"
+            class="text-xs text-muted"
+        >
+            {{ searchHint }}
+        </p>
 
         <div
             v-if="$slots.default"
@@ -98,19 +110,32 @@ import type { FilterChip } from './page-primitives';
 
 const props = withDefaults(
     defineProps<{
-        search: string;
+        search?: string;
         searchLabel?: string;
         placeholder?: string;
         maxlength?: number;
+        /** Id of the search input, for labels and specs. */
+        searchId?: string;
+        /** A hint under the search row, tied to the box by aria-describedby. */
+        searchHint?: string;
+        /** Inline error under the search box. */
+        searchError?: string;
         chips?: FilterChip[];
+        /** False on lists without a text search: only the panel and chips. */
+        searchable?: boolean;
         /** Start with the Filters panel open. */
         initiallyOpen?: boolean;
     }>(),
     {
+        search: '',
         searchLabel: 'Search',
         placeholder: undefined,
         maxlength: undefined,
+        searchId: '',
+        searchError: '',
+        searchHint: '',
         chips: () => [],
+        searchable: true,
         initiallyOpen: false,
     },
 );
@@ -147,7 +172,12 @@ async function clearAll() {
 }
 
 function searchBox() {
-    return root.value?.querySelector<HTMLInputElement>('input') ?? null;
+    return (
+        root.value?.querySelector<HTMLInputElement>('input') ??
+        root.value?.querySelector<HTMLElement>('button') ??
+        null
+    );
 }
 const panelId = useId();
+const hintId = useId();
 </script>

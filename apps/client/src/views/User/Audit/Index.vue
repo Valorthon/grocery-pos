@@ -6,26 +6,19 @@
                 cannot be edited or deleted through the app. No automatic expiry
                 is configured.
             </p>
-            <div class="flex flex-wrap items-end gap-3">
-                <div>
-                    <BaseInput
-                        v-model="username"
-                        label="Username"
-                        :maxlength="STRING_LIMITS.USERNAME"
-                        clearable
-                        aria-describedby="audit-username-hint"
-                        @keydown.enter="search"
-                        @clear="search"
-                    />
-                    <p id="audit-username-hint" class="text-xs text-muted">
-                        Current username. Also finds that account's entries
-                        under earlier names, and failed logins typed with this
-                        name.
-                    </p>
-                </div>
+            <FilterBar
+                v-model:search="username"
+                search-label="Username"
+                :maxlength="STRING_LIMITS.USERNAME"
+                search-hint="Current username. Also finds that account's entries under earlier names, and failed logins typed with this name."
+                :chips="chips"
+                :initially-open="chips.some((chip) => chip.inPanel)"
+                @search="search"
+                @remove="removeFilter"
+                @clear="clear"
+            >
                 <BaseSelect
                     v-model="action"
-                    class="w-56"
                     label="Action"
                     all-label="All actions"
                     :options="actionOptions"
@@ -44,13 +37,16 @@
                     :error="rangeError"
                     @change="search"
                 />
-                <BaseButton :disabled="loading" @click="search"
-                    >Search</BaseButton
-                >
-                <BaseButton variant="outline" :disabled="loading" @click="clear"
-                    >Clear Filters</BaseButton
-                >
-            </div>
+                <div class="flex items-end">
+                    <BaseButton
+                        variant="outline"
+                        class="min-h-11"
+                        :disabled="loading"
+                        @click="clear"
+                        >Clear Filters</BaseButton
+                    >
+                </div>
+            </FilterBar>
             <p v-if="validation" role="alert" class="text-sm text-danger-fg">
                 {{ validation }}
             </p>
@@ -174,6 +170,8 @@ import type { TableHeader } from '@/components/ui/types';
 import { ScrollText } from '@lucide/vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import type { FilterChip } from '@/components/ui/page-primitives';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import { apiErrorText } from '@/utils/api-error';
@@ -207,12 +205,37 @@ const tableRows = computed(() =>
     rows.value.map((row) => ({ ...row, id: row._id })),
 );
 const rangeError = computed(() => dateRangeError(from.value, to.value));
-let applied: Omit<AuditListQuery, 'page' | 'limit'> = {},
-    generation = 0;
+const applied = ref<Omit<AuditListQuery, 'page' | 'limit'>>({});
+let generation = 0;
+// Chips read the applied snapshot, never typed-but-unsearched text.
+const chips = computed<FilterChip[]>(() => {
+    const a = applied.value;
+    const out: FilterChip[] = [];
+    if (a.username) out.push({ key: 'username', label: `User: ${a.username}` });
+    if (a.action)
+        out.push({
+            key: 'action',
+            label: `Action: ${AUDIT_ACTION_LABELS[a.action] ?? a.action}`,
+            inPanel: true,
+        });
+    if (a.from)
+        out.push({ key: 'from', label: `From: ${a.from}`, inPanel: true });
+    if (a.to) out.push({ key: 'to', label: `To: ${a.to}`, inPanel: true });
+    return out;
+});
+/** Drops one applied filter; the inputs go back to the applied ones first. */
+function removeFilter(key: string) {
+    const a = applied.value;
+    username.value = key === 'username' ? '' : (a.username ?? '');
+    action.value = key === 'action' ? null : (a.action ?? null);
+    from.value = key === 'from' ? '' : (a.from ?? '');
+    to.value = key === 'to' ? '' : (a.to ?? '');
+    search();
+}
 function search() {
     validation.value = rangeError.value;
     if (validation.value) return;
-    applied = {
+    applied.value = {
         username: username.value.trim() || undefined,
         action: action.value || undefined,
         from: from.value || undefined,
@@ -237,7 +260,7 @@ async function load() {
     try {
         const { data } = await api.get<Paginated<AuditLogView>>('/audit', {
             params: {
-                ...applied,
+                ...applied.value,
                 page: page.value,
                 limit: 20,
             } satisfies AuditListQuery,

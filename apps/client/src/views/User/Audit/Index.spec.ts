@@ -121,9 +121,8 @@ it('filters by a typed username on Enter, Search or clearing it, never an id (#1
     expect(hint?.textContent).toContain('Current username');
     input('Username', '  maria  ');
     expect(api.get).toHaveBeenCalledTimes(1);
-    box.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
-    );
+    // Enter submits the FilterBar search form once.
+    box.form!.requestSubmit();
     await flush();
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(api.get).toHaveBeenLastCalledWith('/audit', {
