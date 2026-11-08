@@ -67,18 +67,6 @@ describe('BaseTable restyle (issue #156)', () => {
         }
     });
 
-    it('keeps the header sticky inside its own scroller', () => {
-        const host = mount({
-            headers: [{ title: 'Name', key: 'name' }],
-            items: [],
-        });
-        const th = host.querySelector('th')!;
-        expect(th.className.split(/\s+/)).toEqual(
-            expect.arrayContaining(['sticky', 'top-0', 'bg-paper']),
-        );
-        expect(th.closest('.overflow-auto')).not.toBeNull();
-    });
-
     it('shows a default icon in the empty state', () => {
         const host = mount({
             headers: [{ title: 'Name', key: 'name' }],
@@ -95,14 +83,17 @@ describe('BaseTable restyle (issue #156)', () => {
         expect(host.innerHTML).not.toMatch(/\b(?:slate|red|emerald)-\d/);
     });
 
-    it('changes the page size through BaseSelect as a number', async () => {
+    it('changes the page size through BaseSelect as a number', () => {
         const sizes: number[] = [];
         const host = mount({
             ...TABLE_PROPS,
             'onUpdate:itemsPerPage': (n: number) => sizes.push(n),
         });
         const select = host.querySelector('select')!;
-        expect(select.className).toContain('rounded-control');
+        expect(select.className.split(/\s+/)).toEqual(
+            expect.arrayContaining(['rounded-control', 'py-1', 'text-xs']),
+        );
+        expect(select.className).not.toMatch(/py-2\.5|text-sm/);
         expect(Array.from(select.options).map((o) => o.value)).toEqual([
             '5',
             '10',
@@ -111,7 +102,6 @@ describe('BaseTable restyle (issue #156)', () => {
         ]);
         select.value = '25';
         select.dispatchEvent(new Event('change'));
-        await Promise.resolve();
         expect(sizes).toEqual([25]);
     });
 });

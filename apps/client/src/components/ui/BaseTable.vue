@@ -2,11 +2,7 @@
     <div
         class="bg-surface rounded-card border border-line overflow-hidden shadow-card"
     >
-        <!--
-            The header sticks while the rows scroll (#156): sticky needs
-            this box to be the vertical scroller too, hence the max height.
-        -->
-        <div class="overflow-auto max-h-[70vh]">
+        <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr
@@ -16,7 +12,7 @@
                             v-for="header in headers"
                             :key="header.key"
                             :class="[
-                                'sticky top-0 z-10 py-3 px-5 bg-paper border-b border-line',
+                                'py-3 px-5 bg-paper border-b border-line',
                                 alignClass(header.align),
                             ]"
                         >
@@ -139,6 +135,7 @@
                 <BaseSelect
                     :id="rowsPerPageId"
                     class="w-20"
+                    size="sm"
                     :model-value="itemsPerPage"
                     :options="pageSizeOptions"
                     @update:model-value="

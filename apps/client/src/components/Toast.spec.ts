@@ -268,6 +268,13 @@ describe('ToastItem tokens (#156)', () => {
         );
         expect(fyi).toEqual(expect.arrayContaining(['bg-ink', 'text-surface']));
         for (const t of toasts()) {
+            const dismiss = t.querySelector<HTMLElement>(
+                '[aria-label="Dismiss notification"]',
+            )!;
+            expect(dismiss.className.split(/\s+/)).toEqual(
+                expect.arrayContaining(['focus-ring', 'rounded-control']),
+            );
+            expect(dismiss.className).not.toMatch(/outline-none/);
             expect(t.outerHTML).not.toMatch(/\b(?:slate|red|emerald)-\d/);
         }
     });

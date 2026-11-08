@@ -10,9 +10,9 @@
             :value="selected"
             :disabled="disabled"
             :class="[
-                FIELD_BASE,
+                size === 'sm' ? FIELD_BASE_SM : FIELD_BASE,
                 FIELD_OK,
-                'px-3.5',
+                size === 'sm' ? 'px-2' : 'px-3.5',
                 disabled ? FIELD_DISABLED : 'cursor-pointer',
             ]"
             @change="onChange"
@@ -28,6 +28,7 @@
 <script setup lang="ts">
 import {
     FIELD_BASE,
+    FIELD_BASE_SM,
     FIELD_DISABLED,
     FIELD_LABEL,
     FIELD_OK,
@@ -49,6 +50,8 @@ const props = withDefaults(
          * to "all" and a `null` model shows it instead of the first option.
          */
         allLabel?: string;
+        /** `sm`: a compact control for dense rows such as a table pager. */
+        size?: 'md' | 'sm';
     }>(),
     {
         modelValue: '',
@@ -57,6 +60,7 @@ const props = withDefaults(
         ariaLabel: '',
         disabled: false,
         allLabel: '',
+        size: 'md',
     },
 );
 

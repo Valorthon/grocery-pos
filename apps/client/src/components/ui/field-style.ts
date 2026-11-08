@@ -10,6 +10,12 @@ export const FIELD_LABEL = 'block text-sm font-semibold text-ink mb-1.5';
 export const FIELD_BASE =
     'w-full py-2.5 rounded-control border text-sm text-ink placeholder-muted focus-ring focus-visible:border-leaf-600 transition-colors';
 
+/** FIELD_BASE at the compact size: same tokens, less padding, smaller text. */
+export const FIELD_BASE_SM = FIELD_BASE.replace('py-2.5', 'py-1').replace(
+    'text-sm',
+    'text-xs',
+);
+
 export const FIELD_OK = 'border-line-strong bg-surface';
 export const FIELD_ERROR = 'border-danger-fg bg-danger-bg';
 /** A combobox with a picked option. */
