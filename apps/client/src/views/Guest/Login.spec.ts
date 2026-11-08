@@ -10,6 +10,7 @@ import {
 } from 'axios';
 import { Role } from '@grocery-pos/contracts';
 import Login from './Login.vue';
+import { stubMatchMedia } from '@/testing/match-media';
 import { LOGIN_ERRORS, loginErrorMessage } from './login-error';
 
 const auth = vi.hoisted(() => ({
@@ -295,6 +296,52 @@ describe('Market-themed Login (#168)', () => {
         expect(logo).not.toBeNull();
         expect(logo!.closest('form')).toBeNull();
         expect(logo!.closest('[data-testid="login-hero"]')).toBeNull();
+    });
+
+    it('hides the produce art once the hero photo loads (#193)', async () => {
+        const probes: { onload: (() => void) | null; src: string }[] = [];
+        vi.stubGlobal(
+            'Image',
+            class {
+                onload: (() => void) | null = null;
+                src = '';
+                constructor() {
+                    probes.push(this);
+                }
+            },
+        );
+        try {
+            const host = await mount();
+            const art = () =>
+                host.querySelector('[data-testid="login-hero-art"]');
+            expect(art()).not.toBeNull();
+            expect(probes).toHaveLength(1);
+            probes[0].onload?.();
+            await nextTick();
+            expect(art()).toBeNull();
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('does not fetch the hero photo below lg (#193 review)', async () => {
+        const media = stubMatchMedia(false);
+        const probes: unknown[] = [];
+        vi.stubGlobal(
+            'Image',
+            class {
+                constructor() {
+                    probes.push(this);
+                }
+            },
+        );
+        try {
+            await mount();
+            expect(probes).toHaveLength(0);
+        } finally {
+            vi.unstubAllGlobals();
+            media.restore();
+        }
     });
 
     it('puts the hero text on a dark scrim that holds AA over any photo', async () => {

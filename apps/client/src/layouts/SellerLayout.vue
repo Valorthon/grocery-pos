@@ -34,7 +34,8 @@
                 <main
                     class="flex-1 flex flex-col min-h-0 overflow-hidden min-w-0"
                 >
-                    <router-view />
+                    <!-- The not-found page renders itself here (#193). -->
+                    <slot><router-view /></slot>
                 </main>
             </div>
         </div>

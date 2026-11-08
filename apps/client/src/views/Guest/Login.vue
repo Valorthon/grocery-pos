@@ -16,7 +16,10 @@
                 :style="{ backgroundImage: `url('${LOGIN_HERO_URL}')` }"
             />
             <div class="absolute inset-0 hero-overlay" />
+            <!-- Only while there is no photo: over it the art reads as a
+                 stray overlay (#193). -->
             <svg
+                v-if="!heroPhotoLoaded"
                 data-testid="login-hero-art"
                 class="hidden lg:block absolute -top-6 -right-6 w-72 h-72 text-leaf-400 opacity-60"
                 viewBox="0 0 200 200"
@@ -194,7 +197,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue';
+import { onBeforeUnmount, ref, reactive, watch } from 'vue';
+import { useIsLarge } from '@/composables/useMediaQuery';
 import { useRouter } from 'vue-router';
 import { ArrowRight, Eye, EyeOff, Lock, User as UserIcon } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -209,6 +213,30 @@ import { homeRouteFor } from '@/router/access';
 import { LOGIN_HERO_URL } from '@/constant';
 import logo from '@/assets/logo-icon.svg';
 import { loginErrorMessage } from './login-error';
+
+/**
+ * The optional hero photo loaded: the produce art then steps aside (#193).
+ * Probed only from lg, where the art shows, so a phone never downloads the
+ * photo its hidden panel would not fetch either.
+ */
+const heroPhotoLoaded = ref(false);
+const isLarge = useIsLarge();
+let probe: HTMLImageElement | null = null;
+watch(
+    isLarge,
+    (large) => {
+        if (!large || probe) return;
+        probe = new Image();
+        probe.onload = () => {
+            heroPhotoLoaded.value = true;
+        };
+        probe.src = LOGIN_HERO_URL;
+    },
+    { immediate: true },
+);
+onBeforeUnmount(() => {
+    if (probe) probe.onload = null;
+});
 
 const router = useRouter();
 const authStore = useAuthStore();

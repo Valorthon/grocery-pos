@@ -16,10 +16,12 @@
                 <Menu class="w-6 h-6" aria-hidden="true" />
             </button>
 
+            <!-- From lg the sidebar shows the logo: one logo at every width (#193). -->
             <button
                 type="button"
-                class="flex items-center gap-2.5 focus-ring"
+                class="lg:hidden flex items-center gap-2.5 focus-ring"
                 aria-label="GroceryPOS dashboard"
+                data-testid="admin-appbar-logo"
                 @click="router.push({ name: 'Dashboard' })"
             >
                 <div

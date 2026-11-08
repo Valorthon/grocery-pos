@@ -5,7 +5,9 @@
         :aria-busy="loading ? 'true' : undefined"
         :class="[
             'relative flex flex-col gap-1 overflow-hidden rounded-card border border-line bg-surface p-4 shadow-card',
-            to ? 'transition-colors hover:bg-paper focus-ring' : '',
+            to
+                ? 'group transition-colors hover:border-leaf-600 hover:bg-paper focus-ring'
+                : '',
         ]"
     >
         <!-- Tone is a 4px *-fg stripe (3:1 on surface) plus sr-only text,
@@ -42,12 +44,21 @@
         </p>
         <p v-if="hint" class="text-xs text-muted">{{ hint }}</p>
         <slot />
+        <!-- A linked tile says so, not only on hover (#193). -->
+        <span
+            v-if="to"
+            data-tile-link
+            class="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-leaf-700 group-hover:underline"
+            aria-hidden="true"
+            >View<ChevronRight :size="14"
+        /></span>
     </component>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
+import { ChevronRight } from '@lucide/vue';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
 
