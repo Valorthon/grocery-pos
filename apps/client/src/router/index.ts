@@ -8,6 +8,7 @@ import {
     homeRouteFor,
     type RouteAccessMeta,
 } from './access';
+import { pageTitle } from './page-title';
 
 const routes: RouteRecordRaw[] = [
     // GUEST LAYOUT
@@ -273,13 +274,11 @@ router.beforeEach(async (to) => {
     return true;
 });
 
-const BASE_TITLE = 'Grocery POS';
-
-// A route's `meta.title` names the tab; other routes keep the base title.
-router.afterEach((to) => {
-    const title = to.meta?.title;
-    document.title =
-        typeof title === 'string' ? `${title} | ${BASE_TITLE}` : BASE_TITLE;
+// A route's `meta.title` names the tab. A cancelled or redirected
+// navigation (a draft guard's "Stay") keeps the current page's title.
+router.afterEach((to, _from, failure) => {
+    if (failure) return;
+    document.title = pageTitle(to.meta.title);
 });
 
 export default router;

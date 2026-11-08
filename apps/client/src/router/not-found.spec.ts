@@ -55,15 +55,31 @@ describe('not-found route (#162)', () => {
             await router.push(path);
             expect(router.currentRoute.value.name).toBe('NotFound');
             expect(router.currentRoute.value.fullPath).toBe(path);
-            expect(document.title).toBe('Page not found | Grocery POS');
+            expect(document.title).toBe('Page not found · Grocery POS');
         },
     );
 
     it('still sends a logged-out visitor on a protected route to Login', async () => {
         const router = await freshRouter(null);
+        document.title = 'sentinel';
         await router.push('/admin/users');
         expect(router.currentRoute.value.name).toBe('Login');
         expect(document.title).toBe('Grocery POS');
+        const { useUIStore } = await import('@/stores/ui');
+        expect(useUIStore().toasts.map((t) => t.lines)).toContainEqual([
+            'Please log in to continue',
+        ]);
+    });
+
+    it('keeps the current title when a navigation is cancelled', async () => {
+        const router = await freshRouter([Role.Admin]);
+        await router.push('/admin');
+        document.title = 'Dashboard tab';
+        const remove = router.beforeEach(() => false);
+        await router.push('/nope');
+        remove();
+        expect(router.currentRoute.value.name).toBe('Dashboard');
+        expect(document.title).toBe('Dashboard tab');
     });
 
     it.each([[[Role.Admin]], [[Role.Seller]]])(
@@ -78,7 +94,7 @@ describe('not-found route (#162)', () => {
     it('restores the base title when leaving the page', async () => {
         const router = await freshRouter([Role.Admin]);
         await router.push('/nope');
-        expect(document.title).toBe('Page not found | Grocery POS');
+        expect(document.title).toBe('Page not found · Grocery POS');
         await router.push('/admin');
         expect(router.currentRoute.value.name).toBe('Dashboard');
         expect(document.title).toBe('Grocery POS');

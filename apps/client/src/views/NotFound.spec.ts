@@ -7,6 +7,7 @@ import { flush } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import NotFound from './NotFound.vue';
 import { notFoundLink } from './not-found-link';
+import { pageTitle } from '@/router/page-title';
 
 vi.mock('@/axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
 
@@ -71,6 +72,13 @@ describe('NotFound view (#162)', () => {
         const link = host.querySelector('a');
         expect(link?.textContent).toBe('Go to register');
         expect(link?.getAttribute('href')).toBe('/seller');
+    });
+});
+
+describe('pageTitle', () => {
+    it('names the page before the app', () => {
+        expect(pageTitle('Low stock')).toBe('Low stock · Grocery POS');
+        expect(pageTitle()).toBe('Grocery POS');
     });
 });
 
