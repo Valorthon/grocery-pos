@@ -54,7 +54,7 @@
                      */
                     query ? 'pr-43 sm:pr-52' : 'pr-32 sm:pr-48'
                 "
-                class="w-full min-h-14 pl-12 py-3 bg-surface text-ink placeholder:text-muted text-base font-mono font-bold rounded-card border-2 border-line-strong shadow-card focus:border-leaf-600 focus:outline-3 focus:outline-offset-0 focus:outline-leaf-200 disabled:opacity-60 transition-colors"
+                class="w-full min-h-14 pl-12 py-3 bg-surface text-ink placeholder:text-muted text-base font-mono font-bold rounded-card border-2 border-line-strong shadow-card focus:border-leaf-600 focus:outline-3 focus:outline-offset-0 focus:outline-leaf-500 disabled:opacity-60 transition-colors"
                 @input="emit('search-change')"
                 @keydown.down.prevent="emit('move', 1)"
                 @keydown.up.prevent="emit('move', -1)"
@@ -111,7 +111,7 @@
     <div role="status" aria-live="polite" data-testid="scan-status">
         <div
             v-if="scanFeedback?.type === 'success'"
-            class="mt-2.5 p-2.5 rounded-xl flex items-center gap-2 text-sm font-bold bg-success-bg border border-success-border text-success-fg"
+            class="mt-2.5 p-2.5 rounded-card flex items-center gap-2 text-sm font-bold bg-success-bg border border-success-border text-success-fg"
         >
             <CheckCircle2 class="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{{ scanFeedback.message }}</span>
@@ -120,7 +120,7 @@
     <div role="alert" aria-live="assertive" data-testid="scan-alert">
         <div
             v-if="scanFeedback?.type === 'error'"
-            class="mt-2.5 p-2.5 rounded-xl flex items-center gap-2 text-sm font-bold bg-danger-bg border border-danger-border text-danger-fg"
+            class="mt-2.5 p-2.5 rounded-card flex items-center gap-2 text-sm font-bold bg-danger-bg border border-danger-border text-danger-fg"
         >
             <AlertCircle class="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{{ scanFeedback.message }}</span>

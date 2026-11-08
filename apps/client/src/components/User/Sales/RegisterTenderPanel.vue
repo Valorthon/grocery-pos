@@ -53,7 +53,7 @@
                 type="button"
                 :disabled="locked"
                 :aria-pressed="discountChoice === d"
-                class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                class="min-h-11 min-w-11 px-3 py-2 rounded-control text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
                 :class="
                     discountChoice === d
                         ? 'bg-leaf-600 text-white border border-leaf-600'
@@ -68,7 +68,7 @@
                 type="button"
                 :disabled="locked"
                 :aria-pressed="discountChoice === DiscountType.FIXED"
-                class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                class="min-h-11 min-w-11 px-3 py-2 rounded-control text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
                 :class="
                     discountChoice === DiscountType.FIXED
                         ? 'bg-leaf-600 text-white border border-leaf-600'
@@ -159,11 +159,17 @@
             >
                 Amount Due
             </span>
-            <div class="flex items-baseline justify-between mt-1.5">
-                <!-- The big figure in the display face (#164, #175). -->
+            <div
+                class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mt-1.5"
+            >
+                <!--
+                    The big figure in the display face (#164, #175). It wraps
+                    under the badge rather than overflow; up to
+                    ₱10,000,000.00 fits the 320px sheet and the 400px panel.
+                -->
                 <span
                     data-testid="amount-due"
-                    class="font-display num text-4xl sm:text-5xl font-[800] text-ink tracking-tight"
+                    class="min-w-0 font-display num text-2xl min-[360px]:text-3xl sm:text-4xl font-[800] text-ink tracking-tight"
                 >
                     {{ currency(total) }}
                 </span>

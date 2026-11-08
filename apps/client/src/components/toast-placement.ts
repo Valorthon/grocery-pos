@@ -23,7 +23,7 @@ const FIXED: Record<Exclude<ToastPlacement, 'register'>, Placement> = {
 
 /**
  * The register's bottom offsets (#85). Below lg the sticky Tender footer
- * is about 73px tall and the Undo bar above it reaches about 153px; from
+ * is about 77px tall and the Undo bar above it reaches about 157px; from
  * lg there is no footer and the Undo bar reaches about 80px.
  */
 export const REGISTER_BOTTOM = {

@@ -17,22 +17,23 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <span
                                 v-if="shiftStore.activeShift"
-                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold"
+                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-success-bg text-success-fg border border-success-border text-xs font-bold"
                             >
                                 <span>Shift Active</span>
                             </span>
                             <span
                                 v-else
-                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold"
+                                class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-warning-bg text-warning-fg border border-warning-border text-xs font-bold"
                             >
                                 <AlertCircle
-                                    class="w-3.5 h-3.5 text-amber-600"
+                                    class="w-3.5 h-3.5"
+                                    aria-hidden="true"
                                 />
                                 <span>No Active Shift</span>
                             </span>
                         </div>
                         <h1
-                            class="font-display text-xl sm:text-2xl font-extrabold text-ink tracking-tight mt-1"
+                            class="font-display text-xl sm:text-2xl font-[800] text-ink tracking-tight mt-1"
                         >
                             Checkout Register
                         </h1>
@@ -41,7 +42,7 @@
                     <div class="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
-                            class="min-h-11 px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold focus-ring disabled:opacity-40"
+                            class="min-h-11 px-3 py-2 rounded-control bg-surface hover:bg-paper border border-line-strong text-ink text-xs font-bold focus-ring disabled:opacity-40"
                             :disabled="
                                 isTicketLocked ||
                                 !cartStore.items.length ||
@@ -53,7 +54,7 @@
                         </button>
                         <button
                             type="button"
-                            class="min-h-11 px-3 py-2 rounded-xl border border-slate-300 text-xs font-bold focus-ring"
+                            class="min-h-11 px-3 py-2 rounded-control bg-surface hover:bg-paper border border-line-strong text-ink text-xs font-bold focus-ring disabled:opacity-40"
                             :disabled="isTicketLocked"
                             @click="parkedOpen = true"
                         >
@@ -62,7 +63,7 @@
                         <template v-if="shiftStore.activeShift">
                             <button
                                 type="button"
-                                class="min-h-11 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
+                                class="min-h-11 px-3 py-2 rounded-control bg-success-bg hover:bg-leaf-100 border border-success-border text-success-fg text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Add change when drawer coins or small bills run low"
                                 @click="
                                     shiftStore.drawerAction =
@@ -70,14 +71,15 @@
                                 "
                             >
                                 <ArrowDownLeft
-                                    class="w-3.5 h-3.5 text-emerald-600"
+                                    class="w-3.5 h-3.5"
+                                    aria-hidden="true"
                                 />
                                 <span>+ Cash In</span>
                             </button>
 
                             <button
                                 type="button"
-                                class="min-h-11 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
+                                class="min-h-11 px-3 py-2 rounded-control bg-warning-bg hover:bg-citrus-100 border border-warning-border text-warning-fg text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Drop excess cash safely to the back office safe"
                                 @click="
                                     shiftStore.drawerAction =
@@ -85,18 +87,22 @@
                                 "
                             >
                                 <ArrowUpRight
-                                    class="w-3.5 h-3.5 text-amber-600"
+                                    class="w-3.5 h-3.5"
+                                    aria-hidden="true"
                                 />
                                 <span>- Cash Drop</span>
                             </button>
 
                             <button
                                 type="button"
-                                class="min-h-11 px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-extrabold flex items-center gap-1.5 transition-colors shadow-2xs focus-ring"
+                                class="min-h-11 px-3 py-2 rounded-control bg-danger-bg hover:bg-surface border border-danger-border text-danger-fg text-xs font-bold flex items-center gap-1.5 transition-colors focus-ring"
                                 title="Count physical cash in drawer, generate Z-Read report"
                                 @click="shiftStore.shiftOutOpen = true"
                             >
-                                <Calculator class="w-3.5 h-3.5 text-rose-600" />
+                                <Calculator
+                                    class="w-3.5 h-3.5"
+                                    aria-hidden="true"
+                                />
                                 <span>End Shift</span>
                             </button>
                         </template>
@@ -177,7 +183,7 @@
                     </p>
                     <p
                         data-testid="footer-total"
-                        class="font-display num text-3xl font-[800] text-ink tracking-tight truncate"
+                        class="font-display num text-2xl min-[360px]:text-3xl font-[800] text-ink tracking-tight truncate"
                     >
                         {{ currency(total) }}
                     </p>
