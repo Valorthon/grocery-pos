@@ -98,11 +98,8 @@ describe('Dashboard money figures (issue #13)', () => {
 });
 
 describe('Dashboard stock tiles (issue #16)', () => {
-    function tile(title: string) {
-        return [...document.querySelectorAll('div.rounded-2xl')].find(
-            (el) => el.querySelector('.text-xs')?.textContent?.trim() === title,
-        );
-    }
+    const tile = (key: string) =>
+        document.querySelector(`[data-stat="${key}"]`);
 
     it.each([
         ['a non-admin', STATS],
@@ -110,11 +107,11 @@ describe('Dashboard stock tiles (issue #16)', () => {
     ])('shows low-stock and out-of-stock counts to %s', async (_, payload) => {
         await render(payload);
 
+        expect(tile('lowStock')?.querySelector('.num')?.textContent).toContain(
+            '3',
+        );
         expect(
-            tile('Low Stock Items')?.querySelector('.text-2xl')?.textContent,
-        ).toContain('3');
-        expect(
-            tile('Out of Stock Items')?.querySelector('.text-2xl')?.textContent,
+            tile('outOfStock')?.querySelector('.num')?.textContent,
         ).toContain('7');
     });
 
@@ -124,7 +121,7 @@ describe('Dashboard stock tiles (issue #16)', () => {
         await render(older);
 
         expect(
-            tile('Out of Stock Items')?.querySelector('.text-2xl')?.textContent,
+            tile('outOfStock')?.querySelector('.num')?.textContent,
         ).toContain('-');
     });
 });
@@ -231,6 +228,169 @@ describe('Dashboard recent activity (issue #20)', () => {
     });
 });
 
+async function renderWithRouter(roles: string[], payload: unknown) {
+    const { createRouter, createMemoryHistory } = await import('vue-router');
+    const { useAuthStore } = await import('@/stores/auth');
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = {
+        userId: 'u1',
+        username: 'u1',
+        roles: roles as never,
+    };
+    const stub = { template: '<div>page</div>' };
+    const router = createRouter({
+        history: createMemoryHistory(),
+        routes: [
+            { path: '/', name: 'Dashboard', component: Dashboard },
+            { path: '/inventory', name: 'Inventories', component: stub },
+            { path: '/products', name: 'Products', component: stub },
+            { path: '/sales', name: 'SalesHistory', component: stub },
+        ],
+    });
+    await router.push('/');
+    await router.isReady();
+    get.mockResolvedValue({ data: payload });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    app = createApp(Dashboard);
+    app.use(pinia);
+    app.use(router);
+    app.mount(host);
+    for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+        await nextTick();
+    }
+    return router;
+}
+
+/** Each tile's key and its link (null when it is not a link). */
+function tileLinks(): Record<string, string | null> {
+    const links: Record<string, string | null> = {};
+    for (const el of document.querySelectorAll('[data-stat]')) {
+        links[el.getAttribute('data-stat') ?? ''] =
+            el.tagName === 'A' ? el.getAttribute('href') : null;
+    }
+    return links;
+}
+
+describe('Dashboard tiles per role (issue #166)', () => {
+    const INVENTORY_LINKS = {
+        expiring: '/inventory?expiring=true',
+        products: '/products',
+        lowStock: '/inventory?lowStock=true',
+        outOfStock: null,
+        todaySales: null,
+    };
+
+    it.each([['RESTOCKER'], ['ADJUSTER']])(
+        'links the inventory tiles for %s, without money',
+        async (role) => {
+            await renderWithRouter([role], STATS);
+            expect(tileLinks()).toEqual(INVENTORY_LINKS);
+            expect(document.body.textContent).not.toContain('₱');
+            expect(
+                document.querySelector('[data-testid="recent-sales"]'),
+            ).toBeNull();
+        },
+    );
+
+    it('shows stock counts to a USER_MANAGER with no links', async () => {
+        await renderWithRouter(['USER_MANAGER'], STATS);
+        expect(tileLinks()).toEqual({
+            expiring: null,
+            products: null,
+            lowStock: null,
+            outOfStock: null,
+            todaySales: null,
+        });
+        expect(
+            document.querySelector('[data-stat="lowStock"] .num')?.textContent,
+        ).toContain('3');
+        expect(document.querySelector('a')).toBeNull();
+    });
+
+    it('gives an admin the money tile, links and the sales table', async () => {
+        await renderWithRouter(['ADMIN'], WITH_MONEY);
+        expect(tileLinks()).toEqual({
+            ...INVENTORY_LINKS,
+            todayRevenue: null,
+        });
+        expect(
+            document
+                .querySelector('[data-testid="recent-sales-all"]')
+                ?.getAttribute('href'),
+        ).toBe('/sales');
+        const amount = document.querySelector(
+            '[data-testid="recent-sales"] td.text-right',
+        );
+        expect(amount?.classList.contains('num')).toBe(true);
+        expect(amount?.textContent).toContain('₱125.00');
+    });
+
+    it('marks attention tiles with a tone a screen reader hears', async () => {
+        await renderWithRouter(['ADJUSTER'], STATS);
+        const low = document.querySelector('[data-stat="lowStock"]');
+        expect(low?.querySelector('[data-tone-stripe]')).not.toBeNull();
+        expect(low?.querySelector('.sr-only')?.textContent).toContain(
+            'warning',
+        );
+        expect(
+            document
+                .querySelector('[data-stat="products"]')
+                ?.querySelector('[data-tone-stripe]'),
+        ).toBeNull();
+    });
+});
+
+describe('Dashboard loading (issue #166)', () => {
+    it('shows skeletons, not dashes, until the first answer', async () => {
+        const { useAuthStore } = await import('@/stores/auth');
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        useAuthStore().user = {
+            userId: 'a',
+            username: 'a',
+            roles: ['ADMIN'] as never,
+        };
+        get.mockReturnValue(new Promise(() => {}));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Dashboard);
+        app.use(pinia);
+        app.mount(host);
+        await nextTick();
+
+        const tiles = [...document.querySelectorAll('[data-stat]')];
+        expect(tiles).toHaveLength(5);
+        for (const t of tiles) {
+            expect(t.querySelector('[data-skeleton]')).not.toBeNull();
+            expect(t.getAttribute('aria-busy')).toBe('true');
+        }
+        expect(host.textContent).not.toContain('-');
+        // The admin's sales table shows its skeleton rows meanwhile.
+        expect(
+            document.querySelectorAll(
+                '[data-testid="recent-sales"] .animate-pulse',
+            ).length,
+        ).toBeGreaterThan(0);
+        expect(host.textContent).not.toContain('₱');
+    });
+
+    it('hides the sales skeleton from a non-admin', async () => {
+        get.mockReturnValue(new Promise(() => {}));
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Dashboard);
+        app.use(createPinia());
+        app.mount(host);
+        await nextTick();
+        expect(
+            document.querySelector('[data-testid="recent-sales"]'),
+        ).toBeNull();
+    });
+});
+
 it('links the low-stock tile to the filtered inventory list for inventory roles', async () => {
     const { createRouter, createMemoryHistory } = await import('vue-router');
     const { useAuthStore } = await import('@/stores/auth');
@@ -246,6 +406,11 @@ it('links the low-stock tile to the filtered inventory list for inventory roles'
         history: createMemoryHistory(),
         routes: [
             { path: '/', name: 'Dashboard', component: Dashboard },
+            {
+                path: '/products',
+                name: 'Products',
+                component: { template: '<div>Products</div>' },
+            },
             {
                 path: '/inventory',
                 name: 'Inventories',
