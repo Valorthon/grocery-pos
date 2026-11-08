@@ -73,10 +73,10 @@
                         class="divide-y divide-slate-100 text-slate-800 text-xs sm:text-sm"
                     >
                         <!--
-                                    A line is selected by scanning it or
-                                    clicking it (#23): F4 edits its
-                                    quantity, Delete removes it (with Undo).
-                                -->
+                            A line is selected by scanning it or
+                            clicking it (#23): F4 edits its
+                            quantity, Delete removes it (with Undo).
+                        -->
                         <tr
                             v-for="(item, index) in items"
                             :key="item.product"
@@ -263,9 +263,9 @@
             </div>
 
             <!--
-                        A removed line can be put back for a few seconds
-                        (decision 2026-09-25, #23).
-                    -->
+                A removed line can be put back for a few seconds
+                (decision 2026-09-25, #23).
+            -->
             <div role="status" aria-live="polite" class="mt-auto">
                 <div
                     v-if="undo"

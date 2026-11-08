@@ -88,10 +88,10 @@
     </form>
 
     <!--
-                    The multiplier applies to the next scan only (decision
-                    2026-09-25, #23), whether set with the Qty picker or
-                    typed as "12*".
-                -->
+        The multiplier applies to the next scan only (decision
+        2026-09-25, #23), whether set with the Qty picker or
+        typed as "12*".
+    -->
     <div role="status" aria-live="polite">
         <p
             v-if="nextScanQty > 1"
@@ -103,11 +103,11 @@
     </div>
 
     <!--
-                    Scan results are announced (#23): a success politely and
-                    it fades; an error assertively and it stays until the
-                    next scan. Both regions are always present, so a screen
-                    reader hears what appears in them.
-                -->
+        Scan results are announced (#23): a success politely and
+        it fades; an error assertively and it stays until the
+        next scan. Both regions are always present, so a screen
+        reader hears what appears in them.
+    -->
     <div role="status" aria-live="polite" data-testid="scan-status">
         <div
             v-if="scanFeedback?.type === 'success'"
