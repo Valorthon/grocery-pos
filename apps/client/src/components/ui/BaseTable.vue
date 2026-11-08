@@ -4,6 +4,14 @@
     >
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
+                <caption
+                    v-if="caption"
+                    class="px-5 py-3 text-left text-sm text-muted"
+                >
+                    {{
+                        caption
+                    }}
+                </caption>
                 <thead>
                     <tr
                         class="text-xs font-semibold uppercase tracking-wider text-muted"
@@ -111,11 +119,14 @@
                             ]"
                             @click="rowClick && emit('click:row', row)"
                         >
-                            <td
+                            <component
+                                :is="header.rowHeader ? 'th' : 'td'"
                                 v-for="header in headers"
                                 :key="header.key"
+                                :scope="header.rowHeader ? 'row' : undefined"
                                 :class="[
                                     'py-3.5 px-5',
+                                    header.rowHeader ? 'font-semibold' : '',
                                     alignClass(header.align),
                                 ]"
                             >
@@ -126,10 +137,18 @@
                                 >
                                     {{ cell(row, header.key) }}
                                 </slot>
-                            </td>
+                            </component>
                         </tr>
                     </template>
                 </tbody>
+
+                <!-- Totals beside real rows only, never beside a skeleton, error or empty state. -->
+                <tfoot
+                    v-if="$slots.footer && !loading && !error && items.length"
+                    class="border-t-2 border-line-strong text-xs sm:text-sm text-ink"
+                >
+                    <slot name="footer" />
+                </tfoot>
             </table>
         </div>
 
@@ -198,6 +217,8 @@ const props = withDefaults(
          * place with a Retry button, which emits `retry`.
          */
         error?: string;
+        /** The table's `<caption>`, tied to it for assistive tech. */
+        caption?: string;
         emptyText?: string;
         emptyIcon?: Component;
         rowClick?: boolean;
@@ -210,6 +231,7 @@ const props = withDefaults(
     {
         loading: false,
         error: '',
+        caption: '',
         emptyText: 'No data found',
         rowClick: false,
         itemsLength: 0,
@@ -235,6 +257,8 @@ defineSlots<
     {
         /** Replaces the default empty row's content, e.g. an `EmptyState`. */
         empty?: () => unknown;
+        /** Rows of a `<tfoot>` (e.g. totals), shown only beside loaded rows. */
+        footer?: () => unknown;
     } & Record<
         `cell-${string}`,
         (props: { item: T; value: unknown }) => unknown

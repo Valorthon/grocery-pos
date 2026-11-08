@@ -371,6 +371,49 @@ describe('event-date reports UI', () => {
         expect(document.body.textContent).toContain(
             'No matching sales or reversal events',
         );
-        expect(document.querySelector('svg')).toBeNull();
+        expect(
+            document.querySelector('svg[aria-label="Daily net sales trend"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector('[data-testid="report-totals"]'),
+        ).toBeNull();
+    });
+    it('right-aligns every numeric column with tabular figures (#170)', async () => {
+        await mount();
+        const heads = [...document.querySelectorAll('thead th')];
+        expect(heads.map((th) => th.textContent?.trim())).toEqual([
+            'Group',
+            'Sales / reversals',
+            'Quantity (net)',
+            'Gross',
+            'Discounts',
+            'Voids',
+            'Refunds',
+            'Net',
+            'Known COGS',
+            'Margin estimate',
+        ]);
+        expect(heads[0].className).not.toContain('num');
+        for (const th of heads.slice(1)) {
+            expect(th.className).toContain('text-right');
+            expect(th.className).toContain('num');
+        }
+        const label = document.querySelector('tbody tr:first-child th');
+        expect(label?.getAttribute('scope')).toBe('row');
+        expect(
+            document.querySelector('table > caption')?.textContent,
+        ).toContain('totals count it once');
+        const cells = [...document.querySelectorAll('tbody tr:first-child td')];
+        expect(cells).toHaveLength(9);
+        for (const td of cells)
+            expect(td.className).toContain('text-right num');
+        const totals = document.querySelector(
+            'tfoot [data-testid="report-totals"]',
+        );
+        expect(totals?.textContent).toContain('Total');
+        const totalCells = [...totals!.querySelectorAll('td')];
+        expect(totalCells).toHaveLength(9);
+        for (const td of totalCells)
+            expect(td.className).toContain('text-right num');
     });
 });

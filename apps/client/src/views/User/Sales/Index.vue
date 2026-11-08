@@ -164,82 +164,42 @@
                         closing-report addendum.</span
                     >
                 </p>
-                <table class="w-full text-left border-collapse text-sm">
-                    <thead>
-                        <tr
-                            class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
-                        >
-                            <th class="py-2.5 px-4">Product</th>
-                            <th class="py-2.5 px-4">Qty</th>
-                            <th class="py-2.5 px-4 text-right">Unit Price</th>
-                            <th class="py-2.5 px-4 text-right">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-if="detailsLoading">
-                            <td colspan="4" class="py-4 text-center">
-                                <Spinner class="mx-auto text-slate-400" />
-                            </td>
-                        </tr>
-                        <tr v-else-if="detailsError">
-                            <td colspan="4" class="py-4 text-center">
-                                <div
-                                    role="alert"
-                                    data-testid="details-error"
-                                    class="flex flex-col items-center gap-2 text-sm"
-                                >
-                                    <p class="font-bold text-red-700">
-                                        {{ detailsError }}
-                                    </p>
-                                    <BaseButton
-                                        variant="outline"
-                                        size="sm"
-                                        @click="loadDetails"
-                                        >Retry</BaseButton
-                                    >
-                                </div>
-                            </td>
-                        </tr>
-                        <tr v-for="d in details" :key="d._id">
-                            <td class="py-3 px-4">
-                                {{ d.product?.name ?? 'N/A' }}
-                            </td>
-                            <td class="py-3 px-4">
-                                {{
-                                    d.unit
-                                        ? formatQuantity(d.quantity, d.unit)
-                                        : d.quantity
-                                }}
-                            </td>
-                            <td class="py-3 px-4 text-right">
-                                {{ formatCurrency(d.unitPrice ?? 0) }}
-                            </td>
-                            <td class="py-3 px-4 text-right">
-                                {{
-                                    formatCurrency(
-                                        quantityAmount(
-                                            d.unitPrice ?? 0,
-                                            d.quantity,
-                                            d.unit,
-                                        ),
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                    </tbody>
-                    <tfoot
-                        v-if="!detailsLoading && selectedSale"
-                        class="border-t border-slate-200 text-sm"
+                <div data-testid="details-table">
+                    <BaseTable
+                        :headers="detailHeaders"
+                        :items="details"
+                        :loading="detailsLoading"
+                        :error="detailsError"
+                        :skeleton-rows="2"
+                        empty-text="No lines on this sale"
+                        @retry="loadDetails"
                     >
-                        <template v-if="selectedSale.discount">
+                        <template #cell-product="{ item }">{{
+                            item.product?.name ?? 'N/A'
+                        }}</template>
+                        <template #cell-qty="{ item }">{{
+                            item.unit
+                                ? formatQuantity(item.quantity, item.unit)
+                                : item.quantity
+                        }}</template>
+                        <template #cell-unitPrice="{ item }">{{
+                            formatCurrency(item.unitPrice ?? 0)
+                        }}</template>
+                        <template #cell-total="{ item }">{{
+                            formatCurrency(
+                                quantityAmount(
+                                    item.unitPrice ?? 0,
+                                    item.quantity,
+                                    item.unit,
+                                ),
+                            )
+                        }}</template>
+                        <template v-if="selectedSale?.discount" #footer>
                             <tr>
-                                <td
-                                    colspan="3"
-                                    class="py-2 px-4 text-slate-500"
-                                >
+                                <td colspan="3" class="py-2 px-5 text-muted">
                                     Subtotal
                                 </td>
-                                <td class="py-2 px-4 text-right">
+                                <td class="py-2 px-5 text-right num">
                                     {{
                                         formatCurrency(
                                             selectedSale.amount +
@@ -248,14 +208,14 @@
                                     }}
                                 </td>
                             </tr>
-                            <tr class="text-emerald-700">
-                                <td colspan="3" class="py-2 px-4">
+                            <tr class="text-success-fg">
+                                <td colspan="3" class="py-2 px-5">
                                     Discount ({{
                                         discountLabel(selectedSale.discount)
                                     }}) &mdash;
                                     {{ selectedSale.discount.reason }}
                                 </td>
-                                <td class="py-2 px-4 text-right">
+                                <td class="py-2 px-5 text-right num">
                                     -{{
                                         formatCurrency(
                                             selectedSale.discount.amount,
@@ -264,14 +224,19 @@
                                 </td>
                             </tr>
                         </template>
-                        <tr class="font-bold text-slate-900">
-                            <td colspan="3" class="py-2 px-4">Total charged</td>
-                            <td class="py-2 px-4 text-right">
-                                {{ formatCurrency(selectedSale.amount) }}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
+                    </BaseTable>
+                </div>
+                <!-- From the list row, so it stays visible when the lines fail to load. -->
+                <p
+                    v-if="!detailsLoading && selectedSale"
+                    data-testid="details-total"
+                    class="mt-3 flex justify-between px-5 text-sm font-bold text-ink"
+                >
+                    <span>Total charged</span>
+                    <span class="num">{{
+                        formatCurrency(selectedSale.amount)
+                    }}</span>
+                </p>
 
                 <div
                     v-if="selectedSale"
@@ -487,12 +452,12 @@ import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog
 import { useManagerApproval } from '@/composables/useManagerApproval';
 
 import BaseTable from '@/components/ui/BaseTable.vue';
+import type { TableHeader } from '@/components/ui/types';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import { useSalesLookups } from '@/composables/useSalesLookups';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
-import Spinner from '@/components/ui/Spinner.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
 import { dateRangeError } from '@/utils/rules';
@@ -638,10 +603,16 @@ function clearFilters() {
 const totalItems = ref(0);
 const serverItems = ref<SaleListRow[]>([]);
 
+const detailHeaders: TableHeader[] = [
+    { key: 'product', title: 'Product', rowHeader: true },
+    { key: 'qty', title: 'Qty', align: 'right' },
+    { key: 'unitPrice', title: 'Unit Price', align: 'right' },
+    { key: 'total', title: 'Total', align: 'right' },
+];
 const headers = [
     { key: 'saleNumber', title: 'Sale #' },
     { key: 'cashier', title: 'Cashier' },
-    { key: 'amount', title: 'Amount' },
+    { key: 'amount', title: 'Amount', align: 'right' as const },
     { key: 'paymentType', title: 'Payment' },
     { key: 'status', title: 'Status' },
     { key: 'date', title: 'Date' },

@@ -336,9 +336,15 @@ describe('sales errors (issue #18)', () => {
         document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
         await flush();
 
-        const error = document.querySelector('[data-testid="details-error"]');
+        const error = document.querySelector(
+            '[data-testid="details-table"] [data-testid="table-error"]',
+        );
         expect(error?.getAttribute('role')).toBe('alert');
         expect(error?.textContent).toContain('Sale not found');
+        expect(
+            document.querySelector('[data-testid="details-total"]')
+                ?.textContent,
+        ).toContain('Total charged');
 
         [...error!.querySelectorAll('button')]
             .find((b) => b.textContent?.includes('Retry'))!
@@ -346,7 +352,9 @@ describe('sales errors (issue #18)', () => {
         await flush();
         expect(api.get).toHaveBeenLastCalledWith('/sales/details/sale1');
         expect(
-            document.querySelector('[data-testid="details-error"]'),
+            document.querySelector(
+                '[data-testid="details-table"] [data-testid="table-error"]',
+            ),
         ).toBeNull();
     });
 });

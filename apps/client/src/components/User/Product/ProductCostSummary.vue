@@ -1,5 +1,5 @@
 <template>
-    <div class="text-sm" data-testid="product-cost">
+    <div class="text-sm num" data-testid="product-cost">
         <span v-if="loading">Loading cost…</span>
         <span v-else-if="error" role="alert"
             >{{ error }}

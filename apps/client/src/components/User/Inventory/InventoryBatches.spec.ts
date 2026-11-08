@@ -176,3 +176,40 @@ it('bounds batch option pagination and treats empty product as no request', asyn
     await mount(BatchSelect as typeof InventoryBatches, { product: '' });
     expect(api.get).not.toHaveBeenCalled();
 });
+it('lists batches in a BaseTable with right-aligned quantities and an empty state only once loaded (#170)', async () => {
+    await mount();
+    const remaining = [...document.querySelectorAll('thead th')].find(
+        (th) => th.textContent?.trim() === 'Remaining',
+    )!;
+    expect(remaining.className).toContain('text-right num');
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = '';
+    let resolve!: (value: unknown) => void;
+    api.get.mockReturnValue(
+        new Promise((done) => {
+            resolve = done;
+        }),
+    );
+    await mount();
+    expect(document.body.textContent).not.toContain('No matching batches');
+    resolve({ data: { data: [], totalItems: 0 } });
+    await flush();
+    expect(document.body.textContent).toContain('No matching batches');
+});
+it('shows a load failure in the table with Retry, never the empty state (#170)', async () => {
+    api.get.mockRejectedValueOnce(new Error('network'));
+    await mount();
+    expect(
+        document.querySelector('[data-testid="table-error"]'),
+    ).not.toBeNull();
+    expect(document.body.textContent).not.toContain('No matching batches');
+});
+it('replaces stale rows with a skeleton while switching to all batches (#170)', async () => {
+    await mount();
+    expect(document.body.textContent).toContain('Milk-1');
+    api.get.mockReturnValue(new Promise(() => {}));
+    await click('All remaining batches');
+    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Milk-1');
+});
