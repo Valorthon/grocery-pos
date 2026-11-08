@@ -47,7 +47,7 @@
             <BaseTable
                 :headers="headers"
                 :items="rows"
-                :loading="loading && !rows.length"
+                :loading="loading"
                 :error="error"
                 @retry="load"
             >

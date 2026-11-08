@@ -20,6 +20,8 @@ export interface TableHeader {
     title: string;
     align?: 'left' | 'right' | 'center';
     sortable?: boolean;
+    /** Renders this column's cells as `<th scope="row">` (the row's label). */
+    rowHeader?: boolean;
 }
 
 /** A row of `BaseTable`: any object, keyed in the DOM by `id` when set. */

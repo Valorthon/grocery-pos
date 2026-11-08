@@ -189,15 +189,11 @@
                             stroke-width="3"
                         />
                     </svg>
-                    <p class="text-sm text-muted" data-testid="report-caption">
-                        All amounts are pesos. Quantities remain separated by
-                        unit. A transaction can appear in several
-                        product/category groups; totals count it once.
-                    </p>
-                    <BaseTable :headers="reportHeaders" :items="report.rows">
-                        <template #cell-label="{ item }">
-                            <span class="font-semibold">{{ item.label }}</span>
-                        </template>
+                    <BaseTable
+                        :headers="reportHeaders"
+                        :items="report.rows"
+                        caption="All amounts are pesos. Quantities remain separated by unit. A transaction can appear in several product/category groups; totals count it once."
+                    >
                         <template #cell-transactions="{ item }">
                             {{ item.transactions }} /
                             {{ item.reversalTransactions }}
@@ -230,7 +226,7 @@
                             </EmptyState>
                         </template>
                         <template #footer>
-                            <tr data-testid="report-totals">
+                            <tr data-testid="report-totals" class="font-bold">
                                 <th scope="row" class="py-3.5 px-5 text-left">
                                     Total
                                 </th>
@@ -345,7 +341,7 @@ const {
 const right = 'right' as const;
 /** Every numeric column is right-aligned with tabular figures (#170). */
 const reportHeaders: TableHeader[] = [
-    { key: 'label', title: 'Group' },
+    { key: 'label', title: 'Group', rowHeader: true },
     { key: 'transactions', title: 'Sales / reversals', align: right },
     { key: 'quantities', title: 'Quantity (net)', align: right },
     { key: 'grossSales', title: 'Gross', align: right },

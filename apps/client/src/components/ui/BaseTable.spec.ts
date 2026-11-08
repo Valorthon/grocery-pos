@@ -168,3 +168,41 @@ describe('BaseTable footer slot (issue #170)', () => {
         expect(host.querySelector('tfoot')).toBeNull();
     });
 });
+
+describe('BaseTable row headers and caption (issue #170)', () => {
+    it('renders a rowHeader column as th scope=row and ties the caption', () => {
+        const host = mountRender(() =>
+            table({
+                headers: [
+                    { title: 'Group', key: 'name', rowHeader: true },
+                    { title: 'Net', key: 'net', align: 'right' },
+                ],
+                items: [{ id: '1', name: 'Day 1', net: 5 }],
+                caption: 'All amounts are pesos.',
+            }),
+        );
+        const cell = host.querySelector('tbody th');
+        expect(cell?.getAttribute('scope')).toBe('row');
+        expect(cell?.textContent).toContain('Day 1');
+        expect(host.querySelectorAll('tbody td')).toHaveLength(1);
+        expect(host.querySelector('table > caption')?.textContent).toContain(
+            'All amounts are pesos.',
+        );
+    });
+
+    it('renders no caption by default and leaves footer weight to its rows', () => {
+        const host = mountRender(() =>
+            table(
+                {
+                    headers: [{ title: 'Name', key: 'name' }],
+                    items: [{ id: '1', name: 'a' }],
+                },
+                { footer: () => h('tr', [h('td', 'x')]) },
+            ),
+        );
+        expect(host.querySelector('caption')).toBeNull();
+        expect(host.querySelector('tfoot')?.className).not.toContain(
+            'font-bold',
+        );
+    });
+});

@@ -205,3 +205,11 @@ it('shows a load failure in the table with Retry, never the empty state (#170)',
     ).not.toBeNull();
     expect(document.body.textContent).not.toContain('No matching batches');
 });
+it('replaces stale rows with a skeleton while switching to all batches (#170)', async () => {
+    await mount();
+    expect(document.body.textContent).toContain('Milk-1');
+    api.get.mockReturnValue(new Promise(() => {}));
+    await click('All remaining batches');
+    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Milk-1');
+});

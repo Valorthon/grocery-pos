@@ -398,8 +398,14 @@ describe('event-date reports UI', () => {
             expect(th.className).toContain('text-right');
             expect(th.className).toContain('num');
         }
+        const label = document.querySelector('tbody tr:first-child th');
+        expect(label?.getAttribute('scope')).toBe('row');
+        expect(
+            document.querySelector('table > caption')?.textContent,
+        ).toContain('totals count it once');
         const cells = [...document.querySelectorAll('tbody tr:first-child td')];
-        for (const td of cells.slice(1))
+        expect(cells).toHaveLength(9);
+        for (const td of cells)
             expect(td.className).toContain('text-right num');
         const totals = document.querySelector(
             'tfoot [data-testid="report-totals"]',

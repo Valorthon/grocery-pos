@@ -172,26 +172,24 @@ it('drops late results when the owner changes or component unmounts', async () =
     app?.unmount();
     app = undefined;
 });
-it('lists movements in a BaseTable with right-aligned quantities, an empty state and table Retry (#170)', async () => {
+it('right-aligns quantity columns with tabular figures (#170)', async () => {
     await mount();
     const heads = [...document.querySelectorAll('thead th')];
-    const change = heads.find((th) => th.textContent?.trim() === 'Change')!;
-    const balance = heads.find(
-        (th) => th.textContent?.trim() === 'Balance after',
-    )!;
-    expect(change.className).toContain('text-right num');
-    expect(balance.className).toContain('text-right num');
-    app?.unmount();
+    for (const title of ['Change', 'Balance after'])
+        expect(
+            heads.find((th) => th.textContent?.trim() === title)!.className,
+        ).toContain('text-right num');
+});
+it('shows an empty state once loaded with no movements (#170)', async () => {
     api.get.mockImplementation(async (url: string) =>
         url.endsWith('/integrity')
             ? { data: { stock: 0, movementTotal: 0, matches: true } }
             : { data: { data: [], totalItems: 0 } },
     );
-    document.body.innerHTML = '';
     await mount();
     expect(document.body.textContent).toContain('No matching stock movements');
-    app?.unmount();
-    document.body.innerHTML = '';
+});
+it('shows a load failure in the table with Retry, not the empty state (#170)', async () => {
     api.get.mockRejectedValue(new Error('down'));
     await mount();
     expect(
@@ -200,4 +198,12 @@ it('lists movements in a BaseTable with right-aligned quantities, an empty state
     expect(document.body.textContent).not.toContain(
         'No matching stock movements',
     );
+});
+it('replaces the previous page with a skeleton while the next page loads (#170)', async () => {
+    await mount();
+    expect(document.body.textContent).toContain('-0.450 kg');
+    api.get.mockReturnValue(new Promise(() => {}));
+    await click('Next');
+    expect(document.querySelector('.animate-pulse')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('-0.450 kg');
 });
