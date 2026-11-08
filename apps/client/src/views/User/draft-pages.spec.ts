@@ -367,6 +367,42 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
         expect(document.body.textContent).toContain(c.emptyState);
     });
 
+    it.runIf(c.dialogTitle)(
+        'draws the shared draft table: tokens, right-aligned numbers, 44px actions (#173)',
+        async () => {
+            await mountPage(c.page);
+            expect(document.querySelector('table')).toBeNull();
+            await addDraft(c, 'First');
+            const heads = [...document.querySelectorAll('thead th')];
+            for (const th of heads) expect(th.className).toContain('bg-paper');
+            const numeric = heads.filter((th) =>
+                /Quantity|Unit Cost|Total Cost|Change/.test(
+                    th.textContent ?? '',
+                ),
+            );
+            expect(numeric.length).toBeGreaterThan(0);
+            for (const th of numeric)
+                expect(th.className).toContain('text-right');
+            // Each numeric column's cell is right-aligned tabular figures.
+            const cells = [...rows()[0].querySelectorAll('td')];
+            for (const th of numeric) {
+                const td = cells[heads.indexOf(th)];
+                expect(td.classList.contains('num')).toBe(true);
+                expect(td.classList.contains('text-right')).toBe(true);
+            }
+            for (const label of ['Edit draft', 'Delete draft'] as const) {
+                const action = rowAction(rows()[0], label);
+                expect(action.className).toContain('h-11');
+                expect(action.className).toContain('w-11');
+                expect(action.className).toContain('focus-ring');
+                expect(action.className).not.toContain('outline-none');
+            }
+            expect(document.querySelector('table')!.outerHTML).not.toMatch(
+                /slate-|bg-white|primary-/,
+            );
+        },
+    );
+
     it('leaves without asking when there are no drafts', async () => {
         await mountPage(c.page);
         await router.push('/other');
