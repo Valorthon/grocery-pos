@@ -8,6 +8,7 @@ import {
     homeRouteFor,
     type RouteAccessMeta,
 } from './access';
+import { pageTitle } from './page-title';
 
 const routes: RouteRecordRaw[] = [
     // GUEST LAYOUT
@@ -191,8 +192,11 @@ const routes: RouteRecordRaw[] = [
 
     {
         path: '/:pathMatch(.*)*',
+        // Unknown paths (#162). Known protected routes match above and
+        // still send a logged-out visitor to Login.
         name: 'NotFound',
-        redirect: { name: 'Login' },
+        component: () => import('@/views/NotFound.vue'),
+        meta: { title: 'Page not found' },
     },
 ];
 
@@ -268,6 +272,13 @@ router.beforeEach(async (to) => {
     }
 
     return true;
+});
+
+// A route's `meta.title` names the tab. A cancelled or redirected
+// navigation (a draft guard's "Stay") keeps the current page's title.
+router.afterEach((to, _from, failure) => {
+    if (failure) return;
+    document.title = pageTitle(to.meta.title);
 });
 
 export default router;
