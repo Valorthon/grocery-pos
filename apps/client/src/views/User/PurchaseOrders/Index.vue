@@ -206,6 +206,7 @@
                                         <BaseInput
                                             v-model="line.quantity"
                                             class="min-w-24"
+                                            numeric
                                             :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
                                             :inputmode="
                                                 decimalUnit(line.unit)
@@ -220,6 +221,7 @@
                                         <BaseInput
                                             v-model="line.cost"
                                             class="min-w-28"
+                                            numeric
                                             :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
                                             inputmode="decimal"
                                             :error="lineErrors[index]?.cost"
@@ -231,6 +233,7 @@
                                             size="sm"
                                             variant="outline"
                                             class="min-h-11 min-w-11"
+                                            :aria-label="`Remove ${line.name}`"
                                             :disabled="busy"
                                             @click="removeLine(index)"
                                             >Remove</BaseButton

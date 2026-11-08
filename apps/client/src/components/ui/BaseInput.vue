@@ -94,6 +94,8 @@ const props = withDefaults(
         error?: string;
         icon?: boolean;
         mono?: boolean;
+        /** Right-aligned tabular figures, for quantity/cost cells (#173). */
+        numeric?: boolean;
     }>(),
     {
         modelValue: '',
@@ -107,6 +109,7 @@ const props = withDefaults(
         error: '',
         icon: false,
         mono: false,
+        numeric: false,
     },
 );
 
@@ -131,6 +134,7 @@ const inputClasses = computed(() => [
     // The 44px clear (x) sits over the right edge (#157 review).
     props.clearable ? 'pr-11' : props.icon ? 'pr-3' : 'pr-3.5',
     props.mono ? 'font-mono font-bold' : '',
+    props.numeric ? 'text-right num' : '',
     props.error ? FIELD_ERROR : FIELD_OK,
     props.disabled ? FIELD_DISABLED : '',
 ]);

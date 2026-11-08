@@ -99,6 +99,8 @@
                             </td>
                             <td :class="draftTable.tdActions">
                                 <DraftRowActions
+                                    :edit-label="`Edit draft ${item.name}`"
+                                    :delete-label="`Delete draft ${item.name}`"
                                     @edit="editDraft(item)"
                                     @delete="deleteDraft(item)"
                                 />

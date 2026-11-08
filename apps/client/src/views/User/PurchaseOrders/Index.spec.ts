@@ -335,8 +335,12 @@ describe('Purchase order drafting (#123)', () => {
         await mount();
         await press('New purchase order');
         await addMilk();
+        expect(
+            document.querySelector('[aria-label="Remove milk"]'),
+        ).not.toBeNull();
         await press('Remove');
-        expect(document.body.textContent).not.toContain('milk (');
+        expect(document.querySelector('tbody tr')).toBeNull();
+        expect(document.body.textContent).toContain('No lines yet');
         await addMilk();
         await press('Back to list');
         expect(document.body.textContent).toContain('Discard changes?');
@@ -453,7 +457,12 @@ describe('Purchase order references and draft warnings (#123)', () => {
         const cells = document
             .querySelector('tbody tr')!
             .querySelectorAll('td');
-        for (const title of ['Ordered', 'Received', 'Outstanding']) {
+        for (const title of [
+            'Ordered',
+            'Received',
+            'Outstanding',
+            'Expected cost',
+        ]) {
             const i = heads.findIndex((th) => th.textContent?.trim() === title);
             expect(heads[i].className).toContain('text-right');
             expect(cells[i].classList.contains('num')).toBe(true);
