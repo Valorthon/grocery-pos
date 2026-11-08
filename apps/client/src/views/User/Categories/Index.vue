@@ -3,98 +3,86 @@
         <template #actions
             ><BaseButton @click="begin()">Add category</BaseButton></template
         >
-        <PageCard>
-            <div class="p-5">
-                <p v-if="error" role="alert" class="text-red-700">
-                    {{ error }} <BaseButton @click="refresh">Retry</BaseButton>
-                </p>
-                <p v-if="loading">Loading categories…</p>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm">
-                        <thead>
-                            <tr>
-                                <th class="text-left">Name</th>
-                                <th>Order</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in categories"
-                                :key="row._id"
-                                class="border-t"
-                            >
-                                <td>{{ row.name }}</td>
-                                <td class="text-center">{{ row.sortOrder }}</td>
-                                <td>
-                                    {{ row.isActive ? 'Active' : 'Archived' }}
-                                </td>
-                                <td class="flex gap-2 py-2">
-                                    <BaseButton
-                                        size="sm"
-                                        :disabled="saving"
-                                        @click="begin(row)"
-                                        >Edit</BaseButton
-                                    ><BaseButton
-                                        size="sm"
-                                        variant="outline"
-                                        :disabled="saving"
-                                        @click="toggle(row)"
-                                        >{{
-                                            row.isActive ? 'Archive' : 'Restore'
-                                        }}</BaseButton
-                                    ><BaseButton
-                                        size="sm"
-                                        variant="outline"
-                                        :disabled="saving"
-                                        @click="remove(row)"
-                                        >Delete</BaseButton
-                                    >
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <BaseModal
-                v-model="open"
-                :title="editing ? 'Edit category' : 'Add category'"
-                :closable="!saving"
-            >
-                <BaseInput
-                    v-model="name"
-                    label="Category name"
-                    :maxlength="CATEGORY_NAME_MAX"
-                />
-                <BaseInput
-                    v-model="sortOrder"
-                    label="Sort order"
-                    type="number"
-                    :min="0"
-                    :max="CATEGORY_SORT_MAX"
-                    :step="1"
-                />
-                <p v-if="saveError" role="alert" class="text-red-700">
-                    {{ saveError }}
-                </p>
-                <template #footer
+        <BaseTable
+            :headers="headers"
+            :items="rows"
+            :loading="loading && !rows.length"
+            :error="error"
+            @retry="refresh"
+        >
+            <template #cell-status="{ item }">
+                <Badge :color="item.isActive ? 'success' : 'neutral'">{{
+                    item.isActive ? 'Active' : 'Archived'
+                }}</Badge>
+            </template>
+            <template #cell-actions="{ item }">
+                <div class="flex gap-2">
+                    <BaseButton
+                        size="sm"
+                        :disabled="saving"
+                        @click="begin(item)"
+                        >Edit</BaseButton
                     ><BaseButton
+                        size="sm"
                         variant="outline"
                         :disabled="saving"
-                        @click="open = false"
-                        >Cancel</BaseButton
-                    ><BaseButton :disabled="saving" @click="save">{{
-                        saving ? 'Saving…' : 'Save'
-                    }}</BaseButton></template
+                        @click="toggle(item)"
+                        >{{ item.isActive ? 'Archive' : 'Restore' }}</BaseButton
+                    ><BaseButton
+                        size="sm"
+                        variant="outline"
+                        :disabled="saving"
+                        @click="remove(item)"
+                        >Delete</BaseButton
+                    >
+                </div>
+            </template>
+            <template #empty>
+                <EmptyState
+                    title="No categories yet"
+                    hint="Add a category to group products."
                 >
-            </BaseModal>
-            <ConfirmDialog :request="request" @answer="answer" />
-        </PageCard>
+                    <template #icon><Tags :size="24" /></template>
+                </EmptyState>
+            </template>
+        </BaseTable>
+        <BaseModal
+            v-model="open"
+            :title="editing ? 'Edit category' : 'Add category'"
+            :closable="!saving"
+        >
+            <BaseInput
+                v-model="name"
+                label="Category name"
+                :maxlength="CATEGORY_NAME_MAX"
+            />
+            <BaseInput
+                v-model="sortOrder"
+                label="Sort order"
+                type="number"
+                :min="0"
+                :max="CATEGORY_SORT_MAX"
+                :step="1"
+            />
+            <p v-if="saveError" role="alert" class="text-danger-fg">
+                {{ saveError }}
+            </p>
+            <template #footer
+                ><BaseButton
+                    variant="outline"
+                    :disabled="saving"
+                    @click="open = false"
+                    >Cancel</BaseButton
+                ><BaseButton :disabled="saving" @click="save">{{
+                    saving ? 'Saving…' : 'Save'
+                }}</BaseButton></template
+            >
+        </BaseModal>
+        <ConfirmDialog :request="request" @answer="answer" />
     </PageFrame>
 </template>
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import {
     CATEGORY_NAME_MAX,
     CATEGORY_SORT_MAX,
@@ -102,8 +90,12 @@ import {
     type CreateCategoryRequest,
 } from '@grocery-pos/contracts';
 import api from '@/axios';
-import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import Badge from '@/components/ui/Badge.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import type { TableHeader } from '@/components/ui/types';
+import { Tags } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -114,6 +106,15 @@ import { useUIStore, Color } from '@/stores/ui';
 import { apiErrorText } from '@/utils/api-error';
 const { categories, loading, error, refresh } = useCategories();
 const { request, confirm, answer } = useConfirm();
+const headers: TableHeader[] = [
+    { key: 'name', title: 'Name' },
+    { key: 'sortOrder', title: 'Order', align: 'right' },
+    { key: 'status', title: 'Status' },
+    { key: 'actions', title: 'Actions' },
+];
+const rows = computed(() =>
+    categories.value.map((row) => ({ ...row, id: row._id })),
+);
 const open = ref(false),
     saving = ref(false),
     name = ref(''),

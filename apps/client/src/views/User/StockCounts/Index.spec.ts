@@ -336,6 +336,24 @@ describe('physical stock count workflow', () => {
         await flush();
         expect(document.body.textContent).toContain('not in this count');
     });
+    it('colours the variance by sign in a right-aligned numeric column (#169)', async () => {
+        await mount();
+        await exact('Open count');
+        const variance = () =>
+            document.querySelector('[data-testid="count-variance"]')!;
+        expect(variance().textContent).toBe('Not counted');
+        expect(variance().className).toBe('text-muted');
+        await enter('0.450');
+        expect(variance().className.split(' ')).toContain('text-danger-fg');
+        await enter('1.200');
+        expect(variance().textContent).toBe('+0.200 kg');
+        expect(variance().className.split(' ')).toContain('text-success-fg');
+        await enter('1');
+        expect(variance().className).toBe('text-muted');
+        expect(variance().closest('td')!.className.split(/\s+/)).toEqual(
+            expect.arrayContaining(['text-right', 'num']),
+        );
+    });
     it('creates a picked scope from server-resolved barcodes and category scope with explicit reference', async () => {
         await mount();
         const select = document.querySelector('select')!;
@@ -349,8 +367,10 @@ describe('physical stock count workflow', () => {
             products: [product],
         });
         await exact('Back to counts');
-        select.value = 'category';
-        select.dispatchEvent(new Event('change'));
+        // The list view re-renders its form: query the new scope select.
+        const scopeSelect = document.querySelector('select')!;
+        scopeSelect.value = 'category';
+        scopeSelect.dispatchEvent(new Event('change'));
         await flush();
         const category = document.querySelectorAll('select')[1];
         category.value = 'category';
@@ -361,6 +381,32 @@ describe('physical stock count workflow', () => {
             scope: 'category',
             category: 'category',
         });
+    });
+    it('shows the empty state only after a successful empty load (#169)', async () => {
+        const pending = deferred();
+        api.get.mockImplementation((url: string) =>
+            url === '/stock-counts'
+                ? pending.promise
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        expect(document.body.textContent).not.toContain('No stock counts yet');
+        pending.resolve({ data: { data: [], totalItems: 0 } });
+        await flush();
+        expect(document.body.textContent).toContain('No stock counts yet');
+    });
+    it('never says there are no counts after a failed first load (#169)', async () => {
+        api.get.mockImplementation((url: string) =>
+            url === '/stock-counts'
+                ? Promise.reject(new Error('network'))
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        expect(document.body.textContent).toContain('Reload');
+        expect(document.body.textContent).not.toContain('No stock counts yet');
+        expect(document.body.textContent).toContain(
+            'Stock counts could not be loaded.',
+        );
     });
     it('shows list loading errors with retry and paginates sessions', async () => {
         let failed = false;

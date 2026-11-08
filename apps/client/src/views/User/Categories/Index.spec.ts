@@ -55,6 +55,11 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 describe('category administration', () => {
+    it('shows an empty state when there are no categories (#169)', async () => {
+        api.get.mockResolvedValue({ data: { data: [], totalItems: 0 } });
+        await mount();
+        expect(document.body.textContent).toContain('No categories yet');
+    });
     it('loads current categories and creates a dynamic category', async () => {
         await mount();
         expect(document.body.textContent).toContain('Frozen');
