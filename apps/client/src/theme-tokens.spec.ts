@@ -125,6 +125,10 @@ describe('theme tokens (#153)', () => {
         ['leaf-700', 'leaf-50'],
         // Guest footer button hover: leaf text on leaf-50 (#158).
         ['leaf-600', 'leaf-50'],
+        // Admin sidebar active and hover items (#160).
+        ['leaf-800', 'leaf-50'],
+        ['muted', 'leaf-50'],
+        ['ink', 'leaf-50'],
     ])('%s text on %s passes AA (4.5:1)', (fg, bg) => {
         expect(contrast(fg, bg)).toBeGreaterThanOrEqual(4.5);
     });

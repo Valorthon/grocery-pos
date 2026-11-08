@@ -171,13 +171,44 @@ describe('UserLayout sidebar section headings (#143)', () => {
             }),
         );
         await mountAt('/admin/products');
-        expect(headings()).toContain('Inventory Management');
-        expect(headings()).not.toContain('Admin');
+        expect(headings()).toEqual(['Overview', 'Stock', 'Purchasing']);
     });
 
     it('keeps the Admin heading for an admin', async () => {
         await mountAt('/admin/products');
         expect(headings()).toContain('Admin');
+    });
+
+    it('groups the entries by task, in order (#160)', async () => {
+        await mountAt('/admin/products');
+        expect(headings()).toEqual([
+            'Overview',
+            'Sales',
+            'Stock',
+            'Purchasing',
+            'Admin',
+        ]);
+        const groups: string[][] = [];
+        for (const el of sidebar().querySelector('nav')!.children) {
+            if (el.tagName === 'DIV') groups.push([]);
+            else if ((el as HTMLElement).style.display !== 'none')
+                groups[groups.length - 1].push(
+                    el.textContent!.replace(/\d+|\?/g, '').trim(),
+                );
+        }
+        expect(groups).toEqual([
+            ['Dashboard'],
+            ['Sales History', 'Shifts', 'Sales Reports'],
+            [
+                'Product List',
+                'Inventory',
+                'Low Stock',
+                'Stock Counts',
+                'Adjustment History',
+            ],
+            ['Purchase Orders', 'Restock History', 'Suppliers', 'Categories'],
+            ['Users', 'Roles', 'Audit Log', 'Store Settings'],
+        ]);
     });
 });
 
@@ -243,9 +274,17 @@ describe('UserLayout app bar targets (#107)', () => {
                     `button[aria-label="${label}"]`,
                 );
                 expect(classes(button)).toEqual(
-                    expect.arrayContaining(['w-11', 'h-11']),
+                    expect.arrayContaining(['min-h-11', 'min-w-11']),
                 );
                 expect(classes(button)).not.toContain('p-2');
+                // A visible label from md up, icon-only below (#160).
+                const text = button!.querySelector('span')!;
+                expect(classes(text)).toEqual(['hidden', 'md:inline']);
+                expect(
+                    button!
+                        .getAttribute('aria-label')!
+                        .startsWith(text.textContent!.trim()),
+                ).toBe(true);
             }
             expect(
                 classes(header.querySelector('[data-dropdown-trigger]')),
@@ -535,8 +574,12 @@ describe('UserLayout sidebar items are links (#143)', () => {
         );
         expect(current).toHaveLength(1);
         expect(current[0].textContent).toContain('Low Stock');
-        expect(current[0].className).toContain('bg-leaf-600');
-        expect(navButton('Inventory').className).not.toContain('bg-leaf-600');
+        expect(current[0].className.split(/\s+/)).toEqual(
+            expect.arrayContaining(['bg-leaf-50', 'text-leaf-800']),
+        );
+        const inventory = navButton('Inventory').className.split(/\s+/);
+        expect(inventory).not.toContain('bg-leaf-50');
+        expect(inventory).not.toContain('text-leaf-800');
     });
 
     it('keeps a link per item in the collapsed rail, labelled', async () => {
