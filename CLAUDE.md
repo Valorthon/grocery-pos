@@ -624,14 +624,15 @@ requestId}`. A 5xx never carries details or internals.
 - Crossing `lg` with the focus in the tender panel keeps it on the same
   control: shrinking opens the sheet, growing closes it without returning
   the focus to its opener.
-- Seller sidebar: from `lg` it starts expanded; collapsed/expanded is kept
+- Seller sidebar (#161): the one seller navigation, on every seller page
+  including the dashboard (no separate dashboard header), dark leaf like
+  the admin sidebar (`focus-ring-inverse`, `UserProfileMenu tone="dark"`).
+  From `lg` it starts expanded; collapsed/expanded is kept
   in localStorage `grocery_pos_sidebar_v1:<userId>` (the only preference
   there; storage errors fall back to expanded). Below `lg` it is a modal
   drawer on the modal stack (menu button, backdrop, X, Escape, navigation
   close it); the register behind it is inert and its keys pause.
-- The admin `UserSidebar` is the same drawer below `lg`, and below `md`
-  the seller dashboard header's tabs are in a menu drawer (#89). All three
-  are `role=dialog` + `aria-modal` only while they are drawers, and use
+- The admin `UserSidebar` is the same drawer below `lg`. Both are `role=dialog` + `aria-modal` only while they are drawers, and use
   `useModalDrawer`: the page behind is inert, the focus goes back to the
   menu button, growing past the breakpoint closes the drawer, and an
   unmount while open (e.g. Back swapping the layout) leaves nothing on the
@@ -640,7 +641,7 @@ requestId}`. A 5xx never carries details or internals.
   `w-11 h-11`), including the scan box's Clear, Enter / Scan, the Qty
   select and `BaseModal`'s header close (×) in every dialog (#89); so
   are the admin app bar's Add Product/Restock/Adjust, the `UserProfileMenu`
-  bar and rail (`icon`) triggers, the seller dashboard tabs, and the Cash
+  bar and rail (`icon`) triggers, the seller sidebar links, and the Cash
   In/Drop quick amounts (two columns below `sm`, four from `sm`) (#107).
   Below `sm` the admin bar tightens its padding and gaps to fit at 320px. The
   scan box hides its F2 hint below `sm`, and its right padding fits its
