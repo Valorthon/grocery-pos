@@ -152,3 +152,10 @@ describe('BaseInput label (issue #142)', () => {
         expect(labelFor(input)).toBe('From');
     });
 });
+
+describe('BaseInput numeric (#173)', () => {
+    it('right-aligns tabular figures only when asked', () => {
+        expect(mount({ numeric: true }).className).toContain('text-right num');
+        expect(mount({}).className).not.toContain('text-right');
+    });
+});

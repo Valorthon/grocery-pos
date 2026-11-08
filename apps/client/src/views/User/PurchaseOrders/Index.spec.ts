@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import {
+    purchaseOrderReference,
     PurchaseOrderStatus,
     Role,
     UnitOfMeasure,
@@ -334,8 +335,12 @@ describe('Purchase order drafting (#123)', () => {
         await mount();
         await press('New purchase order');
         await addMilk();
+        expect(
+            document.querySelector('[aria-label="Remove milk"]'),
+        ).not.toBeNull();
         await press('Remove');
-        expect(document.body.textContent).not.toContain('milk (');
+        expect(document.querySelector('tbody tr')).toBeNull();
+        expect(document.body.textContent).toContain('No lines yet');
         await addMilk();
         await press('Back to list');
         expect(document.body.textContent).toContain('Discard changes?');
@@ -424,6 +429,45 @@ describe('Purchase order references and draft warnings (#123)', () => {
             'Supplier Farm is archived.',
         );
         expect(document.body.textContent).toContain('Archived product: soap.');
+    });
+    it('draws the editor with a breadcrumb and the shared draft table (#173)', async () => {
+        const crumbs = () =>
+            document.querySelector('nav[aria-label="Breadcrumb"]')
+                ? [
+                      ...document.querySelectorAll(
+                          'nav[aria-label="Breadcrumb"] li',
+                      ),
+                  ]
+                      .map((li) => li.textContent?.trim())
+                      .join(' › ')
+                : undefined;
+        await mount();
+        expect(crumbs()).toBeUndefined();
+        await press('New purchase order');
+        expect(crumbs()).toBe('Purchase orders › New purchase order');
+        expect(document.querySelector('table')).toBeNull();
+        expect(document.body.textContent).toContain('No lines yet');
+        await press('Back to list');
+        await press('Open');
+        expect(crumbs()).toBe(
+            `Purchase orders › ${purchaseOrderReference('po1')}`,
+        );
+        const heads = [...document.querySelectorAll('thead th')];
+        // The list's table is gone while the editor shows.
+        const cells = document
+            .querySelector('tbody tr')!
+            .querySelectorAll('td');
+        for (const title of [
+            'Ordered',
+            'Received',
+            'Outstanding',
+            'Expected cost',
+        ]) {
+            const i = heads.findIndex((th) => th.textContent?.trim() === title);
+            expect(heads[i].className).toContain('text-right');
+            expect(cells[i].classList.contains('num')).toBe(true);
+            expect(cells[i].classList.contains('text-right')).toBe(true);
+        }
     });
     it('writes the open order to ?id= and clears it on close (#143)', async () => {
         nav.route.value = { query: { status: 'SENT' } };

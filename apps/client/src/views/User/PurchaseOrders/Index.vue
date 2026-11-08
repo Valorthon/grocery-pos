@@ -1,5 +1,5 @@
 <template>
-    <PageFrame>
+    <PageFrame :breadcrumbs="breadcrumbs">
         <template #actions>
             <BaseButton v-if="!editing" size="sm" @click="startNew([])"
                 >New purchase order</BaseButton
@@ -67,10 +67,7 @@
                     </BaseTable>
                 </template>
                 <template v-else>
-                    <div
-                        v-if="current"
-                        class="text-sm text-slate-700 space-y-1"
-                    >
+                    <div v-if="current" class="text-sm text-ink space-y-1">
                         <p>
                             <strong>{{
                                 purchaseOrderReference(current._id)
@@ -105,7 +102,7 @@
                     <div
                         v-if="blockers.length"
                         role="status"
-                        class="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800"
+                        class="rounded-control border border-warning-border bg-warning-bg p-3 text-sm text-warning-fg"
                     >
                         <p class="font-medium">
                             This draft can't be sent as it stands.
@@ -136,37 +133,80 @@
                     <p
                         v-if="validation"
                         role="alert"
-                        class="text-sm text-red-700"
+                        class="text-sm text-danger-fg"
                     >
                         {{ validation }}
                     </p>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
+                    <EmptyState
+                        v-if="isDraft && draft.length === 0"
+                        title="No lines yet"
+                        hint="Add a product below by EAN or name."
+                    >
+                        <template #icon
+                            ><ClipboardList class="w-6 h-6"
+                        /></template>
+                    </EmptyState>
+                    <div
+                        v-else
+                        :class="[
+                            draftTable.wrap,
+                            'rounded-card border border-line',
+                        ]"
+                    >
+                        <table :class="draftTable.table">
                             <thead>
-                                <tr>
-                                    <th class="text-left">Product</th>
-                                    <th class="text-right">Ordered</th>
-                                    <th v-if="!isDraft" class="text-right">
+                                <tr :class="draftTable.headRow">
+                                    <th scope="col" :class="draftTable.th">
+                                        Product
+                                    </th>
+                                    <th scope="col" :class="draftTable.thNum">
+                                        Ordered
+                                    </th>
+                                    <th
+                                        v-if="!isDraft"
+                                        scope="col"
+                                        :class="draftTable.thNum"
+                                    >
                                         Received
                                     </th>
-                                    <th v-if="!isDraft" class="text-right">
+                                    <th
+                                        v-if="!isDraft"
+                                        scope="col"
+                                        :class="draftTable.thNum"
+                                    >
                                         Outstanding
                                     </th>
-                                    <th class="text-right">Expected cost</th>
-                                    <th v-if="isDraft">Action</th>
+                                    <th scope="col" :class="draftTable.thNum">
+                                        Expected cost
+                                    </th>
+                                    <th
+                                        v-if="isDraft"
+                                        scope="col"
+                                        :class="draftTable.thNum"
+                                    >
+                                        Action
+                                    </th>
                                 </tr>
                             </thead>
-                            <tbody v-if="isDraft">
+                            <tbody v-if="isDraft" :class="draftTable.body">
                                 <tr
                                     v-for="(line, index) in draft"
                                     :key="line.product"
-                                    class="border-t"
+                                    :class="draftTable.row"
                                 >
-                                    <td>{{ line.name }} ({{ line.EAN }})</td>
-                                    <td class="text-right">
+                                    <td :class="draftTable.tdName">
+                                        {{ line.name }}
+                                        <span
+                                            class="block text-xs font-normal text-muted num"
+                                            >{{ line.EAN }}</span
+                                        >
+                                    </td>
+                                    <td :class="draftTable.tdNum">
                                         <BaseInput
                                             v-model="line.quantity"
+                                            class="min-w-24"
+                                            numeric
                                             :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
                                             :inputmode="
                                                 decimalUnit(line.unit)
@@ -177,19 +217,23 @@
                                             :disabled="busy"
                                         />
                                     </td>
-                                    <td class="text-right">
+                                    <td :class="draftTable.tdNum">
                                         <BaseInput
                                             v-model="line.cost"
+                                            class="min-w-28"
+                                            numeric
                                             :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
                                             inputmode="decimal"
                                             :error="lineErrors[index]?.cost"
                                             :disabled="busy"
                                         />
                                     </td>
-                                    <td class="text-center">
+                                    <td :class="draftTable.tdActions">
                                         <BaseButton
                                             size="sm"
                                             variant="outline"
+                                            class="min-h-11 min-w-11"
+                                            :aria-label="`Remove ${line.name}`"
                                             :disabled="busy"
                                             @click="removeLine(index)"
                                             >Remove</BaseButton
@@ -197,14 +241,20 @@
                                     </td>
                                 </tr>
                             </tbody>
-                            <tbody v-else-if="current">
+                            <tbody v-else-if="current" :class="draftTable.body">
                                 <tr
                                     v-for="line in current.lines"
                                     :key="line._id"
-                                    class="border-t"
+                                    :class="draftTable.row"
                                 >
-                                    <td>{{ line.name }} ({{ line.EAN }})</td>
-                                    <td class="text-right">
+                                    <td :class="draftTable.tdName">
+                                        {{ line.name }}
+                                        <span
+                                            class="block text-xs font-normal text-muted num"
+                                            >{{ line.EAN }}</span
+                                        >
+                                    </td>
+                                    <td :class="draftTable.tdNum">
                                         {{
                                             formatQuantity(
                                                 line.orderedQty,
@@ -212,7 +262,7 @@
                                             )
                                         }}
                                     </td>
-                                    <td class="text-right">
+                                    <td :class="draftTable.tdNum">
                                         {{
                                             formatQuantity(
                                                 line.receivedQty,
@@ -220,7 +270,7 @@
                                             )
                                         }}
                                     </td>
-                                    <td class="text-right">
+                                    <td :class="draftTable.tdNum">
                                         {{
                                             formatQuantity(
                                                 line.outstandingQty,
@@ -228,7 +278,7 @@
                                             )
                                         }}
                                     </td>
-                                    <td class="text-right">
+                                    <td :class="draftTable.tdNum">
                                         {{
                                             formatCurrency(line.expectedCost)
                                         }}/{{ unitLabel(line.unit) }}
@@ -237,7 +287,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <p class="text-sm text-right font-bold">
+                    <p class="text-sm text-right font-bold text-ink num">
                         Expected total:
                         {{
                             formatCurrency(
@@ -290,7 +340,7 @@
                     </div>
                     <p
                         v-if="isDraft && current && dirty"
-                        class="text-sm text-slate-600"
+                        class="text-sm text-muted"
                     >
                         Save the draft before marking it as sent.
                     </p>
@@ -305,7 +355,7 @@
                 scrollable
             >
                 <div class="space-y-3">
-                    <p class="text-sm text-slate-600">
+                    <p class="text-sm text-muted">
                         Enter what arrived, at the invoice's actual unit cost.
                         Leave a quantity blank or 0 to skip a line. Extra goods
                         beyond the outstanding quantity go through a normal
@@ -314,11 +364,13 @@
                     <div
                         v-for="(line, index) in receipt"
                         :key="line.line"
-                        class="border-t pt-2 space-y-2"
+                        class="border-t border-line pt-2 space-y-2"
                     >
                         <p class="text-sm font-medium">
                             {{ line.name }} · outstanding
-                            {{ formatQuantity(line.outstandingQty, line.unit) }}
+                            <span class="num">{{
+                                formatQuantity(line.outstandingQty, line.unit)
+                            }}</span>
                         </p>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <BaseInput
@@ -340,7 +392,7 @@
                                 :disabled="busy"
                             />
                         </div>
-                        <p class="text-xs text-slate-600">
+                        <p class="text-xs text-muted num">
                             Expected {{ formatCurrency(line.expectedCost) }} ·
                             {{ varianceText(line) }}
                         </p>
@@ -378,7 +430,7 @@
                     <p
                         v-if="receiveError"
                         role="alert"
-                        class="text-sm text-red-700"
+                        class="text-sm text-danger-fg"
                     >
                         {{ receiveError }}
                     </p>
@@ -441,6 +493,10 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import type { ComboboxOption } from '@/components/ui/types';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import { draftTable } from '@/components/ui/draft-table';
+import type { Breadcrumb } from '@/components/ui/page-primitives';
+import { ClipboardList } from '@lucide/vue';
 import SupplierSelect from '@/components/User/Supplier/SupplierSelect.vue';
 import { zeroCostRequest } from '@/components/User/Restock/validation';
 import {
@@ -560,6 +616,23 @@ const router = useRouter();
 function viewReceipts(id: string) {
     void router.push({ name: 'Restocks', query: { purchaseOrder: id } });
 }
+/**
+ * The editor's trail (#173): Purchase orders › its reference (or "New").
+ * The list crumb is text, not a link: "Back to list" leaves the editor,
+ * through its unsaved-changes question.
+ */
+const breadcrumbs = computed<Breadcrumb[] | undefined>(() =>
+    editing.value
+        ? [
+              { label: 'Purchase orders' },
+              {
+                  label: current.value
+                      ? purchaseOrderReference(current.value._id)
+                      : 'New purchase order',
+              },
+          ]
+        : undefined,
+);
 const isOpen = computed(
     () =>
         !!current.value &&

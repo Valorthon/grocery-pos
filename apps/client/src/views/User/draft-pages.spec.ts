@@ -231,8 +231,9 @@ async function addDraft(c: PageCase, name: string) {
 const rows = () => [...document.body.querySelectorAll('tbody tr')];
 const rowTexts = () => rows().map((r) => r.textContent ?? '');
 
+/** Row actions are named after their row: "Delete draft Bread" (#173). */
 function rowAction(row: Element, label: 'Edit draft' | 'Delete draft') {
-    return row.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+    return row.querySelector<HTMLButtonElement>(`[aria-label^="${label} "]`)!;
 }
 
 const confirmText = () =>
@@ -365,6 +366,53 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
     it('says what to add while empty (#143)', async () => {
         await mountPage(c.page);
         expect(document.body.textContent).toContain(c.emptyState);
+    });
+
+    it('draws the shared draft table: tokens, right-aligned numbers, 44px actions (#173)', async () => {
+        await mountPage(c.page);
+        expect(document.querySelector('table')).toBeNull();
+        await addDraft(c, 'First');
+        const heads = [...document.querySelectorAll('thead th')];
+        for (const th of heads) expect(th.className).toContain('bg-paper');
+        const numeric = heads.filter((th) =>
+            /Quantity|Unit Cost|Total Cost|Change|Price/.test(
+                th.textContent ?? '',
+            ),
+        );
+        expect(numeric.length).toBeGreaterThan(0);
+        for (const th of numeric) expect(th.className).toContain('text-right');
+        // Each numeric column's cell is right-aligned tabular figures.
+        const cells = [...rows()[0].querySelectorAll('td')];
+        for (const th of numeric) {
+            const td = cells[heads.indexOf(th)];
+            expect(td.classList.contains('num')).toBe(true);
+            expect(td.classList.contains('text-right')).toBe(true);
+        }
+        for (const label of ['Edit draft', 'Delete draft'] as const) {
+            const action = rowAction(rows()[0], label);
+            expect(action.className).toContain('h-11');
+            expect(action.className).toContain('w-11');
+            expect(action.className).toContain('focus-ring');
+            expect(action.className).not.toContain('outline-none');
+            // Named after its row, so ten drafts are ten distinct buttons.
+            expect(action.getAttribute('aria-label')).toMatch(
+                new RegExp(`^${label} \\S`),
+            );
+        }
+        expect(document.querySelector('table')!.outerHTML).not.toMatch(
+            /slate-|bg-white|primary-/,
+        );
+    });
+
+    it('says when the search hides every draft (#173)', async () => {
+        await mountPage(c.page);
+        await addDraft(c, 'First');
+        const search = document.querySelector<HTMLInputElement>('input')!;
+        search.value = 'zzz-no-such-draft';
+        search.dispatchEvent(new Event('input'));
+        await flush();
+        expect(document.querySelector('table')).toBeNull();
+        expect(document.body.textContent).toContain('No matching drafts');
     });
 
     it('leaves without asking when there are no drafts', async () => {

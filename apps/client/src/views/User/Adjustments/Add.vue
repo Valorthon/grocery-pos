@@ -12,7 +12,7 @@
         </template>
         <PageCard>
             <div
-                class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
+                class="px-5 py-4 bg-paper border-b border-line grid grid-cols-1 md:grid-cols-4 gap-3"
             >
                 <BaseInput
                     v-model="search"
@@ -34,56 +34,61 @@
                 </div>
             </div>
 
-            <div
+            <EmptyState
                 v-if="filteredItems.length === 0"
-                class="py-16 text-center text-slate-400 text-sm"
+                :title="
+                    items.length
+                        ? 'No matching drafts'
+                        : 'No adjustment lines yet'
+                "
+                :hint="
+                    items.length
+                        ? 'No draft matches the search.'
+                        : 'No adjustments added yet. Click &quot;Adjust Stock&quot; to start.'
+                "
             >
-                No adjustments added yet. Click "Adjust Stock" to start.
-            </div>
-            <div v-else class="overflow-x-auto">
-                <table class="w-full text-left border-collapse text-sm">
+                <template #icon><SlidersHorizontal class="w-6 h-6" /></template>
+            </EmptyState>
+            <div v-else :class="draftTable.wrap">
+                <table :class="draftTable.table">
                     <thead>
-                        <tr
-                            class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
-                        >
-                            <th class="py-2.5 px-5">EAN</th>
-                            <th class="py-2.5 px-5">Name</th>
-                            <th class="py-2.5 px-5 text-right">Change</th>
-                            <th class="py-2.5 px-5">Reason</th>
-                            <th class="py-2.5 px-5 text-right">Actions</th>
+                        <tr :class="draftTable.headRow">
+                            <th scope="col" :class="draftTable.th">EAN</th>
+                            <th scope="col" :class="draftTable.th">Name</th>
+                            <th scope="col" :class="draftTable.thNum">
+                                Change
+                            </th>
+                            <th scope="col" :class="draftTable.th">Reason</th>
+                            <th scope="col" :class="draftTable.thNum">
+                                Actions
+                            </th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        <tr v-for="item in filteredItems" :key="item.draftId">
-                            <td class="py-3 px-5">{{ item.EAN }}</td>
-                            <td class="py-3 px-5 font-medium">
+                    <tbody :class="draftTable.body">
+                        <tr
+                            v-for="item in filteredItems"
+                            :key="item.draftId"
+                            :class="draftTable.row"
+                        >
+                            <td :class="[draftTable.td, 'num']">
+                                {{ item.EAN }}
+                            </td>
+                            <td :class="draftTable.tdName">
                                 {{ item.name }}
                             </td>
-                            <td class="py-3 px-5 text-right">
+                            <td :class="draftTable.tdNum">
                                 {{ formatQuantity(item.change, item.unit) }}
                             </td>
-                            <td class="py-3 px-5 text-slate-500">
+                            <td :class="draftTable.tdMuted">
                                 {{ item.reason }}
                             </td>
-                            <td class="py-3 px-5">
-                                <div class="flex justify-end gap-1">
-                                    <button
-                                        type="button"
-                                        class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50"
-                                        aria-label="Edit draft"
-                                        @click="editDraft(item)"
-                                    >
-                                        <Pencil class="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="p-1.5 rounded-lg text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                        aria-label="Delete draft"
-                                        @click="deleteDraft(item)"
-                                    >
-                                        <Trash2 class="w-4 h-4" />
-                                    </button>
-                                </div>
+                            <td :class="draftTable.tdActions">
+                                <DraftRowActions
+                                    :edit-label="`Edit draft ${item.name}`"
+                                    :delete-label="`Delete draft ${item.name}`"
+                                    @edit="editDraft(item)"
+                                    @delete="deleteDraft(item)"
+                                />
                             </td>
                         </tr>
                     </tbody>
@@ -109,7 +114,10 @@ import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 import { formatQuantity } from '@grocery-pos/contracts';
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Pencil, Plus, Save, Trash2 } from '@lucide/vue';
+import { Plus, Save, SlidersHorizontal, Trash2 } from '@lucide/vue';
+import DraftRowActions from '@/components/ui/DraftRowActions.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import { draftTable } from '@/components/ui/draft-table';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
