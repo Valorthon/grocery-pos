@@ -191,8 +191,11 @@ const routes: RouteRecordRaw[] = [
 
     {
         path: '/:pathMatch(.*)*',
+        // Unknown paths (#162). Known protected routes match above and
+        // still send a logged-out visitor to Login.
         name: 'NotFound',
-        redirect: { name: 'Login' },
+        component: () => import('@/views/NotFound.vue'),
+        meta: { title: 'Page not found' },
     },
 ];
 
@@ -268,6 +271,15 @@ router.beforeEach(async (to) => {
     }
 
     return true;
+});
+
+const BASE_TITLE = 'Grocery POS';
+
+// A route's `meta.title` names the tab; other routes keep the base title.
+router.afterEach((to) => {
+    const title = to.meta?.title;
+    document.title =
+        typeof title === 'string' ? `${title} | ${BASE_TITLE}` : BASE_TITLE;
 });
 
 export default router;
