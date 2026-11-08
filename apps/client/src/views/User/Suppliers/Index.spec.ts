@@ -39,6 +39,15 @@ async function exact(text: string) {
     button.click();
     await flush();
 }
+/** Answers the confirmation dialog. */
+async function confirmWith(text: string) {
+    const button = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button'),
+    ].find((b) => b.textContent?.trim() === text);
+    if (!button) throw new Error(text);
+    button.click();
+    await flush();
+}
 /** Opens Farm's action menu (#172) and picks one of its items. */
 async function rowAction(label: string) {
     const trigger = document.querySelector<HTMLButtonElement>(
@@ -163,7 +172,7 @@ describe('supplier administration', () => {
         await mount();
         await rowAction('Archive');
         expect(api.patch).not.toHaveBeenCalled();
-        await exact('Archive');
+        await confirmWith('Archive');
         expect(api.patch).toHaveBeenCalledWith(`/suppliers/${row._id}`, {
             isActive: false,
         });
@@ -174,7 +183,7 @@ describe('supplier administration', () => {
         });
         await mount();
         await rowAction('Restore');
-        await exact('Restore');
+        await confirmWith('Restore');
         expect(api.patch).toHaveBeenCalledWith(`/suppliers/${row._id}`, {
             isActive: true,
         });
@@ -183,7 +192,7 @@ describe('supplier administration', () => {
         api.delete.mockRejectedValue(new Error('Referenced'));
         await mount();
         await rowAction('Delete');
-        await exact('Delete');
+        await confirmWith('Delete');
         expect(api.delete).toHaveBeenCalledWith(`/suppliers/${row._id}`);
         expect(document.body.textContent).toContain('Farm');
         expect(useUIStore().toasts.length).toBeGreaterThan(0);
@@ -194,20 +203,20 @@ describe('supplier administration', () => {
         expect(document.querySelector('[role=alert]')).not.toBeNull();
         await exact('Retry');
         await rowAction('Delete');
-        await exact('Delete');
+        await confirmWith('Delete');
         expect(api.delete).toHaveBeenCalled();
     });
     it('reports archive errors and lets cancelled confirmation return to list', async () => {
         api.patch.mockRejectedValue(new Error('offline'));
         await mount();
         await rowAction('Archive');
-        await exact('Cancel');
+        await confirmWith('Cancel');
         await vi.waitFor(() =>
             expect(document.querySelector('[role=dialog]')).toBeNull(),
         );
         expect(api.patch).not.toHaveBeenCalled();
         await rowAction('Archive');
-        await exact('Archive');
+        await confirmWith('Archive');
         expect(useUIStore().toasts.length).toBeGreaterThan(0);
     });
     it('ignores an unfinished lookup after the page unmounts', async () => {

@@ -474,6 +474,10 @@ describe('columns and row menu (#172)', () => {
         trigger.click();
         await flush();
         expect(menuItems()).toEqual(['Stock history']);
+        await rowAction('Stock history');
+        expect(document.querySelector('[role=dialog]')?.textContent).toContain(
+            'Stock history — milk',
+        );
     });
     it('opens from the keyboard and gives the focus back to the trigger', async () => {
         useAuthStore().user = {
