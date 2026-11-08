@@ -2053,10 +2053,21 @@ describe('Sell below lg: sticky footer and tender sheet (#26)', () => {
         expect(footer()).not.toBeNull();
         expect(text('footer-total')).toContain('95.00');
         expect(isTouchSize(openButton())).toBe(true);
+        // #164: the footer's Tender is the citrus CTA while the panel is
+        // away, and its total is the display figure.
+        expect(openButton().className).toContain('bg-citrus-500');
+        expect(openButton().className).toContain('text-ink');
+        expect(
+            document.querySelector('[data-testid="footer-total"]')!.className,
+        ).toContain('font-display');
         // The panel waits under <body>, hidden, not beside the ticket.
         expect(document.querySelector('main')!.contains(panel())).toBe(false);
         expect(tenderRoot().parentElement).toBe(document.body);
         expect(sheetOpen()).toBe(false);
+        // #164: the only citrus CTA on the page is the footer's Tender;
+        // Tender & Charge waits in the hidden sheet.
+        const onPage = [...document.querySelectorAll('main .bg-citrus-500')];
+        expect(onPage).toEqual([openButton()]);
     });
 
     it('Tender opens the panel as a dialog; Escape closes it', async () => {
@@ -2365,6 +2376,15 @@ describe('Sell at lg (#26)', () => {
         const panel = document.querySelector('[data-testid="tender-panel"]')!;
         expect(document.querySelector('main')!.contains(panel)).toBe(true);
         expect(panel.hasAttribute('role')).toBe(false);
+    });
+
+    it('shows one citrus CTA, Tender & Charge (#164)', () => {
+        withMilkOnTicket();
+        mount();
+
+        const citrus = document.querySelectorAll('.bg-citrus-500');
+        expect(citrus).toHaveLength(1);
+        expect(citrus[0].textContent).toContain('Tender & Charge');
     });
 });
 

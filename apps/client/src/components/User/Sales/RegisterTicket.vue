@@ -1,24 +1,27 @@
 <template>
     <div
-        class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 flex flex-col justify-between"
+        class="flex-1 overflow-y-auto p-4 sm:p-6 bg-paper flex flex-col justify-between"
     >
         <div
-            class="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col h-full"
+            class="bg-surface rounded-card border border-line shadow-card overflow-hidden flex flex-col h-full"
         >
             <div
-                class="px-5 py-3.5 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between"
+                class="px-5 py-3 border-b border-line flex items-center justify-between gap-3"
             >
                 <div class="flex items-center gap-2">
-                    <ShoppingBag class="w-4 h-4 text-slate-700" />
+                    <ShoppingBag
+                        class="w-4 h-4 text-leaf-600"
+                        aria-hidden="true"
+                    />
                     <h2
-                        class="text-xs sm:text-sm font-extrabold text-slate-900 uppercase tracking-wide"
+                        class="font-display text-base sm:text-lg font-bold text-ink"
                     >
-                        Active Register Ticket
+                        Ticket
                     </h2>
                 </div>
                 <div class="flex items-center gap-3">
                     <span
-                        class="bg-slate-200/80 text-slate-800 text-xs font-bold px-2.5 py-0.5 rounded-full"
+                        class="num bg-leaf-50 text-leaf-700 border border-leaf-100 text-xs font-bold px-2.5 py-0.5 rounded-full"
                     >
                         {{ totalUnits }} Units
                     </span>
@@ -26,7 +29,7 @@
                         v-if="items.length"
                         type="button"
                         :disabled="locked"
-                        class="min-h-11 text-xs font-bold text-red-600 hover:text-red-800 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors focus-ring"
+                        class="min-h-11 text-xs font-bold text-danger-fg hover:bg-danger-bg px-3 py-2 rounded-control transition-colors focus-ring disabled:opacity-40"
                         @click="emit('void')"
                     >
                         Void Ticket
@@ -36,18 +39,18 @@
 
             <div
                 v-if="items.length === 0"
-                class="py-20 px-6 text-center text-slate-400 flex-1 flex flex-col items-center justify-center"
+                class="py-20 px-6 text-center text-muted flex-1 flex flex-col items-center justify-center"
             >
                 <div
-                    class="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 text-slate-600 flex items-center justify-center mb-3"
+                    class="w-14 h-14 rounded-card bg-leaf-50 border border-leaf-100 text-leaf-600 flex items-center justify-center mb-3"
                 >
-                    <Barcode class="w-7 h-7" />
+                    <Barcode class="w-7 h-7" aria-hidden="true" />
                 </div>
-                <h3 class="text-base font-bold text-slate-800">
+                <h3 class="font-display text-lg font-bold text-ink">
                     Register Ready
                 </h3>
                 <p
-                    class="text-xs sm:text-sm text-slate-500 max-w-sm mt-1 leading-relaxed"
+                    class="text-xs sm:text-sm text-muted max-w-sm mt-1 leading-relaxed"
                 >
                     Scan a barcode, enter a EAN code, or search an item above to
                     ring up products.
@@ -58,19 +61,18 @@
                 <table class="w-full text-left border-collapse">
                     <thead>
                         <tr
-                            class="border-b border-slate-200 bg-slate-50 text-slate-500 text-xs font-bold uppercase tracking-wider"
+                            class="border-b border-line text-muted text-xs font-bold uppercase tracking-wider"
                         >
-                            <th class="py-2.5 px-4 w-10 text-center">#</th>
-                            <th class="py-2.5 px-4">Item Description</th>
-                            <th class="py-2.5 px-4 font-mono">EAN</th>
-                            <th class="py-2.5 px-4 text-right">Price</th>
-                            <th class="py-2.5 px-4 text-center">Quantity</th>
-                            <th class="py-2.5 px-4 text-right">Line Total</th>
-                            <th class="py-2.5 px-4 text-center w-14">Void</th>
+                            <th class="py-2.5 pl-5 pr-3">Item</th>
+                            <th class="py-2.5 px-3 text-center">Quantity</th>
+                            <th class="py-2.5 px-3 text-right">Line Total</th>
+                            <th class="py-2.5 pl-3 pr-4 w-14">
+                                <span class="sr-only">Remove</span>
+                            </th>
                         </tr>
                     </thead>
                     <tbody
-                        class="divide-y divide-slate-100 text-slate-800 text-xs sm:text-sm"
+                        class="divide-y divide-line text-ink text-xs sm:text-sm"
                     >
                         <!--
                             A line is selected by scanning it or
@@ -96,48 +98,50 @@
                                     ? 'true'
                                     : undefined
                             "
-                            class="transition-colors outline-none focus:ring-2 focus:ring-inset focus:ring-slate-900/30"
+                            class="transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-leaf-500"
                             :class="
+                                /*
+                                 * The selected line (#164): a leaf tint and
+                                 * a leaf bar on its leading edge.
+                                 */
                                 selectedLine === item.product
-                                    ? 'bg-sky-50'
-                                    : 'hover:bg-slate-50/80'
+                                    ? 'bg-leaf-50 shadow-[inset_4px_0_0_var(--color-leaf-600)]'
+                                    : 'hover:bg-paper'
                             "
                             @click="emit('line-click', item.product, $event)"
                             @focusin="emit('select', item.product)"
                             @keydown.up.self.prevent="emit('move', -1)"
                             @keydown.down.self.prevent="emit('move', 1)"
                         >
-                            <td
-                                class="py-3 px-4 text-center font-bold text-slate-400"
-                            >
-                                {{ index + 1 }}
-                            </td>
-                            <td class="py-3 px-4">
-                                <div class="font-bold text-slate-900 text-sm">
+                            <td class="py-3 pl-5 pr-3" data-testid="line-item">
+                                <div
+                                    class="font-bold text-ink text-sm leading-snug"
+                                >
                                     {{ item.name }}
                                 </div>
-                            </td>
-                            <td
-                                class="py-3 px-4 font-mono text-xs text-slate-500"
-                            >
-                                {{ item.EAN }}
-                            </td>
-                            <td
-                                class="py-3 px-4 text-right font-medium text-slate-600"
-                            >
-                                {{ currency(item.unitPrice) }}/{{
-                                    unitLabel(item.unit)
-                                }}
-                            </td>
-                            <td class="py-3 px-4 text-center">
                                 <div
-                                    class="inline-flex items-center bg-white border border-slate-300 rounded-lg p-0.5 shadow-2xs"
+                                    class="mt-0.5 text-xs text-muted flex flex-wrap gap-x-2"
+                                    data-testid="line-detail"
+                                >
+                                    <span class="num"
+                                        >{{ currency(item.unitPrice) }}/{{
+                                            unitLabel(item.unit)
+                                        }}</span
+                                    >
+                                    <span class="font-mono">{{
+                                        item.EAN
+                                    }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-3 text-center">
+                                <div
+                                    class="inline-flex items-center bg-surface border border-line-strong rounded-control p-0.5"
                                 >
                                     <button
                                         type="button"
                                         :disabled="locked"
                                         :aria-label="`One less ${item.name}`"
-                                        class="w-11 h-11 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
+                                        class="w-11 h-11 rounded flex items-center justify-center text-muted hover:bg-paper hover:text-ink transition-colors focus-ring disabled:opacity-40"
                                         @click="emit('decrement', item)"
                                     >
                                         <Minus
@@ -181,10 +185,10 @@
                                                 : undefined
                                         "
                                         data-testid="line-quantity"
-                                        class="w-14 h-11 text-center font-bold text-slate-900 text-sm rounded border focus:outline-none focus:border-slate-800"
+                                        class="num w-14 h-11 text-center font-bold text-ink text-sm rounded border focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
                                         :class="
                                             qtyErrors[item.product]
-                                                ? 'border-red-400 bg-red-50'
+                                                ? 'border-danger-border bg-danger-bg'
                                                 : 'border-transparent'
                                         "
                                         @focus="emit('select', item.product)"
@@ -209,7 +213,7 @@
                                         type="button"
                                         :disabled="locked"
                                         :aria-label="`One more ${item.name}`"
-                                        class="w-11 h-11 rounded flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors focus-ring"
+                                        class="w-11 h-11 rounded flex items-center justify-center text-muted hover:bg-paper hover:text-ink transition-colors focus-ring disabled:opacity-40"
                                         @click="emit('increment', item)"
                                     >
                                         <Plus
@@ -222,13 +226,14 @@
                                     v-if="qtyErrors[item.product]"
                                     :id="`qty-error-${index}`"
                                     data-testid="line-quantity-error"
-                                    class="mt-1 text-xs font-semibold text-red-600"
+                                    class="mt-1 text-xs font-semibold text-danger-fg"
                                 >
                                     {{ qtyErrors[item.product] }}
                                 </p>
                             </td>
                             <td
-                                class="py-3 px-4 text-right font-bold text-slate-900"
+                                class="num py-3 px-3 text-right font-bold text-ink text-sm whitespace-nowrap"
+                                data-testid="line-total"
                             >
                                 {{
                                     currency(
@@ -240,7 +245,7 @@
                                     )
                                 }}
                             </td>
-                            <td class="py-3 px-4 text-center">
+                            <td class="py-3 pl-3 pr-4 text-center">
                                 <button
                                     type="button"
                                     :disabled="locked"
@@ -248,7 +253,7 @@
                                     :aria-keyshortcuts="
                                         REGISTER_KEYS.REMOVE_LINE
                                     "
-                                    class="min-h-11 min-w-11 inline-flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus-ring"
+                                    class="min-h-11 min-w-11 inline-flex items-center justify-center text-muted hover:text-danger-fg hover:bg-danger-bg rounded-control transition-colors focus-ring disabled:opacity-40"
                                     @click="emit('remove', item.product)"
                                 >
                                     <Trash2
@@ -270,7 +275,7 @@
                 <div
                     v-if="undo"
                     data-testid="undo-bar"
-                    class="m-3 p-3 rounded-xl bg-slate-900 text-white flex items-center justify-between gap-3 text-sm font-semibold"
+                    class="m-3 p-3 rounded-card bg-ink text-white flex items-center justify-between gap-3 text-sm font-semibold"
                 >
                     <span
                         >Removed {{ undo.item.quantity }}×
@@ -279,7 +284,7 @@
                     <button
                         type="button"
                         :disabled="locked"
-                        class="min-h-11 px-4 py-2 rounded-lg bg-white text-slate-900 text-sm font-extrabold hover:bg-slate-100 focus-ring"
+                        class="min-h-11 px-4 py-2 rounded-control bg-surface text-ink text-sm font-bold hover:bg-paper focus-ring-inverse"
                         @click="emit('undo')"
                     >
                         Undo
@@ -292,7 +297,8 @@
 
 <script setup lang="ts">
 /**
- * The register's ticket table and Undo bar (#163). Selection, typed
+ * The register's ticket table and Undo bar (#163). Each line shows its
+ * name over a muted price/unit and EAN line, with tabular totals (#164). Selection, typed
  * quantities and removal live in Sell.vue; this renders them and reports
  * the cashier's actions.
  */

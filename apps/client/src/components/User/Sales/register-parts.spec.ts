@@ -251,7 +251,7 @@ it('tender panel: discount and charge actions, fields exposed', async () => {
     expect(panel.value?.reasonInput).toBe(q('#discount-reason'));
     expect(panel.value?.fixedInput).toBe(q('#discount-amount'));
     expect(panel.value?.discountOptionsEl).toBe(q('#discount-options'));
-    expect(q('#discount-reason').className).toContain('border-red-300');
+    expect(q('#discount-reason').className).toContain('border-danger-border');
 
     const reasonInput = q<HTMLInputElement>('#discount-reason');
     reasonInput.value = 'loyalty';
@@ -272,4 +272,123 @@ it('tender panel: discount and charge actions, fields exposed', async () => {
         [PaymentType.CASH],
         [PaymentType.SPLIT],
     ]);
+});
+
+const classesOf = (el: Element) => el.className.split(/\s+/);
+
+it('ticket design (#164): two-line item cell, no EAN or # column, tabular totals, marked selection', () => {
+    const lines = [
+        {
+            product: 'p1',
+            EAN: '2000000000015',
+            name: 'milk',
+            unitPrice: 9500,
+            quantity: 2,
+        },
+        {
+            product: 'p2',
+            EAN: '2000000000022',
+            name: 'mints',
+            unitPrice: 2500,
+            quantity: 1,
+        },
+    ];
+    mount(() =>
+        h(RegisterTicket, {
+            items: lines,
+            totalUnits: 3,
+            locked: false,
+            selectedLine: 'p1',
+            qtyDrafts: {},
+            qtyErrors: {},
+            undo: null,
+            setLineEl: () => {},
+            setQtyEl: () => {},
+        }),
+    );
+    const headers = [...document.querySelectorAll('th')].map((th) =>
+        th.textContent?.trim(),
+    );
+    expect(headers).toEqual(['Item', 'Quantity', 'Line Total', 'Remove']);
+
+    const detail = q(
+        '[data-testid="ticket-line-0"] [data-testid="line-detail"]',
+    );
+    expect(classesOf(detail)).toContain('text-muted');
+    expect(detail.textContent).toContain('2000000000015');
+    expect(detail.textContent).toContain('₱95.00/');
+
+    const total = q('[data-testid="ticket-line-0"] [data-testid="line-total"]');
+    expect(classesOf(total)).toEqual(
+        expect.arrayContaining(['num', 'text-right']),
+    );
+    expect(total.textContent).toContain('₱190.00');
+
+    expect(classesOf(q('[data-testid="ticket-line-0"]'))).toContain(
+        'bg-leaf-50',
+    );
+    expect(classesOf(q('[data-testid="ticket-line-1"]'))).not.toContain(
+        'bg-leaf-50',
+    );
+});
+
+it('tender panel design (#164): display total and one citrus CTA with ink text', () => {
+    mount(() =>
+        h(RegisterTenderPanel, {
+            isLarge: true,
+            locked: false,
+            offline: false,
+            showDiscount: false,
+            discountOptions: [0, 5],
+            discountChoice: 0,
+            discountLabel: '',
+            discountAmount: 0,
+            fixedErrorShown: '',
+            needsReason: false,
+            totalUnits: 1,
+            subtotal: 9500,
+            total: 9500,
+            canCheckout: true,
+            fixedText: '',
+            discountReason: '',
+        }),
+    );
+    expect(classesOf(q('[data-testid="amount-due"]'))).toEqual(
+        expect.arrayContaining(['font-display', 'num', 'font-[800]']),
+    );
+    const citrus = [...document.querySelectorAll('button')].filter((b) =>
+        classesOf(b).includes('bg-citrus-500'),
+    );
+    expect(citrus).toEqual([q('[data-testid="charge"]')]);
+    expect(classesOf(citrus[0])).toContain('text-ink');
+    expect(classesOf(citrus[0])).not.toContain('text-white');
+    // The discount toggle stays a quiet secondary row.
+    expect(classesOf(q('[aria-controls="discount-options"]'))).toContain(
+        'text-muted',
+    );
+});
+
+it('scan box design (#164): prominent field with a visible focus state', () => {
+    mount(() =>
+        h(RegisterScanBox, {
+            locked: false,
+            qtyOptions: [1, 2],
+            matchCount: 0,
+            highlighted: -1,
+            nextScanQty: 1,
+            scanFeedback: null,
+            modelValue: '',
+            multiplier: 1,
+        }),
+    );
+    const c = classesOf(q('[data-testid="scan-input"]'));
+    expect(c).toEqual(
+        expect.arrayContaining([
+            'min-h-14',
+            'border-2',
+            'focus:border-leaf-600',
+            'focus:outline-3',
+        ]),
+    );
+    expect(c).not.toContain('focus:outline-none');
 });

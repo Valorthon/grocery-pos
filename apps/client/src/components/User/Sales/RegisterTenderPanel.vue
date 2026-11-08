@@ -1,15 +1,11 @@
 <template>
     <div v-if="!isLarge" class="flex items-center justify-between px-6 pt-4">
-        <h2
-            class="text-base font-extrabold text-slate-900 uppercase tracking-wide"
-        >
-            Tender
-        </h2>
+        <h2 class="font-display text-lg font-bold text-ink">Tender</h2>
         <button
             type="button"
             aria-label="Back to ticket"
             data-testid="close-tender"
-            class="min-h-11 min-w-11 flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors focus-ring"
+            class="min-h-11 min-w-11 flex items-center justify-center rounded-control text-muted hover:text-ink hover:bg-paper transition-colors focus-ring"
             @click="emit('close')"
         >
             <X class="w-5 h-5" aria-hidden="true" />
@@ -19,14 +15,14 @@
         <div class="flex items-center justify-between text-xs sm:text-sm">
             <button
                 type="button"
-                class="min-h-11 text-slate-600 font-bold hover:text-slate-900 flex items-center gap-1.5 underline-offset-2 hover:underline focus-ring rounded"
+                class="min-h-11 text-muted font-semibold hover:text-ink flex items-center gap-1.5 underline-offset-2 hover:underline focus-ring rounded disabled:opacity-40"
                 :aria-expanded="showDiscount"
                 aria-controls="discount-options"
                 :aria-keyshortcuts="REGISTER_KEYS.DISCOUNT"
                 :disabled="offline"
                 @click="emit('toggle-discount')"
             >
-                <Percent class="w-3.5 h-3.5 text-slate-500" />
+                <Percent class="w-3.5 h-3.5" aria-hidden="true" />
                 {{
                     discountLabel
                         ? `Discount Applied (${discountLabel})`
@@ -36,7 +32,7 @@
             </button>
             <span
                 v-if="discountAmount > 0"
-                class="text-emerald-600 font-extrabold text-sm"
+                class="num text-success-fg font-bold text-sm"
             >
                 -{{ currency(discountAmount) }}
             </span>
@@ -48,20 +44,20 @@
             ref="discountOptionsEl"
             role="group"
             aria-label="Discount"
-            class="flex flex-wrap items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-200"
+            class="flex flex-wrap items-center gap-2 p-2 bg-paper rounded-card border border-line"
         >
-            <span class="text-xs font-bold text-slate-500">Discount:</span>
+            <span class="text-xs font-bold text-muted">Discount:</span>
             <button
                 v-for="d in discountOptions"
                 :key="d"
                 type="button"
                 :disabled="locked"
                 :aria-pressed="discountChoice === d"
-                class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                class="min-h-11 min-w-11 px-3 py-2 rounded-control text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
                 :class="
                     discountChoice === d
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-leaf-600 text-white border border-leaf-600'
+                        : 'bg-surface border border-line-strong text-ink hover:bg-paper'
                 "
                 @click="emit('apply-discount', d)"
             >
@@ -72,11 +68,11 @@
                 type="button"
                 :disabled="locked"
                 :aria-pressed="discountChoice === DiscountType.FIXED"
-                class="min-h-11 min-w-11 px-3 py-2 rounded-lg text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
+                class="min-h-11 min-w-11 px-3 py-2 rounded-control text-sm font-bold transition-colors active:scale-[0.98] focus-ring"
                 :class="
                     discountChoice === DiscountType.FIXED
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-leaf-600 text-white border border-leaf-600'
+                        : 'bg-surface border border-line-strong text-ink hover:bg-paper'
                 "
                 @click="emit('apply-discount', DiscountType.FIXED)"
             >
@@ -87,7 +83,7 @@
         <div v-if="discountChoice === DiscountType.FIXED" class="space-y-1">
             <label
                 for="discount-amount"
-                class="block text-xs font-bold text-slate-500"
+                class="block text-xs font-bold text-muted"
                 >Discount amount (₱)</label
             >
             <input
@@ -103,14 +99,18 @@
                 :aria-describedby="
                     fixedErrorShown ? 'discount-amount-error' : undefined
                 "
-                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
-                :class="fixedErrorShown ? 'border-red-300' : 'border-slate-300'"
+                class="w-full min-h-11 px-3 py-2 rounded-control border bg-surface text-sm font-semibold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
+                :class="
+                    fixedErrorShown
+                        ? 'border-danger-border'
+                        : 'border-line-strong'
+                "
             />
             <p
                 v-if="fixedErrorShown"
                 id="discount-amount-error"
                 data-testid="discount-amount-error"
-                class="text-xs font-semibold text-red-600"
+                class="text-xs font-semibold text-danger-fg"
             >
                 {{ fixedErrorShown }}
             </p>
@@ -119,7 +119,7 @@
         <div v-if="discountChoice !== 0" class="space-y-1">
             <label
                 for="discount-reason"
-                class="block text-xs font-bold text-slate-500"
+                class="block text-xs font-bold text-muted"
                 >Discount reason (required)</label
             >
             <input
@@ -130,45 +130,51 @@
                 type="text"
                 :maxlength="STRING_LIMITS.REASON"
                 placeholder="e.g. loyalty card, damaged packaging"
-                class="w-full min-h-11 px-3 py-2 rounded-xl border bg-white text-sm font-semibold focus:outline-none focus:border-slate-800"
-                :class="needsReason ? 'border-red-300' : 'border-slate-300'"
+                class="w-full min-h-11 px-3 py-2 rounded-control border bg-surface text-sm font-semibold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
+                :class="
+                    needsReason ? 'border-danger-border' : 'border-line-strong'
+                "
             />
         </div>
 
-        <div class="space-y-2.5 text-slate-600 text-xs sm:text-sm pt-1">
+        <div class="space-y-2.5 text-muted text-xs sm:text-sm pt-1">
             <div class="flex justify-between font-medium">
-                <span class="text-slate-500"
-                    >Subtotal ({{ countOf(totalUnits, 'Item') }})</span
-                >
-                <span class="text-slate-900 font-bold">{{
+                <span>Subtotal ({{ countOf(totalUnits, 'Item') }})</span>
+                <span class="num text-ink font-bold">{{
                     currency(subtotal)
                 }}</span>
             </div>
             <div
                 v-if="discountAmount > 0"
-                class="flex justify-between text-emerald-600 font-semibold"
+                class="flex justify-between text-success-fg font-semibold"
             >
                 <span>Discount ({{ discountLabel }})</span>
-                <span>-{{ currency(discountAmount) }}</span>
+                <span class="num">-{{ currency(discountAmount) }}</span>
             </div>
         </div>
 
-        <div
-            class="p-5 rounded-2xl bg-slate-50 border border-slate-200 shadow-2xs mt-3"
-        >
+        <div class="p-5 rounded-card bg-leaf-50 border border-leaf-100 mt-3">
             <span
-                class="text-xs font-black uppercase tracking-wider text-slate-500"
+                class="text-xs font-bold uppercase tracking-wider text-leaf-700"
             >
                 Amount Due
             </span>
-            <div class="flex items-baseline justify-between mt-1.5">
+            <div
+                class="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mt-1.5"
+            >
+                <!--
+                    The big figure in the display face (#164, #175). It wraps
+                    under the badge rather than overflow; up to
+                    ₱10,000,000.00 fits the 320px sheet and the 400px panel.
+                -->
                 <span
-                    class="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight"
+                    data-testid="amount-due"
+                    class="min-w-0 font-display num text-2xl min-[360px]:text-3xl sm:text-4xl font-[800] text-ink tracking-tight"
                 >
                     {{ currency(total) }}
                 </span>
                 <span
-                    class="text-xs font-bold text-slate-700 bg-white px-2.5 py-1 rounded-md border border-slate-200 shadow-2xs"
+                    class="num text-xs font-bold text-leaf-700 bg-surface px-2.5 py-1 rounded-control border border-leaf-100"
                 >
                     {{ totalUnits }} Units
                 </span>
@@ -179,25 +185,26 @@
     <div class="p-6 pt-0 space-y-3">
         <button
             type="button"
-            class="w-full py-3.5 px-5 bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-extrabold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-xs transition-all focus-ring"
+            data-testid="charge"
+            class="w-full min-h-14 py-3.5 px-5 bg-citrus-500 hover:bg-citrus-400 active:bg-citrus-600 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed text-ink rounded-card font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-card transition-all focus-ring"
             :disabled="!canCheckout || locked"
             :aria-keyshortcuts="REGISTER_KEYS.CHARGE"
             @click="emit('checkout', PaymentType.CASH)"
         >
-            <CreditCard class="w-5 h-5" />
-            <span>Tender & Charge ({{ currency(total) }})</span>
-            <ArrowRight class="w-4 h-4 ml-1" />
-            <KeyHint tone="dark">{{ REGISTER_KEYS.CHARGE }}</KeyHint>
+            <CreditCard class="w-5 h-5" aria-hidden="true" />
+            <span class="num">Tender & Charge ({{ currency(total) }})</span>
+            <ArrowRight class="w-4 h-4 ml-1" aria-hidden="true" />
+            <KeyHint>{{ REGISTER_KEYS.CHARGE }}</KeyHint>
         </button>
 
         <div class="grid grid-cols-1 gap-2">
             <button
                 type="button"
-                class="min-h-11 py-2.5 px-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98] focus-ring"
+                class="min-h-11 py-2.5 px-2 bg-surface hover:bg-paper border border-line-strong rounded-control text-xs font-bold text-ink disabled:opacity-40 flex items-center justify-center gap-1 transition-colors active:scale-[0.98] focus-ring"
                 :disabled="!canCheckout || locked"
                 @click="emit('checkout', PaymentType.SPLIT)"
             >
-                <Split class="w-3.5 h-3.5 text-emerald-600" />
+                <Split class="w-3.5 h-3.5 text-leaf-600" aria-hidden="true" />
                 <span>Split Payment</span>
             </button>
         </div>

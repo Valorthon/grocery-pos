@@ -110,6 +110,7 @@ describe('theme tokens (#153)', () => {
         ['leaf-600', 'paper'],
         ['leaf-100', 'leaf-900'],
         ['ink', 'citrus-500'],
+        ['muted', 'leaf-50'],
         ['citrus-700', 'paper'],
         ['surface', 'danger-solid'],
         ['success-fg', 'success-bg'],
