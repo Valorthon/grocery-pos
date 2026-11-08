@@ -87,11 +87,11 @@
                     </div>
 
                     <div
-                        class="flex items-center justify-between gap-0.5 bg-surface border rounded-control p-0.5 shadow-2xs focus-within:outline-2 focus-within:outline-leaf-500"
+                        class="flex items-center justify-between gap-0.5 bg-surface border rounded-control p-0.5 shadow-2xs focus-within:outline-2"
                         :class="
                             errors[d.id]
-                                ? 'border-danger-border'
-                                : 'border-line-strong'
+                                ? 'border-danger-border focus-within:outline-danger-fg'
+                                : 'border-line-strong focus-within:outline-leaf-500'
                         "
                     >
                         <button

@@ -28,7 +28,7 @@
             </div>
             <div
                 v-if="report.closedByAdmin"
-                class="mt-2 rounded-md bg-warning-bg border border-warning-border px-2 py-1 text-xs font-sans font-bold text-warning-fg"
+                class="mt-2 rounded-control bg-warning-bg border border-warning-border px-2 py-1 text-xs font-sans font-bold text-warning-fg"
                 data-testid="zread-closed-by-admin"
             >
                 Closed by admin {{ report.closedByName }}

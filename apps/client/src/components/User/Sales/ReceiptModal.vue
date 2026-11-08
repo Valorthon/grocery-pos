@@ -26,9 +26,12 @@
         >
             {{ notice }}
         </div>
-        <div class="p-4 sm:p-5 overflow-y-auto bg-leaf-50 num text-xs text-ink">
+        <div
+            class="p-4 sm:p-5 overflow-y-auto bg-paper num text-xs text-ink drop-shadow-sm"
+        >
             <div
-                class="bg-surface p-5 rounded-control border border-line shadow-2xs space-y-4"
+                class="receipt-paper max-w-xs mx-auto bg-surface px-5 py-7 space-y-4"
+                data-testid="receipt-paper"
             >
                 <div class="text-center space-y-1">
                     <div

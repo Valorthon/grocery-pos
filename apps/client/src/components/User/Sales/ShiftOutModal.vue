@@ -49,11 +49,11 @@
         <BillCountInput v-model="billCounts" v-model:invalid="countsInvalid" />
 
         <div
-            class="mt-4 bg-leaf-800 text-white rounded-control p-4 flex items-center justify-between"
+            class="mt-4 bg-leaf-800 text-white rounded-control p-4 flex items-center justify-between gap-3"
         >
-            <div>
+            <div class="min-w-0">
                 <div
-                    class="text-xs text-muted font-bold uppercase tracking-wider"
+                    class="text-xs text-leaf-200 font-bold uppercase tracking-wider"
                 >
                     Total Physical Counted Cash ({{ totalPieces }} pieces)
                 </div>
@@ -64,9 +64,9 @@
                     {{ currency(countedCash) }}
                 </div>
             </div>
-            <div class="text-right">
-                <span class="text-xs text-muted">Cashier:</span>
-                <div class="text-xs font-bold text-leaf-100">
+            <div class="text-right min-w-0">
+                <span class="text-xs text-leaf-200">Cashier:</span>
+                <div class="text-xs font-bold text-leaf-100 break-all">
                     {{ shiftStore.activeShift?.cashierName }}
                 </div>
             </div>

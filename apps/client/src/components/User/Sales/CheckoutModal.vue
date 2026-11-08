@@ -40,7 +40,7 @@
                 <div class="grid grid-cols-3 gap-2">
                     <button
                         type="button"
-                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98] focus-ring"
                         :class="
                             method === PaymentType.CASH
                                 ? 'bg-leaf-800 text-white border-ink shadow-2xs'
@@ -54,7 +54,7 @@
 
                     <button
                         type="button"
-                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98] focus-ring"
                         :class="
                             method === PaymentType.GCASH
                                 ? 'bg-leaf-800 text-white border-ink shadow-2xs'
@@ -69,7 +69,7 @@
 
                     <button
                         type="button"
-                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98]"
+                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98] focus-ring"
                         :class="
                             method === PaymentType.SPLIT
                                 ? 'bg-leaf-800 text-white border-ink shadow-2xs'
