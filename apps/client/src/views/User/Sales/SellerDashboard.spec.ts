@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { DEFAULT_TERMINAL, ShiftStatus } from '@grocery-pos/contracts';
+import { storePresentation } from '@/settings/presentation';
 import { useShiftStore } from '@/stores/shift';
 import SellerDashboard from './SellerDashboard.vue';
 import { formatShiftDuration } from './shift-duration';
@@ -114,8 +115,13 @@ describe('SellerDashboard shift hero (#167)', () => {
     });
 
     it('has one h1 and an open shift with opened-at, duration and the register as the main action', async () => {
-        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.useFakeTimers({
+            toFake: ['Date', 'setInterval', 'clearInterval'],
+        });
         vi.setSystemTime(new Date('2026-09-25T02:05:30.000Z'));
+        // A store zone unlike any dev machine's: proves store, not browser, time.
+        const saved = storePresentation.value;
+        storePresentation.value = { ...saved, timezone: 'Pacific/Kiritimati' };
         try {
             const shift = useShiftStore();
             shift.activeShift = openShift;
@@ -127,7 +133,7 @@ describe('SellerDashboard shift hero (#167)', () => {
             expect(
                 document.querySelector('[data-testid="shift-opened-at"]')!
                     .textContent,
-            ).toContain('8:00');
+            ).toContain('2:00');
             expect(
                 document
                     .querySelector('[data-testid="shift-duration"]')!
@@ -147,9 +153,51 @@ describe('SellerDashboard shift hero (#167)', () => {
             expect(push).toHaveBeenCalledWith({ name: 'Sell' });
             end.click();
             expect(shift.shiftOutOpen).toBe(true);
+
+            vi.advanceTimersByTime(60_000);
+            await flush();
+            expect(
+                document
+                    .querySelector('[data-testid="shift-duration"]')!
+                    .textContent!.trim(),
+            ).toBe('2h 06m');
+            app!.unmount();
+            app = null;
+            expect(vi.getTimerCount()).toBe(0);
         } finally {
+            storePresentation.value = saved;
             vi.useRealTimers();
         }
+    });
+
+    it('shows an inline error with Retry when the shift check fails, keeping Last Z-read', async () => {
+        const shift = useShiftStore();
+        api.get.mockRejectedValueOnce(new Error('503'));
+        await expect(shift.fetchCurrent()).rejects.toThrow();
+        expect(shift.loadError).toBe(true);
+        mount();
+        await flush();
+        expect(
+            document.querySelector('[data-testid="shift-load-error"]'),
+        ).not.toBeNull();
+        expect(
+            document.querySelector('[data-testid="shift-loading"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector('[data-testid="last-shift-report"]'),
+        ).not.toBeNull();
+
+        api.get.mockResolvedValueOnce({ data: { shift: openShift } });
+        document
+            .querySelector<HTMLButtonElement>('[data-testid="shift-retry"]')!
+            .click();
+        await flush();
+        expect(api.get).toHaveBeenLastCalledWith('/shifts/current');
+        expect(shift.loadError).toBe(false);
+        expect(
+            document.querySelector('[data-testid="shift-load-error"]'),
+        ).toBeNull();
+        expect(document.body.textContent).toContain('Shift open');
     });
 
     it('offers Start shift when no shift is open', async () => {

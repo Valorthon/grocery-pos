@@ -5,10 +5,32 @@
                 class="bg-surface rounded-card border border-line shadow-card p-5 sm:p-6"
                 aria-labelledby="shift-hero-heading"
                 data-testid="shift-hero"
-                :aria-busy="!shiftStore.loaded"
+                :aria-busy="!shiftStore.loaded && !shiftStore.loadError"
             >
                 <div
-                    v-if="!shiftStore.loaded"
+                    v-if="!shiftStore.loaded && shiftStore.loadError"
+                    class="flex flex-wrap items-center gap-3"
+                    data-testid="shift-load-error"
+                    role="alert"
+                >
+                    <h2
+                        id="shift-hero-heading"
+                        class="font-display text-lg font-bold text-danger-fg"
+                    >
+                        Could not check your shift.
+                    </h2>
+                    <BaseButton
+                        variant="outline"
+                        class="min-h-11 min-w-11"
+                        data-testid="shift-retry"
+                        :loading="retrying"
+                        @click="retry"
+                    >
+                        Retry
+                    </BaseButton>
+                </div>
+                <div
+                    v-else-if="!shiftStore.loaded"
                     class="flex items-center gap-3 text-muted"
                     data-testid="shift-loading"
                     role="status"
@@ -78,8 +100,10 @@
                             </p>
                         </div>
                     </div>
+                </template>
 
-                    <div class="mt-5 flex flex-wrap gap-3">
+                <div class="mt-5 flex flex-wrap gap-3">
+                    <template v-if="shiftStore.loaded">
                         <BaseButton
                             v-if="shift"
                             variant="accent"
@@ -119,21 +143,21 @@
                             </template>
                             End shift
                         </BaseButton>
-                        <BaseButton
-                            variant="outline"
-                            size="lg"
-                            class="min-h-11 min-w-11"
-                            data-testid="last-shift-report"
-                            :loading="loadingReport"
-                            @click="showLastReport"
-                        >
-                            <template #icon>
-                                <FileText class="w-5 h-5" />
-                            </template>
-                            Last Z-read
-                        </BaseButton>
-                    </div>
-                </template>
+                    </template>
+                    <BaseButton
+                        variant="outline"
+                        size="lg"
+                        class="min-h-11 min-w-11"
+                        data-testid="last-shift-report"
+                        :loading="loadingReport"
+                        @click="showLastReport"
+                    >
+                        <template #icon>
+                            <FileText class="w-5 h-5" />
+                        </template>
+                        Last Z-read
+                    </BaseButton>
+                </div>
             </section>
         </PageFrame>
     </div>
@@ -167,6 +191,18 @@ const uiStore = useUIStore();
 const userName = computed(() => authStore.user?.username ?? 'seller');
 const shift = computed(() => shiftStore.activeShift);
 const loadingReport = ref(false);
+const retrying = ref(false);
+
+async function retry() {
+    retrying.value = true;
+    try {
+        await shiftStore.fetchCurrent();
+    } catch {
+        // loadError stays set; the inline error keeps its Retry.
+    } finally {
+        retrying.value = false;
+    }
+}
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | undefined;

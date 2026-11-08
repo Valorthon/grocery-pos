@@ -72,6 +72,8 @@ export const useShiftStore = defineStore('shift', () => {
     const activeShift = ref<CurrentShiftView | null>(null);
     /** True once the server has answered whether a shift is open. */
     const loaded = ref(false);
+    /** True when the last shift check failed and nothing is known (#167). */
+    const loadError = ref(false);
 
     const shiftInOpen = ref(false);
     const drawerAction = ref<CashierDrawerMovement | null>(null);
@@ -87,6 +89,7 @@ export const useShiftStore = defineStore('shift', () => {
     function setShift(shift: CurrentShiftView | null) {
         activeShift.value = shift;
         loaded.value = true;
+        loadError.value = false;
     }
 
     /** Reads the caller's open shift from the server. */
@@ -100,7 +103,10 @@ export const useShiftStore = defineStore('shift', () => {
             if (gen === generation && offline.ready && offline.state?.lease) {
                 offline.setConnection(false);
                 setShift(offline.state.lease.shift);
-            } else throw cause;
+            } else {
+                if (gen === generation) loadError.value = true;
+                throw cause;
+            }
         }
         return activeShift.value;
     }
@@ -238,6 +244,7 @@ export const useShiftStore = defineStore('shift', () => {
         generation++;
         activeShift.value = null;
         loaded.value = false;
+        loadError.value = false;
         shiftInOpen.value = false;
         drawerAction.value = null;
         shiftOutOpen.value = false;
@@ -256,6 +263,7 @@ export const useShiftStore = defineStore('shift', () => {
     return {
         activeShift,
         loaded,
+        loadError,
         shiftInOpen,
         drawerAction,
         shiftOutOpen,
