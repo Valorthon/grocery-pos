@@ -172,3 +172,32 @@ it('drops late results when the owner changes or component unmounts', async () =
     app?.unmount();
     app = undefined;
 });
+it('lists movements in a BaseTable with right-aligned quantities, an empty state and table Retry (#170)', async () => {
+    await mount();
+    const heads = [...document.querySelectorAll('thead th')];
+    const change = heads.find((th) => th.textContent?.trim() === 'Change')!;
+    const balance = heads.find(
+        (th) => th.textContent?.trim() === 'Balance after',
+    )!;
+    expect(change.className).toContain('text-right num');
+    expect(balance.className).toContain('text-right num');
+    app?.unmount();
+    api.get.mockImplementation(async (url: string) =>
+        url.endsWith('/integrity')
+            ? { data: { stock: 0, movementTotal: 0, matches: true } }
+            : { data: { data: [], totalItems: 0 } },
+    );
+    document.body.innerHTML = '';
+    await mount();
+    expect(document.body.textContent).toContain('No matching stock movements');
+    app?.unmount();
+    document.body.innerHTML = '';
+    api.get.mockRejectedValue(new Error('down'));
+    await mount();
+    expect(
+        document.querySelector('[data-testid="table-error"]'),
+    ).not.toBeNull();
+    expect(document.body.textContent).not.toContain(
+        'No matching stock movements',
+    );
+});

@@ -170,7 +170,7 @@
                             class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500"
                         >
                             <th class="py-2.5 px-4">Product</th>
-                            <th class="py-2.5 px-4">Qty</th>
+                            <th class="py-2.5 px-4 text-right">Qty</th>
                             <th class="py-2.5 px-4 text-right">Unit Price</th>
                             <th class="py-2.5 px-4 text-right">Total</th>
                         </tr>
@@ -204,17 +204,17 @@
                             <td class="py-3 px-4">
                                 {{ d.product?.name ?? 'N/A' }}
                             </td>
-                            <td class="py-3 px-4">
+                            <td class="py-3 px-4 text-right num">
                                 {{
                                     d.unit
                                         ? formatQuantity(d.quantity, d.unit)
                                         : d.quantity
                                 }}
                             </td>
-                            <td class="py-3 px-4 text-right">
+                            <td class="py-3 px-4 text-right num">
                                 {{ formatCurrency(d.unitPrice ?? 0) }}
                             </td>
-                            <td class="py-3 px-4 text-right">
+                            <td class="py-3 px-4 text-right num">
                                 {{
                                     formatCurrency(
                                         quantityAmount(
@@ -239,7 +239,7 @@
                                 >
                                     Subtotal
                                 </td>
-                                <td class="py-2 px-4 text-right">
+                                <td class="py-2 px-4 text-right num">
                                     {{
                                         formatCurrency(
                                             selectedSale.amount +
@@ -255,7 +255,7 @@
                                     }}) &mdash;
                                     {{ selectedSale.discount.reason }}
                                 </td>
-                                <td class="py-2 px-4 text-right">
+                                <td class="py-2 px-4 text-right num">
                                     -{{
                                         formatCurrency(
                                             selectedSale.discount.amount,
@@ -266,7 +266,7 @@
                         </template>
                         <tr class="font-bold text-slate-900">
                             <td colspan="3" class="py-2 px-4">Total charged</td>
-                            <td class="py-2 px-4 text-right">
+                            <td class="py-2 px-4 text-right num">
                                 {{ formatCurrency(selectedSale.amount) }}
                             </td>
                         </tr>
@@ -641,7 +641,7 @@ const serverItems = ref<SaleListRow[]>([]);
 const headers = [
     { key: 'saleNumber', title: 'Sale #' },
     { key: 'cashier', title: 'Cashier' },
-    { key: 'amount', title: 'Amount' },
+    { key: 'amount', title: 'Amount', align: 'right' as const },
     { key: 'paymentType', title: 'Payment' },
     { key: 'status', title: 'Status' },
     { key: 'date', title: 'Date' },

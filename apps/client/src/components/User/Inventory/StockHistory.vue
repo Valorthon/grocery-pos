@@ -29,10 +29,6 @@
                     >Search</BaseButton
                 >
             </div>
-            <p v-if="error" role="alert" class="text-sm text-red-700">
-                {{ error }}
-                <button class="min-h-11 underline" @click="load">Retry</button>
-            </p>
             <p
                 v-if="integrity"
                 class="text-sm"
@@ -48,66 +44,57 @@
                 Ledger:
                 {{ formatQuantity(integrity.movementTotal, product.unit) }}
             </p>
-            <p v-if="loading" class="text-sm">Loading stock history…</p>
-            <div v-else class="overflow-x-auto">
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr>
-                            <th>Posted</th>
-                            <th>Occurred</th>
-                            <th>Type</th>
-                            <th>Change</th>
-                            <th>Balance after</th>
-                            <th>Source</th>
-                            <th>Recorded user</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in rows"
-                            :key="row._id"
-                            class="border-t border-slate-100"
-                        >
-                            <td class="py-3">
-                                {{ formatStoreDateTime(row.createdAt) }}
-                            </td>
-                            <td>{{ formatStoreDateTime(row.occurredAt) }}</td>
-                            <td>
-                                {{ row.type
-                                }}{{
-                                    row.historical ? ' (derived history)' : ''
-                                }}
-                            </td>
-                            <td>
-                                {{ row.quantity > 0 ? '+' : ''
-                                }}{{ formatQuantity(row.quantity, row.unit) }}
-                            </td>
-                            <td>
-                                {{ formatQuantity(row.balanceAfter, row.unit) }}
-                            </td>
-                            <td>
-                                <RouterLink
-                                    v-if="sourceLink(row)"
-                                    class="underline"
-                                    :to="sourceLink(row)!"
-                                    >{{ row.refModel }}
-                                    {{ row.refId?.slice(-8) }}</RouterLink
-                                ><span v-else>{{
-                                    row.refId
-                                        ? `${row.refModel} ${row.refId}`
-                                        : 'Unattributed opening balance'
-                                }}</span>
-                            </td>
-                            <td>
-                                {{ row.user?.name ?? 'Unknown / unattributed' }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <p v-if="!rows.length && !error" class="text-sm">
-                    No matching stock movements.
-                </p>
-            </div>
+            <BaseTable
+                :headers="headers"
+                :items="rows"
+                :loading="loading && !rows.length"
+                :error="error"
+                @retry="load"
+            >
+                <template #cell-posted="{ item }">{{
+                    formatStoreDateTime(item.createdAt)
+                }}</template>
+                <template #cell-occurred="{ item }">{{
+                    formatStoreDateTime(item.occurredAt)
+                }}</template>
+                <template #cell-type="{ item }"
+                    >{{ item.type
+                    }}{{
+                        item.historical ? ' (derived history)' : ''
+                    }}</template
+                >
+                <template #cell-change="{ item }"
+                    >{{ item.quantity > 0 ? '+' : ''
+                    }}{{ formatQuantity(item.quantity, item.unit) }}</template
+                >
+                <template #cell-balance="{ item }">{{
+                    formatQuantity(item.balanceAfter, item.unit)
+                }}</template>
+                <template #cell-source="{ item }">
+                    <RouterLink
+                        v-if="sourceLink(item)"
+                        class="underline"
+                        :to="sourceLink(item)!"
+                        >{{ item.refModel }}
+                        {{ item.refId?.slice(-8) }}</RouterLink
+                    ><span v-else>{{
+                        item.refId
+                            ? `${item.refModel} ${item.refId}`
+                            : 'Unattributed opening balance'
+                    }}</span>
+                </template>
+                <template #cell-user="{ item }">{{
+                    item.user?.name ?? 'Unknown / unattributed'
+                }}</template>
+                <template #empty>
+                    <EmptyState
+                        title="No matching stock movements."
+                        hint="Try another posting date range."
+                    >
+                        <template #icon><History :size="24" /></template>
+                    </EmptyState>
+                </template>
+            </BaseTable>
             <div v-if="!error" class="flex items-center gap-3 text-sm">
                 <BaseButton
                     variant="outline"
@@ -148,6 +135,10 @@ import api from '@/axios';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import type { TableHeader } from '@/components/ui/types';
+import { History } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
 import { apiErrorText } from '@/utils/api-error';
 import { dateRangeError } from '@/utils/rules';
@@ -166,6 +157,15 @@ const loading = ref(false),
     page = ref(1),
     total = ref(0);
 const rangeError = computed(() => dateRangeError(from.value, to.value));
+const headers: TableHeader[] = [
+    { key: 'posted', title: 'Posted' },
+    { key: 'occurred', title: 'Occurred' },
+    { key: 'type', title: 'Type' },
+    { key: 'change', title: 'Change', align: 'right' },
+    { key: 'balance', title: 'Balance after', align: 'right' },
+    { key: 'source', title: 'Source' },
+    { key: 'user', title: 'Recorded user' },
+];
 let applied: { from?: string; to?: string } = {},
     generation = 0;
 function sourceLink(row: StockMovementView): RouteLocationRaw | undefined {

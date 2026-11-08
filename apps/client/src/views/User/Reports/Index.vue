@@ -189,147 +189,77 @@
                             stroke-width="3"
                         />
                     </svg>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left text-sm">
-                            <caption class="pb-2 text-left">
-                                All amounts are pesos. Quantities remain
-                                separated by unit. A transaction can appear in
-                                several product/category groups; totals count it
-                                once.
-                            </caption>
-                            <thead>
-                                <tr>
-                                    <th>Group</th>
-                                    <th>Sales / reversals</th>
-                                    <th>Quantity (net)</th>
-                                    <th>Gross</th>
-                                    <th>Discounts</th>
-                                    <th>Voids</th>
-                                    <th>Refunds</th>
-                                    <th>Net</th>
-                                    <th>Known COGS</th>
-                                    <th>Margin estimate</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="row in report.rows"
-                                    :key="row.key"
-                                    class="border-t border-slate-200"
+                    <p class="text-sm text-muted" data-testid="report-caption">
+                        All amounts are pesos. Quantities remain separated by
+                        unit. A transaction can appear in several
+                        product/category groups; totals count it once.
+                    </p>
+                    <BaseTable :headers="reportHeaders" :items="report.rows">
+                        <template #cell-label="{ item }">
+                            <span class="font-semibold">{{ item.label }}</span>
+                        </template>
+                        <template #cell-transactions="{ item }">
+                            {{ item.transactions }} /
+                            {{ item.reversalTransactions }}
+                        </template>
+                        <template #cell-quantities="{ item }">
+                            {{ quantityText(item.quantities) }}
+                        </template>
+                        <template
+                            v-for="key in MONEY_KEYS"
+                            :key="key"
+                            #[`cell-${key}`]="{ item }"
+                        >
+                            {{ formatCurrency(item[key]) }}
+                        </template>
+                        <template #cell-grossMargin="{ item }">
+                            {{
+                                item.grossMargin === null
+                                    ? 'Incomplete'
+                                    : formatCurrency(item.grossMargin)
+                            }}
+                        </template>
+                        <template #empty>
+                            <EmptyState
+                                title="No matching sales or reversal events."
+                                hint="Try another date range or filter."
+                            >
+                                <template #icon
+                                    ><ChartColumn :size="24"
+                                /></template>
+                            </EmptyState>
+                        </template>
+                        <template #footer>
+                            <tr data-testid="report-totals">
+                                <th scope="row" class="py-3.5 px-5 text-left">
+                                    Total
+                                </th>
+                                <td class="py-3.5 px-5 text-right num">
+                                    {{ report.totals.transactions }} /
+                                    {{ report.totals.reversalTransactions }}
+                                </td>
+                                <td class="py-3.5 px-5 text-right num">
+                                    {{ quantityText(report.totals.quantities) }}
+                                </td>
+                                <td
+                                    v-for="key in MONEY_KEYS"
+                                    :key="key"
+                                    class="py-3.5 px-5 text-right num"
                                 >
-                                    <th class="py-3">{{ row.label }}</th>
-                                    <td>
-                                        {{ row.transactions }} /
-                                        {{ row.reversalTransactions }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            row.quantities
-                                                .map((q) =>
-                                                    formatQuantity(
-                                                        q.net,
-                                                        q.unit,
-                                                    ),
-                                                )
-                                                .join(', ')
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{ formatCurrency(row.grossSales) }}
-                                    </td>
-                                    <td>{{ formatCurrency(row.discounts) }}</td>
-                                    <td>{{ formatCurrency(row.voids) }}</td>
-                                    <td>{{ formatCurrency(row.refunds) }}</td>
-                                    <td>{{ formatCurrency(row.netSales) }}</td>
-                                    <td>{{ formatCurrency(row.knownCogs) }}</td>
-                                    <td>
-                                        {{
-                                            row.grossMargin === null
-                                                ? 'Incomplete'
-                                                : formatCurrency(
-                                                      row.grossMargin,
-                                                  )
-                                        }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                            <tfoot>
-                                <tr
-                                    class="border-t-2 border-slate-300 font-bold"
-                                >
-                                    <th class="py-3">Total</th>
-                                    <td>
-                                        {{ report.totals.transactions }} /
-                                        {{ report.totals.reversalTransactions }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            report.totals.quantities
-                                                .map((q) =>
-                                                    formatQuantity(
-                                                        q.net,
-                                                        q.unit,
-                                                    ),
-                                                )
-                                                .join(', ')
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatCurrency(
-                                                report.totals.grossSales,
-                                            )
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatCurrency(
-                                                report.totals.discounts,
-                                            )
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatCurrency(report.totals.voids)
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatCurrency(
-                                                report.totals.refunds,
-                                            )
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatCurrency(
-                                                report.totals.netSales,
-                                            )
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            formatCurrency(
-                                                report.totals.knownCogs,
-                                            )
-                                        }}
-                                    </td>
-                                    <td>
-                                        {{
-                                            report.totals.grossMargin === null
-                                                ? 'Incomplete'
-                                                : formatCurrency(
-                                                      report.totals.grossMargin,
-                                                  )
-                                        }}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                        <p v-if="!report.rows.length" class="py-4 text-sm">
-                            No matching sales or reversal events.
-                        </p>
-                    </div>
+                                    {{ formatCurrency(report.totals[key]) }}
+                                </td>
+                                <td class="py-3.5 px-5 text-right num">
+                                    {{
+                                        report.totals.grossMargin === null
+                                            ? 'Incomplete'
+                                            : formatCurrency(
+                                                  report.totals.grossMargin,
+                                              )
+                                    }}
+                                </td>
+                            </tr>
+                        </template>
+                    </BaseTable>
                     <details
                         class="rounded-xl border border-slate-200 p-3 text-sm"
                     >
@@ -397,6 +327,10 @@ import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import type { TableHeader } from '@/components/ui/types';
+import { ChartColumn } from '@lucide/vue';
 import { apiErrorText } from '@/utils/api-error';
 import { formatCurrency } from '@/utils/currency';
 import { useSalesLookups } from '@/composables/useSalesLookups';
@@ -408,6 +342,31 @@ const {
     error: filterError,
     refresh: refreshFilters,
 } = useSalesLookups();
+const right = 'right' as const;
+/** Every numeric column is right-aligned with tabular figures (#170). */
+const reportHeaders: TableHeader[] = [
+    { key: 'label', title: 'Group' },
+    { key: 'transactions', title: 'Sales / reversals', align: right },
+    { key: 'quantities', title: 'Quantity (net)', align: right },
+    { key: 'grossSales', title: 'Gross', align: right },
+    { key: 'discounts', title: 'Discounts', align: right },
+    { key: 'voids', title: 'Voids', align: right },
+    { key: 'refunds', title: 'Refunds', align: right },
+    { key: 'netSales', title: 'Net', align: right },
+    { key: 'knownCogs', title: 'Known COGS', align: right },
+    { key: 'grossMargin', title: 'Margin estimate', align: right },
+];
+const MONEY_KEYS = [
+    'grossSales',
+    'discounts',
+    'voids',
+    'refunds',
+    'netSales',
+    'knownCogs',
+] as const;
+function quantityText(quantities: SalesReport['totals']['quantities']): string {
+    return quantities.map((q) => formatQuantity(q.net, q.unit)).join(', ');
+}
 const options = ref<ReportOptions | null>(null);
 const preset = ref<ReportPreset>('Today');
 const filters = reactive({

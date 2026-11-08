@@ -130,6 +130,14 @@
                         </tr>
                     </template>
                 </tbody>
+
+                <!-- Totals beside real rows only, never beside a skeleton, error or empty state. -->
+                <tfoot
+                    v-if="$slots.footer && !loading && !error && items.length"
+                    class="border-t-2 border-line-strong text-xs sm:text-sm font-bold text-ink"
+                >
+                    <slot name="footer" />
+                </tfoot>
             </table>
         </div>
 
@@ -235,6 +243,8 @@ defineSlots<
     {
         /** Replaces the default empty row's content, e.g. an `EmptyState`. */
         empty?: () => unknown;
+        /** Rows of a `<tfoot>` (e.g. totals), shown only beside loaded rows. */
+        footer?: () => unknown;
     } & Record<
         `cell-${string}`,
         (props: { item: T; value: unknown }) => unknown

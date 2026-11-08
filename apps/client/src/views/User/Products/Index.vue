@@ -245,7 +245,13 @@ const { applied, apply: applySearch } = useAppliedFilters(
 
 const headers = [
     ...(authStore.user?.roles.includes(Role.Admin)
-        ? [{ key: 'cost', title: 'Latest cost / margin estimate' }]
+        ? [
+              {
+                  key: 'cost',
+                  title: 'Latest cost / margin estimate',
+                  align: 'right' as const,
+              },
+          ]
         : []),
     { key: 'history', title: 'History' },
     { key: 'EAN', title: 'EAN' },

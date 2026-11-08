@@ -139,3 +139,32 @@ describe('BaseTable empty slot (issue #169)', () => {
         expect(host.textContent).toContain('a');
     });
 });
+
+describe('BaseTable footer slot (issue #170)', () => {
+    const footer = () =>
+        h('tr', { 'data-testid': 'totals' }, [h('td', 'Total')]);
+    function mountWithFooter(props: Record<string, unknown>) {
+        return mountRender(() =>
+            table(
+                { headers: [{ title: 'Name', key: 'name' }], ...props },
+                { footer, empty: () => h('p', 'Nothing') },
+            ),
+        );
+    }
+
+    it('renders footer rows in a tfoot beside loaded rows', () => {
+        const host = mountWithFooter({ items: [{ id: '1', name: 'a' }] });
+        expect(
+            host.querySelector('tfoot [data-testid="totals"]'),
+        ).not.toBeNull();
+    });
+
+    it.each([
+        ['empty', { items: [] }],
+        ['loading', { items: [{ id: '1', name: 'a' }], loading: true }],
+        ['failed', { items: [{ id: '1', name: 'a' }], error: 'Down' }],
+    ])('hides the footer while %s', (_, props) => {
+        const host = mountWithFooter(props);
+        expect(host.querySelector('tfoot')).toBeNull();
+    });
+});

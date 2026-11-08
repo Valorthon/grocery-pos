@@ -26,65 +26,53 @@
                 >All remaining batches</BaseButton
             >
         </div>
-        <p v-if="error" role="alert" class="text-sm text-red-700">
-            {{ error }} <button type="button" @click="load">Retry</button>
+        <p v-if="daysError" role="alert" class="text-sm text-danger-fg">
+            {{ daysError }}
         </p>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr>
-                        <th class="text-left">Product</th>
-                        <th>Batch</th>
-                        <th>Expiry</th>
-                        <th>Days left</th>
-                        <th>Remaining</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="batch in rows"
-                        :key="batch._id"
-                        class="border-t border-slate-100"
-                    >
-                        <td class="py-3">{{ batch.product.name }}</td>
-                        <td>{{ batch.batchNo || batch._id.slice(-8) }}</td>
-                        <td>
-                            {{ batch.expiryDate || 'Reconciliation / unknown' }}
-                        </td>
-                        <td>
-                            {{
-                                batch.daysLeft === undefined
-                                    ? '—'
-                                    : batch.daysLeft < 0
-                                      ? `Expired ${-batch.daysLeft} days ago`
-                                      : batch.daysLeft
-                            }}
-                        </td>
-                        <td>
-                            {{
-                                formatQuantity(
-                                    batch.remainingQty,
-                                    batch.product.unit,
-                                )
-                            }}
-                        </td>
-                        <td>
-                            <BaseButton
-                                v-if="canAdjust && batch.remainingQty > 0"
-                                size="sm"
-                                variant="outline"
-                                @click="writeOff(batch)"
-                                >Write off</BaseButton
-                            >
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <p v-if="!loading && !rows.length && !error" class="text-sm">
-            No matching batches.
-        </p>
+        <BaseTable
+            :headers="headers"
+            :items="rows"
+            :loading="loading && !rows.length"
+            :error="error"
+            @retry="load"
+        >
+            <template #cell-product="{ item }">{{
+                item.product.name
+            }}</template>
+            <template #cell-batch="{ item }">{{
+                item.batchNo || item._id.slice(-8)
+            }}</template>
+            <template #cell-expiry="{ item }">{{
+                item.expiryDate || 'Reconciliation / unknown'
+            }}</template>
+            <template #cell-daysLeft="{ item }">{{
+                item.daysLeft === undefined
+                    ? '—'
+                    : item.daysLeft < 0
+                      ? `Expired ${-item.daysLeft} days ago`
+                      : item.daysLeft
+            }}</template>
+            <template #cell-remaining="{ item }">{{
+                formatQuantity(item.remainingQty, item.product.unit)
+            }}</template>
+            <template #cell-action="{ item }">
+                <BaseButton
+                    v-if="canAdjust && item.remainingQty > 0"
+                    size="sm"
+                    variant="outline"
+                    @click="writeOff(item)"
+                    >Write off</BaseButton
+                >
+            </template>
+            <template #empty>
+                <EmptyState
+                    title="No matching batches."
+                    hint="Widen the expiry window or show all remaining batches."
+                >
+                    <template #icon><PackageSearch :size="24" /></template>
+                </EmptyState>
+            </template>
+        </BaseTable>
         <div class="flex gap-3">
             <BaseButton
                 v-if="page > 1"
@@ -122,6 +110,10 @@ import api from '@/axios';
 import { apiErrorText } from '@/utils/api-error';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import BaseTable from '@/components/ui/BaseTable.vue';
+import EmptyState from '@/components/ui/EmptyState.vue';
+import type { TableHeader } from '@/components/ui/types';
+import { PackageSearch } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
 import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 const auth = useAuthStore(),
@@ -134,13 +126,23 @@ const days = ref<number | string>(EXPIRY_LIMITS.DEFAULT_DAYS),
     expiring = ref(true),
     loading = ref(false),
     error = ref(''),
+    daysError = ref(''),
     rows = ref<InventoryBatchView[]>([]);
+const headers: TableHeader[] = [
+    { key: 'product', title: 'Product' },
+    { key: 'batch', title: 'Batch' },
+    { key: 'expiry', title: 'Expiry' },
+    { key: 'daysLeft', title: 'Days left', align: 'right' },
+    { key: 'remaining', title: 'Remaining', align: 'right' },
+    { key: 'action', title: 'Action', align: 'right' },
+];
 let generation = 0;
 onBeforeUnmount(() => generation++);
 async function load() {
     const request = ++generation;
     loading.value = true;
     error.value = '';
+    daysError.value = '';
     const value = Number(days.value);
     if (
         expiring.value &&
@@ -149,7 +151,7 @@ async function load() {
             value < 0 ||
             value > EXPIRY_LIMITS.DAYS_MAX)
     ) {
-        error.value = 'Enter a whole number of days from 0 to 365.';
+        daysError.value = 'Enter a whole number of days from 0 to 365.';
         loading.value = false;
         return;
     }
