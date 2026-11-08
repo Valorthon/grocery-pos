@@ -5,7 +5,7 @@
         max-width="24rem"
         @update:model-value="(open) => !open && emit('answer', false)"
     >
-        <p :id="messageId" class="text-sm text-slate-600">
+        <p :id="messageId" class="text-sm text-muted">
             {{ shown.message }}
         </p>
         <template #footer>
@@ -17,12 +17,8 @@
                 >{{ shown.cancelLabel ?? 'Cancel' }}</BaseButton
             >
             <BaseButton
-                :class="[
-                    'flex-1',
-                    shown.danger
-                        ? 'bg-red-600! hover:bg-red-700! active:bg-red-800!'
-                        : '',
-                ]"
+                class="flex-1"
+                :variant="shown.danger ? 'danger-solid' : 'primary'"
                 :aria-describedby="messageId"
                 @click="emit('answer', true)"
                 >{{ shown.confirmLabel ?? 'Confirm' }}</BaseButton

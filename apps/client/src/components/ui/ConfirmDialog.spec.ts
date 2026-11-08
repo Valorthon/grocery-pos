@@ -132,4 +132,24 @@ describe('ConfirmDialog with useConfirm (issue #19)', () => {
             'Clear all 2 drafts?',
         );
     });
+
+    it('styles a danger confirm with danger-solid, no ! override (#155)', async () => {
+        const { confirm } = mount();
+        void ask(confirm);
+        await flush();
+
+        const clear = button('Clear');
+        expect(clear.classList).toContain('bg-danger-solid');
+        expect(clear.classList).toContain('flex-1');
+        expect(clear.className).not.toMatch(/!|bg-leaf-600|red-/);
+    });
+
+    it('styles a plain confirm as primary (#155)', async () => {
+        const { confirm } = mount();
+        void confirm({ title: 'Go?', message: 'Go on?', confirmLabel: 'Go' });
+        await flush();
+
+        expect(button('Go').classList).toContain('bg-leaf-600');
+        expect(button('Go').className).not.toContain('danger');
+    });
 });
