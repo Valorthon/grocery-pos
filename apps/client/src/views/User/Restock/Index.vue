@@ -66,18 +66,7 @@
                 @retry="fetchRestock"
             >
                 <template #cell-purchaseOrder="{ item }">
-                    <button
-                        v-if="item.purchaseOrder && canOpenOrders"
-                        type="button"
-                        class="min-h-11 text-leaf-700 underline"
-                        @click.stop="openOrder(item.purchaseOrder)"
-                    >
-                        {{ purchaseOrderReference(item.purchaseOrder) }}
-                    </button>
-                    <span v-else-if="item.purchaseOrder">{{
-                        purchaseOrderReference(item.purchaseOrder)
-                    }}</span>
-                    <span v-else>—</span>
+                    <PurchaseOrderLink :purchase-order="item.purchaseOrder" />
                 </template>
             </BaseTable>
         </PageCard>
@@ -94,7 +83,6 @@
 </template>
 
 <script setup lang="ts">
-import { canOpenPurchaseOrders } from './purchase-order-link';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Truck, X } from '@lucide/vue';
@@ -112,6 +100,7 @@ import { useListFetch, useListPaging } from '@/composables/useListFetch';
 import { dateRangeError } from '@/utils/rules';
 import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
+import PurchaseOrderLink from '@/components/User/Restock/PurchaseOrderLink.vue';
 import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
@@ -121,7 +110,6 @@ import {
     type RestockRow,
     type UserRef,
 } from '@grocery-pos/contracts';
-import { useAuthStore } from '@/stores/auth';
 import type { RestockListRow } from '@/components/User/Restock/rows';
 
 const router = useRouter();
@@ -138,14 +126,7 @@ const purchaseOrderId = computed(() => {
         ? candidate
         : undefined;
 });
-const authStore = useAuthStore();
 // Defensive: the route already needs RESTOCKER/ADMIN (see the helper).
-const canOpenOrders = computed(() =>
-    canOpenPurchaseOrders((role) => authStore.hasRole(role)),
-);
-function openOrder(id: string) {
-    void router.push({ name: 'PurchaseOrders', query: { id } });
-}
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchRestock());
 const totalItems = ref(0);
