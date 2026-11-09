@@ -26,126 +26,133 @@
                     New Sale
                 </BaseButton>
             </template>
-            <FilterBar
-                v-model:search="filters.saleNumber"
-                search-id="sales-number"
-                search-label="Sale number or full ID"
-                :maxlength="24"
-                :chips="chips"
-                :initially-open="chips.some((chip) => chip.inPanel)"
-                class="mb-4"
-                @search="applyFilters"
-                @remove="removeFilter"
-                @clear="clearFilters"
-            >
-                <BaseInput
-                    id="sales-from"
-                    v-model="filters.dateFrom"
-                    label="From"
-                    type="date"
-                    @change="applyFilters"
-                />
-                <BaseInput
-                    id="sales-to"
-                    v-model="filters.dateTo"
-                    label="To (inclusive)"
-                    type="date"
-                    @change="applyFilters"
-                />
-                <BaseSelect
-                    id="sales-payment"
-                    v-model="filters.paymentType"
-                    label="Payment"
-                    all-label="All payments"
-                    :options="
-                        Object.values(PaymentType).map((value) => ({
-                            label: value,
-                            value,
-                        }))
-                    "
-                    @update:model-value="applyFilters"
-                />
-                <BaseSelect
-                    v-if="authStore.isAdmin"
-                    id="sales-cashier"
-                    v-model="filters.cashier"
-                    label="Cashier"
-                    all-label="All cashiers"
-                    :options="
-                        cashiers.map((row) => ({
-                            label: row.name,
-                            value: row._id,
-                        }))
-                    "
-                    @update:model-value="applyFilters"
-                />
-                <BaseSelect
-                    v-if="authStore.isAdmin"
-                    id="sales-category"
-                    v-model="filters.category"
-                    label="Category"
-                    all-label="All categories"
-                    :options="
-                        categories.map((row) => ({
-                            label:
-                                row.name + (row.isActive ? '' : ' (archived)'),
-                            value: row._id,
-                        }))
-                    "
-                    @update:model-value="applyFilters"
-                />
-                <div class="flex items-end">
-                    <BaseButton
-                        variant="outline"
-                        class="min-h-11"
-                        @click="clearFilters"
-                        >Clear Filters</BaseButton
-                    >
-                </div>
-            </FilterBar>
-            <p
-                v-if="filterError"
-                role="alert"
-                class="mb-3 text-sm text-red-700"
-            >
-                {{ filterError }}
-                <BaseButton variant="outline" @click="refreshLookups"
-                    >Retry filters</BaseButton
+            <PageCard>
+                <FilterBar
+                    v-model:search="filters.saleNumber"
+                    search-id="sales-number"
+                    search-label="Sale number or full ID"
+                    :maxlength="24"
+                    :chips="chips"
+                    :initially-open="chips.some((chip) => chip.inPanel)"
+                    class="px-5 py-4 border-b border-line"
+                    @search="applyFilters"
+                    @remove="removeFilter"
+                    @clear="clearFilters"
                 >
-            </p>
-            <p
-                v-if="searchError"
-                role="alert"
-                class="mb-3 text-sm text-red-700"
-            >
-                {{ searchError }}
-            </p>
-            <BaseTable
-                v-model:page="page"
-                v-model:items-per-page="limit"
-                :headers="headers"
-                :items="serverItems"
-                :loading="loading"
-                :error="loadError"
-                empty-text="No orders found"
-                :items-length="totalItems"
-                row-click
-                @click:row="showDetails"
-                @retry="fetchSales"
-            >
-                <template #cell-amount="{ value }">
-                    <span class="font-bold">{{ value }}</span>
-                </template>
-                <template #cell-paymentType="{ value }">
-                    <Badge
-                        :color="value === PaymentType.CASH ? 'success' : 'info'"
-                        >{{ value }}</Badge
+                    <BaseInput
+                        id="sales-from"
+                        v-model="filters.dateFrom"
+                        label="From"
+                        type="date"
+                        @change="applyFilters"
+                    />
+                    <BaseInput
+                        id="sales-to"
+                        v-model="filters.dateTo"
+                        label="To (inclusive)"
+                        type="date"
+                        @change="applyFilters"
+                    />
+                    <BaseSelect
+                        id="sales-payment"
+                        v-model="filters.paymentType"
+                        label="Payment"
+                        all-label="All payments"
+                        :options="
+                            Object.values(PaymentType).map((value) => ({
+                                label: value,
+                                value,
+                            }))
+                        "
+                        @update:model-value="applyFilters"
+                    />
+                    <BaseSelect
+                        v-if="authStore.isAdmin"
+                        id="sales-cashier"
+                        v-model="filters.cashier"
+                        label="Cashier"
+                        all-label="All cashiers"
+                        :options="
+                            cashiers.map((row) => ({
+                                label: row.name,
+                                value: row._id,
+                            }))
+                        "
+                        @update:model-value="applyFilters"
+                    />
+                    <BaseSelect
+                        v-if="authStore.isAdmin"
+                        id="sales-category"
+                        v-model="filters.category"
+                        label="Category"
+                        all-label="All categories"
+                        :options="
+                            categories.map((row) => ({
+                                label:
+                                    row.name +
+                                    (row.isActive ? '' : ' (archived)'),
+                                value: row._id,
+                            }))
+                        "
+                        @update:model-value="applyFilters"
+                    />
+                    <div class="flex items-end">
+                        <BaseButton
+                            variant="outline"
+                            class="min-h-11"
+                            @click="clearFilters"
+                            >Clear Filters</BaseButton
+                        >
+                    </div>
+                </FilterBar>
+                <p
+                    v-if="filterError"
+                    role="alert"
+                    class="px-5 py-3 text-sm text-red-700"
+                >
+                    {{ filterError }}
+                    <BaseButton variant="outline" @click="refreshLookups"
+                        >Retry filters</BaseButton
                     >
-                </template>
-                <template #cell-status="{ item, value }">
-                    <Badge :color="statusColor(item.status)">{{ value }}</Badge>
-                </template>
-            </BaseTable>
+                </p>
+                <p
+                    v-if="searchError"
+                    role="alert"
+                    class="px-5 py-3 text-sm text-red-700"
+                >
+                    {{ searchError }}
+                </p>
+                <BaseTable
+                    v-model:page="page"
+                    v-model:items-per-page="limit"
+                    :headers="headers"
+                    :items="serverItems"
+                    :loading="loading"
+                    :error="loadError"
+                    empty-text="No orders found"
+                    :items-length="totalItems"
+                    row-click
+                    @click:row="showDetails"
+                    @retry="fetchSales"
+                >
+                    <template #cell-amount="{ value }">
+                        <span class="font-bold">{{ value }}</span>
+                    </template>
+                    <template #cell-paymentType="{ value }">
+                        <Badge
+                            :color="
+                                value === PaymentType.CASH ? 'success' : 'info'
+                            "
+                            >{{ value }}</Badge
+                        >
+                    </template>
+                    <template #cell-status="{ item, value }">
+                        <Badge :color="statusColor(item.status)">{{
+                            value
+                        }}</Badge>
+                    </template>
+                </BaseTable>
+            </PageCard>
 
             <BaseModal
                 v-model="isDialogOpen"
@@ -460,6 +467,7 @@ import { useManagerApproval } from '@/composables/useManagerApproval';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import type { TableHeader } from '@/components/ui/types';
 import BaseInput from '@/components/ui/BaseInput.vue';
+import PageCard from '@/components/ui/PageCard.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import type { FilterChip } from '@/components/ui/page-primitives';
 import { useSalesLookups } from '@/composables/useSalesLookups';

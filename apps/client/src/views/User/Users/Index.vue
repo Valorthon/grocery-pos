@@ -308,7 +308,7 @@ function canEdit(item: UserView): boolean {
 
 const headers = [
     { key: 'name', title: 'Name' },
-    { key: 'roles', title: 'Roles' },
+    { key: 'roles', title: 'Roles', hideBelow: 'sm' as const },
     { key: 'isActive', title: 'Status' },
     { key: 'actions', title: 'Actions', align: 'right' as const },
 ];

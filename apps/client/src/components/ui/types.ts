@@ -22,6 +22,11 @@ export interface TableHeader {
     sortable?: boolean;
     /** Renders this column's cells as `<th scope="row">` (the row's label). */
     rowHeader?: boolean;
+    /**
+     * Hides a secondary column below this breakpoint (#208), so a narrow
+     * screen shows the important columns without scrolling sideways.
+     */
+    hideBelow?: 'sm' | 'md' | 'lg';
 }
 
 /** A row of `BaseTable`: any object, keyed in the DOM by `id` when set. */

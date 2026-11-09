@@ -447,3 +447,14 @@ describe('supplier receipt history', () => {
         expect(host.textContent).toContain('Old receipt');
     });
 });
+
+describe('restock history at 375px (issue #208)', () => {
+    it('shows only Description, Total Cost and Date below md', async () => {
+        api.get.mockResolvedValue({ data: { data: [], totalItems: 0 } });
+        await mount();
+        const shown = Array.from(document.querySelectorAll('thead th'))
+            .filter((th) => !th.className.split(/\s+/).includes('hidden'))
+            .map((th) => th.textContent?.trim());
+        expect(shown).toEqual(['Description', 'Total Cost', 'Date']);
+    });
+});

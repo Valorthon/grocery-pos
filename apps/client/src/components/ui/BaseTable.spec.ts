@@ -206,3 +206,52 @@ describe('BaseTable row headers and caption (issue #170)', () => {
         );
     });
 });
+
+describe('BaseTable narrow columns (issue #208)', () => {
+    it('hides a hideBelow column below its breakpoint in head and rows', () => {
+        const host = mountTables({
+            headers: [
+                { title: 'Name', key: 'name' },
+                { title: 'Roles', key: 'roles', hideBelow: 'sm' },
+                { title: 'Supplier', key: 'supplier', hideBelow: 'lg' },
+            ],
+            items: [{ id: '1', name: 'a', roles: 'r', supplier: 's' }],
+        });
+        const [nameTh, rolesTh, supplierTh] = Array.from(
+            host.querySelectorAll('th'),
+        );
+        const [nameTd, rolesTd, supplierTd] = Array.from(
+            host.querySelectorAll('td'),
+        );
+        for (const el of [rolesTh!, rolesTd!]) {
+            expect(el.className.split(/\s+/)).toEqual(
+                expect.arrayContaining(['hidden', 'sm:table-cell']),
+            );
+        }
+        for (const el of [supplierTh!, supplierTd!]) {
+            expect(el.className.split(/\s+/)).toEqual(
+                expect.arrayContaining(['hidden', 'lg:table-cell']),
+            );
+        }
+        for (const el of [nameTh!, nameTd!]) {
+            expect(el.className.split(/\s+/)).not.toContain('hidden');
+        }
+    });
+
+    it('hides the column in the loading skeleton too', () => {
+        const host = mountTables({
+            headers: [
+                { title: 'Name', key: 'name' },
+                { title: 'Roles', key: 'roles', hideBelow: 'md' },
+            ],
+            items: [],
+            loading: true,
+            skeletonRows: 1,
+        });
+        const cells = Array.from(host.querySelectorAll('tbody td'));
+        expect(cells[0]!.className).not.toContain('hidden');
+        expect(cells[1]!.className.split(/\s+/)).toEqual(
+            expect.arrayContaining(['hidden', 'md:table-cell']),
+        );
+    });
+});

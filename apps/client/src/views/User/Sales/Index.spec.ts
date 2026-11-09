@@ -309,6 +309,16 @@ describe('sales errors (issue #18)', () => {
         return host;
     }
 
+    it('puts the search and the table in one card, as admin lists do (#208)', async () => {
+        serve(CASH_SALE, []);
+        await mount();
+        const card = document
+            .querySelector('form[role="search"]')
+            ?.closest('section');
+        expect(card).not.toBeNull();
+        expect(card!.querySelector('table')).not.toBeNull();
+    });
+
     it('shows a failed list in the table, then retries it', async () => {
         api.get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
         await mount();

@@ -50,7 +50,9 @@
                     clearable
                     @clear="applySearch"
                 />
-                <label class="flex min-h-11 items-center gap-2 text-sm"
+                <label
+                    class="flex min-h-11 items-center gap-2 self-end text-sm"
+                    data-testid="low-stock-filter"
                     ><input
                         v-model="lowStock"
                         type="checkbox"

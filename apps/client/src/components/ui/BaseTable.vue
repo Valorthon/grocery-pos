@@ -22,6 +22,7 @@
                             :class="[
                                 'py-3 px-5 bg-paper border-b border-line',
                                 alignClass(header.align),
+                                hideClass(header.hideBelow),
                             ]"
                         >
                             {{ header.title }}
@@ -35,7 +36,10 @@
                             <td
                                 v-for="header in headers"
                                 :key="header.key"
-                                class="py-3.5 px-5"
+                                :class="[
+                                    'py-3.5 px-5',
+                                    hideClass(header.hideBelow),
+                                ]"
                             >
                                 <div
                                     class="h-4 bg-line rounded animate-pulse"
@@ -128,6 +132,7 @@
                                     'py-3.5 px-5',
                                     header.rowHeader ? 'font-semibold' : '',
                                     alignClass(header.align),
+                                    hideClass(header.hideBelow),
                                 ]"
                             >
                                 <slot
@@ -280,6 +285,16 @@ function alignClass(align?: string): string {
         default:
             return 'text-left';
     }
+}
+
+/** Full class names, so Tailwind finds them in the source. */
+const HIDE_BELOW: Record<NonNullable<TableHeader['hideBelow']>, string> = {
+    sm: 'hidden sm:table-cell',
+    md: 'hidden md:table-cell',
+    lg: 'hidden lg:table-cell',
+};
+function hideClass(hideBelow?: TableHeader['hideBelow']): string {
+    return hideBelow ? HIDE_BELOW[hideBelow] : '';
 }
 
 const pageSizeOptions = computed(() =>

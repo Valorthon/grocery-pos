@@ -153,11 +153,11 @@ const serverItems = ref<RestockListRow[]>([]);
 
 const headers = [
     { key: 'description', title: 'Description' },
-    { key: 'supplier', title: 'Supplier' },
-    { key: 'invoiceNumber', title: 'Invoice / DR' },
-    { key: 'purchaseOrder', title: 'Purchase order' },
+    { key: 'supplier', title: 'Supplier', hideBelow: 'md' as const },
+    { key: 'invoiceNumber', title: 'Invoice / DR', hideBelow: 'lg' as const },
+    { key: 'purchaseOrder', title: 'Purchase order', hideBelow: 'lg' as const },
     { key: 'totalCost', title: 'Total Cost', align: 'right' as const },
-    { key: 'restockedBy', title: 'Restocked By' },
+    { key: 'restockedBy', title: 'Restocked By', hideBelow: 'lg' as const },
     { key: 'date', title: 'Date' },
 ];
 
