@@ -11,6 +11,17 @@
         "
     >
         <div class="p-5 space-y-4">
+            <p
+                v-if="ean || reorderLevel"
+                class="text-sm"
+                data-testid="stock-history-product"
+            >
+                <span v-if="ean">EAN {{ ean }}</span>
+                <span v-if="ean && reorderLevel"> · </span>
+                <span v-if="reorderLevel"
+                    >Reorder level {{ reorderLevel }}</span
+                >
+            </p>
             <p class="text-sm">
                 Balances follow posting order. Offline sale time is shown
                 separately. Historical backfill balances are derived from known
@@ -145,6 +156,10 @@ import { dateRangeError } from '@/utils/rules';
 import { formatStoreDateTime } from '@/utils/datetime';
 const props = defineProps<{
     product: Pick<ProductView, '_id' | 'name' | 'unit'>;
+    /** Shown in the dialog for lists that hide it at phone width (#210). */
+    ean?: string;
+    /** Formatted reorder level, shown like `ean`. */
+    reorderLevel?: string;
 }>();
 const emit = defineEmits<{ (event: 'close'): void }>();
 const auth = useAuthStore();

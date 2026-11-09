@@ -319,6 +319,38 @@ describe('sales errors (issue #18)', () => {
         expect(card!.querySelector('table')).not.toBeNull();
     });
 
+    it('keeps Sale #, Amount and Status at phone width; details show the rest (#210)', async () => {
+        serve(CASH_SALE, []);
+        await mount();
+        const th = (text: string) =>
+            [...document.querySelectorAll('thead th')].find((cell) =>
+                cell.textContent?.includes(text),
+            )!;
+        const classes = (el: Element) => el.className.split(/\s+/);
+        expect(classes(th('Cashier'))).toEqual(
+            expect.arrayContaining(['hidden', 'md:table-cell']),
+        );
+        expect(classes(th('Payment'))).toEqual(
+            expect.arrayContaining(['hidden', 'sm:table-cell']),
+        );
+        expect(classes(th('Date'))).toEqual(
+            expect.arrayContaining(['hidden', 'lg:table-cell']),
+        );
+        for (const shown of ['Sale #', 'Amount', 'Status'])
+            expect(classes(th(shown))).not.toContain('hidden');
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await flush();
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]')
+                ?.textContent,
+        ).toContain('ana');
+        expect(
+            document.querySelector('[data-testid="sale-detail-date"]')
+                ?.textContent,
+        ).toMatch(/Date\s*\S/);
+        expect(document.body.textContent).toContain('Payment');
+    });
+
     it('shows a failed list in the table, then retries it', async () => {
         api.get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
         await mount();
