@@ -157,6 +157,15 @@ describe('reorder list and restock draft', () => {
         );
         expect(document.body.textContent).not.toContain('No new products');
     });
+    it('aligns the Low stock checkbox with the inputs, not their labels (#208)', async () => {
+        await mount();
+        const label = document.querySelector(
+            '[data-testid="low-stock-filter"]',
+        );
+        expect(label?.className.split(/\s+/)).toEqual(
+            expect.arrayContaining(['self-end', 'min-h-11']),
+        );
+    });
     it('applies a low-stock toggle once on page one and retains server order', async () => {
         route.query = {};
         await mount();

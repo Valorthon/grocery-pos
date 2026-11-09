@@ -5,6 +5,8 @@ import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { click, field, fieldError, flush, type } from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import { useUIStore } from '@/stores/ui';
+import { Role } from '@grocery-pos/contracts';
+import { useAuthStore } from '@/stores/auth';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
 
@@ -445,5 +447,95 @@ describe('supplier receipt history', () => {
         expect(host.textContent).toContain('DR-7');
         expect(host.textContent).toContain('Unknown supplier');
         expect(host.textContent).toContain('Old receipt');
+    });
+});
+
+describe('restock history at 375px (issue #208)', () => {
+    it('shows only Description, Total Cost and Date below md', async () => {
+        api.get.mockResolvedValue({ data: { data: [], totalItems: 0 } });
+        await mount();
+        const ths = Array.from(document.querySelectorAll('thead th'));
+        const shown = ths
+            .filter((th) => !th.className.split(/\s+/).includes('hidden'))
+            .map((th) => th.textContent?.trim());
+        expect(shown).toEqual(['Description', 'Total Cost', 'Date']);
+        const breakpoint = (title: string) =>
+            ths
+                .find((th) => th.textContent?.trim() === title)!
+                .className.split(/\s+/)
+                .find((c) => c.endsWith(':table-cell'));
+        expect(breakpoint('Supplier')).toBe('md:table-cell');
+        for (const title of ['Invoice / DR', 'Purchase order', 'Restocked By'])
+            expect(breakpoint(title)).toBe('lg:table-cell');
+    });
+
+    it('shows the purchase order in the details dialog, linked for restockers', async () => {
+        useAuthStore().user = {
+            userId: 'r',
+            username: 'r',
+            roles: [Role.Restocker],
+        };
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/restocks/users'
+                        ? []
+                        : url.startsWith('/restocks/details')
+                          ? { data: [], totalItems: 0 }
+                          : {
+                                data: [
+                                    {
+                                        ...RESTOCK,
+                                        purchaseOrder:
+                                            '64b000000000000000abcdef',
+                                    },
+                                ],
+                                totalItems: 1,
+                            },
+            }),
+        );
+        await mount();
+        document.querySelector<HTMLElement>('tbody tr')!.click();
+        await flush();
+        const cell = document.querySelector(
+            '[data-testid="restock-purchase-order"]',
+        );
+        expect(cell?.textContent).toContain('PO-00ABCDEF');
+        expect(
+            cell?.querySelector('[data-testid="purchase-order-link"]'),
+        ).not.toBeNull();
+    });
+
+    it('shows the reference without a link for viewers who cannot open orders', async () => {
+        useAuthStore().user = { userId: 'a', username: 'a', roles: [] };
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/restocks/users'
+                        ? []
+                        : url.startsWith('/restocks/details')
+                          ? { data: [], totalItems: 0 }
+                          : {
+                                data: [
+                                    {
+                                        ...RESTOCK,
+                                        purchaseOrder:
+                                            '64b000000000000000abcdef',
+                                    },
+                                ],
+                                totalItems: 1,
+                            },
+            }),
+        );
+        await mount();
+        document.querySelector<HTMLElement>('tbody tr')!.click();
+        await flush();
+        const cell = document.querySelector(
+            '[data-testid="restock-purchase-order"]',
+        );
+        expect(cell?.textContent).toContain('PO-00ABCDEF');
+        expect(
+            cell?.querySelector('[data-testid="purchase-order-link"]'),
+        ).toBeNull();
     });
 });

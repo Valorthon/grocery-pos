@@ -1,7 +1,7 @@
 <template>
     <div>
         <div
-            class="grid grid-cols-2 md:grid-cols-4 gap-4 px-5 py-4 border-b border-slate-100"
+            class="grid grid-cols-2 md:grid-cols-5 gap-4 px-5 py-4 border-b border-slate-100"
         >
             <div>
                 <div
@@ -14,6 +14,16 @@
                     {{ item.invoiceNumber || 'No invoice recorded' }}
                 </div>
                 <div class="text-sm">{{ item.description || 'N/A' }}</div>
+            </div>
+            <div data-testid="restock-purchase-order">
+                <div
+                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
+                >
+                    Purchase order
+                </div>
+                <div class="text-sm">
+                    <PurchaseOrderLink :purchase-order="item.purchaseOrder" />
+                </div>
             </div>
             <div>
                 <div
@@ -93,6 +103,7 @@ import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
 import { onMounted, ref } from 'vue';
 import { Search, X } from '@lucide/vue';
 import api from '@/axios';
+import PurchaseOrderLink from './PurchaseOrderLink.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';

@@ -886,3 +886,18 @@ describe('manager PIN entry point (#34)', () => {
         ).toBeNull();
     });
 });
+
+/** Header texts visible below `sm` (no `hidden` class), issue #208. */
+function narrowHeaders(): string[] {
+    return Array.from(document.querySelectorAll('thead th'))
+        .filter((th) => !th.className.split(/\s+/).includes('hidden'))
+        .map((th) => th.textContent?.trim() ?? '');
+}
+
+describe('users list at 375px (issue #208)', () => {
+    it('keeps Name, Status and Actions, hiding Roles below sm', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        expect(narrowHeaders()).toEqual(['Name', 'Status', 'Actions']);
+    });
+});
