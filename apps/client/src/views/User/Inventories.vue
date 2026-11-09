@@ -85,14 +85,22 @@
                     ><BaseButton
                         size="sm"
                         variant="outline"
+                        class="min-h-11 min-w-11"
+                        :aria-label="`Stock history for ${item.name}`"
+                        data-testid="stock-history-button"
                         @click="
                             history = {
                                 _id: item.id,
                                 name: item.name,
                                 unit: item.unit,
+                                EAN: item.EAN,
+                                reorderLevel: item.reorderLevel,
                             }
                         "
-                        >Stock history</BaseButton
+                        ><span class="sm:hidden">History</span
+                        ><span class="hidden sm:inline"
+                            >Stock history</span
+                        ></BaseButton
                     ></template
                 >
             </BaseTable>
@@ -103,6 +111,8 @@
         v-if="history"
         :key="history._id"
         :product="history"
+        :ean="history.EAN"
+        :reorder-level="history.reorderLevel"
         @close="history = null"
     />
 </template>
@@ -134,7 +144,13 @@ import {
 } from '@/composables/useListFetch';
 import type { InventoryRow, Paginated } from '@grocery-pos/contracts';
 
-const history = ref<Pick<ProductView, '_id' | 'name' | 'unit'> | null>(null);
+const history = ref<
+    | (Pick<ProductView, '_id' | 'name' | 'unit'> & {
+          EAN: string;
+          reorderLevel: string;
+      })
+    | null
+>(null);
 const router = useRouter();
 // Offered only to whoever the router lets onto Adjustments/Add (#206): a
 // Restocker can list inventory but not adjust it.
@@ -209,10 +225,16 @@ const { applied, apply: applySearch } = useAppliedFilters(
 
 const headers = [
     { key: 'history', title: 'History' },
-    { key: 'EAN', title: 'EAN' },
+    // Hidden at phone width (#210); the Stock history dialog shows both.
+    { key: 'EAN', title: 'EAN', hideBelow: 'sm' as const },
     { key: 'name', title: 'Name' },
     { key: 'stock', title: 'Stock', align: 'right' as const },
-    { key: 'reorderLevel', title: 'Reorder level', align: 'right' as const },
+    {
+        key: 'reorderLevel',
+        title: 'Reorder level',
+        align: 'right' as const,
+        hideBelow: 'md' as const,
+    },
 ];
 
 /** A row of the inventory table. */

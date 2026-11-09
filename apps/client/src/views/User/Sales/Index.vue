@@ -255,6 +255,26 @@
                     v-if="selectedSale"
                     class="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm"
                 >
+                    <div
+                        v-if="selectedRow"
+                        class="flex justify-between"
+                        data-testid="sale-detail-date"
+                    >
+                        <span class="text-slate-500">Date</span>
+                        <span class="font-semibold">{{
+                            selectedRow.date
+                        }}</span>
+                    </div>
+                    <div
+                        v-if="selectedRow"
+                        class="flex justify-between"
+                        data-testid="sale-detail-cashier"
+                    >
+                        <span class="text-slate-500">Cashier</span>
+                        <span class="font-semibold">{{
+                            selectedRow.cashier
+                        }}</span>
+                    </div>
                     <div class="flex justify-between">
                         <span class="text-slate-500">Status</span>
                         <Badge :color="statusColor(selectedSale.status)">{{
@@ -681,11 +701,11 @@ const detailHeaders: TableHeader[] = [
 ];
 const headers = [
     { key: 'saleNumber', title: 'Sale #' },
-    { key: 'cashier', title: 'Cashier' },
+    { key: 'cashier', title: 'Cashier', hideBelow: 'md' as const },
     { key: 'amount', title: 'Amount', align: 'right' as const },
-    { key: 'paymentType', title: 'Payment' },
+    { key: 'paymentType', title: 'Payment', hideBelow: 'sm' as const },
     { key: 'status', title: 'Status' },
-    { key: 'date', title: 'Date' },
+    { key: 'date', title: 'Date', hideBelow: 'lg' as const },
 ];
 
 function formatDate(value: string | Date): string {
@@ -755,6 +775,8 @@ const details = ref<SaleLine[]>([]);
 const detailsError = ref('');
 const selectedId = ref('');
 const selectedSale = ref<SaleTotals | null>(null);
+/** The clicked row: its cashier and date, hidden from the list at phone width (#210). */
+const selectedRow = ref<SaleListRow | null>(null);
 
 function discountLabel(discount: ReceiptDiscount): string {
     return discount.type === DiscountType.PERCENT
@@ -921,6 +943,7 @@ async function showDetails(row: SaleListRow) {
     cancelReversal();
     selectedId.value = row.id;
     selectedSale.value = row.totals;
+    selectedRow.value = row;
     isDialogOpen.value = true;
     await loadDetails();
 }

@@ -157,6 +157,41 @@ describe('reorder list and restock draft', () => {
         );
         expect(document.body.textContent).not.toContain('No new products');
     });
+    it('fits Name, Stock and a 44px history button at phone width (#210)', async () => {
+        await mount();
+        const th = (text: string) =>
+            [...document.querySelectorAll('thead th')].find((cell) =>
+                cell.textContent?.includes(text),
+            )!;
+        const classes = (el: Element) => el.className.split(/\s+/);
+        expect(classes(th('EAN'))).toEqual(
+            expect.arrayContaining(['hidden', 'sm:table-cell']),
+        );
+        expect(classes(th('Reorder level'))).toEqual(
+            expect.arrayContaining(['hidden', 'md:table-cell']),
+        );
+        for (const shown of ['Name', 'Stock', 'History'])
+            expect(classes(th(shown))).not.toContain('hidden');
+        const button = document.querySelector<HTMLElement>(
+            '[data-testid="stock-history-button"]',
+        )!;
+        expect(button.getAttribute('aria-label')).toBe(
+            'Stock history for rice',
+        );
+        expect(classes(button)).toEqual(
+            expect.arrayContaining(['min-h-11', 'min-w-11']),
+        );
+        expect(button.querySelector('.sm\\:hidden')?.textContent).toBe(
+            'History',
+        );
+        button.click();
+        await flush();
+        const product = document.querySelector(
+            '[data-testid="stock-history-product"]',
+        );
+        expect(product?.textContent).toContain('EAN 4006381333931');
+        expect(product?.textContent).toContain('Reorder level 9');
+    });
     it('aligns the Low stock checkbox with the inputs, not their labels (#208)', async () => {
         await mount();
         const label = document.querySelector(
