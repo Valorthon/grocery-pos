@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, reactive, type App } from 'vue';
-import type { RouteMeta } from 'vue-router';
+import type { RouteMeta, Router } from 'vue-router';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
 import { click, field, flush, type } from '@/testing/form-dom';
@@ -11,18 +11,27 @@ import type { ApiGet } from '@/testing/api-mock';
 import Inventories from './Inventories.vue';
 import RestockAdd from './Restock/Add.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), post: vi.fn() }));
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
+const nav = vi.hoisted(() => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    resolve: null as null | Router['resolve'],
+}));
 vi.mock('@/axios', () => ({ default: api }));
 let route: {
     query: Record<string, string>;
     name: string;
     meta?: RouteMeta;
 };
-vi.mock('vue-router', () => ({
+vi.mock('vue-router', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('vue-router')>()),
     useRoute: () => route,
     useRouter: () => nav,
     onBeforeRouteLeave: vi.fn(),
 }));
+// The app's own route table answers `resolve`, so the Adjust button follows
+// the real Adjustments/Add meta (#206).
+const { default: appRouter } = await import('@/router');
+nav.resolve = appRouter.resolve.bind(appRouter);
 let app: App | undefined;
 let pinia = createPinia();
 const rows = (): InventoryRow[] =>
@@ -122,6 +131,31 @@ describe('reorder list and restock draft', () => {
         expect(document.body.textContent).not.toContain(
             'Create purchase order',
         );
+        expect(document.body.textContent).toContain('Adjust');
+    });
+    it('offers Adjust only to roles that may open the adjustment page (#206)', async () => {
+        await mount();
+        const labels = () =>
+            [...document.querySelectorAll('button')].map((b) =>
+                b.textContent!.trim(),
+            );
+        expect(labels()).not.toContain('Adjust');
+        app!.unmount();
+        useAuthStore().user = {
+            userId: 'x',
+            username: 'x',
+            roles: [Role.Admin],
+        };
+        await mount();
+        expect(labels()).toContain('Adjust');
+    });
+    it('describes the empty New restock as adding restock lines (#206)', async () => {
+        await mount(RestockAdd);
+        expect(document.body.textContent).toContain('No restock lines yet');
+        expect(document.body.textContent).toContain(
+            'Click "Add Product" to add a line for each product received.',
+        );
+        expect(document.body.textContent).not.toContain('No new products');
     });
     it('applies a low-stock toggle once on page one and retains server order', async () => {
         route.query = {};

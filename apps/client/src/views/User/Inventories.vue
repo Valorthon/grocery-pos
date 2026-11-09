@@ -25,6 +25,7 @@
                 >Create purchase order</BaseButton
             >
             <BaseButton
+                v-if="canAdjust"
                 size="sm"
                 @click="router.push({ name: 'Adjustments/Add' })"
             >
@@ -116,6 +117,7 @@ import FilterBar from '@/components/ui/FilterBar.vue';
 import type { FilterChip } from '@/components/ui/page-primitives';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
+import { canOpenRoute, type RouteAccessMeta } from '@/router/access';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
@@ -132,6 +134,14 @@ import type { InventoryRow, Paginated } from '@grocery-pos/contracts';
 
 const history = ref<Pick<ProductView, '_id' | 'name' | 'unit'> | null>(null);
 const router = useRouter();
+// Offered only to whoever the router lets onto Adjustments/Add (#206): a
+// Restocker can list inventory but not adjust it.
+const canAdjust = computed(() =>
+    canOpenRoute(
+        router.resolve({ name: 'Adjustments/Add' }).meta as RouteAccessMeta,
+        useAuthStore().user?.roles ?? [],
+    ),
+);
 const route = useRoute();
 const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();

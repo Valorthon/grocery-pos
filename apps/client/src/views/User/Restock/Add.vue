@@ -47,7 +47,7 @@
                 :hint="
                     items.length
                         ? 'No draft matches the search.'
-                        : 'No new products added yet. Click &quot;Add Product&quot; to start.'
+                        : 'Click &quot;Add Product&quot; to add a line for each product received.'
                 "
             >
                 <template #icon><PackagePlus class="w-6 h-6" /></template>
