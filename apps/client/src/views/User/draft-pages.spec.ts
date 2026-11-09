@@ -91,7 +91,8 @@ const cases: [string, PageCase][] = [
             saveLabel: 'Save',
             dialogTitle: 'Save Restock Info',
             emptyMessage: 'No restock lines to save',
-            emptyState: 'No new products added yet. Click "Add Product"',
+            emptyState:
+                'Click "Add Product" to add a line for each product received.',
             draft: (name) => ({
                 isNewProduct: true,
                 autoGenerateEAN: true,
