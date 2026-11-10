@@ -183,7 +183,9 @@ describe('event-date reports UI', () => {
         expect(tile('prior')).toContain('2 reversals');
         expect(tile('late')).toContain('Late offline occurrences');
         expect(tile('late')).toContain('₱4.50');
-        expect(tile('late')).toContain('1 sale ');
+        expect(tile('late')).toContain(
+            '1 sale uploaded after its shift closed',
+        );
         const notes = document.querySelector<HTMLDetailsElement>(
             '[data-testid="reconciliation-notes"]',
         )!;

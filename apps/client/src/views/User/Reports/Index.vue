@@ -289,14 +289,16 @@
                         </div>
                         <details
                             data-testid="reconciliation-notes"
-                            class="rounded-xl border border-slate-200 p-3 text-sm"
+                            class="rounded-xl border border-line p-3 text-sm"
                         >
-                            <summary class="cursor-pointer font-bold">
+                            <summary
+                                class="cursor-pointer rounded-control font-bold focus-ring"
+                            >
                                 How these numbers work
                             </summary>
                             <ul class="mt-2 list-disc space-y-1 pl-5">
                                 <li
-                                    v-for="line in RECONCILIATION_NOTES"
+                                    v-for="line in SALES_REPORT_RECONCILIATION_NOTES"
                                     :key="line"
                                 >
                                     {{ line }}
@@ -324,6 +326,7 @@ import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue';
 import { isAxiosError } from 'axios';
 import { RouterLink } from 'vue-router';
 import {
+    SALES_REPORT_RECONCILIATION_NOTES,
     PaymentType,
     REPORT_LIMITS,
     SalesReportGroup,
@@ -346,7 +349,6 @@ import { formatCurrency } from '@/utils/currency';
 import { useSalesLookups } from '@/composables/useSalesLookups';
 import StatTile from '@/components/ui/StatTile.vue';
 import { buttonClass } from '@/components/ui/button-class';
-import { RECONCILIATION_NOTES } from './reconciliation-notes';
 import { DATE_PRESET_OPTIONS, presetRange, type ReportPreset } from './presets';
 
 const {
@@ -428,7 +430,7 @@ const reconciliationTiles = computed(() => {
             key: 'late',
             label: 'Late offline occurrences',
             value: formatCurrency(r.lateOfflineNetSales),
-            hint: `${r.lateOfflineTransactions} ${r.lateOfflineTransactions === 1 ? 'sale' : 'sales'} for late-offline addenda`,
+            hint: `${r.lateOfflineTransactions} ${r.lateOfflineTransactions === 1 ? 'sale' : 'sales'} uploaded after ${r.lateOfflineTransactions === 1 ? 'its' : 'their'} shift closed`,
         },
     ];
 });
