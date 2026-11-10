@@ -19,7 +19,7 @@ const config: Config = {
     coverageThreshold: {
         global: { statements: 97, branches: 85, functions: 96, lines: 97 },
     },
-    maxWorkers: process.env.CI ? undefined : '25%',
+    ...(process.env.CI ? {} : { maxWorkers: '25%' }),
 };
 
 export default config;
