@@ -547,8 +547,11 @@ describe('sales-history applied filters and receipt identity', () => {
         document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
         await flush();
         expect(
-            document.querySelector('[data-testid="sale-full-id"]')?.textContent,
-        ).toContain('Sale #DEADBEEF · 0123456789abcdefdeadbeef');
+            document.querySelector('[data-testid="sale-number"]')?.textContent,
+        ).toContain('Sale #DEADBEEF');
+        expect(
+            document.querySelector('[data-testid="sale-full-id"]'),
+        ).toBeNull();
     });
     it('rejects malformed identity/date filters without replacing the current result', async () => {
         serve(CASH_SALE, []);
@@ -702,5 +705,221 @@ describe('page frame per layout (#159)', () => {
     it('leaves scrolling to the admin layout main', async () => {
         const classes = await rootClasses('SalesHistory');
         expect(classes).not.toContain('overflow-y-auto');
+    });
+});
+
+describe('sale details receipt (#218)', () => {
+    async function openSale(sale: object, open: object[] = []) {
+        serve(sale, open);
+        await mountAndOpen();
+    }
+    async function mountAndOpen() {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await flush();
+    }
+    const byTestId = (id: string) =>
+        document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const button = (text: string) =>
+        [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+            (b) => b.textContent?.trim() === text,
+        );
+
+    const APPROVED = {
+        ...CASH_SALE,
+        discount: {
+            type: 'FIXED',
+            value: 5_000,
+            reason: 'loyal customer',
+            amount: 5_000,
+            approvedBy: 'u-boss',
+            approvedByName: 'maria',
+        },
+        status: SaleStatus.REFUNDED,
+        reversal: {
+            type: 'REFUND',
+            reason: 'returned',
+            approvedBy: 'u-sup',
+            approvedByName: 'sam',
+            at: '2026-09-25T02:00:00.000Z',
+            payoutShift: '0123456789abcdef12345678',
+            payoutAmount: 75_000,
+        },
+    };
+
+    it('hides the full ID behind a toggle, with Copy once shown', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true,
+        });
+        await openSale({ ...CASH_SALE, _id: '0123456789abcdefdeadbeef' });
+
+        expect(byTestId('sale-number')?.textContent).toContain(
+            'Sale #DEADBEEF',
+        );
+        expect(byTestId('sale-full-id')).toBeNull();
+        expect(byTestId('sale-id-copy')).toBeNull();
+
+        byTestId('sale-id-toggle')!.click();
+        await flush();
+        expect(byTestId('sale-full-id')?.textContent).toBe(
+            '0123456789abcdefdeadbeef',
+        );
+        expect(byTestId('sale-id-toggle')?.textContent).toContain(
+            'Hide full ID',
+        );
+        byTestId('sale-id-copy')!.click();
+        await flush();
+        expect(writeText).toHaveBeenCalledWith('0123456789abcdefdeadbeef');
+    });
+
+    it('shows a zero Change for exact cash', async () => {
+        await openSale({
+            ...CASH_SALE,
+            tenders: [{ type: TenderType.CASH, amount: 80_000 }],
+            changeGiven: 0,
+        });
+        expect(byTestId('sale-change')?.textContent).toContain('0.00');
+    });
+
+    it('shows no Change for GCash only, and the reference to a seller', async () => {
+        useAuthStore().user = { username: 'ana', roles: [Role.Seller] };
+        await openSale({
+            ...CASH_SALE,
+            paymentType: PaymentType.GCASH,
+            tenders: [{ type: TenderType.GCASH, amount: 80_000 }],
+            changeGiven: 0,
+            referenceNumber: '1234567890123',
+        });
+        expect(byTestId('sale-change')).toBeNull();
+        expect(byTestId('sale-reference')?.textContent).toContain(
+            '1234567890123',
+        );
+    });
+
+    it('shows when an offline sale occurred and when it was recorded', async () => {
+        await openSale({
+            ...CASH_SALE,
+            offline: true,
+            soldAt: '2026-09-24T01:00:00.000Z',
+            stockShortfall: true,
+            lateOffline: true,
+        });
+        const date = byTestId('sale-detail-date')!;
+        expect(date.textContent).toContain('Occurred');
+        expect(date.querySelector('time')?.getAttribute('datetime')).toBe(
+            '2026-09-24T01:00:00.000Z',
+        );
+        expect(
+            byTestId('sale-detail-recorded')
+                ?.querySelector('time')
+                ?.getAttribute('datetime'),
+        ).toBe('2026-09-25T01:00:00.000Z');
+        expect(byTestId('sale-offline-notice')?.textContent).toContain(
+            'Stock shortfall',
+        );
+        expect(byTestId('sale-offline-notice')?.textContent).toContain(
+            'addendum',
+        );
+    });
+
+    it('lists lines compactly, measured quantities per unit', async () => {
+        serve(CASH_SALE, []);
+        const serveRest = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/sales/details/sale1'
+                ? Promise.resolve({
+                      data: [
+                          {
+                              _id: 'l1',
+                              product: { name: 'Rice' },
+                              quantity: 450,
+                              unit: 'KG',
+                              unitPrice: 18_000,
+                          },
+                      ],
+                  })
+                : serveRest(url, config),
+        );
+        await mountAndOpen();
+
+        const line = byTestId('sale-line')!;
+        expect(line.textContent).toContain('Rice');
+        expect(line.textContent).toContain('0.45');
+        expect(line.textContent).toContain('81.00');
+        expect(byTestId('details-table')?.querySelector('thead')).toBeNull();
+    });
+
+    it('shows approvers and the paying shift to an admin', async () => {
+        await openSale(APPROVED);
+        const facts = byTestId('sale-admin-facts')?.textContent ?? '';
+        expect(facts).toContain('Discount approved by');
+        expect(facts).toContain('maria');
+        expect(facts).toContain('Refund approved by');
+        expect(facts).toContain('sam');
+        expect(facts).toContain('#12345678');
+        expect(byTestId('sale-reversal')?.textContent).toContain('750.00');
+        expect(byTestId('sale-discount')?.textContent).toContain(
+            'loyal customer',
+        );
+    });
+
+    it('never shows approvers or the paying shift to a seller', async () => {
+        useAuthStore().user = { username: 'ana', roles: [Role.Seller] };
+        await openSale(APPROVED);
+        expect(byTestId('sale-admin-facts')).toBeNull();
+        expect(document.body.textContent).not.toContain('maria');
+        expect(byTestId('sale-reversal')?.textContent).toContain('returned');
+    });
+
+    it('swaps the receipt for the void panel, and Back keeps the inputs', async () => {
+        await openSale(CASH_SALE, [
+            openShift(OTHER_SHIFT, 'ben'),
+            openShift('shift-3', 'cy'),
+        ]);
+        button('Void sale')!.click();
+        await flush();
+        expect(byTestId('sale-receipt')).toBeNull();
+        expect(byTestId('reversal-panel')).not.toBeNull();
+        expect(byTestId('reversal-amount')?.textContent).toContain('800.00');
+        const confirm = byTestId('reversal-confirm') as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        expect(confirm.className).toContain('disabled:bg-paper');
+
+        const reason =
+            document.querySelector<HTMLInputElement>('#reversal-reason')!;
+        reason.value = 'mis-ring';
+        reason.dispatchEvent(new Event('input'));
+        const select = document.querySelector<HTMLSelectElement>(
+            '[data-testid="payout-shift"] select',
+        )!;
+        select.value = OTHER_SHIFT;
+        select.dispatchEvent(new Event('change'));
+        await flush();
+
+        byTestId('reversal-back')!.click();
+        await flush();
+        expect(byTestId('reversal-panel')).toBeNull();
+        expect(byTestId('sale-receipt')).not.toBeNull();
+
+        button('Void sale')!.click();
+        await flush();
+        expect(
+            document.querySelector<HTMLInputElement>('#reversal-reason')!.value,
+        ).toBe('mis-ring');
+        expect(
+            document.querySelector<HTMLSelectElement>(
+                '[data-testid="payout-shift"] select',
+            )!.value,
+        ).toBe(OTHER_SHIFT);
+        expect(
+            (byTestId('reversal-confirm') as HTMLButtonElement).disabled,
+        ).toBe(false);
     });
 });

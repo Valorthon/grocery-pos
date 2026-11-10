@@ -67,13 +67,32 @@ import { ManagerOverrideService } from '../auth/override/override.service';
 
 /**
  * Sale fields a non-admin never reads: which shift paid a reversal back and
- * how much. The cashier is blind to drawer figures until their own Z-read
- * (issue #2), and a payout may have come out of another cashier's drawer.
+ * how much, and which manager approved the discount or reversal. The
+ * cashier is blind to drawer figures until their own Z-read (issue #2), a
+ * payout may have come out of another cashier's drawer, and approvers are
+ * an ADMIN-only detail of Sale Details (#218).
  */
 export const CASHIER_HIDDEN_SALE_FIELDS = {
     'reversal.payoutShift': 0,
     'reversal.payoutAmount': 0,
+    'reversal.approvedBy': 0,
+    'discount.approvedBy': 0,
 } as const;
+
+/** A copy of a discount or reversal without its approver (#218). */
+export function withoutApprover<T extends { approvedBy?: unknown }>(
+    part: T,
+): Omit<T, 'approvedBy'> {
+    const copy: Partial<T> = { ...part };
+    delete copy.approvedBy;
+    return copy as Omit<T, 'approvedBy'>;
+}
+
+/** A sale row's approver ids, as stored or as read back. */
+type ApproverIds = {
+    discount?: { approvedBy?: unknown } | null;
+    reversal?: { approvedBy?: unknown } | null;
+};
 
 /** A sales filter, or null when the caller may read no sale at all. */
 export type SaleScope = { cashier?: Types.ObjectId; shift?: Types.ObjectId };
@@ -190,7 +209,8 @@ export class SalesService {
         );
         if (!filter) return { data: [], totalItems: 0 };
 
-        const projection = user.roles.includes(Role.Admin)
+        const isAdmin = user.roles.includes(Role.Admin);
+        const projection = isAdmin
             ? INTERNAL_SALE_FIELDS
             : { ...INTERNAL_SALE_FIELDS, ...CASHIER_HIDDEN_SALE_FIELDS };
 
@@ -267,8 +287,10 @@ export class SalesService {
                     },
                 },
             ]);
+            const rows = pageResult?.data ?? [];
+            if (isAdmin) await this.nameApprovers(rows);
             return {
-                data: pageResult?.data ?? [],
+                data: rows,
                 totalItems: pageResult?.total[0]?.count ?? 0,
             };
         }
@@ -289,11 +311,42 @@ export class SalesService {
             // the user and must match the pages (issue #16).
             this.model.countDocuments(filter),
         ]);
+        if (isAdmin) await this.nameApprovers(data);
 
         return {
             data,
             totalItems,
         };
+    }
+
+    /**
+     * Adds `approvedByName` beside each discount and reversal approver id,
+     * for an ADMIN's Sale Details (#218): one read of the page's approvers.
+     * A deleted approver keeps the id alone.
+     */
+    private async nameApprovers(rows: ApproverIds[]): Promise<void> {
+        const refs = rows.flatMap((row) =>
+            [row.discount, row.reversal].filter(
+                (part): part is { approvedBy?: unknown } =>
+                    !!part && part.approvedBy != null,
+            ),
+        );
+        if (!refs.length) return;
+        const ids = [...new Set(refs.map((ref) => String(ref.approvedBy)))];
+        const users = await this.connection
+            .collection<{ name?: string }>('users')
+            .find(
+                { _id: { $in: ids.map((id) => new Types.ObjectId(id)) } },
+                { projection: { name: 1 } },
+            )
+            .toArray();
+        const names = new Map(
+            users.map((user) => [String(user._id), user.name]),
+        );
+        for (const ref of refs) {
+            const name = names.get(String(ref.approvedBy));
+            if (name) Object.assign(ref, { approvedByName: name });
+        }
     }
 
     /**
@@ -874,12 +927,21 @@ export class SalesService {
                     },
                     session,
                 );
+                if (!user.roles.includes(Role.Admin)) {
+                    // Approvers are ADMIN-only (#218), as are payouts.
+                    return {
+                        ...sale,
+                        reversal: withoutApprover(sale.reversal!),
+                        ...(sale.discount && {
+                            discount: withoutApprover(sale.discount),
+                        }),
+                    };
+                }
                 return {
                     ...sale,
                     reversal: {
                         ...sale.reversal!,
-                        ...(user.roles.includes(Role.Admin) &&
-                            payoutShift && { payoutShift, payoutAmount }),
+                        ...(payoutShift && { payoutShift, payoutAmount }),
                     },
                 };
             },

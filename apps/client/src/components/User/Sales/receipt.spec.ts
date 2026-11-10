@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { PaymentType, TenderType } from '@grocery-pos/contracts';
-import { hasCashTender, saleNumber } from './receipt';
+import { DiscountType, PaymentType, TenderType } from '@grocery-pos/contracts';
+import { discountLabel, hasCashTender, saleNumber } from './receipt';
 import type { Receipt } from '@grocery-pos/contracts';
+
+describe('discountLabel (#218, shared with Sale Details)', () => {
+    it('names a percent discount by its percent, a fixed one as Fixed', () => {
+        const base = { reason: 'r', amount: 100 };
+        expect(
+            discountLabel({ ...base, type: DiscountType.PERCENT, value: 10 }),
+        ).toBe('10%');
+        expect(
+            discountLabel({ ...base, type: DiscountType.FIXED, value: 100 }),
+        ).toBe('Fixed');
+    });
+});
 
 describe('saleNumber', () => {
     it('is the last 8 characters of the id, upper case', () => {

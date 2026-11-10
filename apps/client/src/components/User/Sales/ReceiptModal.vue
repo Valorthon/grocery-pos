@@ -228,9 +228,13 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import type { Receipt } from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
 import { paymentLabel, tenderLabel } from './checkout';
-import { DiscountType, receiptStoreIdentity } from '@grocery-pos/contracts';
+import { receiptStoreIdentity } from '@grocery-pos/contracts';
 import { formatStoreDateTime } from '@/utils/datetime';
-import { hasCashTender, saleNumber } from './receipt';
+import {
+    discountLabel as receiptDiscountLabel,
+    hasCashTender,
+    saleNumber,
+} from './receipt';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -262,13 +266,9 @@ const itemCount = computed(
         ) ?? 0,
 );
 
-const discountLabel = computed(() => {
-    const discount = props.receipt?.discount;
-    if (!discount) return '';
-    return discount.type === DiscountType.PERCENT
-        ? `${discount.value}%`
-        : 'Fixed';
-});
+const discountLabel = computed(() =>
+    props.receipt?.discount ? receiptDiscountLabel(props.receipt.discount) : '',
+);
 
 const methodLabel = computed(() =>
     props.receipt ? paymentLabel(props.receipt.paymentType) : '—',

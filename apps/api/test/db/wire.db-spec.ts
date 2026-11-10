@@ -621,6 +621,24 @@ describe('sales', () => {
             expect(
                 rows.filter((row) => row.reversal).length,
             ).toBeGreaterThanOrEqual(2);
+            // Approvers are ADMIN-only, named for the admin (#218).
+            const parts = rows.flatMap(
+                (row) =>
+                    [row.discount, row.reversal].filter((part) => !!part) as {
+                        approvedBy?: unknown;
+                        approvedByName?: unknown;
+                    }[],
+            );
+            expect(parts.length).toBeGreaterThanOrEqual(2);
+            for (const part of parts) {
+                if (who() === admin) {
+                    expectId('approvedBy', part.approvedBy);
+                    expect(typeof part.approvedByName).toBe('string');
+                } else {
+                    expect(part).not.toHaveProperty('approvedBy');
+                    expect(part).not.toHaveProperty('approvedByName');
+                }
+            }
         },
     );
 
