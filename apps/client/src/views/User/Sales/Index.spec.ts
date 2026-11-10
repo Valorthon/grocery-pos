@@ -548,10 +548,10 @@ describe('sales-history applied filters and receipt identity', () => {
         await flush();
         expect(
             document.querySelector('[data-testid="sale-number"]')?.textContent,
-        ).toContain('Sale #DEADBEEF');
+        ).toContain('#DEADBEEF');
         expect(
-            document.querySelector('[data-testid="sale-full-id"]'),
-        ).toBeNull();
+            document.querySelector('[data-testid="sale-full-id"]')?.textContent,
+        ).toContain('deadbeef');
     });
     it('rejects malformed identity/date filters without replacing the current result', async () => {
         serve(CASH_SALE, []);
@@ -759,7 +759,7 @@ describe('sale details receipt (#218)', () => {
         },
     };
 
-    it('hides the full ID behind a toggle, with Copy once shown', async () => {
+    it('always shows the full ID, with an icon-only Copy (#236)', async () => {
         const writeText = vi.fn().mockResolvedValue(undefined);
         Object.defineProperty(navigator, 'clipboard', {
             value: { writeText },
@@ -767,23 +767,61 @@ describe('sale details receipt (#218)', () => {
         });
         await openSale({ ...CASH_SALE, _id: '0123456789abcdefdeadbeef' });
 
-        expect(byTestId('sale-number')?.textContent).toContain(
-            'Sale #DEADBEEF',
-        );
-        expect(byTestId('sale-full-id')).toBeNull();
-        expect(byTestId('sale-id-copy')).toBeNull();
-
-        byTestId('sale-id-toggle')!.click();
-        await flush();
+        expect(byTestId('sale-number')?.textContent).toBe('#DEADBEEF');
         expect(byTestId('sale-full-id')?.textContent).toBe(
             '0123456789abcdefdeadbeef',
         );
-        expect(byTestId('sale-id-toggle')?.textContent).toContain(
-            'Hide full ID',
-        );
-        byTestId('sale-id-copy')!.click();
+        expect(byTestId('sale-full-id')?.className).toContain('text-xs');
+        expect(byTestId('sale-id-toggle')).toBeNull();
+        const copy = byTestId('sale-id-copy')!;
+        expect(copy.getAttribute('aria-label')).toBe('Copy full ID');
+        expect(copy.textContent?.trim()).toBe('');
+        expect(copy.className).toContain('w-11');
+        expect(copy.className).toContain('h-11');
+        copy.click();
         await flush();
         expect(writeText).toHaveBeenCalledWith('0123456789abcdefdeadbeef');
+    });
+
+    it('puts total and status on one row and Date, Cashier, Sale in a grid (#236)', async () => {
+        await openSale(CASH_SALE);
+        const row = byTestId('sale-total-row')!;
+        expect(row.className).toContain('justify-between');
+        expect(row.contains(byTestId('sale-total'))).toBe(true);
+        expect(byTestId('sale-total')?.className).toContain('text-2xl');
+        const labels = [
+            ...byTestId('sale-detail-grid')!.querySelectorAll('dt'),
+        ].map((dt) => dt.textContent?.trim());
+        expect(labels).toEqual(['Date', 'Cashier', 'Sale']);
+    });
+
+    it('lays out the footer: Void/Refund left, Close right (#236)', async () => {
+        await openSale(CASH_SALE);
+        const footer = byTestId('sale-footer')!;
+        expect(footer.className).toContain('sm:justify-between');
+        expect(footer.className).toContain('flex-col');
+        const texts = [...footer.querySelectorAll('button')].map((b) =>
+            b.textContent?.trim(),
+        );
+        expect(texts).toEqual(['Void sale', 'Refund sale', 'Close']);
+        for (const b of footer.querySelectorAll('button'))
+            expect(b.className).toContain('min-h-11');
+        const actions = byTestId('sale-reverse-actions')!;
+        for (const b of actions.querySelectorAll('button'))
+            expect(b.className).toContain('text-danger');
+        expect(byTestId('sale-close')?.className).toContain('sm:ml-auto');
+    });
+
+    it('shows only Close, on the right, for a reversed sale (#236)', async () => {
+        await openSale(APPROVED);
+        const footer = byTestId('sale-footer')!;
+        expect(
+            [...footer.querySelectorAll('button')].map((b) =>
+                b.textContent?.trim(),
+            ),
+        ).toEqual(['Close']);
+        expect(byTestId('sale-reverse-actions')).toBeNull();
+        expect(byTestId('sale-close')?.className).toContain('sm:ml-auto');
     });
 
     it('shows a zero Change for exact cash', async () => {
