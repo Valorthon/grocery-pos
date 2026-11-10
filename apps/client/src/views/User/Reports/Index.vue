@@ -19,20 +19,15 @@
                     {{ options.maxDays }} days. Weeks start Monday.
                 </p>
                 <form
-                    class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                    class="flex flex-wrap items-end gap-3 *:min-w-40 *:flex-1 *:basis-40"
                     @submit.prevent="apply"
                 >
                     <BaseSelect
                         id="report-preset"
                         v-model="preset"
                         label="Date preset"
-                        :options="
-                            REPORT_PRESETS.map((value) => ({
-                                label: value,
-                                value,
-                            }))
-                        "
-                        @update:model-value="choosePreset"
+                        :options="DATE_PRESET_OPTIONS"
+                        @update:model-value="pickPreset"
                     />
                     <BaseInput
                         id="report-from"
@@ -97,9 +92,25 @@
                             }))
                         "
                     />
-                    <BaseButton type="submit" :disabled="loading || !options">{{
-                        loading ? 'Loading…' : 'Run report'
-                    }}</BaseButton>
+                    <div class="flex flex-none! basis-auto! items-end gap-3">
+                        <BaseButton
+                            type="submit"
+                            class="min-h-11"
+                            :disabled="loading || !options"
+                            >{{
+                                loading ? 'Loading…' : 'Run report'
+                            }}</BaseButton
+                        >
+                        <BaseButton
+                            variant="outline"
+                            class="min-h-11"
+                            :disabled="!filtersActive || !options"
+                            @click="clearFilters"
+                        >
+                            <template #icon><X :size="16" /></template>
+                            Clear Filters
+                        </BaseButton>
+                    </div>
                 </form>
                 <p v-if="filterError" role="alert" class="text-sm text-red-700">
                     {{ filterError }}
@@ -326,11 +337,11 @@ import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
-import { ChartColumn } from '@lucide/vue';
+import { ChartColumn, X } from '@lucide/vue';
 import { apiErrorText } from '@/utils/api-error';
 import { formatCurrency } from '@/utils/currency';
 import { useSalesLookups } from '@/composables/useSalesLookups';
-import { presetRange, REPORT_PRESETS, type ReportPreset } from './presets';
+import { DATE_PRESET_OPTIONS, presetRange, type ReportPreset } from './presets';
 
 const {
     categories,
@@ -395,6 +406,39 @@ function choosePreset() {
         ? presetRange(preset.value, options.value.today)
         : null;
     if (range) Object.assign(filters, range);
+}
+/** A preset applies at once (#215); Custom waits for Run report. */
+function pickPreset() {
+    if (preset.value === 'Custom') return;
+    choosePreset();
+    apply();
+}
+/** Clear is enabled while the form is off Today with the default grouping. */
+const filtersActive = computed(() => {
+    const today = options.value
+        ? presetRange('Today', options.value.today)
+        : null;
+    return !!(
+        preset.value !== 'Today' ||
+        filters.from !== today?.from ||
+        filters.to !== today?.to ||
+        filters.groupBy !== SalesReportGroup.DAY ||
+        filters.cashier ||
+        filters.category ||
+        filters.paymentType
+    );
+});
+/** Back to Today with the default grouping and every filter cleared. */
+function clearFilters() {
+    preset.value = 'Today';
+    Object.assign(filters, {
+        groupBy: SalesReportGroup.DAY,
+        cashier: null,
+        category: null,
+        paymentType: null,
+    });
+    choosePreset();
+    apply();
 }
 function requestFilters(): Query {
     return {

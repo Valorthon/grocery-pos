@@ -2,7 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { click, field, fieldError, flush, type } from '@/testing/form-dom';
+import {
+    click,
+    field,
+    fieldError,
+    flush,
+    pick,
+    selectField,
+    type,
+} from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import { useUIStore } from '@/stores/ui';
 import { Role } from '@grocery-pos/contracts';
@@ -188,7 +196,9 @@ describe('restock history filters and paging (issue #20)', () => {
                 data:
                     url === '/restocks/users'
                         ? USERS
-                        : { data: [RESTOCK], totalItems },
+                        : url === '/settings/today'
+                          ? { today: '2026-11-10', timezone: 'Asia/Manila' }
+                          : { data: [RESTOCK], totalItems },
             }),
         );
     }
@@ -341,49 +351,66 @@ describe('restock history filters and paging (issue #20)', () => {
         ).toContain('All users');
     });
 
-    describe('restock history FilterBar (#171)', () => {
-        const chipLabels = () =>
-            [...document.querySelectorAll('[data-chip]')].map((b) =>
-                b.textContent!.trim(),
-            );
+    describe('restock history date presets (#215)', () => {
+        const clearButton = () =>
+            [...document.querySelectorAll('button')].find((b) =>
+                b.textContent?.includes('Clear Filters'),
+            )!;
 
-        it('chips show the applied range, never a reversed one being typed', async () => {
+        it('a preset sets both dates from the server today and loads page 1 once', async () => {
             serve();
             await mount();
-            expect(
-                document.querySelector('form[role="search"]'),
-            ).not.toBeNull();
-            await type('From', '2026-03-02');
-            await flush();
-            await type('To', '2026-03-01');
-            await flush();
-
-            expect(chipLabels()).toEqual(['From: 2026-03-02']);
-        });
-
-        it('removing a chip drops that filter with exactly one request', async () => {
-            serve();
-            await mount();
-            await choose(userFilter(), 'u1');
-            await type('From', '2026-03-02');
-            await flush();
+            await click('Next');
             api.get.mockClear();
 
-            document
-                .querySelector<HTMLButtonElement>(
-                    'button[aria-label="Remove filter From: 2026-03-02"]',
-                )!
-                .click();
+            await pick('Dates', 'Last week');
+
+            expect(api.get).toHaveBeenCalledWith('/settings/today');
+            expect(listCalls()).toEqual([
+                expect.objectContaining({
+                    page: 1,
+                    dateFrom: '2026-11-02',
+                    dateTo: '2026-11-08',
+                }),
+            ]);
+            expect(field('From').value).toBe('2026-11-02');
+            expect(field('To').value).toBe('2026-11-08');
+        });
+
+        it('a manual date edit switches the preset to Custom', async () => {
+            serve();
+            await mount();
+            await pick('Dates', 'Today');
+            await type('From', '2026-11-01');
             await flush();
+            expect(selectField('Dates').value).toBe('Custom');
+            expect(listCalls().slice(-1)[0]).toMatchObject({
+                dateFrom: '2026-11-01',
+                dateTo: '2026-11-10',
+            });
+        });
+
+        it('Clear Filters is disabled at defaults, enabled by a preset or deep link, and resets the preset', async () => {
+            serve();
+            await mount();
+            expect(clearButton().disabled).toBe(true);
+            await pick('Dates', 'This month');
+            expect(clearButton().disabled).toBe(false);
+            api.get.mockClear();
+
+            await click('Clear Filters');
 
             expect(listCalls()).toEqual([
                 expect.objectContaining({
                     page: 1,
-                    restockedBy: 'u1',
                     dateFrom: undefined,
+                    dateTo: undefined,
                 }),
             ]);
             expect(field('From').value).toBe('');
+            expect(selectField('Dates').value).not.toBe('This month');
+            expect(clearButton().disabled).toBe(true);
+            expect(document.querySelector('[data-chip]')).toBeNull();
         });
     });
 });

@@ -74,30 +74,29 @@ async function rowAction(label: string, row = 'milk') {
 
 const params = () => api.get.mock.calls.map(([, config]) => config?.params);
 
-describe('product list FilterBar (#171)', () => {
-    const chip = (label: string) =>
-        document.querySelector<HTMLButtonElement>(
-            `button[aria-label="Remove filter ${label}"]`,
-        );
+describe('product list FilterBar (#171, #215)', () => {
+    const clear = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
 
-    it('removes one chip with one load and never sends unsearched text', async () => {
+    it('shows no chips; Clear Filters is enabled only off the defaults and resets with one load', async () => {
         await mount();
+        expect(clear().disabled).toBe(true);
         await type('EAN / Barcode', '4006');
+        expect(clear().disabled).toBe(false);
         await type('Product Name', 'milk');
         await click('Search');
-        expect(chip('Name: milk')).not.toBeNull();
-        expect(chip('EAN: 4006')).not.toBeNull();
-        await type('Product Name', 'bread');
-        expect(chip('Name: bread')).toBeNull();
+        expect(document.querySelector('[data-chip]')).toBeNull();
         api.get.mockClear();
 
-        chip('EAN: 4006')!.click();
-        await flush();
+        await click('Clear Filters');
 
         expect(params()).toEqual([
-            expect.objectContaining({ page: 1, name: 'MILK', EAN: '' }),
+            expect.objectContaining({ page: 1, name: '', EAN: '' }),
         ]);
-        expect(field('Product Name').value).toBe('milk');
+        expect(field('Product Name').value).toBe('');
+        expect(clear().disabled).toBe(true);
     });
 });
 

@@ -218,6 +218,80 @@ describe('event-date reports UI', () => {
         expect(URL.createObjectURL).toHaveBeenCalledOnce();
         expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:csv');
     });
+    it('a preset applies at once with one request; other changes wait for Run report (#215)', async () => {
+        await mount();
+        const sales = () =>
+            api.get.mock.calls.filter(([url]) => url === '/reports/sales');
+        const before = sales().length;
+        const preset =
+            document.querySelector<HTMLSelectElement>('#report-preset')!;
+        preset.value = 'Last week';
+        preset.dispatchEvent(new Event('change'));
+        await flush();
+        expect(sales()).toHaveLength(before + 1);
+        expect(sales()[sales().length - 1]?.[1]).toEqual({
+            params: { from: '2026-10-26', to: '2026-11-01', groupBy: 'day' },
+        });
+
+        const group =
+            document.querySelector<HTMLSelectElement>('#report-group')!;
+        group.value = SalesReportGroup.PRODUCT;
+        group.dispatchEvent(new Event('change'));
+        await type('From', '2026-10-20');
+        await flush();
+        expect(preset.value).toBe('Custom');
+        preset.value = 'Custom';
+        preset.dispatchEvent(new Event('change'));
+        await flush();
+        expect(sales()).toHaveLength(before + 1);
+        await click('Run report');
+        expect(sales()).toHaveLength(before + 2);
+    });
+    it('Clear resets to Today with the default grouping, enabled only off the defaults (#215)', async () => {
+        await mount();
+        const clear = () =>
+            [...document.querySelectorAll('button')].find((b) =>
+                b.textContent?.includes('Clear Filters'),
+            )!;
+        expect(clear().disabled).toBe(true);
+        const group =
+            document.querySelector<HTMLSelectElement>('#report-group')!;
+        group.value = SalesReportGroup.PRODUCT;
+        group.dispatchEvent(new Event('change'));
+        await type('From', '2026-11-01');
+        await flush();
+        expect(clear().disabled).toBe(false);
+        const sales = () =>
+            api.get.mock.calls.filter(([url]) => url === '/reports/sales');
+        const before = sales().length;
+
+        await click('Clear Filters');
+
+        expect(sales()).toHaveLength(before + 1);
+        expect(sales()[sales().length - 1]?.[1]).toEqual({
+            params: { from: '2026-11-05', to: '2026-11-05', groupBy: 'day' },
+        });
+        expect(
+            document.querySelector<HTMLSelectElement>('#report-preset')!.value,
+        ).toBe('Today');
+        expect(group.value).toBe(SalesReportGroup.DAY);
+        expect(clear().disabled).toBe(true);
+    });
+    it('Run report and Clear sit together at the row end at field height (#215)', async () => {
+        await mount();
+        const run = [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Run report'),
+        )!;
+        const clear = [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+        expect(run.parentElement).toBe(clear.parentElement);
+        expect(run.parentElement!.classList).toContain('items-end');
+        expect(run.classList).toContain('min-h-11');
+        expect(run.parentElement!.parentElement!.lastElementChild).toBe(
+            run.parentElement,
+        );
+    });
     it('shows settings failures and retries initialization', async () => {
         const original = api.get.getMockImplementation()!;
         api.get.mockImplementationOnce(() =>

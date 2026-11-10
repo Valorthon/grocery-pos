@@ -2,14 +2,13 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import {
-    AUDIT_ACTION_LABELS,
     AuditAction,
     Role,
     STRING_LIMITS,
     type AuditLogView,
 } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
-import { click, field, flush } from '@/testing/form-dom';
+import { click, field, flush, pick, selectField } from '@/testing/form-dom';
 import type { ApiGet } from '@/testing/api-mock';
 import Index from './Index.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
@@ -95,33 +94,48 @@ it('pages and retries applied filters rather than unsearched edits', async () =>
         api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
     ).toMatchObject({ from: undefined, page: 1 });
 });
-it('removes one chip with one request and never sends unsearched text (#171)', async () => {
+it('a date preset searches page 1 once with the server today; an edit makes it Custom; Clear resets it (#215)', async () => {
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/settings/today'
+                    ? { today: '2026-11-10', timezone: 'Asia/Manila' }
+                    : { data: [row()], totalItems: 21 },
+        }),
+    );
     await mount();
-    expect(
-        field('Username').form?.querySelector('button[type="submit"]'),
-    ).not.toBeNull();
-    input('Username', 'maria');
-    await click('Search');
-    const select = document.querySelector('select')!;
-    select.value = AuditAction.USER_CREATED;
-    select.dispatchEvent(new Event('change'));
-    await flush();
-    input('Username', 'jose');
-    await flush();
-    const before = api.get.mock.calls.length;
+    const clear = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+    expect(clear().disabled).toBe(true);
+    await click('Next');
+    const audits = () => api.get.mock.calls.filter(([u]) => u === '/audit');
+    const before = audits().length;
 
-    document
-        .querySelector<HTMLButtonElement>(
-            `button[aria-label="Remove filter Action: ${AUDIT_ACTION_LABELS[AuditAction.USER_CREATED]}"]`,
-        )!
-        .click();
-    await flush();
+    await pick('Dates', 'This week');
 
-    expect(api.get.mock.calls.length).toBe(before + 1);
-    expect(
-        api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
-    ).toMatchObject({ username: 'maria', action: undefined, page: 1 });
-    expect(field('Username').value).toBe('maria');
+    expect(audits()).toHaveLength(before + 1);
+    expect(audits()[audits().length - 1]?.[1]?.params).toMatchObject({
+        from: '2026-11-09',
+        to: '2026-11-10',
+        page: 1,
+    });
+    expect(clear().disabled).toBe(false);
+
+    input('From', '2026-11-01');
+    field('From').dispatchEvent(new Event('change'));
+    await flush();
+    expect(selectField('Dates').value).toBe('Custom');
+
+    await click('Clear Filters');
+    expect(audits()[audits().length - 1]?.[1]?.params).toMatchObject({
+        from: undefined,
+        to: undefined,
+        page: 1,
+    });
+    expect(selectField('Dates').value).not.toBe('Custom');
+    expect(clear().disabled).toBe(true);
 });
 it('validates date ordering and applies exact action selection', async () => {
     await mount();

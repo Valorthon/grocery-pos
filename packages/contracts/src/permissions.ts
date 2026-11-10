@@ -52,9 +52,9 @@ export interface Permission {
 
 export const PERMISSIONS: Permission[] = [
     {
-        label: 'Read store identity and settings',
+        label: 'Read store identity, settings and date',
         roles: ASSIGNABLE_ROLES,
-        routes: ['GET /settings'],
+        routes: ['GET /settings', 'GET /settings/today'],
         appRoles: [],
     },
     {

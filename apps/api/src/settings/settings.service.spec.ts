@@ -141,3 +141,20 @@ it('binds reads and timezone lookups to the supplied transaction snapshot', asyn
     await service.timezone(transaction);
     expect(session).toHaveBeenCalledWith(transaction);
 });
+describe('store today (#215)', () => {
+    it('is the calendar date in the committed store timezone, not UTC', async () => {
+        const { service, lean } = harness();
+        lean.mockResolvedValue({ ...row, timezone: 'Asia/Manila' });
+        // 16:30 UTC on the 31st is 00:30 on Nov 1 in Manila.
+        await expect(
+            service.today(new Date('2026-10-31T16:30:00Z')),
+        ).resolves.toEqual({ today: '2026-11-01', timezone: 'Asia/Manila' });
+        lean.mockResolvedValue({ ...row, timezone: 'America/New_York' });
+        await expect(
+            service.today(new Date('2026-01-01T03:00:00Z')),
+        ).resolves.toEqual({
+            today: '2025-12-31',
+            timezone: 'America/New_York',
+        });
+    });
+});

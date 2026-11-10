@@ -16,3 +16,12 @@ it('returns only the settings service view and forwards the authenticated update
     expect(await controller.update(actor, dto)).toBe(data);
     expect(admin.update).toHaveBeenCalledWith(actor, dto);
 });
+it('answers the store today from the settings service (#215)', async () => {
+    const data = { today: '2026-11-10', timezone: 'Asia/Manila' };
+    const settings = { today: jest.fn().mockResolvedValue(data) };
+    const controller = new SettingsController(
+        settings as unknown as SettingsService,
+        {} as unknown as SettingsAdminService,
+    );
+    expect(await controller.today()).toBe(data);
+});

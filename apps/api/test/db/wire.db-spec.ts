@@ -67,6 +67,8 @@ import {
     SALE_ROW_SHAPE,
     SALE_VIEW_SHAPE,
     SHIFT_LIST_ITEM_SHAPE,
+    STORE_SETTINGS_SHAPE,
+    STORE_TODAY_SHAPE,
     TENDER_SHAPE,
     TenderType,
     USER_REF_SHAPE,
@@ -458,6 +460,21 @@ afterAll(async () => {
 });
 
 // ---------------------------------------------------------------- shifts
+
+describe('settings', () => {
+    it('GET /settings and GET /settings/today match their shapes (#215)', async () => {
+        expectShape(
+            'GET /settings',
+            await get(seller, '/settings'),
+            STORE_SETTINGS_SHAPE,
+        );
+        for (const who of [seller, restocker, admin]) {
+            const body = await get(who, '/settings/today');
+            expectShape('GET /settings/today', body, STORE_TODAY_SHAPE);
+            expect(body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        }
+    });
+});
 
 describe('shifts', () => {
     it('POST /shifts and the drawer answer CurrentShiftView, every movement a DrawerMovementView', () => {
