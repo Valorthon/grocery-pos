@@ -11,6 +11,7 @@ import { Transform } from 'class-transformer';
 import {
     EXPIRY_LIMITS,
     PAGINATION,
+    type ExpiryTrackingView,
     type InventoryBatchView,
     type Paginated,
 } from '@grocery-pos/contracts';
@@ -51,6 +52,11 @@ export class InventoryBatchController {
         @Query() dto: BatchQuery,
     ): Promise<Paginated<InventoryBatchView>> {
         return this.service.list({ ...dto, expiring: true });
+    }
+    /** Whether any active product tracks expiry (#233). */
+    @Get('expiry-tracking')
+    async expiryTracking(): Promise<ExpiryTrackingView> {
+        return { trackedProducts: await this.service.trackedProductCount() };
     }
     @Get('batches')
     async batches(

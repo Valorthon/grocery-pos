@@ -38,6 +38,13 @@ export const INVENTORY_BATCH_SHAPE: WireShape<InventoryBatchView> = {
     createdAt: 'required',
     updatedAt: 'required',
 };
+/** `GET /inventories/expiry-tracking`: active products that track expiry (#233). */
+export interface ExpiryTrackingView {
+    trackedProducts: number;
+}
+export const EXPIRY_TRACKING_SHAPE: WireShape<ExpiryTrackingView> = {
+    trackedProducts: 'required',
+};
 
 /** Calendar date validation shared with browser receipt forms. */
 export function isExpiryDate(value: unknown): value is string {

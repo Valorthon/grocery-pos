@@ -29,7 +29,11 @@ let batchModel: {
     updateOne: jest.Mock;
     countDocuments: jest.Mock;
 };
-let productModel: { findById: jest.Mock; distinct: jest.Mock },
+let productModel: {
+        findById: jest.Mock;
+        distinct: jest.Mock;
+        countDocuments: jest.Mock;
+    },
     inventoryModel: { findOne: jest.Mock };
 beforeEach(() => {
     batchModel = {
@@ -41,6 +45,7 @@ beforeEach(() => {
         countDocuments: jest.fn().mockResolvedValue(0),
     };
     productModel = {
+        countDocuments: jest.fn().mockResolvedValue(2),
         findById: jest.fn(() => query({ tracksExpiry: true })),
         distinct: jest.fn().mockResolvedValue([]),
     };
@@ -486,5 +491,12 @@ describe('expiry alert window and archived products (#213)', () => {
         await service.list({ page: 1, limit: 10 });
         expect(productModel.distinct).not.toHaveBeenCalled();
         expect(lastQuery()).toEqual({ remainingQty: { $ne: 0 } });
+    });
+});
+it('counts active products that track expiry (#233)', async () => {
+    await expect(service.trackedProductCount()).resolves.toBe(2);
+    expect(productModel.countDocuments).toHaveBeenCalledWith({
+        tracksExpiry: true,
+        isActive: { $ne: false },
     });
 });

@@ -165,7 +165,7 @@
                     class="space-y-4 text-sm"
                     data-testid="sale-receipt"
                 >
-                    <header class="text-center space-y-1">
+                    <header class="space-y-2">
                         <p
                             class="text-xs font-bold uppercase tracking-widest text-muted"
                             data-testid="sale-store"
@@ -175,88 +175,108 @@
                                 · {{ identity.branchName }}</template
                             >
                         </p>
-                        <p
-                            class="num text-3xl font-extrabold text-ink"
-                            data-testid="sale-total"
-                        >
-                            {{ formatCurrency(selectedSale.amount) }}
-                        </p>
-                        <Badge :color="statusColor(selectedSale.status)">{{
-                            selectedSale.status
-                        }}</Badge>
-                        <p
-                            v-if="selectedSale.offline"
-                            class="text-xs text-muted"
-                            data-testid="sale-detail-date"
-                        >
-                            Occurred
-                            <time :datetime="selectedSale.soldAt">{{
-                                receiptDate(selectedSale.soldAt)
-                            }}</time>
-                            <span
-                                class="block"
-                                data-testid="sale-detail-recorded"
-                                >Recorded
-                                <time :datetime="selectedSale.createdAt">{{
-                                    receiptDate(selectedSale.createdAt)
-                                }}</time></span
-                            >
-                        </p>
-                        <p
-                            v-else
-                            class="text-xs text-muted"
-                            data-testid="sale-detail-date"
-                        >
-                            Date
-                            <time :datetime="selectedSale.createdAt">{{
-                                receiptDate(selectedSale.createdAt)
-                            }}</time>
-                        </p>
-                        <p
-                            v-if="selectedRow"
-                            class="text-xs text-muted"
-                            data-testid="sale-detail-cashier"
-                        >
-                            Cashier {{ selectedRow.cashier }}
-                        </p>
                         <div
-                            class="flex flex-wrap items-center justify-center gap-2 pt-1"
+                            class="flex items-center justify-between gap-2"
+                            data-testid="sale-total-row"
                         >
-                            <span
-                                class="font-bold text-ink"
-                                data-testid="sale-number"
-                                >Sale #{{ saleNumber(selectedId) }}</span
+                            <p
+                                class="num text-2xl font-extrabold text-ink"
+                                data-testid="sale-total"
                             >
-                            <BaseButton
-                                variant="ghost"
-                                size="sm"
-                                class="min-h-11"
-                                :aria-expanded="showFullId"
-                                data-testid="sale-id-toggle"
-                                @click="showFullId = !showFullId"
-                                >{{
-                                    showFullId ? 'Hide full ID' : 'Show full ID'
-                                }}</BaseButton
-                            >
+                                {{ formatCurrency(selectedSale.amount) }}
+                            </p>
+                            <Badge :color="statusColor(selectedSale.status)">{{
+                                selectedSale.status
+                            }}</Badge>
                         </div>
-                        <div
-                            v-if="showFullId"
-                            class="flex items-center justify-center gap-2"
+                        <dl
+                            class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 text-xs"
+                            data-testid="sale-detail-grid"
                         >
-                            <code
-                                class="break-all text-xs text-ink"
-                                data-testid="sale-full-id"
-                                >{{ selectedId }}</code
-                            >
-                            <BaseButton
-                                variant="outline"
-                                size="sm"
-                                class="min-h-11"
-                                data-testid="sale-id-copy"
-                                @click="copyId"
-                                ><Copy class="w-3.5 h-3.5" />Copy</BaseButton
-                            >
-                        </div>
+                            <template v-if="selectedSale.offline">
+                                <div
+                                    class="contents"
+                                    data-testid="sale-detail-date"
+                                >
+                                    <dt class="text-muted">Occurred</dt>
+                                    <dd class="text-ink">
+                                        <time :datetime="selectedSale.soldAt">{{
+                                            receiptDate(selectedSale.soldAt)
+                                        }}</time>
+                                    </dd>
+                                </div>
+                                <div
+                                    class="contents"
+                                    data-testid="sale-detail-recorded"
+                                >
+                                    <dt class="text-muted">Recorded</dt>
+                                    <dd class="text-ink">
+                                        <time
+                                            :datetime="selectedSale.createdAt"
+                                            >{{
+                                                receiptDate(
+                                                    selectedSale.createdAt,
+                                                )
+                                            }}</time
+                                        >
+                                    </dd>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div
+                                    class="contents"
+                                    data-testid="sale-detail-date"
+                                >
+                                    <dt class="text-muted">Date</dt>
+                                    <dd class="text-ink">
+                                        <time
+                                            :datetime="selectedSale.createdAt"
+                                            >{{
+                                                receiptDate(
+                                                    selectedSale.createdAt,
+                                                )
+                                            }}</time
+                                        >
+                                    </dd>
+                                </div>
+                            </template>
+                            <template v-if="selectedRow">
+                                <div
+                                    class="contents"
+                                    data-testid="sale-detail-cashier"
+                                >
+                                    <dt class="text-muted">Cashier</dt>
+                                    <dd class="text-ink">
+                                        {{ selectedRow.cashier }}
+                                    </dd>
+                                </div>
+                            </template>
+                            <dt class="text-muted">Sale</dt>
+                            <dd class="min-w-0">
+                                <div class="flex items-center gap-1">
+                                    <span
+                                        class="font-bold text-ink"
+                                        data-testid="sale-number"
+                                        >#{{ saleNumber(selectedId) }}</span
+                                    >
+                                    <BaseButton
+                                        variant="ghost"
+                                        size="sm"
+                                        class="w-11 h-11"
+                                        aria-label="Copy full ID"
+                                        title="Copy full ID"
+                                        data-testid="sale-id-copy"
+                                        @click="copyId"
+                                        ><Copy class="w-4 h-4"
+                                    /></BaseButton>
+                                </div>
+                                <code
+                                    class="block break-all text-xs text-muted"
+                                    data-testid="sale-full-id"
+                                    >{{ selectedId }}</code
+                                >
+                            </dd>
+                        </dl>
                     </header>
 
                     <p
@@ -553,46 +573,60 @@
                 </div>
 
                 <template #footer>
-                    <template v-if="pendingReversal">
-                        <BaseButton
-                            variant="outline"
-                            :disabled="reversing"
-                            data-testid="reversal-back"
-                            @click="backToReceipt"
-                            >Back</BaseButton
-                        >
-                        <BaseButton
-                            variant="danger-solid"
-                            class="flex-1 disabled:bg-paper disabled:text-muted disabled:border disabled:border-line-strong disabled:shadow-none"
-                            :loading="reversing"
-                            :disabled="!canConfirmReversal"
-                            data-testid="reversal-confirm"
-                            @click="confirmReversal"
-                            >Confirm
-                            {{
-                                reversalLabel(pendingReversal).toLowerCase()
-                            }}</BaseButton
-                        >
-                    </template>
-                    <template v-else>
-                        <template v-if="canReverse">
+                    <div
+                        class="flex w-full flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between"
+                        data-testid="sale-footer"
+                    >
+                        <template v-if="pendingReversal">
                             <BaseButton
                                 variant="outline"
-                                @click="startReversal(ReversalType.VOID)"
-                                >Void sale</BaseButton
+                                class="min-h-11"
+                                :disabled="reversing"
+                                data-testid="reversal-back"
+                                @click="backToReceipt"
+                                >Back</BaseButton
                             >
                             <BaseButton
-                                variant="outline"
-                                @click="startReversal(ReversalType.REFUND)"
-                                >Refund sale</BaseButton
+                                variant="danger-solid"
+                                class="min-h-11 disabled:bg-paper disabled:text-muted disabled:border disabled:border-line-strong disabled:shadow-none"
+                                :loading="reversing"
+                                :disabled="!canConfirmReversal"
+                                data-testid="reversal-confirm"
+                                @click="confirmReversal"
+                                >Confirm
+                                {{
+                                    reversalLabel(pendingReversal).toLowerCase()
+                                }}</BaseButton
                             >
                         </template>
-                        <BaseButton
-                            variant="outline"
-                            @click="isDialogOpen = false"
-                            >Close</BaseButton
-                        >
-                    </template>
+                        <template v-else>
+                            <div
+                                v-if="canReverse"
+                                class="flex flex-col gap-2.5 sm:flex-row"
+                                data-testid="sale-reverse-actions"
+                            >
+                                <BaseButton
+                                    variant="danger"
+                                    class="min-h-11 border border-danger-border bg-danger-bg"
+                                    @click="startReversal(ReversalType.VOID)"
+                                    >Void sale</BaseButton
+                                >
+                                <BaseButton
+                                    variant="danger"
+                                    class="min-h-11 border border-danger-border bg-danger-bg"
+                                    @click="startReversal(ReversalType.REFUND)"
+                                    >Refund sale</BaseButton
+                                >
+                            </div>
+                            <BaseButton
+                                variant="outline"
+                                class="min-h-11 sm:ml-auto"
+                                data-testid="sale-close"
+                                @click="isDialogOpen = false"
+                                >Close</BaseButton
+                            >
+                        </template>
+                    </div>
                 </template>
             </BaseModal>
         </PageFrame>
@@ -952,9 +986,6 @@ const adminFacts = computed(() => {
     return facts;
 });
 
-/** The full id shows only on request (#218). */
-const showFullId = ref(false);
-
 async function copyId() {
     try {
         await navigator.clipboard.writeText(selectedId.value);
@@ -1150,7 +1181,6 @@ async function confirmReversal() {
 
 async function showDetails(row: SaleListRow) {
     cancelReversal();
-    showFullId.value = false;
     selectedId.value = row.id;
     selectedSale.value = row.totals;
     selectedRow.value = row;

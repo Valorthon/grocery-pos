@@ -255,3 +255,101 @@ describe('BaseTable narrow columns (issue #208)', () => {
         );
     });
 });
+
+describe('BaseTable opt-in row click (issue #234)', () => {
+    const ITEMS = [
+        { id: 'a', name: 'first' },
+        { id: 'b', name: 'second' },
+    ];
+    function mountClickable(rowClick: boolean) {
+        const clicks: unknown[] = [];
+        const inner: string[] = [];
+        const host = mountRender(() =>
+            table(
+                {
+                    headers: [{ title: 'Name', key: 'name' }],
+                    items: ITEMS,
+                    rowClick,
+                    'onClick:row': (row: unknown) => clicks.push(row),
+                },
+                {
+                    'cell-name': ((p: { item: { name: string } }) => [
+                        p.item.name,
+                        h(
+                            'button',
+                            { onClick: () => inner.push(p.item.name) },
+                            'Open',
+                        ),
+                        h('a', { href: '#x' }, 'link'),
+                        h('input', {}),
+                    ]) as () => unknown,
+                },
+            ),
+        );
+        const rows = Array.from(
+            host.querySelectorAll<HTMLTableRowElement>('tbody tr'),
+        );
+        return { host, rows, clicks, inner };
+    }
+    const key = (el: Element, k: string, repeat = false) => {
+        const ev = new KeyboardEvent('keydown', {
+            key: k,
+            bubbles: true,
+            cancelable: true,
+            repeat,
+        });
+        el.dispatchEvent(ev);
+        return ev;
+    };
+
+    it('emits click:row with the row clicked, by its item not its index', () => {
+        const { rows, clicks } = mountClickable(true);
+        rows[1]!.querySelector('td')!.click();
+        expect(clicks).toEqual([ITEMS[1]]);
+    });
+
+    it('makes rows focusable with a hint, and Enter/Space activate them', () => {
+        const { host, rows, clicks } = mountClickable(true);
+        const row = rows[0]!;
+        expect(row.tabIndex).toBe(0);
+        expect(row.className).toContain('focus-ring');
+        expect(row.className).toContain('cursor-pointer');
+        const hint = document.getElementById(
+            row.getAttribute('aria-describedby')!,
+        );
+        expect(host.contains(hint)).toBe(true);
+        expect(hint?.textContent).toBe('Press Enter to open details');
+        const enter = key(row, 'Enter');
+        expect(enter.defaultPrevented).toBe(true);
+        key(row, ' ');
+        key(row, 'Enter', true);
+        key(row, 'a');
+        expect(clicks).toEqual([ITEMS[0], ITEMS[0]]);
+    });
+
+    it('never fires from inner buttons, links or fields', () => {
+        const { rows, clicks, inner } = mountClickable(true);
+        const row = rows[0]!;
+        const button = row.querySelector('button')!;
+        button.click();
+        row.querySelector('a')!.click();
+        row.querySelector('input')!.click();
+        key(button, 'Enter');
+        key(button, ' ');
+        key(row.querySelector('input')!, 'Enter');
+        expect(clicks).toEqual([]);
+        expect(inner).toEqual(['first']);
+    });
+
+    it('leaves rows without the opt-in as before', () => {
+        const { host, rows, clicks } = mountClickable(false);
+        const row = rows[0]!;
+        expect(row.hasAttribute('tabindex')).toBe(false);
+        expect(row.hasAttribute('aria-describedby')).toBe(false);
+        expect(row.className).not.toContain('cursor-pointer');
+        expect(host.querySelector('.sr-only')).toBeNull();
+        row.querySelector('td')!.click();
+        key(row, 'Enter');
+        expect(clicks).toEqual([]);
+    });
+});

@@ -2,14 +2,6 @@
     <PageFrame>
         <template #actions>
             <BaseButton
-                size="sm"
-                variant="outline"
-                @click="showBatches = !showBatches"
-                >{{
-                    showBatches ? 'Hide batches' : 'Expiry and batches'
-                }}</BaseButton
-            >
-            <BaseButton
                 v-if="canRestock && (applied.lowStock || applied.outOfStock)"
                 size="sm"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
@@ -35,37 +27,36 @@
         </template>
         <PageCard>
             <FilterBar
-                v-model:search="searchName"
-                search-label="Product Name"
+                v-model:search="searchTerm"
+                search-label="Search name or barcode"
                 :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
                 @search="onSearch"
                 @clear="resetFilters"
             >
-                <BaseInput
-                    v-model="searchEAN"
-                    label="EAN / Barcode"
-                    clearable
-                    @clear="applySearch"
-                />
-                <label
-                    class="flex min-h-11 items-center gap-2 self-end text-sm"
-                    data-testid="low-stock-filter"
-                    ><input
-                        v-model="lowStock"
-                        type="checkbox"
-                        @change="toggleLowStock"
-                    />Low stock</label
+                <div
+                    role="group"
+                    aria-label="Stock status"
+                    class="flex self-end rounded-control border border-line overflow-hidden"
+                    data-testid="stock-filter"
                 >
-                <label
-                    class="flex min-h-11 items-center gap-2 self-end text-sm"
-                    data-testid="out-of-stock-filter"
-                    ><input
-                        v-model="outOfStock"
-                        type="checkbox"
-                        @change="toggleOutOfStock"
-                    />Out of stock</label
-                >
+                    <button
+                        v-for="option in STOCK_FILTERS"
+                        :key="option.value"
+                        type="button"
+                        :aria-pressed="stockFilter === option.value"
+                        :data-value="option.value"
+                        :class="[
+                            'focus-ring min-h-11 flex-1 px-3 text-sm font-semibold whitespace-nowrap border-l border-line first:border-l-0',
+                            stockFilter === option.value
+                                ? 'bg-leaf-600 text-white'
+                                : 'bg-surface text-ink hover:bg-paper',
+                        ]"
+                        @click="setStockFilter(option.value)"
+                    >
+                        {{ option.label }}
+                    </button>
+                </div>
             </FilterBar>
             <p
                 v-if="route?.query.expiring === 'true'"
@@ -82,36 +73,56 @@
                 :items="serverItems"
                 :loading="loading"
                 :error="loadError"
+                row-click
                 empty-text="No inventory found"
                 :items-length="totalItems"
+                @click:row="openHistory"
                 @retry="fetchInventory"
             >
+                <template #cell-name="{ item }"
+                    ><span class="block">{{ item.name }}</span
+                    ><span
+                        class="block text-xs text-muted font-normal num"
+                        data-testid="row-ean"
+                        >{{ item.EAN }}</span
+                    ></template
+                >
+                <template #cell-stock="{ item }"
+                    ><span class="block">{{ item.stock }}</span
+                    ><span class="mt-1 block sm:hidden"
+                        ><Badge :color="STATUS[item.status].color">{{
+                            STATUS[item.status].label
+                        }}</Badge></span
+                    ></template
+                >
+                <template #cell-reorderLevel="{ item }"
+                    ><span class="text-muted">{{
+                        item.reorderLevel
+                    }}</span></template
+                >
+                <template #cell-status="{ item }"
+                    ><Badge
+                        :color="STATUS[item.status].color"
+                        data-testid="stock-status"
+                        >{{ STATUS[item.status].label }}</Badge
+                    ></template
+                >
                 <template #cell-history="{ item }"
                     ><BaseButton
                         size="sm"
-                        variant="outline"
-                        class="min-h-11 min-w-11"
+                        variant="ghost"
+                        class="-my-2 min-h-11 min-w-11 w-11 h-11 p-0"
                         :aria-label="`Stock history for ${item.name}`"
                         data-testid="stock-history-button"
-                        @click="
-                            history = {
-                                _id: item.id,
-                                name: item.name,
-                                unit: item.unit,
-                                EAN: item.EAN,
-                                reorderLevel: item.reorderLevel,
-                            }
-                        "
-                        ><span class="sm:hidden">History</span
-                        ><span class="hidden sm:inline"
-                            >Stock history</span
-                        ></BaseButton
-                    ></template
-                >
+                        @click="openHistory(item)"
+                        ><History class="w-5 h-5" aria-hidden="true"
+                    /></BaseButton>
+                </template>
             </BaseTable>
         </PageCard>
     </PageFrame>
-    <InventoryBatches v-if="showBatches" />
+    <!-- Always shown (#233); the dashboard's expiring link scrolls to it. -->
+    <InventoryBatches :focus-on-load="route?.query.expiring === 'true'" />
     <StockHistory
         v-if="history"
         :key="history._id"
@@ -130,7 +141,8 @@ import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Pencil } from '@lucide/vue';
+import { History, Pencil } from '@lucide/vue';
+import Badge from '@/components/ui/Badge.vue';
 import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
@@ -141,7 +153,6 @@ import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import {
     useAppliedFilters,
@@ -168,7 +179,6 @@ const canAdjust = computed(() =>
 );
 const route = useRoute();
 const settingsStore = useSettingsStore();
-const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
 const prefill = useRestockPrefillStore();
@@ -176,6 +186,22 @@ const poPrefill = usePurchaseOrderPrefillStore();
 const lowStock = ref(route?.query.lowStock === 'true');
 // Low stock and out of stock are exclusive (#212); low stock wins a URL with both.
 const outOfStock = ref(!lowStock.value && route?.query.outOfStock === 'true');
+type StockFilter = 'all' | 'low' | 'out';
+const STOCK_FILTERS: { value: StockFilter; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'low', label: 'Low stock' },
+    { value: 'out', label: 'Out of stock' },
+];
+/** The segmented control's value (#232), over the two query flags. */
+const stockFilter = computed<StockFilter>(() =>
+    lowStock.value ? 'low' : outOfStock.value ? 'out' : 'all',
+);
+function setStockFilter(value: StockFilter) {
+    if (value === stockFilter.value) return;
+    lowStock.value = value === 'low';
+    outOfStock.value = value === 'out';
+    syncStockQuery();
+}
 const sourceRows = ref<InventoryRow[]>([]);
 async function createRestock() {
     if (
@@ -210,14 +236,6 @@ function syncStockQuery() {
         },
     });
 }
-function toggleLowStock() {
-    if (lowStock.value) outOfStock.value = false;
-    syncStockQuery();
-}
-function toggleOutOfStock() {
-    if (outOfStock.value) lowStock.value = false;
-    syncStockQuery();
-}
 watch(
     () => [route?.query.lowStock, route?.query.outOfStock],
     ([low, out]) => {
@@ -230,14 +248,15 @@ watch(
         }
     },
 );
-const { page, limit, search } = useListPaging(() => fetchInventory());
+const { page, limit, search } = useListPaging(() => fetchInventory(), 25);
 const totalItems = ref(0);
-const searchName = ref('');
+const searchTerm = ref('');
+// An unknown barcode-shaped term searches barcodes; any other, names.
 const searchEAN = ref('');
 // What the list was last searched for: paging and Retry reuse it.
 const { applied, apply: applySearch } = useAppliedFilters(
     () => ({
-        name: searchName.value,
+        name: searchEAN.value ? '' : searchTerm.value.trim(),
         EAN: searchEAN.value,
         lowStock: lowStock.value,
         outOfStock: outOfStock.value,
@@ -250,7 +269,8 @@ const { applied, apply: applySearch } = useAppliedFilters(
  * Stock history, archived too (#214); otherwise the normal search.
  */
 async function onSearch() {
-    const code = scannedTerm(searchName.value, searchEAN.value);
+    const code = scannedTerm(searchTerm.value);
+    searchEAN.value = '';
     if (code) {
         const found = await findExactProduct(code).catch(() => null);
         if (found) {
@@ -263,23 +283,40 @@ async function onSearch() {
             };
             return;
         }
+        searchEAN.value = code;
     }
     applySearch();
 }
 
 const headers = [
-    { key: 'history', title: 'History' },
-    // Hidden at phone width (#210); the Stock history dialog shows both.
-    { key: 'EAN', title: 'EAN', hideBelow: 'sm' as const },
-    { key: 'name', title: 'Name' },
+    { key: 'name', title: 'Product', rowHeader: true },
     { key: 'stock', title: 'Stock', align: 'right' as const },
     {
         key: 'reorderLevel',
-        title: 'Reorder level',
+        title: 'Reorder at',
         align: 'right' as const,
+        // Hidden below md (#210); the Stock history dialog shows it.
         hideBelow: 'md' as const,
     },
+    // Below sm the badge sits under the stock figure instead.
+    { key: 'status', title: 'Status', hideBelow: 'sm' as const },
+    { key: 'history', title: 'History' },
 ];
+
+/** The #40 / dashboard predicate: out at ≤ 0, low at ≤ the reorder level. */
+type StockStatus = 'out' | 'low' | 'ok';
+function stockStatus(stock: number, reorderLevel: number): StockStatus {
+    if (stock <= 0) return 'out';
+    return stock <= reorderLevel ? 'low' : 'ok';
+}
+const STATUS: Record<
+    StockStatus,
+    { label: string; color: 'error' | 'warning' | 'success' }
+> = {
+    out: { label: 'Out of stock', color: 'error' },
+    low: { label: 'Low stock', color: 'warning' },
+    ok: { label: 'In stock', color: 'success' },
+};
 
 /** A row of the inventory table. */
 interface InventoryListRow {
@@ -288,8 +325,19 @@ interface InventoryListRow {
     EAN: string;
     name: string;
     stock: string;
+    status: StockStatus;
     unit?: UnitOfMeasure;
     reorderLevel: string;
+}
+
+function openHistory(item: InventoryListRow) {
+    history.value = {
+        _id: item.id,
+        name: item.name,
+        unit: item.unit,
+        EAN: item.EAN,
+        reorderLevel: item.reorderLevel,
+    };
 }
 
 const serverItems = ref<InventoryListRow[]>([]);
@@ -298,8 +346,7 @@ const serverItems = ref<InventoryListRow[]>([]);
 const filtersActive = computed(
     () =>
         !!(
-            searchName.value ||
-            searchEAN.value ||
+            searchTerm.value ||
             lowStock.value ||
             outOfStock.value ||
             applied.value.name ||
@@ -312,11 +359,10 @@ const filtersActive = computed(
 
 const resetFilters = () => {
     searchEAN.value = '';
-    searchName.value = '';
+    searchTerm.value = '';
     lowStock.value = false;
     outOfStock.value = false;
-    // The `?expiring=` deep link (dashboard) is cleared too, with its panel.
-    if (route?.query.expiring === 'true') showBatches.value = false;
+    // The `?expiring=` deep link (dashboard) is cleared too; the panel stays.
     applySearch();
     void router.replace({
         query: {
@@ -352,6 +398,10 @@ const {
             EAN: inventory.product.EAN,
             name: inventory.product.name,
             stock: formatQuantity(inventory.stock, inventory.product.unit),
+            status: stockStatus(
+                inventory.stock,
+                reorderLevelOf(inventory.product),
+            ),
             reorderLevel: formatQuantity(
                 reorderLevelOf(inventory.product),
                 inventory.product.unit,

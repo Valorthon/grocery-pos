@@ -70,7 +70,17 @@ beforeEach(() => {
         username: 'r',
         roles: [Role.Restocker],
     };
-    api.get.mockResolvedValue({ data: { data: rows(), totalItems: 2 } });
+    // The always-shown batches panel (#233) lists nothing by default.
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/inventories'
+                    ? { data: rows(), totalItems: 2 }
+                    : url === '/inventories/expiry-tracking'
+                      ? { trackedProducts: 1 }
+                      : { data: [], totalItems: 0 },
+        }),
+    );
     nav.push.mockResolvedValue(undefined);
     nav.replace.mockResolvedValue(undefined);
 });
@@ -79,6 +89,20 @@ afterEach(() => {
     disposePinia(pinia);
     document.body.innerHTML = '';
 });
+/** A segment of the stock-status control (#232). */
+function segment(label: string): HTMLButtonElement {
+    return [
+        ...document.querySelectorAll<HTMLButtonElement>(
+            '[data-testid="stock-filter"] button',
+        ),
+    ].find((b) => b.textContent?.trim() === label)!;
+}
+const pressed = (label: string) =>
+    segment(label).getAttribute('aria-pressed') === 'true';
+async function closeDialog() {
+    document.querySelector<HTMLElement>('button[aria-label="Close"]')!.click();
+    await flush();
+}
 async function mount(component = Inventories) {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -158,21 +182,33 @@ describe('reorder list and restock draft', () => {
         );
         expect(document.body.textContent).not.toContain('No new products');
     });
-    it('fits Name, Stock and a 44px history button at phone width (#210)', async () => {
+    it('fits Product, Stock, Status and a 44px history icon at phone width (#210, #232)', async () => {
         await mount();
+        const ths = [
+            ...document
+                .querySelectorAll('table')[0]
+                .querySelectorAll('thead th'),
+        ];
+        expect(ths.map((t) => t.textContent?.trim())).toEqual([
+            'Product',
+            'Stock',
+            'Reorder at',
+            'Status',
+            'History',
+        ]);
         const th = (text: string) =>
-            [...document.querySelectorAll('thead th')].find((cell) =>
-                cell.textContent?.includes(text),
-            )!;
+            ths.find((cell) => cell.textContent?.includes(text))!;
         const classes = (el: Element) => el.className.split(/\s+/);
-        expect(classes(th('EAN'))).toEqual(
-            expect.arrayContaining(['hidden', 'sm:table-cell']),
-        );
-        expect(classes(th('Reorder level'))).toEqual(
+        expect(classes(th('Reorder at'))).toEqual(
             expect.arrayContaining(['hidden', 'md:table-cell']),
         );
-        for (const shown of ['Name', 'Stock', 'History'])
+        expect(classes(th('Status'))).toEqual(
+            expect.arrayContaining(['hidden', 'sm:table-cell']),
+        );
+        for (const shown of ['Product', 'Stock', 'History'])
             expect(classes(th(shown))).not.toContain('hidden');
+        expect(classes(th('Stock'))).toContain('text-right');
+        expect(classes(th('Reorder at'))).toContain('text-right');
         const button = document.querySelector<HTMLElement>(
             '[data-testid="stock-history-button"]',
         )!;
@@ -182,9 +218,7 @@ describe('reorder list and restock draft', () => {
         expect(classes(button)).toEqual(
             expect.arrayContaining(['min-h-11', 'min-w-11']),
         );
-        expect(button.querySelector('.sm\\:hidden')?.textContent).toBe(
-            'History',
-        );
+        expect(button.textContent?.trim()).toBe('');
         button.click();
         await flush();
         const product = document.querySelector(
@@ -193,22 +227,101 @@ describe('reorder list and restock draft', () => {
         expect(product?.textContent).toContain('EAN 4006381333931');
         expect(product?.textContent).toContain('Reorder level 9');
     });
-    it('aligns the Low stock checkbox with the inputs, not their labels (#208)', async () => {
+    it('shows the EAN under the name, as typed, at every width (#232)', async () => {
         await mount();
-        const label = document.querySelector(
-            '[data-testid="low-stock-filter"]',
+        const cell = document.querySelector('tbody tr > th')!;
+        expect(cell.textContent).toContain('rice');
+        const ean = cell.querySelector('[data-testid="row-ean"]')!;
+        expect(ean.textContent).toBe('4006381333931');
+        expect(ean.className.split(/\s+/)).toEqual(
+            expect.arrayContaining(['text-xs', 'text-muted', 'num']),
         );
-        expect(label?.className.split(/\s+/)).toEqual(
-            expect.arrayContaining(['self-end', 'min-h-11']),
+        expect(ean.className).not.toMatch(/hidden/);
+    });
+    it('badges each stock state with the reorder predicate (#232)', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        const row = (id: string, stock: number, reorderLevel: number) => ({
+            product: {
+                _id: id,
+                EAN: '12345670',
+                name: id,
+                price: 1,
+                reorderLevel,
+            },
+            stock,
+        });
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/inventories'
+                        ? {
+                              data: [
+                                  row('zero', 0, 5),
+                                  row('negative', -3, 5),
+                                  row('atLevel', 5, 5),
+                                  row('above', 6, 5),
+                                  row('zeroLevel', 0, 0),
+                              ],
+                              totalItems: 5,
+                          }
+                        : { data: [], totalItems: 0 },
+            }),
         );
+        await mount();
+        const badges = [
+            ...document.querySelectorAll('[data-testid="stock-status"]'),
+        ].map((b) => b.textContent?.trim());
+        expect(badges).toEqual([
+            'Out of stock',
+            'Out of stock',
+            'Low stock',
+            'In stock',
+            'Out of stock',
+        ]);
+        const first = document.querySelector('[data-testid="stock-status"]')!;
+        expect(first.className).toContain('text-danger-fg');
+        const rows = document.querySelectorAll('tbody tr');
+        expect(rows[2].querySelector('.text-warning-fg')).not.toBeNull();
+        expect(rows[3].querySelector('.text-success-fg')).not.toBeNull();
+    });
+    it('opens Stock history on a row click and on Enter or Space (#232)', async () => {
+        await mount();
+        const rows = document.querySelectorAll<HTMLTableRowElement>('tbody tr');
+        expect(rows[1].tabIndex).toBe(0);
+        expect(rows[1].getAttribute('aria-describedby')).toBeTruthy();
+        rows[1].querySelector('td')!.click();
+        await flush();
+        expect(document.body.textContent).toContain('Stock history — bread');
+        await closeDialog();
+        expect(document.body.textContent).not.toContain('Stock history —');
+        for (const key of ['Enter', ' ']) {
+            rows[0].dispatchEvent(
+                new KeyboardEvent('keydown', { key, bubbles: true }),
+            );
+            await flush();
+            expect(document.body.textContent).toContain('Stock history — rice');
+            await closeDialog();
+        }
+    });
+    it('pages 25 rows by default (#232)', async () => {
+        await mount();
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            limit: 25,
+        });
+    });
+    it('makes the stock filter a 44px segmented control (#232)', async () => {
+        await mount();
+        for (const label of ['All', 'Low stock', 'Out of stock'])
+            expect(segment(label).className.split(/\s+/)).toContain('min-h-11');
+        expect(pressed('Low stock')).toBe(true);
+        expect(pressed('All')).toBe(false);
+        expect(document.querySelector('input[type=checkbox]')).toBeNull();
     });
     it('applies a low-stock toggle once on page one and retains server order', async () => {
         route.query = {};
         await mount();
         api.get.mockClear();
-        const checkbox = field('Low stock');
-        checkbox.checked = true;
-        checkbox.dispatchEvent(new Event('change'));
+        segment('Low stock').click();
         await flush();
         expect(api.get).toHaveBeenCalledTimes(1);
         expect(api.get.mock.calls[0]?.[0]).toBe('/inventories');
@@ -284,6 +397,40 @@ describe('receipt-cost restock defaults', () => {
     });
 });
 
+describe('batches panel (#233)', () => {
+    it('renders without a toggle', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(document.getElementById('batch-heading')).not.toBeNull();
+        const labels = [...document.querySelectorAll('button')].map(
+            (b) => b.textContent ?? '',
+        );
+        expect(
+            labels.some((t) => /Expiry and batches|Hide batches/.test(t)),
+        ).toBe(false);
+    });
+    it('?expiring=true scrolls to and focuses the panel heading', async () => {
+        const scroll = vi.fn();
+        Element.prototype.scrollIntoView = scroll;
+        route = reactive({ name: 'Inventories', query: { expiring: 'true' } });
+        await mount();
+        await flush();
+        const heading = document.getElementById('batch-heading');
+        expect(heading?.getAttribute('tabindex')).toBe('-1');
+        expect(scroll).toHaveBeenCalled();
+        expect(scroll.mock.contexts[0]).toBe(heading);
+        expect(document.activeElement).toBe(heading);
+    });
+    it('does not move the focus without the deep link', async () => {
+        const scroll = vi.fn();
+        Element.prototype.scrollIntoView = scroll;
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        await flush();
+        expect(scroll).not.toHaveBeenCalled();
+    });
+});
+
 describe('inventory FilterBar (#171, #215)', () => {
     const clearButton = () =>
         [...document.querySelectorAll('button')].find((b) =>
@@ -325,6 +472,8 @@ describe('inventory FilterBar (#171, #215)', () => {
         expect(
             document.querySelector('[data-testid="deep-link-note"]'),
         ).toBeNull();
+        // The batches panel stays (#233).
+        expect(document.getElementById('batch-heading')).not.toBeNull();
 
         expect(listCalls()).toHaveLength(1);
         expect(listCalls()[0]?.[1]?.params).toMatchObject({
@@ -340,7 +489,7 @@ describe('inventory FilterBar (#171, #215)', () => {
                 expiring: undefined,
             },
         });
-        expect(field('Low stock').checked).toBe(false);
+        expect(pressed('Low stock')).toBe(false);
         expect(clearButton().disabled).toBe(true);
     });
 
@@ -348,7 +497,7 @@ describe('inventory FilterBar (#171, #215)', () => {
         route = reactive({ name: 'Inventories', query: {} });
         await mount();
         expect(clearButton().disabled).toBe(true);
-        await type('Product Name', 'rice');
+        await type('Search name or barcode', 'rice');
         expect(clearButton().disabled).toBe(false);
     });
 });
@@ -372,7 +521,7 @@ describe('low-stock frame (#159)', () => {
         expect(
             document.querySelector('[data-testid="low-stock-chip"]'),
         ).toBeNull();
-        expect(field('Low stock').checked).toBe(true);
+        expect(pressed('Low stock')).toBe(true);
         expect(
             [...document.querySelectorAll('button')].find((b) =>
                 b.textContent?.includes('Clear Filters'),
@@ -386,7 +535,7 @@ describe('low-stock frame (#159)', () => {
         expect(document.querySelector('h1')?.textContent?.trim()).toBe(
             'Inventory',
         );
-        expect(field('Low stock').checked).toBe(false);
+        expect(pressed('Low stock')).toBe(false);
         expect(
             [...document.querySelectorAll('button')].find((b) =>
                 b.textContent?.includes('Clear Filters'),
@@ -413,8 +562,8 @@ describe('out-of-stock view (#212)', () => {
             outOfStock: true,
             lowStock: undefined,
         });
-        expect(field('Out of stock').checked).toBe(true);
-        expect(field('Low stock').checked).toBe(false);
+        expect(pressed('Out of stock')).toBe(true);
+        expect(pressed('Low stock')).toBe(false);
     });
 
     it('offers Restock listed items and Create purchase order with reorder quantities', async () => {
@@ -447,11 +596,9 @@ describe('out-of-stock view (#212)', () => {
         await mount(); // starts on ?lowStock=true
         api.get.mockClear();
         nav.replace.mockClear();
-        const out = field('Out of stock');
-        out.checked = true;
-        out.dispatchEvent(new Event('change'));
+        segment('Out of stock').click();
         await flush();
-        expect(field('Low stock').checked).toBe(false);
+        expect(pressed('Low stock')).toBe(false);
         expect(api.get).toHaveBeenCalledTimes(1);
         expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
             page: 1,
@@ -465,15 +612,32 @@ describe('out-of-stock view (#212)', () => {
         route.query = { outOfStock: 'true' };
         await flush();
         api.get.mockClear();
-        const low = field('Low stock');
-        low.checked = true;
-        low.dispatchEvent(new Event('change'));
+        segment('Low stock').click();
         await flush();
-        expect(field('Out of stock').checked).toBe(false);
+        expect(nav.replace).toHaveBeenLastCalledWith({
+            query: { lowStock: 'true', outOfStock: undefined },
+        });
+        expect(pressed('Out of stock')).toBe(false);
         expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
             lowStock: true,
             outOfStock: undefined,
         });
+    });
+
+    it('All drops both stock filters (#232)', async () => {
+        await mount();
+        api.get.mockClear();
+        nav.replace.mockClear();
+        segment('All').click();
+        await flush();
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            lowStock: undefined,
+            outOfStock: undefined,
+        });
+        expect(nav.replace).toHaveBeenLastCalledWith({
+            query: { lowStock: undefined, outOfStock: undefined },
+        });
+        expect(pressed('All')).toBe(true);
     });
 
     it('Clear Filters drops the out-of-stock filter', async () => {
@@ -487,7 +651,7 @@ describe('out-of-stock view (#212)', () => {
         expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
             outOfStock: undefined,
         });
-        expect(field('Out of stock').checked).toBe(false);
+        expect(pressed('Out of stock')).toBe(false);
     });
 });
 
@@ -517,19 +681,34 @@ describe('inventory list scans (#214)', () => {
                   : Promise.resolve({ data: { data: [], totalItems: 0 } }),
         );
         await mount();
-        await type('EAN / Barcode', '12345670');
-        field('EAN / Barcode').form!.requestSubmit();
+        await type('Search name or barcode', '12345670');
+        field('Search name or barcode').form!.requestSubmit();
         await flush();
         expect(document.body.textContent).toContain('Stock history — bread');
         expect(
             api.get.mock.calls.filter(([url]) => url === '/inventories'),
         ).toHaveLength(1);
-        await type('EAN / Barcode', '4006381333931');
-        field('EAN / Barcode').form!.requestSubmit();
+        await type('Search name or barcode', '4006381333931');
+        field('Search name or barcode').form!.requestSubmit();
         await flush();
         const calls = api.get.mock.calls;
         const last = calls[calls.length - 1];
         expect(last?.[0]).toBe('/inventories');
         expect(last?.[1]?.params).toMatchObject({ EAN: '4006381333931' });
+        expect(last?.[1]?.params?.name).toBeFalsy();
+    });
+    it('searches a non-barcode term by name in the one box (#232)', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(document.querySelectorAll('[role=search] input').length).toBe(1);
+        api.get.mockClear();
+        await type('Search name or barcode', 'rice');
+        field('Search name or barcode').form!.requestSubmit();
+        await flush();
+        const params = api.get.mock.calls.find(
+            ([url]) => url === '/inventories',
+        )?.[1]?.params;
+        expect(params).toMatchObject({ name: 'RICE' });
+        expect(params?.EAN).toBeFalsy();
     });
 });
