@@ -33,7 +33,15 @@ export const useSettingsStore = defineStore('settings', () => {
                 const value: unknown = JSON.parse(
                     localStorage.getItem(key(id)) ?? 'null',
                 );
-                if (validSettings(value)) storePresentation.value = value;
+                // A cache saved before #213 has no expiry window: the default.
+                const cached =
+                    value && typeof value === 'object'
+                        ? {
+                              expiryAlertDays: initialSettings.expiryAlertDays,
+                              ...value,
+                          }
+                        : value;
+                if (validSettings(cached)) storePresentation.value = cached;
             } catch {
                 /* malformed presentation cache is ignored */
             }

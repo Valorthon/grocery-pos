@@ -8,6 +8,7 @@ import { Optional } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
+import { SETTINGS_LIMITS } from '@grocery-pos/contracts';
 import {
     COUNTED_SALES_FILTER,
     INTERNAL_SALE_FIELDS,
@@ -41,14 +42,15 @@ export type RestockActivityDoc = Pick<
 
 /** What every dashboard role sees: stock and activity, no money. */
 export interface DashboardStats {
+    /** Active products (`isActive != false`), #213. */
     totalProducts: number;
+    /** Lots of active products in stock, expiring within `expiryAlertDays` or expired. */
     expiringBatchCount?: number;
+    expiryAlertDays?: number;
     /** Active products at or below their per-product reorder level, including zero/negative stock. */
     lowStockCount: number;
     /** Products with 0 (or fewer) units on hand. */
     outOfStockCount: number;
-    /** Store-wide count of today's sales that were not reversed. */
-    todaySalesCount: number;
     /** Newest restocks; without `totalCost` unless the caller is ADMIN. */
     recentRestocks: RestockActivityDoc[];
     recentAdjustments: AdjustmentRowDoc[];
@@ -56,6 +58,8 @@ export interface DashboardStats {
 
 /** The money figures only ADMIN receives (issue #13). */
 export interface DashboardMoney {
+    /** Store-wide count of today's sales that were not reversed (#213). */
+    todaySalesCount: number;
     /** Centavos. */
     todayRevenue: number;
     /** The newest sales store-wide, with their amounts and cashiers. */
@@ -143,9 +147,12 @@ export class DashboardService {
     async getDashboard({
         includeMoney,
     }: DashboardOptions): Promise<DashboardResponse> {
-        const timeZone = this.settings
-            ? await this.settings.timezone()
-            : this.config.get('STORE_TIMEZONE');
+        const settings = this.settings ? await this.settings.read() : null;
+        const timeZone =
+            settings?.timezone ?? this.config.get('STORE_TIMEZONE');
+        const expiryAlertDays =
+            settings?.expiryAlertDays ??
+            SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT;
         const { start: startOfDay, end: endOfDay } = dayRangeInZone(
             calendarDateInZone(new Date(), timeZone),
             timeZone,
@@ -168,34 +175,47 @@ export class DashboardService {
             recentRestocks,
             recentAdjustments,
         ] = await Promise.all([
-            // Exact: a user-facing figure (issue #16).
-            this.productModel.countDocuments(),
+            // Exact: a user-facing figure (issue #16); active only (#213).
+            this.productModel.countDocuments({ isActive: { $ne: false } }),
             this.inventoryModel.aggregate<{
                 lowStockCount: number;
                 outOfStockCount: number;
             }>(stockAlertPipeline()),
-            this.salesModel.aggregate<{ count: number; revenue?: number }>([
-                {
-                    $match: {
-                        $or: [
-                            { soldAt: { $gte: startOfDay, $lt: endOfDay } },
-                            {
-                                soldAt: { $exists: false },
-                                createdAt: { $gte: startOfDay, $lt: endOfDay },
-                            },
-                        ],
-                        // Voided and refunded sales are not revenue.
-                        ...COUNTED_SALES_FILTER,
-                    },
-                },
-                {
-                    $group: {
-                        _id: null,
-                        count: { $sum: 1 },
-                        ...(includeMoney && { revenue: { $sum: '$amount' } }),
-                    },
-                },
-            ]),
+            // Today's sales are ADMIN-only (#213): not even read otherwise.
+            includeMoney
+                ? this.salesModel.aggregate<{ count: number; revenue: number }>(
+                      [
+                          {
+                              $match: {
+                                  $or: [
+                                      {
+                                          soldAt: {
+                                              $gte: startOfDay,
+                                              $lt: endOfDay,
+                                          },
+                                      },
+                                      {
+                                          soldAt: { $exists: false },
+                                          createdAt: {
+                                              $gte: startOfDay,
+                                              $lt: endOfDay,
+                                          },
+                                      },
+                                  ],
+                                  // Voided and refunded sales are not revenue.
+                                  ...COUNTED_SALES_FILTER,
+                              },
+                          },
+                          {
+                              $group: {
+                                  _id: null,
+                                  count: { $sum: 1 },
+                                  revenue: { $sum: '$amount' },
+                              },
+                          },
+                      ],
+                  )
+                : Promise.resolve([]),
             includeMoney
                 ? this.salesModel
                       .find({}, INTERNAL_SALE_FIELDS)
@@ -230,11 +250,12 @@ export class DashboardService {
         const stats: DashboardStats = {
             totalProducts,
             ...(this.batches && {
-                expiringBatchCount: await this.batches.expiringCount(),
+                expiringBatchCount:
+                    await this.batches.expiringCount(expiryAlertDays),
+                expiryAlertDays,
             }),
             lowStockCount: stockAlerts?.lowStockCount ?? 0,
             outOfStockCount: stockAlerts?.outOfStockCount ?? 0,
-            todaySalesCount: todaySales?.count ?? 0,
             recentRestocks,
             recentAdjustments,
         };
@@ -243,6 +264,7 @@ export class DashboardService {
 
         return {
             ...stats,
+            todaySalesCount: todaySales?.count ?? 0,
             todayRevenue: todaySales?.revenue ?? 0,
             recentSales: recentSales ?? [],
         };

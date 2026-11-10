@@ -213,3 +213,23 @@ it('replaces stale rows with a skeleton while switching to all batches (#170)', 
     expect(document.querySelector('.animate-pulse')).not.toBeNull();
     expect(document.body.textContent).not.toContain('Milk-1');
 });
+it('starts the expiring list at the store expiry alert window (#213)', async () => {
+    const { useSettingsStore } = await import('@/stores/settings');
+    const { initialSettings } = await import('@/settings/presentation');
+    const store = useSettingsStore();
+    store.setOwner('a');
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve(
+            url === '/settings'
+                ? { data: { ...initialSettings, expiryAlertDays: 30 } }
+                : { data: { data: [batch()], totalItems: 1 } },
+        ),
+    );
+    await mount();
+    expect(api.get).toHaveBeenCalledWith('/settings');
+    expect(api.get).toHaveBeenLastCalledWith('/inventories/expiring', {
+        params: { page: 1, limit: 25, days: 30 },
+    });
+    expect(field('Expiring within days (expired included)').value).toBe('30');
+    store.setOwner(undefined);
+});

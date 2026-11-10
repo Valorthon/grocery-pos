@@ -116,11 +116,14 @@ import type { TableHeader } from '@/components/ui/types';
 import { PackageSearch } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
 import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
+import { useSettingsStore } from '@/stores/settings';
 const auth = useAuthStore(),
     router = useRouter(),
     prefill = useAdjustmentPrefillStore();
 const canAdjust = computed(() => auth.isAdmin || auth.hasRole(Role.Adjuster));
-const days = ref<number | string>(EXPIRY_LIMITS.DEFAULT_DAYS),
+const settings = useSettingsStore();
+/** Starts at the store's expiry alert window, like the dashboard tile (#213). */
+const days = ref<number | string>(settings.settings.expiryAlertDays),
     page = ref(1),
     total = ref(0),
     expiring = ref(true),
@@ -192,5 +195,12 @@ async function writeOff(batch: InventoryBatchView) {
     if (canAdjust.value && prefill.prepare(batch))
         await router.push({ name: 'Adjustments/Add' });
 }
-void load();
+/** Read the committed window first; a failed refresh keeps the last-known one. */
+async function start() {
+    const initial = days.value;
+    await settings.refresh();
+    if (days.value === initial) days.value = settings.settings.expiryAlertDays;
+    await load();
+}
+void start();
 </script>

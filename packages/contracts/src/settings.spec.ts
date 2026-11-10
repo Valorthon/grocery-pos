@@ -17,6 +17,7 @@ it('captures only immutable receipt presentation fields, excluding settings conc
         timezone: 'Asia/Manila',
         currency: 'PHP',
         defaultReorderLevel: 10,
+        expiryAlertDays: 7,
         version: 7,
     };
     const receipt = receiptStoreIdentity(settings, 'Lane 2');

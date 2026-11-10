@@ -47,6 +47,7 @@
                     :key="stat.key"
                     :data-stat="stat.key"
                     :label="stat.title"
+                    :hint="stat.hint"
                     :value="stat.value"
                     :tone="stat.tone"
                     :to="stat.to"
@@ -211,6 +212,7 @@ import {
     type DashboardView,
     PaymentType,
     SaleStatus,
+    SETTINGS_LIMITS,
 } from '@grocery-pos/contracts';
 
 const authStore = useAuthStore();
@@ -244,6 +246,8 @@ interface Stat {
     key: StatKey;
     title: string;
     value: string;
+    /** What the card counts, always visible (#213). */
+    hint: string;
     icon: Component;
     tone: 'neutral' | 'warning' | 'danger';
     /** Only for roles that may open the list behind the tile. */
@@ -255,6 +259,12 @@ const hasRouter = inject(routerKey, null) !== null;
 
 function count(n: number | undefined): string {
     return n === undefined ? '-' : n.toLocaleString();
+}
+
+/** The store's expiry alert window, as the API reported it. */
+function expiryDays(n: number | undefined): string {
+    const days = n ?? SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT;
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
 /** Warning or danger only while something needs attention. */
@@ -286,6 +296,7 @@ const attentionStats = computed<Stat[]>(() => {
             key: 'expiring',
             title: 'Expiring / expired batches',
             value: count(d?.expiringBatchCount),
+            hint: `Batches in stock expiring within ${expiryDays(d?.expiryAlertDays)} or already expired`,
             icon: AlertCircle,
             tone: attention(d?.expiringBatchCount, 'warning'),
         },
@@ -293,6 +304,7 @@ const attentionStats = computed<Stat[]>(() => {
             key: 'lowStock',
             title: 'Low Stock Items',
             value: count(d?.lowStockCount),
+            hint: 'Active products at or below their reorder level',
             icon: AlertCircle,
             tone: attention(d?.lowStockCount, 'warning'),
         },
@@ -300,6 +312,7 @@ const attentionStats = computed<Stat[]>(() => {
             key: 'outOfStock',
             title: 'Out of Stock Items',
             value: count(d?.outOfStockCount),
+            hint: 'Active products with zero or less on hand',
             icon: PackageX,
             tone: attention(d?.outOfStockCount, 'danger'),
         },
@@ -313,24 +326,28 @@ const overviewStats = computed<Stat[]>(() => {
             key: 'products',
             title: 'Total Products',
             value: count(d?.totalProducts),
+            hint: 'Active products',
             icon: Package,
             tone: 'neutral',
         },
-        {
+    ];
+    // Today's sales and revenue are ADMIN-only (#13, #213). An ADMIN's
+    // skeletons hold their place during the first load, so the grid does
+    // not reflow; no figure shows before the answer.
+    if (showsMoney.value || (!d && authStore.isAdmin && loading.value)) {
+        list.push({
             key: 'todaySales',
             title: "Today's Sales",
             value: count(d?.todaySalesCount),
+            hint: 'Sales completed today; voids and refunds excluded',
             icon: ShoppingCart,
             tone: 'neutral',
-        },
-    ];
-    // An ADMIN's revenue skeleton holds its place during the first load,
-    // so the grid does not reflow; no figure shows before the answer.
-    if (showsMoney.value || (!d && authStore.isAdmin && loading.value)) {
+        });
         list.push({
             key: 'todayRevenue',
             title: "Today's Revenue",
             value: formatCurrency(d?.todayRevenue ?? 0),
+            hint: "Today's sales total; voids and refunds excluded",
             icon: Banknote,
             tone: 'neutral',
         });

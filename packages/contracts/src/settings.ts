@@ -10,6 +10,10 @@ export const SETTINGS_LIMITS = {
     TIMEZONE: 100,
     TERMINAL: 80,
     REORDER_LEVEL: 1_000_000,
+    /** Dashboard/Inventories expiry alert window, whole days (#213). */
+    EXPIRY_ALERT_DAYS_MIN: 1,
+    EXPIRY_ALERT_DAYS_MAX: 90,
+    EXPIRY_ALERT_DAYS_DEFAULT: 7,
 } as const;
 
 /** Store identity is presentation data, never an authorization credential. */
@@ -26,11 +30,14 @@ export interface StoreSettings extends StoreIdentity {
     currency: string;
     /** Display units, used only as a default when creating new products. */
     defaultReorderLevel: number;
+    /** Whole days; batches expiring within it (or expired) are alerted. A legacy row without it reads as 7. */
+    expiryAlertDays: number;
     version: number;
 }
 export type UpdateStoreSettingsRequest = Partial<StoreIdentity> & {
     timezone?: string;
     defaultReorderLevel?: number;
+    expiryAlertDays?: number;
     version: number;
 };
 export const STORE_SETTINGS_SHAPE: WireShape<StoreSettings> = {
@@ -43,6 +50,7 @@ export const STORE_SETTINGS_SHAPE: WireShape<StoreSettings> = {
     timezone: 'required',
     currency: 'required',
     defaultReorderLevel: 'required',
+    expiryAlertDays: 'required',
     version: 'required',
 };
 

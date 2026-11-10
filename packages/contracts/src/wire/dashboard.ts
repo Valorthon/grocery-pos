@@ -28,14 +28,17 @@ export const RESTOCK_ACTIVITY_SHAPE: WireShape<RestockActivity> = {
  * absent, and `recentRestocks` carry no `totalCost`.
  */
 export interface DashboardView {
+    /** Lots of active products in stock, expiring within `expiryAlertDays` or expired. */
     expiringBatchCount?: number;
+    /** The store's expiry alert window the count used (#213). */
+    expiryAlertDays?: number;
     totalProducts: number;
-    /** Products with 1 to LOW_STOCK_THRESHOLD units on hand. */
+    /** Active products at or below their reorder level. */
     lowStockCount: number;
     /** Products with 0 (or fewer) units on hand. */
     outOfStockCount: number;
-    /** Store-wide count of today's sales that were not reversed. */
-    todaySalesCount: number;
+    /** Store-wide count of today's sales that were not reversed. ADMIN only (#213). */
+    todaySalesCount?: number;
     /** Newest first, at most 5. */
     recentRestocks: RestockActivity[];
     /** Newest first, at most 5. */
@@ -48,10 +51,11 @@ export interface DashboardView {
 
 export const DASHBOARD_VIEW_SHAPE: WireShape<DashboardView> = {
     expiringBatchCount: 'optional',
+    expiryAlertDays: 'optional',
     totalProducts: 'required',
     lowStockCount: 'required',
     outOfStockCount: 'required',
-    todaySalesCount: 'required',
+    todaySalesCount: 'optional',
     recentRestocks: 'required',
     recentAdjustments: 'required',
     todayRevenue: 'optional',
@@ -59,4 +63,8 @@ export const DASHBOARD_VIEW_SHAPE: WireShape<DashboardView> = {
 };
 
 /** The dashboard keys only an ADMIN receives. */
-export const DASHBOARD_MONEY_KEYS = ['todayRevenue', 'recentSales'] as const;
+export const DASHBOARD_MONEY_KEYS = [
+    'todayRevenue',
+    'recentSales',
+    'todaySalesCount',
+] as const;

@@ -25,6 +25,7 @@ const FIELDS: Record<AuditAction, readonly string[]> = {
         'timezone',
         'currency',
         'defaultReorderLevel',
+        'expiryAlertDays',
         'version',
     ],
     [AuditAction.USER_CREATED]: ['name', 'roles', 'isActive'],
