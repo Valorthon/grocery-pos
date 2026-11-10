@@ -351,6 +351,24 @@ describe('sales errors (issue #18)', () => {
         expect(document.body.textContent).toContain('Payment');
     });
 
+    it('opens Sale Details from a focused row with Enter (#234)', async () => {
+        serve(CASH_SALE, []);
+        await mount();
+        const row = document.querySelector<HTMLElement>(
+            'tbody tr.cursor-pointer',
+        )!;
+        expect(row.tabIndex).toBe(0);
+        expect(row.getAttribute('aria-describedby')).toBeTruthy();
+        row.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+        );
+        await flush();
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]')
+                ?.textContent,
+        ).toContain('ana');
+    });
+
     it('shows a failed list in the table, then retries it', async () => {
         api.get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
         await mount();

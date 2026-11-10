@@ -66,61 +66,59 @@
                 Showing batches expiring within
                 {{ settingsStore.settings.expiryAlertDays }} days
             </p>
-            <div ref="tableHost" @keydown="onRowKeydown">
-                <BaseTable
-                    v-model:page="page"
-                    v-model:items-per-page="limit"
-                    :headers="headers"
-                    :items="serverItems"
-                    :loading="loading"
-                    :error="loadError"
-                    row-click
-                    empty-text="No inventory found"
-                    :items-length="totalItems"
-                    @click:row="openHistory"
-                    @retry="fetchInventory"
+            <BaseTable
+                v-model:page="page"
+                v-model:items-per-page="limit"
+                :headers="headers"
+                :items="serverItems"
+                :loading="loading"
+                :error="loadError"
+                row-click
+                empty-text="No inventory found"
+                :items-length="totalItems"
+                @click:row="openHistory"
+                @retry="fetchInventory"
+            >
+                <template #cell-name="{ item }"
+                    ><span class="block">{{ item.name }}</span
+                    ><span
+                        class="block text-xs text-muted font-normal num"
+                        data-testid="row-ean"
+                        >{{ item.EAN }}</span
+                    ></template
                 >
-                    <template #cell-name="{ item }"
-                        ><span class="block">{{ item.name }}</span
-                        ><span
-                            class="block text-xs text-muted font-normal num"
-                            data-testid="row-ean"
-                            >{{ item.EAN }}</span
-                        ></template
-                    >
-                    <template #cell-stock="{ item }"
-                        ><span class="block">{{ item.stock }}</span
-                        ><span class="mt-1 block sm:hidden"
-                            ><Badge :color="STATUS[item.status].color">{{
-                                STATUS[item.status].label
-                            }}</Badge></span
-                        ></template
-                    >
-                    <template #cell-reorderLevel="{ item }"
-                        ><span class="text-muted">{{
-                            item.reorderLevel
-                        }}</span></template
-                    >
-                    <template #cell-status="{ item }"
-                        ><Badge
-                            :color="STATUS[item.status].color"
-                            data-testid="stock-status"
-                            >{{ STATUS[item.status].label }}</Badge
-                        ></template
-                    >
-                    <template #cell-history="{ item }"
-                        ><BaseButton
-                            size="sm"
-                            variant="ghost"
-                            class="-my-2 min-h-11 min-w-11 w-11 h-11 p-0"
-                            :aria-label="`Stock history for ${item.name}`"
-                            data-testid="stock-history-button"
-                            @click.stop="openHistory(item)"
-                            ><History class="w-5 h-5" aria-hidden="true"
-                        /></BaseButton>
-                    </template>
-                </BaseTable>
-            </div>
+                <template #cell-stock="{ item }"
+                    ><span class="block">{{ item.stock }}</span
+                    ><span class="mt-1 block sm:hidden"
+                        ><Badge :color="STATUS[item.status].color">{{
+                            STATUS[item.status].label
+                        }}</Badge></span
+                    ></template
+                >
+                <template #cell-reorderLevel="{ item }"
+                    ><span class="text-muted">{{
+                        item.reorderLevel
+                    }}</span></template
+                >
+                <template #cell-status="{ item }"
+                    ><Badge
+                        :color="STATUS[item.status].color"
+                        data-testid="stock-status"
+                        >{{ STATUS[item.status].label }}</Badge
+                    ></template
+                >
+                <template #cell-history="{ item }"
+                    ><BaseButton
+                        size="sm"
+                        variant="ghost"
+                        class="-my-2 min-h-11 min-w-11 w-11 h-11 p-0"
+                        :aria-label="`Stock history for ${item.name}`"
+                        data-testid="stock-history-button"
+                        @click="openHistory(item)"
+                        ><History class="w-5 h-5" aria-hidden="true"
+                    /></BaseButton>
+                </template>
+            </BaseTable>
         </PageCard>
     </PageFrame>
     <!-- Always shown (#233); the dashboard's expiring link scrolls to it. -->
@@ -141,7 +139,7 @@ import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import type { ProductView, UnitOfMeasure } from '@grocery-pos/contracts';
 import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { History, Pencil } from '@lucide/vue';
 import Badge from '@/components/ui/Badge.vue';
@@ -415,44 +413,6 @@ const {
     },
     'Could not load the inventory.',
 );
-
-/*
- * Keyboard row activation (#232), page-local until #234 moves it into
- * BaseTable: each body row is focusable, Enter/Space opens its history.
- */
-const tableHost = ref<HTMLElement | null>(null);
-function bodyRows(): HTMLTableRowElement[] {
-    return [
-        ...(tableHost.value?.querySelectorAll<HTMLTableRowElement>(
-            'tbody tr',
-        ) ?? []),
-    ];
-}
-watch(
-    () => [serverItems.value, loading.value, loadError.value],
-    async () => {
-        await nextTick();
-        const live = !loading.value && !loadError.value;
-        for (const row of bodyRows()) {
-            if (live && serverItems.value.length) {
-                row.tabIndex = 0;
-                row.classList.add('focus-ring');
-            } else row.removeAttribute('tabindex');
-        }
-    },
-    { flush: 'post' },
-);
-function onRowKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    if (event.repeat) return;
-    const row = event.target as HTMLElement;
-    if (row.tagName !== 'TR') return;
-    const item =
-        serverItems.value[bodyRows().indexOf(row as HTMLTableRowElement)];
-    if (!item) return;
-    event.preventDefault();
-    openHistory(item);
-}
 
 void fetchInventory();
 </script>

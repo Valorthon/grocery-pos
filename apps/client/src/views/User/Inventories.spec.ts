@@ -288,6 +288,7 @@ describe('reorder list and restock draft', () => {
         await mount();
         const rows = document.querySelectorAll<HTMLTableRowElement>('tbody tr');
         expect(rows[1].tabIndex).toBe(0);
+        expect(rows[1].getAttribute('aria-describedby')).toBeTruthy();
         rows[1].querySelector('td')!.click();
         await flush();
         expect(document.body.textContent).toContain('Stock history — bread');
