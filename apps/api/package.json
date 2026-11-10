@@ -86,6 +86,7 @@
         ],
         "coverageDirectory": "../coverage",
         "testEnvironment": "node",
+        "maxWorkers": "25%",
         "coverageReporters": [
             "text-summary",
             "lcov"
