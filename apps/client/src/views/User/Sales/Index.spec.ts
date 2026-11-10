@@ -921,5 +921,85 @@ describe('sale details receipt (#218)', () => {
         expect(
             (byTestId('reversal-confirm') as HTMLButtonElement).disabled,
         ).toBe(false);
+
+        // Another type starts afresh.
+        byTestId('reversal-back')!.click();
+        await flush();
+        button('Refund sale')!.click();
+        await flush();
+        expect(
+            document.querySelector<HTMLInputElement>('#reversal-reason')!.value,
+        ).toBe('');
+    });
+
+    /** `/shifts` answers held until the test resolves them, in call order. */
+    function serveDeferredShifts(sales: object[]) {
+        const pending: ((open: object[]) => void)[] = [];
+        api.get.mockImplementation((url: string) => {
+            if (url === '/sales')
+                return Promise.resolve({
+                    data: { data: sales, totalItems: sales.length },
+                });
+            if (url === '/shifts')
+                return new Promise((resolve) =>
+                    pending.push((open) =>
+                        resolve({
+                            data: { data: open, totalItems: open.length },
+                        }),
+                    ),
+                );
+            return Promise.resolve({ data: [] });
+        });
+        return pending;
+    }
+
+    it('keeps only the latest open-shift answer, out of order', async () => {
+        const pending = serveDeferredShifts([CASH_SALE]);
+        await mountAndOpen();
+        button('Void sale')!.click();
+        await flush();
+        byTestId('reversal-back')!.click();
+        await flush();
+        button('Void sale')!.click();
+        await flush();
+
+        // The latest answer: the own shift is open.
+        pending[1]!([openShift(OWN_SHIFT, 'ana')]);
+        await flush();
+        expect(byTestId('payout-own-shift')).not.toBeNull();
+        // The stale one lands late and changes nothing.
+        pending[0]!([]);
+        await flush();
+        expect(byTestId('payout-own-shift')).not.toBeNull();
+        expect(byTestId('payout-no-open-shift')).toBeNull();
+    });
+
+    it('drops an open-shift answer for a sale switched away from', async () => {
+        const SALE_B = { ...CASH_SALE, _id: 'sale2', shift: undefined };
+        const pending = serveDeferredShifts([CASH_SALE, SALE_B]);
+        await mountAndOpen();
+        button('Void sale')!.click();
+        await flush();
+        button('Back')!.click();
+        await flush();
+        document
+            .querySelectorAll<HTMLElement>('tbody tr.cursor-pointer')[1]!
+            .click();
+        await flush();
+        button('Void sale')!.click();
+        await flush();
+        expect(byTestId('payout-loading')).not.toBeNull();
+
+        // The first sale's answer lands late: still loading for sale2.
+        pending[0]!([openShift(OWN_SHIFT, 'ana')]);
+        await flush();
+        expect(byTestId('payout-loading')).not.toBeNull();
+        expect(byTestId('payout-own-shift')).toBeNull();
+
+        pending[1]!([openShift(OTHER_SHIFT, 'ben')]);
+        await flush();
+        expect(
+            document.querySelector('[data-testid="payout-shift"] select'),
+        ).not.toBeNull();
     });
 });

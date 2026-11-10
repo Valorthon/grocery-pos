@@ -1043,10 +1043,15 @@ const canConfirmReversal = computed(
 );
 
 /** Loads the open shifts and works out whether one must be chosen. */
+/** Counts open-shift loads, so only the latest one may write (#218). */
+let shiftsCall = 0;
+
 async function loadPayoutShifts(forceChoice = false) {
+    const call = ++shiftsCall;
     const sale = selectedSale.value;
     if (!sale || reversalCash.value === 0 || !authStore.isAdmin) {
         payoutRequired.value = false;
+        loadingShifts.value = false;
         return;
     }
     loadingShifts.value = true;
@@ -1055,8 +1060,10 @@ async function loadPayoutShifts(forceChoice = false) {
         const res = await api.get<Paginated<ShiftListItem>>('/shifts', {
             params: { page: 1, limit: 100, status: ShiftStatus.OPEN },
         });
+        if (call !== shiftsCall) return;
         openShifts.value = res.data.data;
     } catch (error) {
+        if (call !== shiftsCall) return;
         // Unknown, not "none open": say so and offer a retry. Without a
         // forced choice the server decides; it answers
         // SHIFT_PAYOUT_REQUIRED if a shift must be chosen.
@@ -1065,7 +1072,7 @@ async function loadPayoutShifts(forceChoice = false) {
         payoutRequired.value = forceChoice;
         return;
     } finally {
-        loadingShifts.value = false;
+        if (call === shiftsCall) loadingShifts.value = false;
     }
     const ownShiftOpen =
         !!sale.shift && openShifts.value.some((s) => s._id === sale.shift);
@@ -1083,7 +1090,15 @@ async function loadPayoutShifts(forceChoice = false) {
  * Opens the void/refund panel. What was entered before Back stays; the
  * open shifts are checked again, keeping a chosen one that is still open.
  */
+/** The type whose inputs the panel holds; another type starts afresh. */
+let draftType: ReversalType | null = null;
+
 function startReversal(type: ReversalType) {
+    if (draftType !== type) {
+        reversalReason.value = '';
+        payoutShiftId.value = '';
+    }
+    draftType = type;
     pendingReversal.value = type;
     shiftsError.value = '';
     payoutRequired.value = false;
@@ -1096,6 +1111,10 @@ function backToReceipt() {
 }
 
 function cancelReversal() {
+    // Drops any open-shift load still in flight, e.g. across a sale switch.
+    shiftsCall++;
+    loadingShifts.value = false;
+    draftType = null;
     pendingReversal.value = null;
     shiftsError.value = '';
     reversalReason.value = '';

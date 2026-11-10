@@ -621,7 +621,9 @@ describe('sales', () => {
             expect(
                 rows.filter((row) => row.reversal).length,
             ).toBeGreaterThanOrEqual(2);
-            // Approvers are ADMIN-only, named for the admin (#218).
+            // Approvers are ADMIN-only, named for the admin (#218). Every
+            // approver seeded here is a live user, so the name is present;
+            // a deleted approver would carry the id alone.
             const parts = rows.flatMap(
                 (row) =>
                     [row.discount, row.reversal].filter((part) => !!part) as {
