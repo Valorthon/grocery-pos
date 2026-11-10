@@ -250,8 +250,10 @@ export class DashboardService {
         const stats: DashboardStats = {
             totalProducts,
             ...(this.batches && {
-                expiringBatchCount:
-                    await this.batches.expiringCount(expiryAlertDays),
+                expiringBatchCount: await this.batches.expiringCount({
+                    timezone: timeZone,
+                    expiryAlertDays,
+                }),
                 expiryAlertDays,
             }),
             lowStockCount: stockAlerts?.lowStockCount ?? 0,

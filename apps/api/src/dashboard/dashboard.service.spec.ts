@@ -325,7 +325,10 @@ describe('DashboardService.getDashboard', () => {
 
             const result = await service.getDashboard({ includeMoney: false });
 
-            expect(expiringCount).toHaveBeenCalledWith(30);
+            expect(expiringCount).toHaveBeenCalledWith({
+                timezone: 'Asia/Manila',
+                expiryAlertDays: 30,
+            });
             expect(result).toMatchObject({
                 expiringBatchCount: 3,
                 expiryAlertDays: 30,
@@ -344,7 +347,10 @@ describe('DashboardService.getDashboard', () => {
 
             const result = await service.getDashboard({ includeMoney: true });
 
-            expect(expiringCount).toHaveBeenCalledWith(7);
+            expect(expiringCount).toHaveBeenCalledWith({
+                timezone: 'Asia/Manila',
+                expiryAlertDays: 7,
+            });
             expect(result.expiryAlertDays).toBe(7);
         });
 

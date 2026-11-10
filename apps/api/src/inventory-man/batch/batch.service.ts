@@ -310,8 +310,11 @@ export class InventoryBatchService implements OnModuleInit {
         days?: number;
         product?: string;
         expiring?: boolean;
+        /** A caller's settings snapshot; read here when absent. */
+        settings?: { timezone: string; expiryAlertDays: number };
     }): Promise<Paginated<InventoryBatchView>> {
-        const settings = this.settings ? await this.settings.read() : null;
+        const settings =
+            dto.settings ?? (this.settings ? await this.settings.read() : null);
         const today = this.today(
             new Date(),
             settings?.timezone ?? this.config.get('STORE_TIMEZONE'),
@@ -381,8 +384,12 @@ export class InventoryBatchService implements OnModuleInit {
         };
     }
     /** The dashboard tile: the Expiring list's total at the store's alert window. */
-    async expiringCount(days?: number): Promise<number> {
-        return (await this.list({ page: 1, limit: 1, days, expiring: true }))
-            .totalItems;
+    async expiringCount(settings?: {
+        timezone: string;
+        expiryAlertDays: number;
+    }): Promise<number> {
+        return (
+            await this.list({ page: 1, limit: 1, settings, expiring: true })
+        ).totalItems;
     }
 }

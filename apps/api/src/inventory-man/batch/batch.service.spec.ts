@@ -442,6 +442,20 @@ describe('expiry alert window and archived products (#213)', () => {
             expiryDate: { $lte: '2026-01-03' },
         });
     });
+    it('uses a passed settings snapshot without reading settings again', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-01T20:00:00Z'));
+        const read = jest.fn();
+        Reflect.set(service, 'settings', { read });
+        await service.expiringCount({
+            timezone: 'Asia/Manila',
+            expiryAlertDays: 3,
+        });
+        expect(read).not.toHaveBeenCalled();
+        // 04:00 on 2 Jan in Manila, plus 3 days.
+        expect(lastQuery()).toMatchObject({
+            expiryDate: { $lte: '2026-01-05' },
+        });
+    });
     it('falls back to 7 days without the settings service', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-01-01T04:00:00Z'));
         await service.expiringCount();
