@@ -16,7 +16,7 @@
                 search-label="Product Name"
                 :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
-                @search="applySearch"
+                @search="onSearch"
                 @clear="resetFilters"
             >
                 <BaseInput
@@ -118,6 +118,7 @@
 
 <script setup lang="ts">
 import { useCategories } from '@/composables/useCategories';
+import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import ProductCostSummary from '@/components/User/Product/ProductCostSummary.vue';
 import { Role, unitLabel } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
@@ -211,6 +212,25 @@ const { applied, apply: applySearch } = useAppliedFilters(
     }),
     search,
 );
+
+/**
+ * A scan (a barcode-shaped term + Enter) opens its one exact product,
+ * archived too: Edit for product editors, else Stock history (#214).
+ * Anything else, or no single exact match, is the normal search.
+ */
+async function onSearch() {
+    const code = scannedTerm(searchName.value, searchEAN.value);
+    if (code) {
+        const found = await findExactProduct(code).catch(() => null);
+        if (found) {
+            const row = { ...found, id: found._id };
+            if (canAddProducts.value) editing.value = row;
+            else history.value = row;
+            return;
+        }
+    }
+    applySearch();
+}
 
 // Name first, then Category and Price (#172). The list API returns no
 // stock, so Stock is not a column here (recorded on #172).

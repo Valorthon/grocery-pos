@@ -519,3 +519,68 @@ describe('columns and row menu (#172)', () => {
         await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
     });
 });
+
+describe('product list scans (#214)', () => {
+    const SCAN = '4006381333931';
+    function answer(rows: object[]) {
+        api.get.mockImplementation((url, config) =>
+            Promise.resolve({
+                data:
+                    url === '/products' && config?.params?.status === 'all'
+                        ? { data: rows, totalItems: rows.length }
+                        : { data: [], totalItems: 0 },
+            }),
+        );
+    }
+    const archived = {
+        _id: 'p1',
+        EAN: SCAN,
+        name: 'milk',
+        price: 5000,
+        isActive: false,
+    };
+    async function scanInto(label: string) {
+        await type(label, SCAN);
+        api.get.mockClear();
+        field(label).form!.requestSubmit();
+        await flush();
+    }
+
+    it('opens Edit for a product editor, archived too, without filtering', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        answer([archived]);
+        await mount();
+        await scanInto('EAN / Barcode');
+        expect(document.body.textContent).toContain('Edit Product');
+        expect(params()[0]).toEqual({
+            EAN: SCAN,
+            status: 'all',
+            page: 1,
+            limit: 100,
+        });
+        expect(params()).not.toContainEqual(
+            expect.objectContaining({ status: 'active' }),
+        );
+    });
+
+    it('opens Stock history for an Adjuster, from the name box too', async () => {
+        useAuthStore().user = { username: 'a', roles: [Role.Adjuster] };
+        answer([archived]);
+        await mount();
+        await scanInto('Product Name');
+        expect(document.body.textContent).toContain('Stock history — milk');
+        expect(document.body.textContent).not.toContain('Edit Product');
+    });
+
+    it('falls back to the filtered search without one exact match', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        answer([{ ...archived, EAN: `${SCAN}9` }]);
+        await mount();
+        await scanInto('EAN / Barcode');
+        expect(document.body.textContent).not.toContain('Edit Product');
+        expect(params()).toEqual([
+            { EAN: SCAN, status: 'all', page: 1, limit: 100 },
+            expect.objectContaining({ page: 1, EAN: SCAN, status: 'active' }),
+        ]);
+    });
+});

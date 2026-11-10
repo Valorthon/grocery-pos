@@ -206,6 +206,7 @@
                                         <BaseInput
                                             v-model="line.quantity"
                                             class="min-w-24"
+                                            :data-scan-line="line.product"
                                             numeric
                                             :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
                                             :inputmode="
@@ -457,7 +458,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import {
     EXPIRY_LIMITS,
     OPEN_PURCHASE_ORDER_STATUSES,
@@ -468,7 +469,10 @@ import {
     STRING_LIMITS,
     SUPPLIER_LIMITS,
     formatQuantity,
+    parseQuantity,
+    quantityInput,
     quantityScale,
+    UnitOfMeasure as Unit,
     unitLabel,
     unitOf,
     type Paginated,
@@ -518,6 +522,10 @@ import {
 import { useConfirm } from '@/composables/useConfirm';
 import { useUnsavedDraftsGuard } from '@/composables/useDrafts';
 import { useProductMatches } from '@/composables/useProductMatches';
+import {
+    lookupActiveBarcode,
+    useBarcodeCapture,
+} from '@/composables/useBarcodeCapture';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { Color, useUIStore } from '@/stores/ui';
 import {
@@ -720,6 +728,70 @@ const picked = computed<ComboboxOption | null>({
         draft.value = [...draft.value, line];
         void prefillCosts([line]);
     },
+});
+
+/** Focuses a draft line's ordered quantity field. */
+async function focusQuantity(product: string) {
+    await nextTick();
+    [...document.querySelectorAll<HTMLInputElement>('input[data-scan-line]')]
+        .find((el) => el.dataset.scanLine === product)
+        ?.focus();
+}
+
+/**
+ * A page-wide scan on a DRAFT (#214): adds the product as a line, or +1
+ * displayed unit when it is already on the order. A measured unit
+ * (KG/G/L) is never counted up: its quantity field takes the focus so the
+ * weight is typed. Locked orders ignore scans.
+ */
+async function onScan(code: string) {
+    let found;
+    try {
+        found = await lookupActiveBarcode(code);
+    } catch (cause) {
+        if (!unmounted)
+            ui.queueMessage(
+                Color.ERROR,
+                apiErrorText(cause, 'Could not look up the barcode.'),
+            );
+        return;
+    }
+    if (unmounted || !isDraft.value || busy.value) return;
+    if (found.kind === 'archived') {
+        ui.queueMessage(Color.ERROR, 'Product archived');
+        return;
+    }
+    if (found.kind === 'unknown') {
+        ui.queueMessage(Color.ERROR, 'Product not found');
+        return;
+    }
+    const product = found.product;
+    const unit = unitOf(product.unit);
+    const piece = unit === Unit.PIECE;
+    validation.value = '';
+    const existing = draft.value.find((line) => line.product === product._id);
+    if (existing) {
+        const qty = parseQuantity(existing.quantity, unit);
+        if (piece && (existing.quantity.trim() === '' || qty !== null))
+            existing.quantity = quantityInput((qty ?? 0) + 1, unit);
+        else await focusQuantity(product._id);
+        return;
+    }
+    const line: PurchaseOrderDraftLine = {
+        product: product._id,
+        name: product.name,
+        EAN: product.EAN,
+        unit,
+        tracksExpiry: product.tracksExpiry,
+        quantity: piece ? '1' : '',
+        cost: '',
+    };
+    draft.value = [...draft.value, line];
+    void prefillCosts([line]);
+    if (!piece) await focusQuantity(product._id);
+}
+useBarcodeCapture((code) => void onScan(code), {
+    enabled: () => isDraft.value && !busy.value,
 });
 
 /** Known latest costs fill untouched lines only, never an edit (#41, #123). */

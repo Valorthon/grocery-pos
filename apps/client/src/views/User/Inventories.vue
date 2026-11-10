@@ -39,7 +39,7 @@
                 search-label="Product Name"
                 :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
-                @search="applySearch"
+                @search="onSearch"
                 @clear="resetFilters"
             >
                 <BaseInput
@@ -124,6 +124,7 @@
 
 <script setup lang="ts">
 import StockHistory from '@/components/User/Inventory/StockHistory.vue';
+import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import type { ProductView, UnitOfMeasure } from '@grocery-pos/contracts';
 import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
@@ -243,6 +244,28 @@ const { applied, apply: applySearch } = useAppliedFilters(
     }),
     search,
 );
+
+/**
+ * A scan (a barcode-shaped term + Enter) opens its one exact product's
+ * Stock history, archived too (#214); otherwise the normal search.
+ */
+async function onSearch() {
+    const code = scannedTerm(searchName.value, searchEAN.value);
+    if (code) {
+        const found = await findExactProduct(code).catch(() => null);
+        if (found) {
+            history.value = {
+                _id: found._id,
+                name: found.name,
+                unit: found.unit,
+                EAN: found.EAN,
+                reorderLevel: formatQuantity(reorderLevelOf(found), found.unit),
+            };
+            return;
+        }
+    }
+    applySearch();
+}
 
 const headers = [
     { key: 'history', title: 'History' },

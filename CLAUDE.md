@@ -332,6 +332,20 @@ requestId}`. A 5xx never carries details or internals.
   scanned; the rules are in contracts `barcode.ts`. Typed codes in the
   generated 200… range are refused.
 - A restock line needs exactly one of `newProduct` or `product`.
+- Scanners outside the register (#214, owner decisions 2026-11-10) are
+  keyboard wedges only, no camera. Products/Inventory searches: a
+  barcode-shaped term (`isBarcode`, check digit not enforced) + Enter
+  opens its one exact product, archived too, resolved through
+  `GET /products?status=all` (Products: Edit for RESTOCKER/ADMIN, else
+  Stock history; Inventory: Stock history), else the normal search.
+  Restock, adjustments, stock counts and the DRAFT PO editor capture scans
+  page-wide with `useBarcodeCapture` (scanner-speed digits + Enter; not in
+  text/number/select fields, IME, key repeats or while a modal is open).
+  Restock/adjustment scans open the add dialog as a new line (archived is
+  refused; an unknown restock code opens a new product only if
+  `barcodeError` passes). The PO adds a line or +1 piece; a measured unit
+  focuses its quantity. Counts focus the first uncounted matching line.
+  Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via
   `common/utils/regex.ts` and `product/product-search.ts`.
 - `Inventory.updatedBy` means the last writer.

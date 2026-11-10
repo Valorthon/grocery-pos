@@ -14,6 +14,7 @@ import {
 } from '@/testing/form-dom';
 import AddDialog from './AddDialog.vue';
 import type { AddForm } from './dto';
+import type { ScannedLine } from '@/composables/useBarcodeCapture';
 
 const api = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -47,7 +48,7 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-async function open(item?: AddForm) {
+async function open(item?: AddForm, scanned?: ScannedLine) {
     const isOpen = ref(false);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -57,6 +58,7 @@ async function open(item?: AddForm) {
                 modelValue: isOpen.value,
                 'onUpdate:modelValue': (v: boolean) => (isOpen.value = v),
                 item,
+                scanned,
                 onAdd: (p: AddForm) => added.push(p),
                 onUpdate: (p: AddForm) => updated.push(p),
             }),
@@ -428,5 +430,50 @@ it('requires expiry for a freshly picked tracked product from the catalogue', as
     expect(added[0]).toMatchObject({
         tracksExpiry: true,
         expiryDate: '2026-11-01',
+    });
+});
+
+describe('Restock AddDialog scans (#214)', () => {
+    it('opens with a scanned product picked, as a new line', async () => {
+        await open(undefined, {
+            product: {
+                _id: MILK.product,
+                name: MILK.name,
+                EAN: MILK.EAN,
+                price: 100,
+                createdAt: '',
+                updatedAt: '',
+            },
+        });
+        expect(field('Search Product').value).toBe(MILK.EAN);
+        await type('Quantity', '2');
+        await type('Unit Cost', '1');
+        await click('Restock');
+        expect(added[0]).toMatchObject({
+            isNewProduct: false,
+            product: MILK.product,
+            quantity: 2,
+        });
+        expect(updated).toHaveLength(0);
+    });
+
+    it('opens an unknown code as a new product with its EAN, auto-generate off', async () => {
+        await open(undefined, { EAN: '4006381333931' });
+        expect(field('EAN').value).toBe('4006381333931');
+        expect(field('Auto-generate EAN').checked).toBe(false);
+        await type('Product Name', 'Pens');
+        await type('Selling Price', '20');
+        await type('Quantity', '1');
+        await type('Unit Cost', '10');
+        await click('Restock');
+        expect(api.get).toHaveBeenCalledWith(
+            'products/ensureValid',
+            expect.anything(),
+        );
+        expect(added[0]).toMatchObject({
+            isNewProduct: true,
+            EAN: '4006381333931',
+            autoGenerateEAN: false,
+        });
     });
 });
