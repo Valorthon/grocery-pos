@@ -310,22 +310,35 @@ export class InventoryBatchService implements OnModuleInit {
         days?: number;
         product?: string;
         expiring?: boolean;
+        /** A caller's settings snapshot; read here when absent. */
+        settings?: { timezone: string; expiryAlertDays: number };
     }): Promise<Paginated<InventoryBatchView>> {
+        const settings =
+            dto.settings ?? (this.settings ? await this.settings.read() : null);
         const today = this.today(
             new Date(),
-            this.settings
-                ? await this.settings.timezone()
-                : this.config.get('STORE_TIMEZONE'),
+            settings?.timezone ?? this.config.get('STORE_TIMEZONE'),
         );
         const query: Record<string, unknown> = { remainingQty: { $ne: 0 } };
         if (dto.product) query.product = id(dto.product);
         if (dto.expiring) {
             const date = new Date(`${today}T00:00:00Z`);
             date.setUTCDate(
-                date.getUTCDate() + (dto.days ?? EXPIRY_LIMITS.DEFAULT_DAYS),
+                date.getUTCDate() +
+                    (dto.days ??
+                        settings?.expiryAlertDays ??
+                        EXPIRY_LIMITS.DEFAULT_DAYS),
             );
             query.expiryDate = { $lte: date.toISOString().slice(0, 10) };
             query.remainingQty = { $gt: 0 };
+            // Like the stock tiles, archived products raise no alert (#213).
+            const archived = await this.products.distinct('_id', {
+                isActive: false,
+            });
+            if (archived.length)
+                query.product = dto.product
+                    ? { $eq: id(dto.product), $nin: archived }
+                    : { $nin: archived };
         }
         const [rows, totalItems] = await Promise.all([
             this.batches
@@ -370,8 +383,13 @@ export class InventoryBatchService implements OnModuleInit {
             totalItems,
         };
     }
-    async expiringCount(): Promise<number> {
-        return (await this.list({ page: 1, limit: 1, days: 7, expiring: true }))
-            .totalItems;
+    /** The dashboard tile: the Expiring list's total at the store's alert window. */
+    async expiringCount(settings?: {
+        timezone: string;
+        expiryAlertDays: number;
+    }): Promise<number> {
+        return (
+            await this.list({ page: 1, limit: 1, settings, expiring: true })
+        ).totalItems;
     }
 }

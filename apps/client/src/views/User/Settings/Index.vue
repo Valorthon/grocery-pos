@@ -61,6 +61,20 @@
                         Existing product levels, including legacy defaults,
                         remain unchanged.
                     </p>
+                    <BaseInput
+                        id="settings-expiry-days"
+                        v-model="expiryInput"
+                        label="Expiry alert window (days)"
+                        inputmode="numeric"
+                        :disabled="saving || loadingForm"
+                    />
+                    <p class="text-xs text-slate-600">
+                        The dashboard and the Inventories expiring list flag
+                        batches expiring within this many days, or already
+                        expired ({{ SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MIN }}–{{
+                            SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MAX
+                        }}).
+                    </p>
                     <p
                         v-if="saveError"
                         role="alert"
@@ -131,12 +145,14 @@ import {
     initialSettings,
     terminalLabel,
     saveTerminalLabel,
+    validExpiryAlertDays,
 } from '@/settings/presentation';
 import { apiErrorText } from '@/utils/api-error';
 const settings = useSettingsStore();
 const form = ref({ ...initialSettings });
 const baseline = ref(JSON.stringify(form.value));
 const reorderInput = ref<string | number>(10);
+const expiryInput = ref<string | number>(initialSettings.expiryAlertDays);
 const laneInput = ref(terminalLabel.value);
 const loadingForm = ref(true);
 const saving = ref(false),
@@ -170,7 +186,8 @@ const identityFields: {
 const settingsDirty = computed(
     () =>
         JSON.stringify(form.value) !== baseline.value ||
-        String(reorderInput.value) !== String(form.value.defaultReorderLevel),
+        String(reorderInput.value) !== String(form.value.defaultReorderLevel) ||
+        String(expiryInput.value) !== String(form.value.expiryAlertDays),
 );
 useUnsavedDraftsGuard({
     count: () =>
@@ -208,6 +225,7 @@ function resetForm() {
     form.value = { ...settings.settings };
     baseline.value = JSON.stringify(form.value);
     reorderInput.value = form.value.defaultReorderLevel;
+    expiryInput.value = form.value.expiryAlertDays;
 }
 onMounted(async () => {
     await ownerKnown();
@@ -257,6 +275,14 @@ async function save() {
             'Enter a store name and a valid whole-number reorder default.';
         return;
     }
+    const expiryDays = Number(expiryInput.value);
+    if (
+        !String(expiryInput.value).trim() ||
+        !validExpiryAlertDays(expiryDays)
+    ) {
+        saveError.value = `Enter a whole number of expiry alert days from ${SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MIN} to ${SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MAX}.`;
+        return;
+    }
     try {
         const timezone = form.value.timezone.trim();
         if (timezone !== 'UTC' && !timezone.includes('/'))
@@ -272,6 +298,7 @@ async function save() {
         version: form.value.version,
         timezone: form.value.timezone.trim(),
         defaultReorderLevel: level,
+        expiryAlertDays: expiryDays,
     };
     for (const field of identityFields)
         body[field.key] = form.value[field.key].trim();

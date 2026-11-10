@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
-import { type StoreSettings } from '@grocery-pos/contracts';
+import { SETTINGS_LIMITS, type StoreSettings } from '@grocery-pos/contracts';
 import { Settings } from './settings.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { ConflictError, ErrorCode, InternalError } from '../common/errors';
@@ -17,6 +17,8 @@ export function settingsView(row: Settings): StoreSettings {
         timezone: row.timezone,
         currency: row.currency,
         defaultReorderLevel: row.defaultReorderLevel,
+        expiryAlertDays:
+            row.expiryAlertDays ?? SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT,
         version: row.version,
     };
 }
@@ -44,6 +46,8 @@ export class SettingsService implements OnModuleInit {
                         timezone: this.config.get('STORE_TIMEZONE'),
                         currency: 'PHP',
                         defaultReorderLevel: 10,
+                        expiryAlertDays:
+                            SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT,
                         version: 0,
                         contextLock: 0,
                     },

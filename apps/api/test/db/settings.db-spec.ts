@@ -285,3 +285,24 @@ it('captures receipt identity per sale and preserves it across settings changes 
         'Even Later',
     );
 });
+it('reads a legacy row without the expiry window as 7 and audits a window change (#213)', async () => {
+    await db
+        .model('Settings')
+        .collection.updateOne(
+            { key: 'store' },
+            { $unset: { expiryAlertDays: '' } },
+        );
+    expect((await current()).expiryAlertDays).toBe(7);
+    for (const bad of [0, 91, 2.5])
+        expect((await patch({ expiryAlertDays: bad })).status).toBe(400);
+    const result = await patch({ expiryAlertDays: 30 });
+    expect(result.status).toBe(200);
+    expect(result.body.expiryAlertDays).toBe(30);
+    const entry = await db
+        .model<{ after: { expiryAlertDays?: number } }>('AuditLog')
+        .findOne({ action: AuditAction.SETTINGS_UPDATED })
+        .sort({ _id: -1 })
+        .lean();
+    expect(entry?.after.expiryAlertDays).toBe(30);
+    expect((await patch({ expiryAlertDays: 7 })).status).toBe(200);
+});

@@ -34,6 +34,7 @@ export function validTimezone(value: unknown): boolean {
     'receiptFooter',
     'timezone',
     'defaultReorderLevel',
+    'expiryAlertDays',
 ])
 export class UpdateSettingsDto implements UpdateStoreSettingsRequest {
     @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) version!: number;
@@ -85,4 +86,9 @@ export class UpdateSettingsDto implements UpdateStoreSettingsRequest {
     @Min(0)
     @Max(SETTINGS_LIMITS.REORDER_LEVEL)
     defaultReorderLevel?: number;
+    @ValidateIf((_o, value: unknown) => value !== undefined)
+    @IsInt()
+    @Min(SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MIN)
+    @Max(SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MAX)
+    expiryAlertDays?: number;
 }

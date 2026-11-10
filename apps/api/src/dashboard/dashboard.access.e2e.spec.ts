@@ -171,7 +171,6 @@ describe('GET /dashboard access by role (e2e)', () => {
                 totalProducts: 40,
                 lowStockCount: 3,
                 outOfStockCount: 1,
-                todaySalesCount: 2,
                 recentRestocks: [
                     {
                         _id: RESTOCK._id,
@@ -183,7 +182,7 @@ describe('GET /dashboard access by role (e2e)', () => {
                 recentAdjustments: [ADJUSTMENT],
             });
             expect(JSON.stringify(body)).not.toMatch(
-                /todayRevenue|recentSales|totalCost|amount/,
+                /todayRevenue|todaySalesCount|recentSales|totalCost|amount/,
             );
         },
     );
@@ -195,5 +194,6 @@ describe('GET /dashboard access by role (e2e)', () => {
         expect(res.status).toBe(200);
         expect(body).not.toHaveProperty('todayRevenue');
         expect(body).not.toHaveProperty('recentSales');
+        expect(body).not.toHaveProperty('todaySalesCount');
     });
 });

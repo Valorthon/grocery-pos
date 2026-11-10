@@ -80,6 +80,23 @@ describe('persistent settings', () => {
         lean.mockResolvedValueOnce(null);
         await expect(service.read()).rejects.toThrow('not initialized');
     });
+    it('reads a legacy row without an expiry alert window as 7 days (#213)', async () => {
+        const { service, lean } = harness();
+        expect((await service.read()).expiryAlertDays).toBe(7);
+        lean.mockResolvedValueOnce({ ...row, expiryAlertDays: 30 });
+        expect((await service.read()).expiryAlertDays).toBe(30);
+    });
+    it('initializes new stores with the default expiry alert window', async () => {
+        const { service, model } = harness();
+        await service.onModuleInit();
+        expect(model.updateOne).toHaveBeenCalledWith(
+            { key: 'store' },
+            {
+                $setOnInsert: expect.objectContaining({ expiryAlertDays: 7 }),
+            },
+            expect.anything(),
+        );
+    });
     it('serializes context establishment on the singleton inside the transaction', async () => {
         const { service, model, lean } = harness();
         const session = {} as ClientSession;

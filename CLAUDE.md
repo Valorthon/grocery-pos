@@ -420,7 +420,8 @@ requestId}`. A 5xx never carries details or internals.
   Void/refund also allow SELLER for their own current-shift sales, with approval
   enforced inside the monetary transaction (#34). Contracts `PERMISSIONS` marks those rows `ownRoleOnly`,
   and `role-permissions.spec.ts` checks it against the metadata.
-- Dashboard money is ADMIN-only and stripped on the server. A cashier sees only
+- Dashboard money and today's sales count are ADMIN-only and stripped on the
+  server (#213). Total Products counts active products. A cashier sees only
   their own sales. Price changes are ADMIN-only.
 - Only RESTOCKER (and ADMIN) add or edit products (`POST /products/bulk`,
   `GET /products/ensureValid`, `PATCH /products`); ADJUSTER keeps stock
@@ -886,7 +887,10 @@ on upstream fixes).
   aggregate Inventory.stock, including deficit/reconciliation balances. Batches
   and aggregate changes roll back together. Costing remains latest receipt (#41),
   not lot/FIFO valuation. Expiring view includes already-expired lots; dashboard
-  alerts count remaining lots expired or expiring within seven store days.
+  alerts count remaining lots expired or expiring within the store's
+  `expiryAlertDays` (Store settings, ADMIN, 1–90, default 7; a legacy row
+  reads 7). The tile and the Expiring list share one query and both skip
+  archived products (#213).
 
 **Stock movement ledger** (#45, owner decision 2026-11-05)
 

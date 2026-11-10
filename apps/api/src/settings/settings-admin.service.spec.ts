@@ -15,6 +15,7 @@ const before = {
     timezone: 'Asia/Manila',
     currency: 'PHP',
     defaultReorderLevel: 10,
+    expiryAlertDays: 7,
     version: 0,
 };
 const actor: AuthUser = {
@@ -128,4 +129,26 @@ it('propagates audit failure through transaction rollback', async () => {
         service.update(actor, { version: 0, storeName: 'Next' }),
     ).rejects.toThrow('Transaction failed');
     expect(session.endSession).toHaveBeenCalled();
+});
+it('saves the expiry alert window with its audit entry in one transaction (#213)', async () => {
+    const { service, settings, audit, session, shifts } = setup();
+    settings.replace.mockResolvedValueOnce({
+        ...before,
+        expiryAlertDays: 14,
+        version: 1,
+    });
+    await service.update(actor, { version: 0, expiryAlertDays: 14 });
+    expect(settings.replace).toHaveBeenCalledWith(
+        0,
+        { expiryAlertDays: 14 },
+        session,
+    );
+    expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+            before: expect.objectContaining({ expiryAlertDays: 7 }),
+            after: expect.objectContaining({ expiryAlertDays: 14 }),
+        }),
+        session,
+    );
+    expect(shifts.exists).not.toHaveBeenCalled();
 });
