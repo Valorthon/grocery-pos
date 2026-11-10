@@ -45,7 +45,7 @@
                             v-if="
                                 title || subtitle || closable || $slots.header
                             "
-                            class="flex items-center justify-between px-5 py-3.5 border-b border-line bg-paper"
+                            class="flex shrink-0 items-center justify-between px-5 py-3.5 border-b border-line bg-paper"
                         >
                             <div v-if="$slots.header" :id="titleId">
                                 <slot name="header" />
@@ -85,7 +85,12 @@
                         <div
                             :class="[
                                 'p-4 sm:p-5',
-                                scrollable ? 'overflow-y-auto' : '',
+                                // min-h-0 lets the body shrink inside the capped
+                                // panel and scroll, keeping header and footer
+                                // in view (#217).
+                                scrollable
+                                    ? 'min-h-0 flex-1 overflow-y-auto'
+                                    : '',
                             ]"
                         >
                             <slot />
@@ -93,7 +98,7 @@
 
                         <div
                             v-if="$slots.footer"
-                            class="px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex gap-2.5 items-center"
+                            class="shrink-0 px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex gap-2.5 items-center"
                         >
                             <slot name="footer" />
                         </div>

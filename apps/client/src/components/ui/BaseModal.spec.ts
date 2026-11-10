@@ -398,3 +398,35 @@ describe('BaseModal tokens (#156)', () => {
         expect(document.body.innerHTML).not.toMatch(/\b(?:slate|red)-\d/);
     });
 });
+
+describe('scrollable BaseModal (#217)', () => {
+    const parts = () => {
+        const [dialog] = dialogs();
+        const save = byTestId('save');
+        const footer = save.parentElement!;
+        const body = byTestId('first').parentElement!;
+        const header = dialog.firstElementChild as HTMLElement;
+        return { dialog, header, body, footer };
+    };
+    const classes = (el: HTMLElement) => el.className.split(/\s+/);
+
+    it('lets the body shrink and scroll while header and footer stay', async () => {
+        await mountOne({ scrollable: true });
+        const { dialog, header, body, footer } = parts();
+        expect(classes(dialog)).toEqual(
+            expect.arrayContaining(['flex', 'flex-col', 'max-h-[92vh]']),
+        );
+        expect(classes(body)).toEqual(
+            expect.arrayContaining(['min-h-0', 'flex-1', 'overflow-y-auto']),
+        );
+        expect(classes(header)).toContain('shrink-0');
+        expect(classes(footer)).toContain('shrink-0');
+    });
+
+    it('leaves a non-scrollable body at its natural height', async () => {
+        await mountOne();
+        const { body } = parts();
+        expect(classes(body)).not.toContain('overflow-y-auto');
+        expect(classes(body)).not.toContain('min-h-0');
+    });
+});
