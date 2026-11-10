@@ -32,7 +32,7 @@ VITE_APP_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com V
 CI runs the same steps (plus audit, depcheck and `pnpm licenses:check`) and
 passes on a clean checkout since #28, so a red run is a real failure. Lint is `--max-warnings 0`, and
 `test` enforces coverage thresholds (jest `coverageThreshold` in
-`apps/api/package.json`, vitest `thresholds` in the client and contracts
+`apps/api/jest.config.ts`, vitest `thresholds` in the client and contracts
 `vitest.config.ts`). Raise a threshold when coverage rises; never lower it.
 
 ## Workflow for issues under #31

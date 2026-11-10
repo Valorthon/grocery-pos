@@ -20,6 +20,10 @@ export default defineConfig({
         // Vitest 4's restoreMocks only restores vi.spyOn spies; mockReset also
         // resets every vi.fn() (calls and queued returns) between tests, as
         // restoreMocks did on Vitest 3.
+        // #225: jest (API) runs beside this under `pnpm -r test`; default
+        // worker counts on both exhausted memory and timed tests out. CI
+        // runners are small (4 vCPUs), so the cap applies only off CI.
+        maxWorkers: process.env.CI ? undefined : '25%',
         mockReset: true,
         restoreMocks: true,
         coverage: {
