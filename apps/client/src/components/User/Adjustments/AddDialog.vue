@@ -89,8 +89,14 @@ import type { ComboboxOption } from '@/components/ui/types';
 import { AddForm, AddFormInput } from './dto';
 import { adjustmentLineErrors } from './validation';
 import { useProductMatches } from '@/composables/useProductMatches';
+import type { ScannedLine } from '@/composables/useBarcodeCapture';
 
-const props = defineProps<{ modelValue: boolean; item?: AddForm }>();
+const props = defineProps<{
+    modelValue: boolean;
+    item?: AddForm;
+    /** A page-wide scan (#214): the product to fill in. */
+    scanned?: ScannedLine;
+}>();
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
@@ -200,6 +206,16 @@ watch(
                   unit: unitOf(item.unit),
               }
             : null;
+        const scanned = item ? undefined : props.scanned?.product;
+        if (scanned) formData.EAN = scanned.EAN;
+        if (scanned)
+            picked.value = {
+                tracksExpiry: scanned.tracksExpiry,
+                product: scanned._id,
+                name: scanned.name,
+                EAN: scanned.EAN,
+                unit: unitOf(scanned.unit),
+            };
         errors.value = {};
         resetMatches();
     },

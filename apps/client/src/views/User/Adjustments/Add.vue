@@ -100,6 +100,7 @@
     <AdjustAddDialog
         v-model="isAddDialogOpen"
         :item="editItem"
+        :scanned="scanned"
         @add="handleNewItem"
         @update="handleUpdateItem"
     />
@@ -131,6 +132,11 @@ import { Color, useUIStore } from '@/stores/ui';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toAdjustmentBody } from '@/utils/payloads';
 import { useConfirm } from '@/composables/useConfirm';
+import {
+    lookupActiveBarcode,
+    useBarcodeCapture,
+    type ScannedLine,
+} from '@/composables/useBarcodeCapture';
 import {
     clearDraftsRequest,
     useDraftList,
@@ -224,6 +230,41 @@ const saveToDB = async (saveForm: SaveForm): Promise<boolean> => {
     return true;
 };
 
+/** The scan the add dialog opens with; undefined for a plain Add. */
+const scanned = ref<ScannedLine>();
+
+function openScanned(line: ScannedLine) {
+    if (unmounted || isAddDialogOpen.value) return;
+    editItem.value = undefined;
+    editingId.value = null;
+    scanned.value = line;
+    isAddDialogOpen.value = true;
+}
+
+/**
+ * A page-wide scan (#214) opens the add dialog for a new line with the
+ * product filled in. Archived products are refused.
+ */
+async function onScan(code: string) {
+    try {
+        const found = await lookupActiveBarcode(code);
+        if (unmounted) return;
+        if (found.kind === 'found') openScanned({ product: found.product });
+        else if (found.kind === 'archived')
+            uiStore.queueMessage(Color.ERROR, 'Product archived');
+        else uiStore.queueMessage(Color.ERROR, 'Product not found');
+    } catch (error) {
+        if (!unmounted)
+            uiStore.queueMessage(
+                Color.ERROR,
+                apiErrorMessages(error, 'Could not look up the barcode.'),
+            );
+    }
+}
+useBarcodeCapture((code) => void onScan(code), {
+    enabled: () => !saving.value,
+});
+
 const confirmClear = async () => {
     const count = items.value.length;
     if (count === 0) return;
@@ -231,6 +272,7 @@ const confirmClear = async () => {
 };
 
 const openAddDialog = () => {
+    scanned.value = undefined;
     editItem.value = undefined;
     editingId.value = null;
     isAddDialogOpen.value = true;
@@ -242,6 +284,7 @@ const handleNewItem = (newItem: AddForm) => {
 };
 
 const editDraft = (item: Row) => {
+    scanned.value = undefined;
     editingId.value = item.draftId;
     editItem.value = { ...item };
     isAddDialogOpen.value = true;

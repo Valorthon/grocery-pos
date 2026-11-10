@@ -16,6 +16,7 @@ import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { flush, type, field } from '@/testing/form-dom';
 import { nextDraft } from '@/testing/stub-add-dialog';
+import { wedgeScan } from '@/testing/scanner';
 import { Color, useUIStore } from '@/stores/ui';
 import { Role, useAuthStore } from '@/stores/auth';
 import ProductsAdd from './Products/Add.vue';
@@ -727,6 +728,100 @@ describe.each(cases)('%s draft page (issue #19)', (_, c) => {
             spy.mock.calls.filter(([type]) => type === 'beforeunload');
         expect(listener(add)).toHaveLength(2);
         expect(listener(remove)).toHaveLength(2);
+    });
+});
+
+describe('page-wide scanning on restock and adjustments (#214)', () => {
+    const SOAP = { _id: PRODUCT, name: 'soap', EAN: '4800000000017' };
+    const DRAFT = {
+        ...SOAP,
+        product: PRODUCT,
+        quantity: 1,
+        unitCost: 100,
+        change: 1,
+        reason: 'count',
+    };
+    function failure(status: number, error: string) {
+        return new AxiosError('x', String(status), undefined, undefined, {
+            status,
+            statusText: '',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: { statusCode: status, error, message: 'x' },
+        } as AxiosResponse);
+    }
+    beforeEach(() => {
+        api.get.mockImplementation(async (url: string) => {
+            if (url === '/products/4800000000017') return { data: SOAP };
+            if (url === '/products/4800000000024')
+                throw failure(400, 'VALIDATION_001');
+            if (url.startsWith('/products/')) throw failure(404, 'PRODUCT_001');
+            return { data: [] };
+        });
+    });
+    const scanned = () =>
+        document
+            .querySelector<HTMLButtonElement>('button[data-scanned]')
+            ?.getAttribute('data-scanned');
+    const toasts = () => useUIStore().toasts.map((t) => t.lines.join(' '));
+
+    it.each([
+        ['restock', RestockAdd],
+        ['adjustments', AdjustmentAdd],
+    ])(
+        '%s: a known product opens the add dialog with it, as a new line',
+        async (_, page) => {
+            await mountPage(page);
+            wedgeScan('4800000000017', document.body);
+            await flush();
+            expect(JSON.parse(scanned()!)).toEqual({ product: SOAP });
+            nextDraft.value = { ...DRAFT };
+            await press('Stub submit');
+            wedgeScan('4800000000017', document.body);
+            await flush();
+            await press('Stub submit');
+            expect(rows()).toHaveLength(2);
+        },
+    );
+
+    it.each([
+        ['restock', RestockAdd],
+        ['adjustments', AdjustmentAdd],
+    ])('%s: an archived product is refused', async (_, page) => {
+        await mountPage(page);
+        wedgeScan('4800000000024', document.body);
+        await flush();
+        expect(scanned()).toBeUndefined();
+        expect(toasts()).toContain('Product archived');
+    });
+
+    it('restock: an unknown valid code opens a new product with its EAN', async () => {
+        await mountPage(RestockAdd);
+        wedgeScan('4800000000040', document.body);
+        await flush();
+        expect(JSON.parse(scanned()!)).toEqual({ EAN: '4800000000040' });
+    });
+
+    it('restock: a reserved or bad check-digit code starts no new product', async () => {
+        await mountPage(RestockAdd);
+        wedgeScan('2000000000015', document.body);
+        await flush();
+        wedgeScan('4800000000049', document.body);
+        await flush();
+        expect(scanned()).toBeUndefined();
+        expect(toasts().join(' ')).toContain('reserved');
+        expect(toasts().join(' ')).toContain('check digit');
+    });
+
+    it('a plain Add Product opens without the last scan', async () => {
+        await mountPage(RestockAdd);
+        wedgeScan('4800000000017', document.body);
+        await flush();
+        nextDraft.value = { ...DRAFT };
+        await press('Stub submit');
+        buttons()[0].click();
+        await flush();
+        expect(scanned()).toBeUndefined();
     });
 });
 

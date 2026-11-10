@@ -81,7 +81,10 @@ export class ProductService {
         private settings?: SettingsService,
     ) {}
 
-    async getByBarcode(dto: GetDto): Promise<ProductDoc> {
+    async getByBarcode(
+        dto: GetDto,
+        includeArchived = false,
+    ): Promise<ProductDoc> {
         const { EAN } = dto;
 
         const product = await this.model.findOne({ EAN }).lean<ProductDoc>();
@@ -93,7 +96,7 @@ export class ProductService {
             );
         }
 
-        if (product.isActive === false)
+        if (product.isActive === false && !includeArchived)
             throw new ValidationError(
                 ErrorCode.VALIDATION_INVALID_INPUT,
                 'Product discontinued',

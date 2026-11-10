@@ -14,6 +14,7 @@ import {
     EnsureValidDto,
     GetAllDto,
     GetDto,
+    GetByBarcodeQueryDto,
     MatchesDto,
     NewProductsDto,
     UpdateBulkDto,
@@ -64,8 +65,13 @@ export class ProductController {
 
     @Roles(Role.Restocker, Role.Adjuster, Role.Seller)
     @Get(':EAN')
-    async getByBarcode(@Param() dto: GetDto): Promise<ProductView> {
-        return asJson(await this.service.getByBarcode(dto));
+    async getByBarcode(
+        @Param() dto: GetDto,
+        @Query() query: GetByBarcodeQueryDto,
+    ): Promise<ProductView> {
+        return asJson(
+            await this.service.getByBarcode(dto, query.includeArchived),
+        );
     }
 
     // Non-price fields: Restocker. `price`: Admin only; the whole batch is a

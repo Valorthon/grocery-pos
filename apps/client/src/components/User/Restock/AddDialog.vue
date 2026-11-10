@@ -175,8 +175,14 @@ import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
 import { toEnsureValidQuery } from '@/utils/payloads';
 import { useProductMatches } from '@/composables/useProductMatches';
+import type { ScannedLine } from '@/composables/useBarcodeCapture';
 
-const props = defineProps<{ modelValue: boolean; item?: AddForm }>();
+const props = defineProps<{
+    modelValue: boolean;
+    item?: AddForm;
+    /** A page-wide scan (#214): its product, or an unknown code's EAN. */
+    scanned?: ScannedLine;
+}>();
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
@@ -263,38 +269,42 @@ const selectedProduct = computed<ComboboxOption | null>({
                   unit: unitOf(match?.unit),
               }
             : null;
-        if (picked.value && !props.item) {
-            const product = picked.value.product;
-            const previousCost = formData.unitCost;
-            void api
-                .get<ProductCostView[]>('/suppliers/costs', {
-                    params: { products: product },
-                })
-                .then((response) => {
-                    if (
-                        generation !== costGeneration ||
-                        !props.modelValue ||
-                        picked.value?.product !== product ||
-                        formData.unitCost !== previousCost
-                    )
-                        return;
-                    const cost = response.data[0]?.lastCost;
-                    if (cost !== undefined)
-                        formData.unitCost = centavosToPesoInput(cost);
-                })
-                .catch((cause) =>
-                    uiStore.queueMessage(
-                        Color.ERROR,
-                        apiErrorMessages(
-                            cause,
-                            'Cost default unavailable; enter the actual unit cost.',
-                        ),
-                    ),
-                );
-        }
+        if (picked.value && !props.item) loadCostDefault(generation);
         clearError('EAN');
     },
 });
+
+/** Prefills the unit cost from the picked product's latest receipt. */
+function loadCostDefault(generation: number) {
+    if (!picked.value) return;
+    const product = picked.value.product;
+    const previousCost = formData.unitCost;
+    void api
+        .get<ProductCostView[]>('/suppliers/costs', {
+            params: { products: product },
+        })
+        .then((response) => {
+            if (
+                generation !== costGeneration ||
+                !props.modelValue ||
+                picked.value?.product !== product ||
+                formData.unitCost !== previousCost
+            )
+                return;
+            const cost = response.data[0]?.lastCost;
+            if (cost !== undefined)
+                formData.unitCost = centavosToPesoInput(cost);
+        })
+        .catch((cause) =>
+            uiStore.queueMessage(
+                Color.ERROR,
+                apiErrorMessages(
+                    cause,
+                    'Cost default unavailable; enter the actual unit cost.',
+                ),
+            ),
+        );
+}
 
 function clearError(...fields: string[]) {
     const next = { ...errors.value };
@@ -362,6 +372,23 @@ watch(
                 : null;
         errors.value = {};
         resetMatches();
+        const scanned = item ? undefined : props.scanned;
+        if (scanned?.product) {
+            const product = scanned.product;
+            picked.value = {
+                tracksExpiry: product.tracksExpiry,
+                product: product._id,
+                name: product.name,
+                EAN: product.EAN,
+                unit: unitOf(product.unit),
+            };
+            formData.EAN = product.EAN;
+            loadCostDefault(costGeneration);
+        } else if (scanned?.EAN) {
+            formData.isNewProduct = true;
+            formData.autoGenerateEAN = false;
+            formData.EAN = scanned.EAN;
+        }
     },
 );
 

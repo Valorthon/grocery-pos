@@ -20,6 +20,11 @@ export function stubAddDialogModule() {
                 type: Object as PropType<Record<string, unknown>>,
                 default: undefined,
             },
+            /** A page-wide scan (#214), shown as `data-scanned` JSON. */
+            scanned: {
+                type: Object as PropType<Record<string, unknown>>,
+                default: undefined,
+            },
         },
         emits: ['update:modelValue', 'add', 'update'],
         setup(props, { emit }) {
@@ -29,6 +34,9 @@ export function stubAddDialogModule() {
                           'button',
                           {
                               type: 'button',
+                              'data-scanned': props.scanned
+                                  ? JSON.stringify(props.scanned)
+                                  : undefined,
                               onClick: () => {
                                   const editing =
                                       !!props.item &&

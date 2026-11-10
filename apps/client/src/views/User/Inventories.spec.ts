@@ -9,6 +9,7 @@ import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import type { ApiGet } from '@/testing/api-mock';
 import Inventories from './Inventories.vue';
+import { AxiosError, AxiosHeaders } from 'axios';
 import RestockAdd from './Restock/Add.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), post: vi.fn() }));
 const nav = vi.hoisted(() => ({
@@ -487,5 +488,48 @@ describe('out-of-stock view (#212)', () => {
             outOfStock: undefined,
         });
         expect(field('Out of stock').checked).toBe(false);
+    });
+});
+
+describe('inventory list scans (#214)', () => {
+    it('opens Stock history for one exact match, else searches', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        api.get.mockImplementation((url) =>
+            url === '/products/12345670'
+                ? Promise.resolve({
+                      data: {
+                          _id: 'bread',
+                          EAN: '12345670',
+                          name: 'bread',
+                          isActive: false,
+                      },
+                  })
+                : url.startsWith('/products/')
+                  ? Promise.reject(
+                        new AxiosError('x', '404', undefined, undefined, {
+                            status: 404,
+                            statusText: '',
+                            headers: {},
+                            config: { headers: new AxiosHeaders() },
+                            data: {},
+                        }),
+                    )
+                  : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        await type('EAN / Barcode', '12345670');
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        expect(document.body.textContent).toContain('Stock history — bread');
+        expect(
+            api.get.mock.calls.filter(([url]) => url === '/inventories'),
+        ).toHaveLength(1);
+        await type('EAN / Barcode', '4006381333931');
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        const calls = api.get.mock.calls;
+        const last = calls[calls.length - 1];
+        expect(last?.[0]).toBe('/inventories');
+        expect(last?.[1]?.params).toMatchObject({ EAN: '4006381333931' });
     });
 });
