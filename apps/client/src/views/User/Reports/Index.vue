@@ -267,49 +267,54 @@
                             </tr>
                         </template>
                     </BaseTable>
-                    <details
-                        class="rounded-xl border border-slate-200 p-3 text-sm"
+                    <section
+                        data-testid="reconciliation"
+                        aria-labelledby="reconciliation-title"
+                        class="flex flex-col gap-3"
                     >
-                        <summary class="cursor-pointer font-bold">
+                        <h2 id="reconciliation-title" class="text-sm font-bold">
                             Reconcile with shift Z-reads
-                        </summary>
-                        <p class="mt-2">{{ report.reconciliation.note }}</p>
-                        <p>
-                            Original charged sales:
-                            {{
-                                formatCurrency(
-                                    report.reconciliation.chargedSales,
-                                )
-                            }}
-                            · reversal events:
-                            {{
-                                formatCurrency(
-                                    report.reconciliation.reversalAmount,
-                                )
-                            }}.
-                        </p>
-                        <p>
-                            Prior-period reversals:
-                            {{ report.reconciliation.priorPeriodReversals }} ({{
-                                formatCurrency(
-                                    report.reconciliation
-                                        .priorPeriodReversalAmount,
-                                )
-                            }}). Late offline occurrences:
-                            {{ report.reconciliation.lateOfflineTransactions }}
-                            ({{
-                                formatCurrency(
-                                    report.reconciliation.lateOfflineNetSales,
-                                )
-                            }}).
-                        </p>
-                        <RouterLink
-                            :to="{ name: 'Shifts' }"
-                            class="font-bold text-leaf-700 underline"
-                            >Review original Z-reads and late
-                            addenda</RouterLink
+                        </h2>
+                        <div
+                            class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
                         >
-                    </details>
+                            <StatTile
+                                v-for="tile in reconciliationTiles"
+                                :key="tile.key"
+                                :data-reconcile="tile.key"
+                                :label="tile.label"
+                                :value="tile.value"
+                                :hint="tile.hint"
+                            />
+                        </div>
+                        <details
+                            data-testid="reconciliation-notes"
+                            class="rounded-xl border border-line p-3 text-sm"
+                        >
+                            <summary
+                                class="cursor-pointer rounded-control font-bold focus-ring"
+                            >
+                                How these numbers work
+                            </summary>
+                            <ul class="mt-2 list-disc space-y-1 pl-5">
+                                <li
+                                    v-for="line in SALES_REPORT_RECONCILIATION_NOTES"
+                                    :key="line"
+                                >
+                                    {{ line }}
+                                </li>
+                            </ul>
+                        </details>
+                        <div>
+                            <RouterLink
+                                :to="{ name: 'Shifts' }"
+                                data-testid="reconciliation-shifts"
+                                :class="[...buttonClass('outline'), 'min-h-11']"
+                                >Review original Z-reads and late
+                                addenda</RouterLink
+                            >
+                        </div>
+                    </section>
                 </template>
             </div>
         </PageCard>
@@ -321,6 +326,7 @@ import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue';
 import { isAxiosError } from 'axios';
 import { RouterLink } from 'vue-router';
 import {
+    SALES_REPORT_RECONCILIATION_NOTES,
     PaymentType,
     REPORT_LIMITS,
     SalesReportGroup,
@@ -341,6 +347,8 @@ import { ChartColumn, X } from '@lucide/vue';
 import { apiErrorText } from '@/utils/api-error';
 import { formatCurrency } from '@/utils/currency';
 import { useSalesLookups } from '@/composables/useSalesLookups';
+import StatTile from '@/components/ui/StatTile.vue';
+import { buttonClass } from '@/components/ui/button-class';
 import { DATE_PRESET_OPTIONS, presetRange, type ReportPreset } from './presets';
 
 const {
@@ -395,6 +403,37 @@ type Query = {
 const applied = ref<Query | null>(null);
 const requested = ref<Query | null>(null);
 const report = ref<SalesReport | null>(null);
+// The four Z-read reconciliation figures as tiles (#216).
+const reconciliationTiles = computed(() => {
+    const r = report.value?.reconciliation;
+    if (!r) return [];
+    return [
+        {
+            key: 'charged',
+            label: 'Original charged sales',
+            value: formatCurrency(r.chargedSales),
+            hint: 'Gross sales less discounts, by sale date',
+        },
+        {
+            key: 'reversals',
+            label: 'Reversal events',
+            value: formatCurrency(r.reversalAmount),
+            hint: 'Voids and refunds, by reversal date',
+        },
+        {
+            key: 'prior',
+            label: 'Prior-period reversals',
+            value: formatCurrency(r.priorPeriodReversalAmount),
+            hint: `${r.priorPeriodReversals} ${r.priorPeriodReversals === 1 ? 'reversal' : 'reversals'} of sales before this range`,
+        },
+        {
+            key: 'late',
+            label: 'Late offline occurrences',
+            value: formatCurrency(r.lateOfflineNetSales),
+            hint: `${r.lateOfflineTransactions} ${r.lateOfflineTransactions === 1 ? 'sale' : 'sales'} uploaded after ${r.lateOfflineTransactions === 1 ? 'its' : 'their'} shift closed`,
+        },
+    ];
+});
 const loading = ref(false);
 const exporting = ref(false);
 const error = ref('');

@@ -8,6 +8,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, type PipelineStage } from 'mongoose';
 import {
     REPORT_LIMITS,
+    SALES_REPORT_RECONCILIATION_NOTES,
     SalesReportGroup,
     ReversalType,
     SaleStatus,
@@ -206,7 +207,7 @@ export async function buildSalesReport(
             priorPeriodReversalAmount: 0,
             chargedSales: 0,
             reversalAmount: 0,
-            note: 'Sales use their original occurrence date; reversals use the date they happened. Gross sales less discounts equals original charged sales. Net sales then subtracts reversal events. Original shift Z-reads are immutable closing snapshots: compare original charges, drawer payout movements, and separate late-offline addenda, not an unadjusted calendar-period net. Category/product groups count a transaction in each group it touches; totals count it once. Categories use current product assignments. SPLIT is one payment-type group. Product costs use the latest-receipt estimate; unknown cost coverage is explicit.',
+            note: SALES_REPORT_RECONCILIATION_NOTES.join(' '),
         },
     };
     const rows = new Map<string, SalesReportRow>();

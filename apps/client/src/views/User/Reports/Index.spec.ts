@@ -151,10 +151,63 @@ describe('event-date reports UI', () => {
         expect(
             document.querySelector('svg[aria-label="Daily net sales trend"]'),
         ).not.toBeNull();
-        expect(document.body.textContent).toContain(
-            'Original shift Z-reads remain immutable',
-        );
         expect(document.body.textContent).toContain('Frozen (archived)');
+    });
+    it('shows reconciliation figures as tiles, a closed explanation and a Shifts link (#216)', async () => {
+        const original = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/reports/sales'
+                ? Promise.resolve({
+                      data: response({
+                          reconciliation: {
+                              chargedSales: 8000,
+                              reversalAmount: -1200,
+                              priorPeriodReversals: 2,
+                              priorPeriodReversalAmount: -700,
+                              lateOfflineTransactions: 1,
+                              lateOfflineNetSales: 450,
+                              note: 'server note',
+                          },
+                      }),
+                  })
+                : original(url, config),
+        );
+        await mount();
+        const tile = (key: string) =>
+            document.querySelector(`[data-reconcile="${key}"]`)?.textContent;
+        expect(tile('charged')).toContain('Original charged sales');
+        expect(tile('charged')).toContain('₱80.00');
+        expect(tile('reversals')).toContain('₱12.00');
+        expect(tile('prior')).toContain('Prior-period reversals');
+        expect(tile('prior')).toContain('₱7.00');
+        expect(tile('prior')).toContain('2 reversals');
+        expect(tile('late')).toContain('Late offline occurrences');
+        expect(tile('late')).toContain('₱4.50');
+        expect(tile('late')).toContain(
+            '1 sale uploaded after its shift closed',
+        );
+        const notes = document.querySelector<HTMLDetailsElement>(
+            '[data-testid="reconciliation-notes"]',
+        )!;
+        expect(notes.open).toBe(false);
+        expect(notes.querySelector('summary')?.textContent?.trim()).toBe(
+            'How these numbers work',
+        );
+        const bullets = [...notes.querySelectorAll('li')].map((li) =>
+            li.textContent?.trim(),
+        );
+        expect(bullets).toHaveLength(7);
+        expect(bullets.join(' ')).toBe(
+            'Sales use their original occurrence date; reversals use the date they happened. Gross sales less discounts equals original charged sales. Net sales then subtracts reversal events. Original shift Z-reads are immutable closing snapshots: compare original charges, drawer payout movements, and separate late-offline addenda, not an unadjusted calendar-period net. Category/product groups count a transaction in each group it touches; totals count it once. Categories use current product assignments. SPLIT is one payment-type group. Product costs use the latest-receipt estimate; unknown cost coverage is explicit.',
+        );
+        const link = document.querySelector<HTMLAnchorElement>(
+            '[data-testid="reconciliation-shifts"]',
+        )!;
+        expect(link.getAttribute('href')).toBe('/shifts');
+        expect(link.className).toContain('min-h-11');
+        expect(link.textContent).toContain(
+            'Review original Z-reads and late addenda',
+        );
     });
     it('shows incomplete coverage instead of false complete gross margin', async () => {
         const original = api.get.getMockImplementation()!;
