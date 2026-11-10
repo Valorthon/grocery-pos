@@ -2,6 +2,7 @@
     <BaseModal
         v-model="open"
         title="Edit Product"
+        scrollable
         max-width="28rem"
         :closable="!saving"
     >
