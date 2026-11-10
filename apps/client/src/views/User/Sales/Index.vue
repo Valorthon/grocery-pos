@@ -935,7 +935,13 @@ const {
         const opening = serverItems.value.find(
             (row) => openOnLoad !== null && row.id.toLowerCase() === openOnLoad,
         );
-        openOnLoad = null;
+        if (openOnLoad !== null) {
+            openOnLoad = null;
+            // Consumed once: a reload or Back must not reopen it (#243).
+            const query = { ...router.currentRoute.value.query };
+            delete query.details;
+            void router.replace({ query });
+        }
         if (opening) void showDetails(opening);
     },
     'Could not load the sales.',

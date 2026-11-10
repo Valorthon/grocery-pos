@@ -23,10 +23,14 @@ const routeState = vi.hoisted(() => ({
     meta: { title: 'Sales history' },
     query: {},
 }));
-const routerQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
+const routerQuery = vi.hoisted(() => ({
+    value: {} as Record<string, string>,
+    replace: vi.fn(),
+}));
 vi.mock('vue-router', () => ({
     useRouter: () => ({
         push: vi.fn(),
+        replace: routerQuery.replace,
         currentRoute: { value: { query: routerQuery.value } },
     }),
     useRoute: () => routeState,
@@ -430,6 +434,19 @@ describe('sales errors (issue #18)', () => {
             document.querySelector('[data-testid="sale-detail-cashier"]')
                 ?.textContent,
         ).toContain('ana');
+        expect(routerQuery.replace).toHaveBeenCalledTimes(1);
+        expect(routerQuery.replace).toHaveBeenCalledWith({
+            query: { saleNumber: ID },
+        });
+        app?.unmount();
+        document.body.innerHTML = '';
+        routerQuery.value = { saleNumber: ID };
+        routerQuery.replace.mockClear();
+        await mount();
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]'),
+        ).toBeNull();
+        expect(routerQuery.replace).not.toHaveBeenCalled();
     });
 
     it('opens nothing for a deep link without details=1', async () => {
