@@ -23,8 +23,12 @@ const routeState = vi.hoisted(() => ({
     meta: { title: 'Sales history' },
     query: {},
 }));
+const routerQuery = vi.hoisted(() => ({ value: {} as Record<string, string> }));
 vi.mock('vue-router', () => ({
-    useRouter: () => ({ push: vi.fn() }),
+    useRouter: () => ({
+        push: vi.fn(),
+        currentRoute: { value: { query: routerQuery.value } },
+    }),
     useRoute: () => routeState,
 }));
 
@@ -138,6 +142,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    routerQuery.value = {};
     app?.unmount();
     app = null;
     document.body.innerHTML = '';
@@ -367,6 +372,74 @@ describe('sales errors (issue #18)', () => {
             document.querySelector('[data-testid="sale-detail-cashier"]')
                 ?.textContent,
         ).toContain('ana');
+    });
+
+    it('badges each status: completed green, voided red, refunded amber (#243)', async () => {
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/sales'
+                        ? {
+                              data: [
+                                  CASH_SALE,
+                                  {
+                                      ...CASH_SALE,
+                                      _id: 'sale2',
+                                      status: SaleStatus.VOIDED,
+                                  },
+                                  {
+                                      ...CASH_SALE,
+                                      _id: 'sale3',
+                                      status: SaleStatus.REFUNDED,
+                                  },
+                              ],
+                              totalItems: 3,
+                          }
+                        : { data: [], totalItems: 0 },
+            }),
+        );
+        await mount();
+        const badges = [
+            ...document.querySelectorAll('[data-testid="sale-status"]'),
+        ];
+        expect(badges.map((b) => b.textContent?.trim())).toEqual([
+            'Completed',
+            'Voided',
+            'Refunded',
+        ]);
+        expect(badges.map((b) => b.className)).toEqual([
+            expect.stringContaining('bg-success-bg'),
+            expect.stringContaining('bg-danger-bg'),
+            expect.stringContaining('bg-warning-bg'),
+        ]);
+        expect(
+            document.querySelector('tbody tr[data-row-click]')?.closest('table')
+                ?.parentElement?.textContent,
+        ).toContain('Press Enter to open the sale details');
+    });
+
+    it('opens the deep-linked sale from the dashboard (?saleNumber=&details=1, #243)', async () => {
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID, details: '1' };
+        serve({ ...CASH_SALE, _id: ID }, []);
+        await mount();
+        expect(api.get).toHaveBeenCalledWith('/sales', {
+            params: expect.objectContaining({ saleNumber: ID }) as unknown,
+        });
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]')
+                ?.textContent,
+        ).toContain('ana');
+    });
+
+    it('opens nothing for a deep link without details=1', async () => {
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID };
+        serve({ ...CASH_SALE, _id: ID }, []);
+        await mount();
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]'),
+        ).toBeNull();
     });
 
     it('shows a failed list in the table, then retries it', async () => {

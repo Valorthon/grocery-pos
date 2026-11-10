@@ -10,6 +10,7 @@ import {
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
 import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
+import type { StatusMap } from '@/components/ui/status-badge';
 import { centavosToPesoInput, parsePesos } from '@/utils/currency';
 import { fieldErrors, moneyError, quantityError } from '@/utils/rules';
 
@@ -32,6 +33,18 @@ export const STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
     [PurchaseOrderStatus.PARTIALLY_RECEIVED]: 'Partially received',
     [PurchaseOrderStatus.RECEIVED]: 'Received',
     [PurchaseOrderStatus.CANCELLED]: 'Cancelled',
+};
+
+/** A purchase order's status badge (#243). */
+export const PURCHASE_ORDER_STATUS: StatusMap<PurchaseOrderStatus> = {
+    [PurchaseOrderStatus.DRAFT]: { label: 'Draft', color: 'neutral' },
+    [PurchaseOrderStatus.SENT]: { label: 'Sent', color: 'warning' },
+    [PurchaseOrderStatus.PARTIALLY_RECEIVED]: {
+        label: 'Partially received',
+        color: 'warning',
+    },
+    [PurchaseOrderStatus.RECEIVED]: { label: 'Received', color: 'success' },
+    [PurchaseOrderStatus.CANCELLED]: { label: 'Cancelled', color: 'error' },
 };
 
 export function draftLinesOf(po: PurchaseOrderView): PurchaseOrderDraftLine[] {

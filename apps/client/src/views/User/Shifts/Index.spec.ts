@@ -177,3 +177,78 @@ describe('Shifts force-close confirmation (issue #143)', () => {
         });
     });
 });
+
+describe('Shifts table design (#243)', () => {
+    async function mount() {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(ShiftsIndex);
+        app.use(createPinia());
+        app.mount(host);
+        await flush();
+    }
+
+    it('filters All / Open / Closed with the same query values', async () => {
+        await mount();
+        const group = document.querySelector(
+            '[role="group"][aria-label="Status"]',
+        )!;
+        const buttons = [
+            ...group.querySelectorAll<HTMLButtonElement>('button'),
+        ];
+        expect(buttons.map((b) => b.textContent?.trim())).toEqual([
+            'All shifts',
+            'Open',
+            'Closed',
+        ]);
+        expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
+        const statusParam = () =>
+            (
+                api.get.mock.calls[api.get.mock.calls.length - 1] as [
+                    string,
+                    { params: object },
+                ]
+            )[1].params;
+        expect(statusParam()).not.toHaveProperty('status');
+        for (const [i, value] of [
+            [1, ShiftStatus.OPEN],
+            [2, ShiftStatus.CLOSED],
+        ] as const) {
+            buttons[i].click();
+            await flush();
+            expect(statusParam()).toMatchObject({ status: value, page: 1 });
+        }
+        buttons[0].click();
+        await flush();
+        expect(statusParam()).not.toHaveProperty('status');
+    });
+
+    it('badges open green and closed neutral', async () => {
+        api.get.mockResolvedValue({
+            data: {
+                data: [
+                    OPEN_SHIFT,
+                    {
+                        ...OPEN_SHIFT,
+                        _id: 'shift2',
+                        status: ShiftStatus.CLOSED,
+                    },
+                ],
+                totalItems: 2,
+            },
+        });
+        await mount();
+        const badges = [
+            ...document.querySelectorAll('[data-testid="shift-status"]'),
+        ];
+        expect(badges.map((b) => [b.textContent?.trim(), b.className])).toEqual(
+            [
+                ['Open', expect.stringContaining('bg-success-bg')],
+                ['Closed', expect.stringContaining('bg-paper')],
+            ],
+        );
+        expect(document.body.textContent).toContain(
+            'Press Enter to open the shift report',
+        );
+    });
+});
