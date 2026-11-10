@@ -3,7 +3,12 @@
         class="mt-6 rounded-2xl border border-slate-200 bg-white p-5 space-y-4"
         aria-labelledby="batch-heading"
     >
-        <h2 id="batch-heading" class="text-lg font-bold">
+        <h2
+            id="batch-heading"
+            ref="heading"
+            tabindex="-1"
+            class="text-lg font-bold focus:outline-none"
+        >
             Expiry and inventory batches
         </h2>
         <p class="text-sm">
@@ -11,98 +16,111 @@
             expiry date. Expired batches cannot be sold. Reconciliation batches
             need review.
         </p>
-        <div class="flex flex-wrap items-end gap-3">
-            <BaseInput
-                v-model="days"
-                label="Expiring within days (expired included)"
-                type="number"
-                :min="0"
-                :max="EXPIRY_LIMITS.DAYS_MAX"
-            />
-            <BaseButton :disabled="loading" @click="search"
-                >Show expiring</BaseButton
-            >
-            <BaseButton variant="outline" :disabled="loading" @click="showAll"
-                >All remaining batches</BaseButton
-            >
-        </div>
-        <p v-if="daysError" role="alert" class="text-sm text-danger-fg">
-            {{ daysError }}
-        </p>
-        <BaseTable
-            :headers="headers"
-            :items="rows"
-            :loading="loading"
-            :error="error"
-            @retry="load"
+        <p
+            v-if="trackedProducts === 0"
+            class="text-sm text-muted"
+            data-testid="no-expiry-tracking"
         >
-            <template #cell-product="{ item }">{{
-                item.product.name
-            }}</template>
-            <template #cell-batch="{ item }">{{
-                item.batchNo || item._id.slice(-8)
-            }}</template>
-            <template #cell-expiry="{ item }">{{
-                item.expiryDate || 'Reconciliation / unknown'
-            }}</template>
-            <template #cell-daysLeft="{ item }">{{
-                item.daysLeft === undefined
-                    ? '—'
-                    : item.daysLeft < 0
-                      ? `Expired ${-item.daysLeft} days ago`
-                      : item.daysLeft
-            }}</template>
-            <template #cell-remaining="{ item }">{{
-                formatQuantity(item.remainingQty, item.product.unit)
-            }}</template>
-            <template #cell-action="{ item }">
+            No products track expiry.
+        </p>
+        <template v-else>
+            <div class="flex flex-wrap items-end gap-3">
+                <BaseInput
+                    v-model="days"
+                    label="Expiring within days (expired included)"
+                    type="number"
+                    :min="0"
+                    :max="EXPIRY_LIMITS.DAYS_MAX"
+                />
+                <BaseButton :disabled="loading" @click="search"
+                    >Show expiring</BaseButton
+                >
                 <BaseButton
-                    v-if="canAdjust && item.remainingQty > 0"
-                    size="sm"
                     variant="outline"
-                    @click="writeOff(item)"
-                    >Write off</BaseButton
+                    :disabled="loading"
+                    @click="showAll"
+                    >All remaining batches</BaseButton
                 >
-            </template>
-            <template #empty>
-                <EmptyState
-                    title="No matching batches."
-                    hint="Widen the expiry window or show all remaining batches."
-                >
-                    <template #icon><PackageSearch :size="24" /></template>
-                </EmptyState>
-            </template>
-        </BaseTable>
-        <div class="flex gap-3">
-            <BaseButton
-                v-if="page > 1"
-                variant="outline"
-                :disabled="loading"
-                @click="
-                    page--;
-                    load();
-                "
-                >Previous</BaseButton
-            ><BaseButton
-                v-if="page * 25 < total"
-                variant="outline"
-                :disabled="loading"
-                @click="
-                    page++;
-                    load();
-                "
-                >Next</BaseButton
+            </div>
+            <p v-if="daysError" role="alert" class="text-sm text-danger-fg">
+                {{ daysError }}
+            </p>
+            <BaseTable
+                :headers="headers"
+                :items="rows"
+                :loading="loading"
+                :error="error"
+                @retry="load"
             >
-        </div>
+                <template #cell-product="{ item }">{{
+                    item.product.name
+                }}</template>
+                <template #cell-batch="{ item }">{{
+                    item.batchNo || item._id.slice(-8)
+                }}</template>
+                <template #cell-expiry="{ item }">{{
+                    item.expiryDate || 'Reconciliation / unknown'
+                }}</template>
+                <template #cell-daysLeft="{ item }">{{
+                    item.daysLeft === undefined
+                        ? '—'
+                        : item.daysLeft < 0
+                          ? `Expired ${-item.daysLeft} days ago`
+                          : item.daysLeft
+                }}</template>
+                <template #cell-remaining="{ item }">{{
+                    formatQuantity(item.remainingQty, item.product.unit)
+                }}</template>
+                <template #cell-action="{ item }">
+                    <BaseButton
+                        v-if="canAdjust && item.remainingQty > 0"
+                        size="sm"
+                        variant="outline"
+                        @click="writeOff(item)"
+                        >Write off</BaseButton
+                    >
+                </template>
+                <template #empty>
+                    <EmptyState
+                        title="No matching batches."
+                        hint="Widen the expiry window or show all remaining batches."
+                    >
+                        <template #icon><PackageSearch :size="24" /></template>
+                    </EmptyState>
+                </template>
+            </BaseTable>
+            <div class="flex gap-3">
+                <BaseButton
+                    v-if="page > 1"
+                    variant="outline"
+                    :disabled="loading"
+                    @click="
+                        page--;
+                        load();
+                    "
+                    >Previous</BaseButton
+                ><BaseButton
+                    v-if="page * 25 < total"
+                    variant="outline"
+                    :disabled="loading"
+                    @click="
+                        page++;
+                        load();
+                    "
+                    >Next</BaseButton
+                >
+            </div>
+        </template>
     </section>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
     EXPIRY_LIMITS,
     Role,
     formatQuantity,
+    type ExpiryTrackingView,
     type InventoryBatchView,
     type Paginated,
 } from '@grocery-pos/contracts';
@@ -117,6 +135,13 @@ import { PackageSearch } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
 import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 import { useSettingsStore } from '@/stores/settings';
+const props = defineProps<{
+    /** Scroll to and focus the heading once the first load settles (#233). */
+    focusOnLoad?: boolean;
+}>();
+const heading = ref<HTMLElement | null>(null);
+/** Active products that track expiry; null while unknown (#233). */
+const trackedProducts = ref<number | null>(null);
 const auth = useAuthStore(),
     router = useRouter(),
     prefill = useAdjustmentPrefillStore();
@@ -195,12 +220,27 @@ async function writeOff(batch: InventoryBatchView) {
     if (canAdjust.value && prefill.prepare(batch))
         await router.push({ name: 'Adjustments/Add' });
 }
+/** A failed or odd answer stays unknown, so the table still shows. */
+async function loadTracking() {
+    try {
+        const { trackedProducts: count } = (
+            await api.get<ExpiryTrackingView>('/inventories/expiry-tracking')
+        ).data;
+        if (Number.isSafeInteger(count)) trackedProducts.value = count;
+    } catch {
+        trackedProducts.value = null;
+    }
+}
 /** Read the committed window first; a failed refresh keeps the last-known one. */
 async function start() {
     const initial = days.value;
     await settings.refresh();
     if (days.value === initial) days.value = settings.settings.expiryAlertDays;
-    await load();
+    await Promise.all([load(), loadTracking()]);
+    if (!props.focusOnLoad) return;
+    await nextTick();
+    heading.value?.scrollIntoView({ block: 'start' });
+    heading.value?.focus();
 }
 void start();
 </script>

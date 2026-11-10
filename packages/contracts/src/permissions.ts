@@ -105,7 +105,11 @@ export const PERMISSIONS: Permission[] = [
     {
         label: 'Review inventory batches and expiry',
         roles: [Role.Restocker, Role.Adjuster],
-        routes: ['GET /inventories/expiring', 'GET /inventories/batches'],
+        routes: [
+            'GET /inventories/expiring',
+            'GET /inventories/batches',
+            'GET /inventories/expiry-tracking',
+        ],
         pages: ['Inventories'],
     },
     {

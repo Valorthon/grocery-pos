@@ -70,7 +70,17 @@ beforeEach(() => {
         username: 'r',
         roles: [Role.Restocker],
     };
-    api.get.mockResolvedValue({ data: { data: rows(), totalItems: 2 } });
+    // The always-shown batches panel (#233) lists nothing by default.
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/inventories'
+                    ? { data: rows(), totalItems: 2 }
+                    : url === '/inventories/expiry-tracking'
+                      ? { trackedProducts: 1 }
+                      : { data: [], totalItems: 0 },
+        }),
+    );
     nav.push.mockResolvedValue(undefined);
     nav.replace.mockResolvedValue(undefined);
 });
@@ -284,6 +294,40 @@ describe('receipt-cost restock defaults', () => {
     });
 });
 
+describe('batches panel (#233)', () => {
+    it('renders without a toggle', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(document.getElementById('batch-heading')).not.toBeNull();
+        const labels = [...document.querySelectorAll('button')].map(
+            (b) => b.textContent ?? '',
+        );
+        expect(
+            labels.some((t) => /Expiry and batches|Hide batches/.test(t)),
+        ).toBe(false);
+    });
+    it('?expiring=true scrolls to and focuses the panel heading', async () => {
+        const scroll = vi.fn();
+        Element.prototype.scrollIntoView = scroll;
+        route = reactive({ name: 'Inventories', query: { expiring: 'true' } });
+        await mount();
+        await flush();
+        const heading = document.getElementById('batch-heading');
+        expect(heading?.getAttribute('tabindex')).toBe('-1');
+        expect(scroll).toHaveBeenCalled();
+        expect(scroll.mock.contexts[0]).toBe(heading);
+        expect(document.activeElement).toBe(heading);
+    });
+    it('does not move the focus without the deep link', async () => {
+        const scroll = vi.fn();
+        Element.prototype.scrollIntoView = scroll;
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        await flush();
+        expect(scroll).not.toHaveBeenCalled();
+    });
+});
+
 describe('inventory FilterBar (#171, #215)', () => {
     const clearButton = () =>
         [...document.querySelectorAll('button')].find((b) =>
@@ -325,6 +369,8 @@ describe('inventory FilterBar (#171, #215)', () => {
         expect(
             document.querySelector('[data-testid="deep-link-note"]'),
         ).toBeNull();
+        // The batches panel stays (#233).
+        expect(document.getElementById('batch-heading')).not.toBeNull();
 
         expect(listCalls()).toHaveLength(1);
         expect(listCalls()[0]?.[1]?.params).toMatchObject({
