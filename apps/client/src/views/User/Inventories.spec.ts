@@ -374,3 +374,104 @@ describe('low-stock frame (#159)', () => {
         ).toBeNull();
     });
 });
+
+describe('out-of-stock view (#212)', () => {
+    const meta = (): RouteMeta =>
+        appRouter.getRoutes().find((r) => r.name === 'Inventories')!.meta;
+
+    it('titles the list from the route, sends outOfStock and shows its chip', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+            meta: meta(),
+        });
+        await mount();
+        expect(document.querySelector('h1')?.textContent?.trim()).toBe(
+            'Out of stock',
+        );
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            outOfStock: true,
+            lowStock: undefined,
+        });
+        expect(field('Out of stock').checked).toBe(true);
+        expect(field('Low stock').checked).toBe(false);
+        expect(
+            document.querySelector(
+                'button[aria-label="Remove filter Out of stock"]',
+            ),
+        ).not.toBeNull();
+    });
+
+    it('offers Restock listed items and Create purchase order with reorder quantities', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+        });
+        await mount();
+        await click('Create purchase order');
+        expect(nav.push).toHaveBeenCalledWith({ name: 'PurchaseOrders' });
+        expect(
+            usePurchaseOrderPrefillStore()
+                .take()
+                .map((line) => line.name),
+        ).toEqual(['rice', 'bread']);
+        await click('Restock listed items');
+        expect(nav.push).toHaveBeenCalledWith({ name: 'Restocks/Add' });
+    });
+
+    it('offers no draft actions on the plain list', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(document.body.textContent).not.toContain('Restock listed items');
+        expect(document.body.textContent).not.toContain(
+            'Create purchase order',
+        );
+    });
+
+    it('turns Low stock off when Out of stock is picked, and back', async () => {
+        await mount(); // starts on ?lowStock=true
+        api.get.mockClear();
+        nav.replace.mockClear();
+        const out = field('Out of stock');
+        out.checked = true;
+        out.dispatchEvent(new Event('change'));
+        await flush();
+        expect(field('Low stock').checked).toBe(false);
+        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            outOfStock: true,
+            lowStock: undefined,
+        });
+        expect(nav.replace).toHaveBeenLastCalledWith({
+            query: { lowStock: undefined, outOfStock: 'true' },
+        });
+
+        route.query = { outOfStock: 'true' };
+        await flush();
+        api.get.mockClear();
+        const low = field('Low stock');
+        low.checked = true;
+        low.dispatchEvent(new Event('change'));
+        await flush();
+        expect(field('Out of stock').checked).toBe(false);
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            lowStock: true,
+            outOfStock: undefined,
+        });
+    });
+
+    it('Clear Filters drops the out-of-stock filter', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+        });
+        await mount();
+        api.get.mockClear();
+        await click('Clear Filters');
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            outOfStock: undefined,
+        });
+        expect(field('Out of stock').checked).toBe(false);
+    });
+});

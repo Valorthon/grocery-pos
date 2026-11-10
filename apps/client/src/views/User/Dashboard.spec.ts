@@ -3,6 +3,7 @@ import { type App, createApp, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import Dashboard from './Dashboard.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/axios', () => ({ default: { get, post: vi.fn() } }));
@@ -55,12 +56,16 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
-async function render(payload: unknown) {
+/** Mounted as an inventory role, so both sections show (#212). */
+async function render(payload: unknown, roles: string[] = ['RESTOCKER']) {
     get.mockResolvedValue({ data: payload });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { userId: 'u', username: 'u', roles: roles as never };
     const host = document.createElement('div');
     document.body.appendChild(host);
     app = createApp(Dashboard);
-    app.use(createPinia());
+    app.use(pinia);
     app.mount(host);
     for (let i = 0; i < 5; i++) {
         await Promise.resolve();
@@ -274,12 +279,81 @@ function tileLinks(): Record<string, string | null> {
     return links;
 }
 
+function sectionKeys(): string[] {
+    return [...document.querySelectorAll('[data-section]')].map(
+        (el) => el.getAttribute('data-section') ?? '',
+    );
+}
+
+/** Tile keys per section, in order. */
+function sectionTiles(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const el of document.querySelectorAll('[data-section]'))
+        out[el.getAttribute('data-section') ?? ''] = [
+            ...el.querySelectorAll('[data-stat]'),
+        ].map((t) => t.getAttribute('data-stat') ?? '');
+    return out;
+}
+
+describe('Dashboard sections (issue #212)', () => {
+    it('gives an admin Needs attention then Overview, with all six tiles', async () => {
+        await renderWithRouter(['ADMIN'], WITH_MONEY);
+        expect(sectionKeys()).toEqual(['attention', 'overview']);
+        expect(sectionTiles()).toEqual({
+            attention: ['expiring', 'lowStock', 'outOfStock'],
+            overview: ['products', 'todaySales', 'todayRevenue'],
+        });
+        const headings = [...document.querySelectorAll('[data-section] h2')];
+        expect(headings.map((h) => h.textContent?.trim())).toEqual([
+            'Needs attention',
+            'Overview',
+        ]);
+    });
+
+    it.each([['RESTOCKER'], ['ADJUSTER']])(
+        'gives %s both sections, Overview without revenue',
+        async (role) => {
+            await renderWithRouter([role], STATS);
+            expect(sectionTiles()).toEqual({
+                attention: ['expiring', 'lowStock', 'outOfStock'],
+                overview: ['products', 'todaySales'],
+            });
+        },
+    );
+
+    it('keeps Needs attention when every count is zero', async () => {
+        await renderWithRouter(['RESTOCKER'], {
+            ...STATS,
+            lowStockCount: 0,
+            outOfStockCount: 0,
+            expiringBatchCount: 0,
+        });
+        expect(sectionKeys()).toEqual(['attention', 'overview']);
+    });
+
+    it('links Out of Stock to the out-of-stock inventory list', async () => {
+        const router = await renderWithRouter(['ADJUSTER'], STATS);
+        const link = document.querySelector<HTMLAnchorElement>(
+            '[data-stat="outOfStock"]',
+        );
+        expect(link?.getAttribute('href')).toBe('/inventory?outOfStock=true');
+        link!.dispatchEvent(
+            new MouseEvent('click', { bubbles: true, button: 0 }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(router.currentRoute.value).toMatchObject({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+        });
+    });
+});
+
 describe('Dashboard tiles per role (issue #166)', () => {
     const INVENTORY_LINKS = {
         expiring: '/inventory?expiring=true',
         products: null,
         lowStock: '/inventory?lowStock=true',
-        outOfStock: null,
+        outOfStock: '/inventory?outOfStock=true',
         todaySales: null,
     };
 
@@ -295,18 +369,11 @@ describe('Dashboard tiles per role (issue #166)', () => {
         },
     );
 
-    it('shows stock counts to a USER_MANAGER with no links', async () => {
+    it('hides Needs attention from a USER_MANAGER: Overview only, no links', async () => {
         await renderWithRouter(['USER_MANAGER'], STATS);
-        expect(tileLinks()).toEqual({
-            expiring: null,
-            products: null,
-            lowStock: null,
-            outOfStock: null,
-            todaySales: null,
-        });
-        expect(
-            document.querySelector('[data-stat="lowStock"] .num')?.textContent,
-        ).toContain('3');
+        expect(tileLinks()).toEqual({ products: null, todaySales: null });
+        expect(sectionKeys()).toEqual(['overview']);
+        expect(document.body.textContent).not.toContain('Needs attention');
         expect(document.querySelector('a')).toBeNull();
     });
 
