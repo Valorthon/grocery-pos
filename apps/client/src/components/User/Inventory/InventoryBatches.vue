@@ -178,11 +178,12 @@ const headers: TableHeader[] = [
     { key: 'remaining', title: 'Remaining', align: 'right' },
     { key: 'action', title: 'Action', align: 'right' },
 ];
-type BatchStatus = 'expired' | 'soon' | 'ok' | 'reconciliation';
+type BatchStatus = 'expired' | 'soon' | 'ok' | 'check' | 'reconciliation';
 /** Expiring soon means within the store's alert window, like the dashboard (#213). */
 function batchStatus(batch: InventoryBatchView): BatchStatus {
-    if (!batch.expiryDate || batch.daysLeft === undefined)
-        return 'reconciliation';
+    if (!batch.expiryDate) return 'reconciliation';
+    // A dated lot without the server's day count: flag it for a look.
+    if (batch.daysLeft === undefined) return 'check';
     if (batch.daysLeft < 0) return 'expired';
     return batch.daysLeft <= settings.settings.expiryAlertDays ? 'soon' : 'ok';
 }
@@ -190,6 +191,7 @@ const BATCH_STATUS: StatusMap<BatchStatus> = {
     expired: { label: 'Expired', color: 'error' },
     soon: { label: 'Expiring soon', color: 'warning' },
     ok: { label: 'OK', color: 'success' },
+    check: { label: 'Check expiry', color: 'warning' },
     reconciliation: { label: 'Reconciliation', color: 'neutral' },
 };
 let generation = 0;

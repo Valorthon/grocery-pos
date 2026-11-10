@@ -283,6 +283,7 @@ it('shows the product cell and a status badge per batch, with no row click (#242
             daysLeft: undefined,
             reconciliation: true,
         },
+        { ...batch(), _id: 'nodays', daysLeft: undefined },
     ];
     api.get.mockResolvedValue({ data: { data: lots, totalItems: 4 } });
     await mount();
@@ -298,6 +299,7 @@ it('shows the product cell and a status badge per batch, with no row click (#242
         ['Expiring soon', 'bg-warning-bg'],
         ['OK', 'bg-success-bg'],
         ['Reconciliation', 'bg-paper'],
+        ['Check expiry', 'bg-warning-bg'],
     ]);
     const firstRow = document.querySelector('tbody tr')!;
     expect(firstRow.textContent).toContain('Milk');

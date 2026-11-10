@@ -660,6 +660,14 @@ describe('shared table pieces (#242)', () => {
     ])('a row click for %s opens %s', async (roles, title) => {
         as(roles);
         await mount();
+        const hint = document.getElementById(
+            row().getAttribute('aria-describedby')!,
+        )!.textContent;
+        expect(hint).toBe(
+            roles.includes(Role.Adjuster)
+                ? 'Press Enter to open its stock history'
+                : 'Press Enter to edit the product',
+        );
         row().click();
         await flush();
         expect(dialogText()).toContain(title);

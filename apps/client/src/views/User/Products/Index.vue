@@ -69,6 +69,7 @@
                 :loading="loading"
                 :error="loadError"
                 row-click
+                :row-hint="rowHint"
                 empty-text="No products found"
                 :items-length="totalItems"
                 @click:row="openRow"
@@ -281,6 +282,11 @@ const headers = [
 ];
 
 /** A row opens Edit for product editors, else Stock history (#242, as #214). */
+const rowHint = computed(() =>
+    canAddProducts.value
+        ? 'Press Enter to edit the product'
+        : 'Press Enter to open its stock history',
+);
 function openRow(item: ProductListRow) {
     if (canAddProducts.value) editing.value = item;
     else history.value = item;
