@@ -271,3 +271,46 @@ it('keeps the widen hint when tracked products have no matching batch (#233)', a
         document.querySelector('[data-testid="no-expiry-tracking"]'),
     ).toBeNull();
 });
+it('shows the product cell and a status badge per batch, with no row click (#242)', async () => {
+    const lots: InventoryBatchView[] = [
+        batch(),
+        { ...batch(), _id: 'soon', daysLeft: 3 },
+        { ...batch(), _id: 'ok', daysLeft: 30 },
+        {
+            ...batch(),
+            _id: 'rec',
+            expiryDate: undefined,
+            daysLeft: undefined,
+            reconciliation: true,
+        },
+        { ...batch(), _id: 'nodays', daysLeft: undefined },
+    ];
+    api.get.mockResolvedValue({ data: { data: lots, totalItems: 4 } });
+    await mount();
+    expect(
+        [...document.querySelectorAll('[data-testid=batch-status]')].map(
+            (b) => [
+                b.textContent?.trim(),
+                b.className.match(/bg-[a-z]+-bg|bg-paper/)?.[0],
+            ],
+        ),
+    ).toEqual([
+        ['Expired', 'bg-danger-bg'],
+        ['Expiring soon', 'bg-warning-bg'],
+        ['OK', 'bg-success-bg'],
+        ['Reconciliation', 'bg-paper'],
+        ['Check expiry', 'bg-warning-bg'],
+    ]);
+    const firstRow = document.querySelector('tbody tr')!;
+    expect(firstRow.textContent).toContain('Milk');
+    expect(firstRow.querySelector('[data-testid=row-ean]')?.textContent).toBe(
+        '12345670',
+    );
+    expect(document.querySelector('[data-row-click]')).toBeNull();
+    expect(firstRow.getAttribute('tabindex')).toBeNull();
+    (firstRow as HTMLElement).click();
+    await flush();
+    expect(nav.push).not.toHaveBeenCalled();
+    await click('Write off');
+    expect(nav.push).toHaveBeenCalledWith({ name: 'Adjustments/Add' });
+});

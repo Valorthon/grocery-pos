@@ -52,15 +52,26 @@
                 :error="error"
                 @retry="load"
             >
-                <template #cell-product="{ item }">{{
-                    item.product.name
-                }}</template>
+                <template #cell-product="{ item }"
+                    ><ProductCell
+                        :name="item.product.name"
+                        :ean="item.product.EAN"
+                /></template>
+
                 <template #cell-batch="{ item }">{{
                     item.batchNo || item._id.slice(-8)
                 }}</template>
-                <template #cell-expiry="{ item }">{{
-                    item.expiryDate || 'Reconciliation / unknown'
-                }}</template>
+                <!-- The badge sits under the date: no new column (#242). -->
+                <template #cell-expiry="{ item }"
+                    ><span class="block">{{
+                        item.expiryDate || 'Reconciliation / unknown'
+                    }}</span
+                    ><span class="mt-1 block"
+                        ><StatusBadge
+                            :status="batchStatus(item)"
+                            :map="BATCH_STATUS"
+                            data-testid="batch-status" /></span
+                ></template>
                 <template #cell-daysLeft="{ item }">{{
                     item.daysLeft === undefined
                         ? '—'
@@ -130,6 +141,9 @@ import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
+import ProductCell from '@/components/ui/ProductCell.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import type { StatusMap } from '@/components/ui/status-badge';
 import type { TableHeader } from '@/components/ui/types';
 import { PackageSearch } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
@@ -164,6 +178,22 @@ const headers: TableHeader[] = [
     { key: 'remaining', title: 'Remaining', align: 'right' },
     { key: 'action', title: 'Action', align: 'right' },
 ];
+type BatchStatus = 'expired' | 'soon' | 'ok' | 'check' | 'reconciliation';
+/** Expiring soon means within the store's alert window, like the dashboard (#213). */
+function batchStatus(batch: InventoryBatchView): BatchStatus {
+    if (!batch.expiryDate) return 'reconciliation';
+    // A dated lot without the server's day count: flag it for a look.
+    if (batch.daysLeft === undefined) return 'check';
+    if (batch.daysLeft < 0) return 'expired';
+    return batch.daysLeft <= settings.settings.expiryAlertDays ? 'soon' : 'ok';
+}
+const BATCH_STATUS: StatusMap<BatchStatus> = {
+    expired: { label: 'Expired', color: 'error' },
+    soon: { label: 'Expiring soon', color: 'warning' },
+    ok: { label: 'OK', color: 'success' },
+    check: { label: 'Check expiry', color: 'warning' },
+    reconciliation: { label: 'Reconciliation', color: 'neutral' },
+};
 let generation = 0;
 onBeforeUnmount(() => generation++);
 async function load() {
