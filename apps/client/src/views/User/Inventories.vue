@@ -2,14 +2,6 @@
     <PageFrame>
         <template #actions>
             <BaseButton
-                size="sm"
-                variant="outline"
-                @click="showBatches = !showBatches"
-                >{{
-                    showBatches ? 'Hide batches' : 'Expiry and batches'
-                }}</BaseButton
-            >
-            <BaseButton
                 v-if="canRestock && (applied.lowStock || applied.outOfStock)"
                 size="sm"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
@@ -111,7 +103,8 @@
             </BaseTable>
         </PageCard>
     </PageFrame>
-    <InventoryBatches v-if="showBatches" />
+    <!-- Always shown (#233); the dashboard's expiring link scrolls to it. -->
+    <InventoryBatches :focus-on-load="route?.query.expiring === 'true'" />
     <StockHistory
         v-if="history"
         :key="history._id"
@@ -168,7 +161,6 @@ const canAdjust = computed(() =>
 );
 const route = useRoute();
 const settingsStore = useSettingsStore();
-const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
 const prefill = useRestockPrefillStore();
@@ -315,8 +307,7 @@ const resetFilters = () => {
     searchName.value = '';
     lowStock.value = false;
     outOfStock.value = false;
-    // The `?expiring=` deep link (dashboard) is cleared too, with its panel.
-    if (route?.query.expiring === 'true') showBatches.value = false;
+    // The `?expiring=` deep link (dashboard) is cleared too; the panel stays.
     applySearch();
     void router.replace({
         query: {

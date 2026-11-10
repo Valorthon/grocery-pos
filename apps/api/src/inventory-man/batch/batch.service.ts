@@ -383,6 +383,13 @@ export class InventoryBatchService implements OnModuleInit {
             totalItems,
         };
     }
+    /** Active products that track expiry; a missing isActive means active. */
+    async trackedProductCount(): Promise<number> {
+        return this.products.countDocuments({
+            tracksExpiry: true,
+            isActive: { $ne: false },
+        });
+    }
     /** The dashboard tile: the Expiring list's total at the store's alert window. */
     async expiringCount(settings?: {
         timezone: string;

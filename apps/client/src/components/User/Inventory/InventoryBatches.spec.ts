@@ -227,9 +227,47 @@ it('starts the expiring list at the store expiry alert window (#213)', async () 
     );
     await mount();
     expect(api.get).toHaveBeenCalledWith('/settings');
-    expect(api.get).toHaveBeenLastCalledWith('/inventories/expiring', {
+    expect(api.get).toHaveBeenCalledWith('/inventories/expiring', {
         params: { page: 1, limit: 25, days: 30 },
     });
     expect(field('Expiring within days (expired included)').value).toBe('30');
     store.setOwner(undefined);
+});
+
+it('says no products track expiry instead of the filters and table (#233)', async () => {
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/inventories/expiry-tracking'
+                    ? { trackedProducts: 0 }
+                    : { data: [], totalItems: 0 },
+        }),
+    );
+    await mount();
+    expect(api.get).toHaveBeenCalledWith('/inventories/expiry-tracking');
+    expect(
+        document.querySelector('[data-testid="no-expiry-tracking"]')
+            ?.textContent,
+    ).toContain('No products track expiry.');
+    expect(document.querySelector('table')).toBeNull();
+    expect(document.body.textContent).not.toContain('Show expiring');
+    expect(document.body.textContent).not.toContain('No matching batches.');
+});
+
+it('keeps the widen hint when tracked products have no matching batch (#233)', async () => {
+    api.get.mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/inventories/expiry-tracking'
+                    ? { trackedProducts: 2 }
+                    : { data: [], totalItems: 0 },
+        }),
+    );
+    await mount();
+    expect(document.body.textContent).toContain('No matching batches.');
+    expect(document.body.textContent).toContain('Widen the expiry window');
+    expect(document.body.textContent).toContain('Show expiring');
+    expect(
+        document.querySelector('[data-testid="no-expiry-tracking"]'),
+    ).toBeNull();
 });

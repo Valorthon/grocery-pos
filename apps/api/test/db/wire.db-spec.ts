@@ -44,6 +44,7 @@ import {
     DRAWER_MOVEMENT_VIEW_SHAPE,
     DrawerMovementType,
     ErrorCode,
+    EXPIRY_TRACKING_SHAPE,
     INVENTORY_ROW_SHAPE,
     LOGIN_RESPONSE_SHAPE,
     LOGIN_USER_SHAPE,
@@ -709,6 +710,16 @@ describe('products, stock and history', () => {
             ),
             PRODUCT_MATCH_SHAPE,
         );
+    });
+
+    it('GET /inventories/expiry-tracking answers ExpiryTrackingView (#233)', async () => {
+        const body = await get(restocker, '/inventories/expiry-tracking');
+        expectShape(
+            'GET /inventories/expiry-tracking',
+            body,
+            EXPIRY_TRACKING_SHAPE,
+        );
+        expect(Number.isSafeInteger(body.trackedProducts)).toBe(true);
     });
 
     it('GET /inventories answers InventoryRow with its product', async () => {
