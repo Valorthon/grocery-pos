@@ -68,7 +68,10 @@ describe('useDatePreset (#215)', () => {
     it('a failed store-date read is an error toast and applies nothing', async () => {
         api.get.mockRejectedValue(new Error('offline'));
         const { apply, preset } = harness();
+        await preset.choose('Custom');
         await preset.choose('This week');
+        // The select goes back to what it showed before the failed pick.
+        expect(preset.preset.value).toBe('Custom');
         await flush();
         expect(apply).not.toHaveBeenCalled();
         expect(useUIStore().toasts.map((t) => t.lines.join(' '))).toEqual([

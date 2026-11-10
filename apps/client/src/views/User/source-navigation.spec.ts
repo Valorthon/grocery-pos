@@ -80,6 +80,7 @@ describe.each([
         api.get.mockClear();
         const clear = clearButton();
         expect(clear.disabled).toBe(false);
+        expect(note()).toContain(`from source ${first}`);
 
         clear.click();
         await flush();
@@ -89,6 +90,7 @@ describe.each([
         expect(requests()).toHaveLength(1);
         expect(requests()[0]?.source).toBeUndefined();
         expect(clearButton().disabled).toBe(true);
+        expect(note()).toBeUndefined();
     });
 
     it('clears the visible source restriction and ignores malformed source IDs', async () => {
@@ -113,4 +115,10 @@ function clearButton(): HTMLButtonElement {
     return [...document.querySelectorAll('button')].find((b) =>
         b.textContent?.includes('Clear Filters'),
     )!;
+}
+function note(): string | undefined {
+    return (
+        document.querySelector('[data-testid="deep-link-note"]')?.textContent ??
+        undefined
+    );
 }

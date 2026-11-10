@@ -46,6 +46,13 @@
                     @update:model-value="editDate"
                 />
             </FilterBar>
+            <p
+                v-if="deepLinkNote"
+                class="px-5 py-2 text-sm text-muted"
+                data-testid="deep-link-note"
+            >
+                {{ deepLinkNote }}
+            </p>
 
             <BaseTable
                 v-model:page="page"
@@ -104,6 +111,7 @@ import RestockDetails from '@/components/User/Restock/DetailsDialog.vue';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime } from '@/utils/datetime';
 import {
+    purchaseOrderReference,
     type Paginated,
     type RestockRow,
     type UserRef,
@@ -124,6 +132,16 @@ const purchaseOrderId = computed(() => {
         ? candidate
         : undefined;
 });
+/** The deep links have no field, so a muted line names them (#215). */
+const deepLinkNote = computed(() =>
+    [
+        purchaseOrderId.value &&
+            `Showing receipts for ${purchaseOrderReference(purchaseOrderId.value)}`,
+        sourceId.value && `Showing the restock from source ${sourceId.value}`,
+    ]
+        .filter(Boolean)
+        .join(' · '),
+);
 // Defensive: the route already needs RESTOCKER/ADMIN (see the helper).
 const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchRestock());

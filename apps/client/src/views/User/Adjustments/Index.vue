@@ -46,6 +46,13 @@
                     @update:model-value="editDate"
                 />
             </FilterBar>
+            <p
+                v-if="sourceId"
+                class="px-5 py-2 text-sm text-muted"
+                data-testid="deep-link-note"
+            >
+                Showing the adjustment from source {{ sourceId }}
+            </p>
 
             <BaseTable
                 v-model:page="page"

@@ -67,6 +67,14 @@
                     />Out of stock</label
                 >
             </FilterBar>
+            <p
+                v-if="route?.query.expiring === 'true'"
+                class="px-5 py-2 text-sm text-muted"
+                data-testid="deep-link-note"
+            >
+                Showing batches expiring within
+                {{ settingsStore.settings.expiryAlertDays }} days
+            </p>
             <BaseTable
                 v-model:page="page"
                 v-model:items-per-page="limit"
@@ -122,6 +130,7 @@ import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Pencil } from '@lucide/vue';
+import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
@@ -157,6 +166,7 @@ const canAdjust = computed(() =>
     ),
 );
 const route = useRoute();
+const settingsStore = useSettingsStore();
 const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));

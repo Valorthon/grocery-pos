@@ -559,12 +559,15 @@ requestId}`. A 5xx never carries details or internals.
 - Text searches run on Enter, a Search button or clearing the box (×).
   Select and date filters apply on change. `BaseSelect`'s opt-in
   `allLabel` adds an "All" option that maps to `null`.
-- Filter bars (#215): `FilterBar` is one inline, wrapping row: search box
-    - Search, the filters, then Clear Filters at the end (no Filters toggle,
-      panel or chips). Clear is enabled only while a filter is entered,
-      applied, a date preset or a deep link (Restock `?source=`/`?purchaseOrder=`,
-      Adjustments `?source=`, Inventory `?lowStock=`/`?outOfStock=`/`?expiring=`),
-      and clears those too. Purchase orders and Users have no Clear button.
+- Filter bars (#215): `FilterBar` is one inline, wrapping row: the search
+  box with its Search button, the filters, then Clear Filters at the end
+  (no Filters toggle, panel or chips). Clear is enabled only while a filter
+  is entered, applied, a date preset or a deep link (Restock `?source=` and
+  `?purchaseOrder=`, Adjustments `?source=`, Inventory `?lowStock=`,
+  `?outOfStock=` and `?expiring=`), and clears those too. A deep link shows
+  a muted line above the table (`data-testid="deep-link-note"`), e.g.
+  "Showing receipts for PO-…" (owner-default assumption, reversible).
+  Purchase orders and Users have no Clear button.
 - Dated lists (Sales, Restock, Adjustments, Audit) have a "Dates" preset
   select before From/To (`useDatePreset`, `Reports/presets.ts`): Today,
   Yesterday, This week, Last week, This month, Last month, Last 30 days,

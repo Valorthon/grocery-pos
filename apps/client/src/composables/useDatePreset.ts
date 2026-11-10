@@ -30,6 +30,7 @@ export function useDatePreset(
     });
     async function choose(value: DatePreset | null) {
         const mine = ++turn;
+        const previous = preset.value;
         preset.value = value;
         if (value === 'Custom') return;
         if (value === null) {
@@ -42,11 +43,13 @@ export function useDatePreset(
         try {
             today = await fetchStoreToday();
         } catch (cause) {
-            if (alive && mine === turn)
+            if (alive && mine === turn) {
+                preset.value = previous;
                 useUIStore().queueMessage(
                     Color.ERROR,
                     apiErrorText(cause, 'Could not read the store date.'),
                 );
+            }
             return;
         }
         if (!alive || mine !== turn) return;

@@ -85,6 +85,11 @@ describe('restock history purchase-order links (#123)', () => {
         const clear = [...document.querySelectorAll('button')].find((b) =>
             b.textContent?.includes('Clear Filters'),
         )!;
+        // The deep link is named above the table (#215).
+        expect(
+            document.querySelector('[data-testid="deep-link-note"]')
+                ?.textContent,
+        ).toContain('Showing receipts for PO-99439ABC');
         // The deep link alone enables Clear Filters (#215).
         expect(clear.disabled).toBe(false);
         clear.click();

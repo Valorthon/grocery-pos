@@ -308,6 +308,11 @@ describe('inventory FilterBar (#171, #215)', () => {
         await mount();
         expect(document.querySelector('[data-chip]')).toBeNull();
         expect(clearButton().disabled).toBe(false);
+        expect(
+            document
+                .querySelector('[data-testid="deep-link-note"]')
+                ?.textContent?.replace(/\s+/g, ' '),
+        ).toContain('Showing batches expiring within 7 days');
         api.get.mockClear();
         nav.replace.mockClear();
 
@@ -316,6 +321,9 @@ describe('inventory FilterBar (#171, #215)', () => {
         // The router then drops the query; its watcher must not reload.
         route.query = { keep: 'x' };
         await flush();
+        expect(
+            document.querySelector('[data-testid="deep-link-note"]'),
+        ).toBeNull();
 
         expect(listCalls()).toHaveLength(1);
         expect(listCalls()[0]?.[1]?.params).toMatchObject({
