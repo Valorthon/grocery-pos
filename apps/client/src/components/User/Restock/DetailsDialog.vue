@@ -94,7 +94,11 @@
             empty-text="No details found"
             :items-length="totalItems"
             @retry="fetchDetails"
-        />
+        >
+            <template #cell-name="{ item: line }"
+                ><ProductCell :name="line.name" :ean="line.EAN"
+            /></template>
+        </BaseTable>
     </div>
 </template>
 
@@ -105,6 +109,7 @@ import { Search, X } from '@lucide/vue';
 import api from '@/axios';
 import PurchaseOrderLink from './PurchaseOrderLink.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
+import ProductCell from '@/components/ui/ProductCell.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import {
@@ -131,7 +136,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
 );
 
 const headers = [
-    { key: 'name', title: 'Name' },
+    { key: 'name', title: 'Product', rowHeader: true },
     { key: 'quantity', title: 'Quantity', align: 'right' as const },
     { key: 'unitCost', title: 'Unit Cost', align: 'right' as const },
     { key: 'totalCost', title: 'Total Cost', align: 'right' as const },
@@ -141,6 +146,7 @@ const headers = [
 interface RestockLineRow {
     id: string;
     name: string;
+    EAN: string;
     quantity: string;
     unitCost: string;
     totalCost: string;
@@ -172,6 +178,7 @@ const {
         serverItems.value = result.data.data.map((details) => ({
             id: details._id,
             name: details.product.name,
+            EAN: details.product.EAN,
             quantity: formatQuantity(
                 details.quantity,
                 details.unit ?? details.product.unit,

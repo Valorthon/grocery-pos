@@ -3,10 +3,9 @@
         description="Every cashier's shifts, newest first, with their close reports"
     >
         <template #actions>
-            <BaseSelect
+            <SegmentedFilter
                 v-model="statusFilter"
-                class="w-40"
-                aria-label="Status"
+                label="Status"
                 :options="statusOptions"
             />
         </template>
@@ -20,15 +19,16 @@
             empty-text="No shifts found"
             :items-length="totalItems"
             row-click
+            row-hint="Press Enter to open the shift report"
             @click:row="select"
             @retry="fetchShifts"
         >
-            <template #cell-status="{ value }">
-                <Badge
-                    :color="value === ShiftStatus.OPEN ? 'success' : 'neutral'"
-                    >{{ value }}</Badge
-                >
-            </template>
+            <template #cell-status="{ item }"
+                ><StatusBadge
+                    :status="item.status"
+                    :map="SHIFT_STATUS"
+                    data-testid="shift-status"
+            /></template>
             <template #cell-overShort="{ item }">
                 <span
                     v-if="item.shift.report"
@@ -144,8 +144,9 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { useConfirm } from '@/composables/useConfirm';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import BaseSelect from '@/components/ui/BaseSelect.vue';
-import Badge from '@/components/ui/Badge.vue';
+import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import type { StatusMap } from '@/components/ui/status-badge';
 import BillCountInput from '@/components/User/Sales/BillCountInput.vue';
 import { countsError } from '@/components/User/Sales/shift';
 import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
@@ -165,13 +166,18 @@ const uiStore = useUIStore();
 const { page, limit, search } = useListPaging(() => fetchShifts(), 10);
 const totalItems = ref(0);
 const shifts = ref<ShiftListItem[]>([]);
-const statusFilter = ref<string>('');
+const statusFilter = ref<'' | ShiftStatus>('');
 
-const statusOptions = [
+const statusOptions: { label: string; value: '' | ShiftStatus }[] = [
     { label: 'All shifts', value: '' },
     { label: 'Open', value: ShiftStatus.OPEN },
     { label: 'Closed', value: ShiftStatus.CLOSED },
 ];
+
+const SHIFT_STATUS: StatusMap<ShiftStatus> = {
+    [ShiftStatus.OPEN]: { label: 'Open', color: 'success' },
+    [ShiftStatus.CLOSED]: { label: 'Closed', color: 'neutral' },
+};
 
 const headers = [
     { key: 'cashier', title: 'Cashier' },

@@ -56,25 +56,30 @@
                     :headers="listHeaders"
                     :items="listRows"
                     :loading="listLoading && !rows.length"
+                    :row-click="!busy"
+                    row-hint="Press Enter to open the count"
+                    @click:row="(item) => load(item._id)"
                 >
                     <template #cell-createdAt="{ item }">
                         {{ formatStoreDateTime(item.createdAt) }}
                     </template>
                     <template #cell-status="{ item }">
-                        <Badge :color="statusColor(item.status)">{{
-                            item.status
-                        }}</Badge>
+                        <StatusBadge
+                            :status="item.status"
+                            :map="STOCK_COUNT_STATUS"
+                            data-testid="count-status"
+                        />
                     </template>
                     <template #cell-lines="{ item }">
                         {{ item.lines.length }}
                     </template>
                     <template #cell-action="{ item }">
-                        <BaseButton
-                            size="sm"
+                        <RowOpenButton
+                            :label="`Open count from ${formatStoreDateTime(item.createdAt)}`"
                             :disabled="busy"
-                            @click="load(item._id)"
-                            >Open count</BaseButton
-                        >
+                            data-testid="count-open"
+                            @open="load(item._id)"
+                        />
                     </template>
                     <template #empty>
                         <!-- A failed load shows the Reload banner, never "none" (#18). -->
@@ -252,7 +257,9 @@ import {
 import api from '@/axios';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
-import Badge from '@/components/ui/Badge.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import RowOpenButton from '@/components/ui/RowOpenButton.vue';
+import type { StatusMap } from '@/components/ui/status-badge';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
 import { ClipboardList } from '@lucide/vue';
@@ -321,7 +328,7 @@ const listHeaders: TableHeader[] = [
     { key: 'createdAt', title: 'Opened' },
     { key: 'status', title: 'Status' },
     { key: 'lines', title: 'Lines', align: 'right' },
-    { key: 'action', title: 'Action' },
+    { key: 'action', title: 'Open', align: 'right' as const },
 ];
 const listRows = computed(() =>
     rows.value.map((row) => ({ ...row, id: row._id })),
@@ -345,20 +352,12 @@ const lineHeaders = computed<TableHeader[]>(() => [
 const lineRows = computed(() =>
     (selected.value?.lines ?? []).map((line) => ({ ...line, id: line._id })),
 );
-function statusColor(
-    status: StockCountStatus,
-): 'success' | 'warning' | 'info' | 'neutral' {
-    switch (status) {
-        case StockCountStatus.OPEN:
-            return 'info';
-        case StockCountStatus.SUBMITTED:
-            return 'warning';
-        case StockCountStatus.APPROVED:
-            return 'success';
-        default:
-            return 'neutral';
-    }
-}
+const STOCK_COUNT_STATUS: StatusMap<StockCountStatus> = {
+    [StockCountStatus.OPEN]: { label: 'Open', color: 'info' },
+    [StockCountStatus.SUBMITTED]: { label: 'Submitted', color: 'warning' },
+    [StockCountStatus.APPROVED]: { label: 'Approved', color: 'success' },
+    [StockCountStatus.CANCELLED]: { label: 'Cancelled', color: 'neutral' },
+};
 /** Shortage red, surplus green, exact or uncounted muted (#169). */
 function varianceClass(variance: number | null): string {
     if (variance === null || variance === 0) return 'text-muted';

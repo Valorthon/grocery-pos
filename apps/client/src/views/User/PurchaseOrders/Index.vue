@@ -49,7 +49,11 @@
                             {{ supplierLabel(item) }}
                         </template>
                         <template #cell-status="{ item }">
-                            {{ STATUS_LABELS[item.status] }}
+                            <StatusBadge
+                                :status="item.status"
+                                :map="PURCHASE_ORDER_STATUS"
+                                data-testid="po-status"
+                            />
                             <span
                                 v-if="draftSendBlockers(item).length"
                                 class="block text-xs font-medium text-amber-700"
@@ -63,9 +67,11 @@
                             {{ formatCurrency(item.expectedTotal) }}
                         </template>
                         <template #cell-action="{ item }">
-                            <BaseButton size="sm" @click="open(item)"
-                                >Open</BaseButton
-                            >
+                            <RowOpenButton
+                                :label="`Open ${purchaseOrderReference(item._id)}`"
+                                data-testid="po-open"
+                                @open="open(item)"
+                            />
                         </template>
                     </BaseTable>
                 </template>
@@ -488,6 +494,8 @@ import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import RowOpenButton from '@/components/ui/RowOpenButton.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
@@ -509,6 +517,7 @@ import SupplierSelect from '@/components/User/Supplier/SupplierSelect.vue';
 import { zeroCostRequest } from '@/components/User/Restock/validation';
 import {
     STATUS_LABELS,
+    PURCHASE_ORDER_STATUS,
     costVariance,
     draftLineErrors,
     draftLinesOf,
@@ -558,7 +567,7 @@ const headers = [
     { key: 'status', title: 'Status' },
     { key: 'lines', title: 'Lines', align: 'right' as const },
     { key: 'expectedTotal', title: 'Expected total', align: 'right' as const },
-    { key: 'action', title: 'Action', align: 'right' as const },
+    { key: 'action', title: 'Open', align: 'right' as const },
 ];
 const rows = ref<PurchaseOrderView[]>([]);
 const totalItems = ref(0);

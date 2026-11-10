@@ -95,6 +95,9 @@
                     :loading="loading && !data"
                     :skeleton-rows="5"
                     empty-text="No sales yet"
+                    :row-click="hasRouter"
+                    row-hint="Press Enter to open the sale details"
+                    @click:row="openSale"
                     @retry="loadDashboard"
                 >
                     <template #cell-cashier="{ item }">
@@ -114,15 +117,12 @@
                             "
                             >{{ item.paymentType }}</Badge
                         >
-                        <Badge
-                            v-if="
-                                item.status &&
-                                item.status !== SaleStatus.COMPLETED
-                            "
-                            color="error"
+                        <StatusBadge
+                            :status="item.status"
+                            :map="SALE_STATUS"
                             class="ml-1"
-                            >{{ item.status }}</Badge
-                        >
+                            data-testid="recent-sale-status"
+                        />
                     </template>
                     <template #cell-createdAt="{ item }">
                         <span class="text-xs text-muted">{{
@@ -198,6 +198,8 @@ import {
 } from '@lucide/vue';
 import api from '@/axios';
 import Badge from '@/components/ui/Badge.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import { SALE_STATUS } from '@/components/User/Sales/sale-status';
 import StatTile from '@/components/ui/StatTile.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -255,7 +257,16 @@ interface Stat {
 }
 
 /** Tests mount the view without a router: no links then. */
-const hasRouter = inject(routerKey, null) !== null;
+const router = inject(routerKey, null);
+const hasRouter = router !== null;
+
+/** A Recent Sales row opens its Sale Details on Sales history (#243). */
+function openSale(row: { id: string }) {
+    void router?.push({
+        name: 'SalesHistory',
+        query: { saleNumber: row.id, details: '1' },
+    });
+}
 
 function count(n: number | undefined): string {
     return n === undefined ? '-' : n.toLocaleString();
@@ -405,7 +416,8 @@ const saleRows = computed(() =>
         cashier: sale.cashier?.name ?? 'N/A',
         amount: formatCurrency(sale.amount ?? 0),
         paymentType: sale.paymentType,
-        status: sale.status,
+        // Sales from before statuses existed are completed.
+        status: sale.status ?? SaleStatus.COMPLETED,
         createdAt: formatDate(sale.createdAt),
     })),
 );
