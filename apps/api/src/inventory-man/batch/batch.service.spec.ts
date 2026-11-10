@@ -29,7 +29,7 @@ let batchModel: {
     updateOne: jest.Mock;
     countDocuments: jest.Mock;
 };
-let productModel: { findById: jest.Mock },
+let productModel: { findById: jest.Mock; distinct: jest.Mock },
     inventoryModel: { findOne: jest.Mock };
 beforeEach(() => {
     batchModel = {
@@ -40,7 +40,10 @@ beforeEach(() => {
         updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
         countDocuments: jest.fn().mockResolvedValue(0),
     };
-    productModel = { findById: jest.fn(() => query({ tracksExpiry: true })) };
+    productModel = {
+        findById: jest.fn(() => query({ tracksExpiry: true })),
+        distinct: jest.fn().mockResolvedValue([]),
+    };
     inventoryModel = { findOne: jest.fn(() => query({ stock: 0 })) };
     service = new InventoryBatchService(
         batchModel as unknown as Model<InventoryBatch>,
@@ -393,7 +396,11 @@ it('retains tracking once any batch history exists, including empty lots', async
 it('uses the committed store timezone for expiry consumption and list boundaries', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-01-01T16:30:00Z'));
     const timezone = jest.fn().mockResolvedValue('America/Los_Angeles');
-    Reflect.set(service, 'settings', { timezone });
+    const read = jest.fn().mockResolvedValue({
+        timezone: 'America/Los_Angeles',
+        expiryAlertDays: 7,
+    });
+    Reflect.set(service, 'settings', { timezone, read });
     batchModel.find.mockReturnValue(query([]));
     await expect(service.consume(product, 1, session)).rejects.toThrow();
     expect(batchModel.find).toHaveBeenCalledWith(
@@ -405,4 +412,79 @@ it('uses the committed store timezone for expiry consumption and list boundaries
     );
     expect(timezone).toHaveBeenCalledWith(session);
     jest.useRealTimers();
+});
+
+describe('expiry alert window and archived products (#213)', () => {
+    afterEach(() => jest.useRealTimers());
+    function lastQuery(): Record<string, unknown> {
+        return batchModel.find.mock.lastCall![0] as Record<string, unknown>;
+    }
+    it('defaults the Expiring list and the dashboard count to the store setting', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-01T04:00:00Z'));
+        Reflect.set(service, 'settings', {
+            read: jest
+                .fn()
+                .mockResolvedValue({ timezone: 'UTC', expiryAlertDays: 30 }),
+        });
+        batchModel.countDocuments.mockResolvedValue(4);
+        await service.list({ page: 1, limit: 10, expiring: true });
+        expect(lastQuery()).toMatchObject({
+            expiryDate: { $lte: '2026-01-31' },
+        });
+        expect(await service.expiringCount()).toBe(4);
+        expect(lastQuery()).toMatchObject({
+            expiryDate: { $lte: '2026-01-31' },
+        });
+        expect(batchModel.countDocuments).toHaveBeenLastCalledWith(lastQuery());
+        // An explicit window still wins.
+        await service.list({ page: 1, limit: 10, expiring: true, days: 2 });
+        expect(lastQuery()).toMatchObject({
+            expiryDate: { $lte: '2026-01-03' },
+        });
+    });
+    it('uses a passed settings snapshot without reading settings again', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-01T20:00:00Z'));
+        const read = jest.fn();
+        Reflect.set(service, 'settings', { read });
+        await service.expiringCount({
+            timezone: 'Asia/Manila',
+            expiryAlertDays: 3,
+        });
+        expect(read).not.toHaveBeenCalled();
+        // 04:00 on 2 Jan in Manila, plus 3 days.
+        expect(lastQuery()).toMatchObject({
+            expiryDate: { $lte: '2026-01-05' },
+        });
+    });
+    it('falls back to 7 days without the settings service', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-01-01T04:00:00Z'));
+        await service.expiringCount();
+        expect(lastQuery()).toMatchObject({
+            expiryDate: { $lte: '2026-01-08' },
+        });
+    });
+    it('leaves lots of archived products out of the expiring list and count', async () => {
+        const archived = new Types.ObjectId();
+        productModel.distinct.mockResolvedValue([archived]);
+        await service.expiringCount();
+        expect(productModel.distinct).toHaveBeenCalledWith('_id', {
+            isActive: false,
+        });
+        expect(lastQuery()).toMatchObject({ product: { $nin: [archived] } });
+        await service.list({
+            page: 1,
+            limit: 10,
+            expiring: true,
+            product: String(product),
+        });
+        expect(lastQuery()).toMatchObject({
+            product: { $eq: product, $nin: [archived] },
+        });
+    });
+    it('keeps every remaining batch, archived included, in the all-batches list', async () => {
+        productModel.distinct.mockResolvedValue([new Types.ObjectId()]);
+        await service.list({ page: 1, limit: 10 });
+        expect(productModel.distinct).not.toHaveBeenCalled();
+        expect(lastQuery()).toEqual({ remainingQty: { $ne: 0 } });
+    });
 });

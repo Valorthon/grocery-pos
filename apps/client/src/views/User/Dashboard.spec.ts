@@ -3,6 +3,7 @@ import { type App, createApp, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import Dashboard from './Dashboard.vue';
+import { useAuthStore } from '@/stores/auth';
 
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/axios', () => ({ default: { get, post: vi.fn() } }));
@@ -14,7 +15,6 @@ const STATS = {
     totalProducts: 40,
     lowStockCount: 3,
     outOfStockCount: 7,
-    todaySalesCount: 2,
     recentRestocks: [
         {
             _id: 'r1',
@@ -29,6 +29,7 @@ const STATS = {
 /** What it returns to an admin. */
 const WITH_MONEY = {
     ...STATS,
+    todaySalesCount: 2,
     todayRevenue: 12_500,
     recentSales: [
         {
@@ -55,12 +56,16 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
-async function render(payload: unknown) {
+/** Mounted as an inventory role, so both sections show (#212). */
+async function render(payload: unknown, roles: string[] = ['RESTOCKER']) {
     get.mockResolvedValue({ data: payload });
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { userId: 'u', username: 'u', roles: roles as never };
     const host = document.createElement('div');
     document.body.appendChild(host);
     app = createApp(Dashboard);
-    app.use(createPinia());
+    app.use(pinia);
     app.mount(host);
     for (let i = 0; i < 5; i++) {
         await Promise.resolve();
@@ -92,7 +97,8 @@ describe('Dashboard money figures (issue #13)', () => {
         ).toBeNull();
         expect(text).toContain('Total Products');
         expect(text).toContain('40');
-        expect(text).toContain("Today's Sales");
+        // Today's Sales is ADMIN-only (#213).
+        expect(text).not.toContain("Today's Sales");
         expect(text).toContain('Restocked: weekly delivery');
     });
 });
@@ -274,13 +280,81 @@ function tileLinks(): Record<string, string | null> {
     return links;
 }
 
+function sectionKeys(): string[] {
+    return [...document.querySelectorAll('[data-section]')].map(
+        (el) => el.getAttribute('data-section') ?? '',
+    );
+}
+
+/** Tile keys per section, in order. */
+function sectionTiles(): Record<string, string[]> {
+    const out: Record<string, string[]> = {};
+    for (const el of document.querySelectorAll('[data-section]'))
+        out[el.getAttribute('data-section') ?? ''] = [
+            ...el.querySelectorAll('[data-stat]'),
+        ].map((t) => t.getAttribute('data-stat') ?? '');
+    return out;
+}
+
+describe('Dashboard sections (issue #212)', () => {
+    it('gives an admin Needs attention then Overview, with all six tiles', async () => {
+        await renderWithRouter(['ADMIN'], WITH_MONEY);
+        expect(sectionKeys()).toEqual(['attention', 'overview']);
+        expect(sectionTiles()).toEqual({
+            attention: ['expiring', 'lowStock', 'outOfStock'],
+            overview: ['products', 'todaySales', 'todayRevenue'],
+        });
+        const headings = [...document.querySelectorAll('[data-section] h2')];
+        expect(headings.map((h) => h.textContent?.trim())).toEqual([
+            'Needs attention',
+            'Overview',
+        ]);
+    });
+
+    it.each([['RESTOCKER'], ['ADJUSTER']])(
+        'gives %s both sections, Overview without revenue',
+        async (role) => {
+            await renderWithRouter([role], STATS);
+            expect(sectionTiles()).toEqual({
+                attention: ['expiring', 'lowStock', 'outOfStock'],
+                overview: ['products'],
+            });
+        },
+    );
+
+    it('keeps Needs attention when every count is zero', async () => {
+        await renderWithRouter(['RESTOCKER'], {
+            ...STATS,
+            lowStockCount: 0,
+            outOfStockCount: 0,
+            expiringBatchCount: 0,
+        });
+        expect(sectionKeys()).toEqual(['attention', 'overview']);
+    });
+
+    it('links Out of Stock to the out-of-stock inventory list', async () => {
+        const router = await renderWithRouter(['ADJUSTER'], STATS);
+        const link = document.querySelector<HTMLAnchorElement>(
+            '[data-stat="outOfStock"]',
+        );
+        expect(link?.getAttribute('href')).toBe('/inventory?outOfStock=true');
+        link!.dispatchEvent(
+            new MouseEvent('click', { bubbles: true, button: 0 }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(router.currentRoute.value).toMatchObject({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+        });
+    });
+});
+
 describe('Dashboard tiles per role (issue #166)', () => {
     const INVENTORY_LINKS = {
         expiring: '/inventory?expiring=true',
         products: null,
         lowStock: '/inventory?lowStock=true',
-        outOfStock: null,
-        todaySales: null,
+        outOfStock: '/inventory?outOfStock=true',
     };
 
     it.each([['RESTOCKER'], ['ADJUSTER']])(
@@ -295,18 +369,11 @@ describe('Dashboard tiles per role (issue #166)', () => {
         },
     );
 
-    it('shows stock counts to a USER_MANAGER with no links', async () => {
+    it('hides Needs attention from a USER_MANAGER: Overview only, no links', async () => {
         await renderWithRouter(['USER_MANAGER'], STATS);
-        expect(tileLinks()).toEqual({
-            expiring: null,
-            products: null,
-            lowStock: null,
-            outOfStock: null,
-            todaySales: null,
-        });
-        expect(
-            document.querySelector('[data-stat="lowStock"] .num')?.textContent,
-        ).toContain('3');
+        expect(tileLinks()).toEqual({ products: null });
+        expect(sectionKeys()).toEqual(['overview']);
+        expect(document.body.textContent).not.toContain('Needs attention');
         expect(document.querySelector('a')).toBeNull();
     });
 
@@ -314,6 +381,7 @@ describe('Dashboard tiles per role (issue #166)', () => {
         await renderWithRouter(['ADMIN'], WITH_MONEY);
         expect(tileLinks()).toEqual({
             ...INVENTORY_LINKS,
+            todaySales: null,
             todayRevenue: null,
         });
         expect(
@@ -497,5 +565,48 @@ it('links the low-stock tile to the filtered inventory list for inventory roles'
     expect(router.currentRoute.value).toMatchObject({
         name: 'Inventories',
         query: { lowStock: 'true' },
+    });
+});
+
+describe('Dashboard card subtitles (#213)', () => {
+    const hint = (key: string) =>
+        document.querySelector(`[data-stat="${key}"]`)?.textContent ?? '';
+
+    it('explains every card, with the configured expiry window', async () => {
+        await render(
+            { ...WITH_MONEY, expiringBatchCount: 2, expiryAlertDays: 14 },
+            ['ADMIN'],
+        );
+        expect(hint('expiring')).toContain(
+            'Batches in stock expiring within 14 days or already expired',
+        );
+        expect(hint('products')).toContain('Active products');
+        expect(hint('lowStock')).toContain(
+            'Active products at or below their reorder level',
+        );
+        expect(hint('outOfStock')).toContain(
+            'Active products with zero or less on hand',
+        );
+        expect(hint('todaySales')).toContain(
+            'Sales completed today; voids and refunds excluded',
+        );
+        expect(hint('todayRevenue')).toContain(
+            "Today's sales total; voids and refunds excluded",
+        );
+    });
+
+    it('says 1 day, and 7 days when the API names no window', async () => {
+        await render({ ...STATS, expiringBatchCount: 0, expiryAlertDays: 1 });
+        expect(hint('expiring')).toContain('within 1 day or');
+        app?.unmount();
+        app = null;
+        document.body.innerHTML = '';
+        await render({ ...STATS, expiringBatchCount: 0 });
+        expect(hint('expiring')).toContain('within 7 days or');
+    });
+
+    it("hides Today's Sales from non-admins", async () => {
+        await render(STATS, ['USER_MANAGER']);
+        expect(document.querySelector('[data-stat="todaySales"]')).toBeNull();
     });
 });

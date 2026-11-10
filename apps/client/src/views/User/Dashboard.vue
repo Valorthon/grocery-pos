@@ -23,26 +23,42 @@
             </BaseButton>
         </div>
 
-        <!-- Stat tiles: keyed by `stat.key`, never by their titles. -->
-        <div
-            class="grid grid-cols-1 sm:grid-cols-2 gap-4"
-            :class="stats.length > 4 ? 'xl:grid-cols-5' : 'xl:grid-cols-4'"
+        <!--
+            Stat tiles in two sections (#212), keyed by `stat.key`, never by
+            their titles. Needs attention shows only for the roles with a say
+            over items (canOpenInventory); USER_MANAGER sees Overview only.
+        -->
+        <section
+            v-for="section in sections"
+            :key="section.key"
+            :data-section="section.key"
+            :aria-labelledby="`dashboard-${section.key}-title`"
+            class="flex flex-col gap-3"
         >
-            <StatTile
-                v-for="stat in stats"
-                :key="stat.key"
-                :data-stat="stat.key"
-                :label="stat.title"
-                :value="stat.value"
-                :tone="stat.tone"
-                :to="stat.to"
-                :loading="tilesLoading"
+            <h2
+                :id="`dashboard-${section.key}-title`"
+                class="font-display text-base font-bold text-ink"
             >
-                <template #icon>
-                    <component :is="stat.icon" :size="18" />
-                </template>
-            </StatTile>
-        </div>
+                {{ section.title }}
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <StatTile
+                    v-for="stat in section.stats"
+                    :key="stat.key"
+                    :data-stat="stat.key"
+                    :label="stat.title"
+                    :hint="stat.hint"
+                    :value="stat.value"
+                    :tone="stat.tone"
+                    :to="stat.to"
+                    :loading="tilesLoading"
+                >
+                    <template #icon>
+                        <component :is="stat.icon" :size="18" />
+                    </template>
+                </StatTile>
+            </div>
+        </section>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
             <p v-if="showsMoney" class="text-sm text-muted md:col-span-3">
@@ -196,6 +212,7 @@ import {
     type DashboardView,
     PaymentType,
     SaleStatus,
+    SETTINGS_LIMITS,
 } from '@grocery-pos/contracts';
 
 const authStore = useAuthStore();
@@ -229,6 +246,8 @@ interface Stat {
     key: StatKey;
     title: string;
     value: string;
+    /** What the card counts, always visible (#213). */
+    hint: string;
     icon: Component;
     tone: 'neutral' | 'warning' | 'danger';
     /** Only for roles that may open the list behind the tile. */
@@ -240,6 +259,12 @@ const hasRouter = inject(routerKey, null) !== null;
 
 function count(n: number | undefined): string {
     return n === undefined ? '-' : n.toLocaleString();
+}
+
+/** The store's expiry alert window, as the API reported it. */
+function expiryDays(n: number | undefined): string {
+    const days = n ?? SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT;
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
 /** Warning or danger only while something needs attention. */
@@ -256,31 +281,30 @@ const tileLinks = computed<Partial<Record<StatKey, RouteLocationRaw>>>(() =>
         ? {
               expiring: { name: 'Inventories', query: { expiring: 'true' } },
               lowStock: { name: 'Inventories', query: { lowStock: 'true' } },
+              outOfStock: {
+                  name: 'Inventories',
+                  query: { outOfStock: 'true' },
+              },
           }
         : {},
 );
 
-const stats = computed<Stat[]>(() => {
+const attentionStats = computed<Stat[]>(() => {
     const d = data.value;
-    const list: Stat[] = [
+    return [
         {
             key: 'expiring',
             title: 'Expiring / expired batches',
             value: count(d?.expiringBatchCount),
+            hint: `Batches in stock expiring within ${expiryDays(d?.expiryAlertDays)} or already expired`,
             icon: AlertCircle,
             tone: attention(d?.expiringBatchCount, 'warning'),
-        },
-        {
-            key: 'products',
-            title: 'Total Products',
-            value: count(d?.totalProducts),
-            icon: Package,
-            tone: 'neutral',
         },
         {
             key: 'lowStock',
             title: 'Low Stock Items',
             value: count(d?.lowStockCount),
+            hint: 'Active products at or below their reorder level',
             icon: AlertCircle,
             tone: attention(d?.lowStockCount, 'warning'),
         },
@@ -288,29 +312,72 @@ const stats = computed<Stat[]>(() => {
             key: 'outOfStock',
             title: 'Out of Stock Items',
             value: count(d?.outOfStockCount),
+            hint: 'Active products with zero or less on hand',
             icon: PackageX,
             tone: attention(d?.outOfStockCount, 'danger'),
         },
+    ];
+});
+
+const overviewStats = computed<Stat[]>(() => {
+    const d = data.value;
+    const list: Stat[] = [
         {
-            key: 'todaySales',
-            title: "Today's Sales",
-            value: count(d?.todaySalesCount),
-            icon: ShoppingCart,
+            key: 'products',
+            title: 'Total Products',
+            value: count(d?.totalProducts),
+            hint: 'Active products',
+            icon: Package,
             tone: 'neutral',
         },
     ];
-    // An ADMIN's revenue skeleton holds its place during the first load,
-    // so the grid does not reflow; no figure shows before the answer.
+    // Today's sales and revenue are ADMIN-only (#13, #213). An ADMIN's
+    // skeletons hold their place during the first load, so the grid does
+    // not reflow; no figure shows before the answer.
     if (showsMoney.value || (!d && authStore.isAdmin && loading.value)) {
+        list.push({
+            key: 'todaySales',
+            title: "Today's Sales",
+            value: count(d?.todaySalesCount),
+            hint: 'Sales completed today; voids and refunds excluded',
+            icon: ShoppingCart,
+            tone: 'neutral',
+        });
         list.push({
             key: 'todayRevenue',
             title: "Today's Revenue",
             value: formatCurrency(d?.todayRevenue ?? 0),
+            hint: "Today's sales total; voids and refunds excluded",
             icon: Banknote,
             tone: 'neutral',
         });
     }
-    return list.map((stat) => ({ ...stat, to: tileLinks.value[stat.key] }));
+    return list;
+});
+
+interface Section {
+    key: 'attention' | 'overview';
+    title: string;
+    stats: Stat[];
+}
+
+/** Needs attention first, for the roles that manage items; then Overview. */
+const sections = computed<Section[]>(() => {
+    const withLinks = (list: Stat[]) =>
+        list.map((stat) => ({ ...stat, to: tileLinks.value[stat.key] }));
+    const list: Section[] = [];
+    if (canOpenInventory.value)
+        list.push({
+            key: 'attention',
+            title: 'Needs attention',
+            stats: withLinks(attentionStats.value),
+        });
+    list.push({
+        key: 'overview',
+        title: 'Overview',
+        stats: withLinks(overviewStats.value),
+    });
+    return list;
 });
 
 /** Skeletons until the first answer; a reload keeps the last figures. */

@@ -151,10 +151,63 @@ describe('event-date reports UI', () => {
         expect(
             document.querySelector('svg[aria-label="Daily net sales trend"]'),
         ).not.toBeNull();
-        expect(document.body.textContent).toContain(
-            'Original shift Z-reads remain immutable',
-        );
         expect(document.body.textContent).toContain('Frozen (archived)');
+    });
+    it('shows reconciliation figures as tiles, a closed explanation and a Shifts link (#216)', async () => {
+        const original = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/reports/sales'
+                ? Promise.resolve({
+                      data: response({
+                          reconciliation: {
+                              chargedSales: 8000,
+                              reversalAmount: -1200,
+                              priorPeriodReversals: 2,
+                              priorPeriodReversalAmount: -700,
+                              lateOfflineTransactions: 1,
+                              lateOfflineNetSales: 450,
+                              note: 'server note',
+                          },
+                      }),
+                  })
+                : original(url, config),
+        );
+        await mount();
+        const tile = (key: string) =>
+            document.querySelector(`[data-reconcile="${key}"]`)?.textContent;
+        expect(tile('charged')).toContain('Original charged sales');
+        expect(tile('charged')).toContain('₱80.00');
+        expect(tile('reversals')).toContain('₱12.00');
+        expect(tile('prior')).toContain('Prior-period reversals');
+        expect(tile('prior')).toContain('₱7.00');
+        expect(tile('prior')).toContain('2 reversals');
+        expect(tile('late')).toContain('Late offline occurrences');
+        expect(tile('late')).toContain('₱4.50');
+        expect(tile('late')).toContain(
+            '1 sale uploaded after its shift closed',
+        );
+        const notes = document.querySelector<HTMLDetailsElement>(
+            '[data-testid="reconciliation-notes"]',
+        )!;
+        expect(notes.open).toBe(false);
+        expect(notes.querySelector('summary')?.textContent?.trim()).toBe(
+            'How these numbers work',
+        );
+        const bullets = [...notes.querySelectorAll('li')].map((li) =>
+            li.textContent?.trim(),
+        );
+        expect(bullets).toHaveLength(7);
+        expect(bullets.join(' ')).toBe(
+            'Sales use their original occurrence date; reversals use the date they happened. Gross sales less discounts equals original charged sales. Net sales then subtracts reversal events. Original shift Z-reads are immutable closing snapshots: compare original charges, drawer payout movements, and separate late-offline addenda, not an unadjusted calendar-period net. Category/product groups count a transaction in each group it touches; totals count it once. Categories use current product assignments. SPLIT is one payment-type group. Product costs use the latest-receipt estimate; unknown cost coverage is explicit.',
+        );
+        const link = document.querySelector<HTMLAnchorElement>(
+            '[data-testid="reconciliation-shifts"]',
+        )!;
+        expect(link.getAttribute('href')).toBe('/shifts');
+        expect(link.className).toContain('min-h-11');
+        expect(link.textContent).toContain(
+            'Review original Z-reads and late addenda',
+        );
     });
     it('shows incomplete coverage instead of false complete gross margin', async () => {
         const original = api.get.getMockImplementation()!;
@@ -217,6 +270,80 @@ describe('event-date reports UI', () => {
         });
         expect(URL.createObjectURL).toHaveBeenCalledOnce();
         expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:csv');
+    });
+    it('a preset applies at once with one request; other changes wait for Run report (#215)', async () => {
+        await mount();
+        const sales = () =>
+            api.get.mock.calls.filter(([url]) => url === '/reports/sales');
+        const before = sales().length;
+        const preset =
+            document.querySelector<HTMLSelectElement>('#report-preset')!;
+        preset.value = 'Last week';
+        preset.dispatchEvent(new Event('change'));
+        await flush();
+        expect(sales()).toHaveLength(before + 1);
+        expect(sales()[sales().length - 1]?.[1]).toEqual({
+            params: { from: '2026-10-26', to: '2026-11-01', groupBy: 'day' },
+        });
+
+        const group =
+            document.querySelector<HTMLSelectElement>('#report-group')!;
+        group.value = SalesReportGroup.PRODUCT;
+        group.dispatchEvent(new Event('change'));
+        await type('From', '2026-10-20');
+        await flush();
+        expect(preset.value).toBe('Custom');
+        preset.value = 'Custom';
+        preset.dispatchEvent(new Event('change'));
+        await flush();
+        expect(sales()).toHaveLength(before + 1);
+        await click('Run report');
+        expect(sales()).toHaveLength(before + 2);
+    });
+    it('Clear resets to Today with the default grouping, enabled only off the defaults (#215)', async () => {
+        await mount();
+        const clear = () =>
+            [...document.querySelectorAll('button')].find((b) =>
+                b.textContent?.includes('Clear Filters'),
+            )!;
+        expect(clear().disabled).toBe(true);
+        const group =
+            document.querySelector<HTMLSelectElement>('#report-group')!;
+        group.value = SalesReportGroup.PRODUCT;
+        group.dispatchEvent(new Event('change'));
+        await type('From', '2026-11-01');
+        await flush();
+        expect(clear().disabled).toBe(false);
+        const sales = () =>
+            api.get.mock.calls.filter(([url]) => url === '/reports/sales');
+        const before = sales().length;
+
+        await click('Clear Filters');
+
+        expect(sales()).toHaveLength(before + 1);
+        expect(sales()[sales().length - 1]?.[1]).toEqual({
+            params: { from: '2026-11-05', to: '2026-11-05', groupBy: 'day' },
+        });
+        expect(
+            document.querySelector<HTMLSelectElement>('#report-preset')!.value,
+        ).toBe('Today');
+        expect(group.value).toBe(SalesReportGroup.DAY);
+        expect(clear().disabled).toBe(true);
+    });
+    it('Run report and Clear sit together at the row end at field height (#215)', async () => {
+        await mount();
+        const run = [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Run report'),
+        )!;
+        const clear = [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+        expect(run.parentElement).toBe(clear.parentElement);
+        expect(run.parentElement!.classList).toContain('items-end');
+        expect(run.classList).toContain('min-h-11');
+        expect(run.parentElement!.parentElement!.lastElementChild).toBe(
+            run.parentElement,
+        );
     });
     it('shows settings failures and retries initialization', async () => {
         const original = api.get.getMockImplementation()!;

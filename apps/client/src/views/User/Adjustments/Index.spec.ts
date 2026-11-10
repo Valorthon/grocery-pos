@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
-import { fieldError, flush, type } from '@/testing/form-dom';
+import {
+    click,
+    field,
+    fieldError,
+    flush,
+    pick,
+    selectField,
+    type,
+} from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
@@ -35,7 +43,9 @@ beforeEach(() => {
             data:
                 url === '/adjustments/users'
                     ? [{ _id: 'u1', name: 'ada' }]
-                    : { data: [ADJUSTMENT], totalItems: 1 },
+                    : url === '/settings/today'
+                      ? { today: '2026-11-10', timezone: 'Asia/Manila' }
+                      : { data: [ADJUSTMENT], totalItems: 1 },
         }),
     );
 });
@@ -116,5 +126,53 @@ describe('adjustment history filters (issue #20)', () => {
 
         expect(fieldError('To')).toBe(DATE_RANGE_REVERSED);
         expect(listCalls()).toEqual([]);
+    });
+});
+
+describe('adjustment history date presets (#215)', () => {
+    const clearButton = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+
+    it('a preset sets both dates from the server today and loads page 1 once', async () => {
+        await mount();
+        api.get.mockClear();
+
+        await pick('Dates', 'Last month');
+
+        expect(api.get).toHaveBeenCalledWith('/settings/today');
+        expect(listCalls()).toEqual([
+            expect.objectContaining({
+                page: 1,
+                dateFrom: '2026-10-01',
+                dateTo: '2026-10-31',
+            }),
+        ]);
+    });
+
+    it('a manual date edit switches the preset to Custom', async () => {
+        await mount();
+        await pick('Dates', 'Yesterday');
+        expect(field('From').value).toBe('2026-11-09');
+        await type('To', '2026-11-10');
+        await flush();
+        expect(selectField('Dates').value).toBe('Custom');
+    });
+
+    it('Clear Filters is disabled at defaults and resets the preset with one load', async () => {
+        await mount();
+        expect(clearButton().disabled).toBe(true);
+        await pick('Dates', 'Last 30 days');
+        expect(clearButton().disabled).toBe(false);
+        api.get.mockClear();
+
+        await click('Clear Filters');
+
+        expect(listCalls()).toEqual([
+            expect.objectContaining({ page: 1, dateFrom: undefined }),
+        ]);
+        expect(selectField('Dates').value).not.toBe('Last 30 days');
+        expect(clearButton().disabled).toBe(true);
     });
 });

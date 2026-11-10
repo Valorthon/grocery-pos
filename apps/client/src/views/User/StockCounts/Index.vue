@@ -231,6 +231,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { useBarcodeCapture } from '@/composables/useBarcodeCapture';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
 import {
@@ -655,13 +656,31 @@ function projected(line: StockCountLineView): string {
         ? formatQuantity(balance, line.unit)
         : 'Outside limits';
 }
+/**
+ * Focuses the counted field of the line scanned (#214): with several
+ * batches, the first one not yet counted. The scope is fixed, so a scan
+ * never adds a line.
+ */
+const OUT_OF_SCOPE = 'Barcode is not in this count scope.';
+function focusCode(code: string) {
+    const lines = selected.value?.lines.filter((row) => row.EAN === code);
+    if (!lines?.length) {
+        validation.value = OUT_OF_SCOPE;
+        return;
+    }
+    const line =
+        lines.find((row) => !(entries.value[row._id] ?? '').trim()) ?? lines[0];
+    if (validation.value === OUT_OF_SCOPE) validation.value = '';
+    document.getElementById(`count-${line._id}`)?.focus();
+}
 function focusBarcode() {
-    const code = scan.value.trim();
-    const line = selected.value?.lines.find((row) => row.EAN === code);
-    if (line) document.getElementById(`count-${line._id}`)?.focus();
-    else validation.value = 'Barcode is not in this count scope.';
+    focusCode(scan.value.trim());
     scan.value = '';
 }
+// The scan box works only while focused; this works page-wide (#214).
+useBarcodeCapture(focusCode, {
+    enabled: () => selected.value?.status === StockCountStatus.OPEN,
+});
 async function discardLocal(): Promise<boolean> {
     return (
         !dirty.value ||

@@ -11,6 +11,8 @@ import { Product } from '../product/product.schema';
 import { Restock } from '../inventory-man/restock/restock.schema';
 import { Adjustment } from '../inventory-man/adjustment/adjustment.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
+import { InventoryBatchService } from '../inventory-man/batch/batch.service';
+import { SettingsService } from '../settings/settings.service';
 import {
     DASHBOARD_MONEY_KEYS,
     DASHBOARD_VIEW_SHAPE,
@@ -192,7 +194,6 @@ describe('DashboardService.getDashboard', () => {
                 totalProducts: 0,
                 lowStockCount: 0,
                 outOfStockCount: 0,
-                todaySalesCount: 1,
                 recentRestocks: [],
                 recentAdjustments: [],
             });
@@ -214,8 +215,9 @@ describe('DashboardService.getDashboard', () => {
         it('does not even read money for other roles', async () => {
             await service.getDashboard({ includeMoney: false });
 
-            // No revenue sum, no sales feed query, restocks without totalCost.
-            expect(groupStage()).not.toHaveProperty('revenue');
+            // No sales count or revenue sum (#213), no sales feed query,
+            // restocks without totalCost.
+            expect(aggregate).not.toHaveBeenCalled();
             expect(salesFind).not.toHaveBeenCalled();
             expect(restockQuery.select).toHaveBeenCalledWith(
                 RESTOCK_ACTIVITY_FIELDS,
@@ -238,7 +240,10 @@ describe('DashboardService.getDashboard', () => {
 
             const result = await service.getDashboard({ includeMoney: false });
 
-            expect(productCount).toHaveBeenCalledWith();
+            // Active products only, like the stock tiles (#213).
+            expect(productCount).toHaveBeenCalledWith({
+                isActive: { $ne: false },
+            });
             expect(result.totalProducts).toBe(42);
         });
 
@@ -298,6 +303,63 @@ describe('DashboardService.getDashboard', () => {
                 });
                 expect(JSON.stringify(pipeline[3])).toContain('reorderLevel');
             });
+        });
+    });
+
+    describe("expiry alerts and today's sales (#213)", () => {
+        beforeEach(() => {
+            jest.setSystemTime(new Date('2026-01-05T02:00:00.000Z'));
+        });
+
+        it('counts expiring lots at the configured window and reports it', async () => {
+            const expiringCount = jest.fn().mockResolvedValue(3);
+            Reflect.set(service, 'batches', {
+                expiringCount,
+            } as unknown as InventoryBatchService);
+            Reflect.set(service, 'settings', {
+                read: jest.fn().mockResolvedValue({
+                    timezone: 'Asia/Manila',
+                    expiryAlertDays: 30,
+                }),
+            } as unknown as SettingsService);
+
+            const result = await service.getDashboard({ includeMoney: false });
+
+            expect(expiringCount).toHaveBeenCalledWith({
+                timezone: 'Asia/Manila',
+                expiryAlertDays: 30,
+            });
+            expect(result).toMatchObject({
+                expiringBatchCount: 3,
+                expiryAlertDays: 30,
+            });
+            expect(wireShapeDiff(result, DASHBOARD_VIEW_SHAPE)).toEqual({
+                missing: [],
+                unexpected: [],
+            });
+        });
+
+        it('falls back to the 7-day window without store settings', async () => {
+            const expiringCount = jest.fn().mockResolvedValue(0);
+            Reflect.set(service, 'batches', {
+                expiringCount,
+            } as unknown as InventoryBatchService);
+
+            const result = await service.getDashboard({ includeMoney: true });
+
+            expect(expiringCount).toHaveBeenCalledWith({
+                timezone: 'Asia/Manila',
+                expiryAlertDays: 7,
+            });
+            expect(result.expiryAlertDays).toBe(7);
+        });
+
+        it('gives the store-wide sales count to an admin only', async () => {
+            const admin = await service.getDashboard({ includeMoney: true });
+            const other = await service.getDashboard({ includeMoney: false });
+
+            expect(admin.todaySalesCount).toBe(1);
+            expect(other).not.toHaveProperty('todaySalesCount');
         });
     });
 });

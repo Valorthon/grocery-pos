@@ -66,36 +66,31 @@ describe.each([
             dateFrom: appliedFrom,
         });
         expect(requests()[0]?.dateTo).toBeUndefined();
-        // The applied deep link shows as a FilterBar chip (#171).
-        expect(chipLabels()).toContain(`Source: ${second}`);
         api.get.mockClear();
         await router.push(path);
         await flush();
         expect(requests()).toHaveLength(1);
         expect(requests()[0]?.source).toBeUndefined();
-        expect(chipLabels().some((c) => c.startsWith('Source:'))).toBe(false);
         await click('Clear Filters');
         expect(requests()[requests().length - 1]?.source).toBeUndefined();
     });
 
-    it('removes the source chip with one route change and one request, keeping focus (#171)', async () => {
+    it('the deep link alone enables Clear Filters, which drops it with one route change and one request (#215)', async () => {
         const router = await mount();
         api.get.mockClear();
-        const chip = document.querySelector<HTMLButtonElement>(
-            `button[aria-label="Remove filter Source: ${first}"]`,
-        )!;
-        chip.focus();
+        const clear = clearButton();
+        expect(clear.disabled).toBe(false);
+        expect(note()).toContain(`from source ${first}`);
 
-        chip.click();
+        clear.click();
         await flush();
         await flush();
 
         expect(router.currentRoute.value.query.source).toBeUndefined();
         expect(requests()).toHaveLength(1);
         expect(requests()[0]?.source).toBeUndefined();
-        // The chip is gone; focus moved to the Filters toggle, not <body>.
-        expect(document.activeElement).not.toBe(document.body);
-        expect(document.activeElement?.textContent).toContain('Filters');
+        expect(clearButton().disabled).toBe(true);
+        expect(note()).toBeUndefined();
     });
 
     it('clears the visible source restriction and ignores malformed source IDs', async () => {
@@ -112,12 +107,18 @@ describe.each([
         // Invalid route text never becomes a backend filter, even on retry.
         await click('Next');
         expect(requests()[requests().length - 1]?.source).toBeUndefined();
-        expect(chipLabels().some((c) => c.startsWith('Source:'))).toBe(false);
+        expect(document.querySelector('[data-chip]')).toBeNull();
     });
 });
 
-function chipLabels(): string[] {
-    return [...document.querySelectorAll('[data-chip]')].map((b) =>
-        b.textContent!.trim(),
+function clearButton(): HTMLButtonElement {
+    return [...document.querySelectorAll('button')].find((b) =>
+        b.textContent?.includes('Clear Filters'),
+    )!;
+}
+function note(): string | undefined {
+    return (
+        document.querySelector('[data-testid="deep-link-note"]')?.textContent ??
+        undefined
     );
 }

@@ -79,3 +79,18 @@ export async function pickFirstMatch(): Promise<void> {
     option.dispatchEvent(new Event('mousedown'));
     await flush();
 }
+
+/** The select of the field whose label is `text`. */
+export function selectField(text: string): HTMLSelectElement {
+    const el = labelled(text).querySelector<HTMLSelectElement>('select');
+    if (!el) throw new Error(`No select for "${text}"`);
+    return el;
+}
+
+/** Picks `value` in the select labelled `text`, as a user would. */
+export async function pick(text: string, value: string): Promise<void> {
+    const el = selectField(text);
+    el.value = value;
+    el.dispatchEvent(new Event('change'));
+    await flush();
+}

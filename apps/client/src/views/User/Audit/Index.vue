@@ -11,10 +11,8 @@
                 search-label="Username"
                 :maxlength="STRING_LIMITS.USERNAME"
                 search-hint="Current username. Also finds that account's entries under earlier names, and failed logins typed with this name."
-                :chips="chips"
-                :initially-open="chips.some((chip) => chip.inPanel)"
+                :active="filtersActive"
                 @search="search"
-                @remove="removeFilter"
                 @clear="clear"
             >
                 <BaseSelect
@@ -24,28 +22,26 @@
                     :options="actionOptions"
                     @update:model-value="search"
                 />
+                <BaseSelect
+                    :model-value="datePreset"
+                    label="Dates"
+                    all-label="All dates"
+                    :options="DATE_PRESET_OPTIONS"
+                    @update:model-value="pickPreset"
+                />
                 <BaseInput
                     v-model="from"
                     label="From"
                     type="date"
-                    @change="search"
+                    @change="editDate"
                 />
                 <BaseInput
                     v-model="to"
                     label="To"
                     type="date"
                     :error="rangeError"
-                    @change="search"
+                    @change="editDate"
                 />
-                <div class="flex items-end">
-                    <BaseButton
-                        variant="outline"
-                        class="min-h-11"
-                        :disabled="loading"
-                        @click="clear"
-                        >Clear Filters</BaseButton
-                    >
-                </div>
             </FilterBar>
             <p v-if="validation" role="alert" class="text-sm text-danger-fg">
                 {{ validation }}
@@ -171,7 +167,11 @@ import { ScrollText } from '@lucide/vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
-import type { FilterChip } from '@/components/ui/page-primitives';
+import { useDatePreset } from '@/composables/useDatePreset';
+import {
+    DATE_PRESET_OPTIONS,
+    type DatePreset,
+} from '@/views/User/Reports/presets';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import { apiErrorText } from '@/utils/api-error';
@@ -207,31 +207,33 @@ const tableRows = computed(() =>
 const rangeError = computed(() => dateRangeError(from.value, to.value));
 const applied = ref<Omit<AuditListQuery, 'page' | 'limit'>>({});
 let generation = 0;
-// Chips read the applied snapshot, never typed-but-unsearched text.
-const chips = computed<FilterChip[]>(() => {
-    const a = applied.value;
-    const out: FilterChip[] = [];
-    if (a.username) out.push({ key: 'username', label: `User: ${a.username}` });
-    if (a.action)
-        out.push({
-            key: 'action',
-            label: `Action: ${AUDIT_ACTION_LABELS[a.action] ?? a.action}`,
-            inPanel: true,
-        });
-    if (a.from)
-        out.push({ key: 'from', label: `From: ${a.from}`, inPanel: true });
-    if (a.to) out.push({ key: 'to', label: `To: ${a.to}`, inPanel: true });
-    return out;
-});
-/** Drops one applied filter; the inputs go back to the applied ones first. */
-function removeFilter(key: string) {
-    const a = applied.value;
-    username.value = key === 'username' ? '' : (a.username ?? '');
-    action.value = key === 'action' ? null : (a.action ?? null);
-    from.value = key === 'from' ? '' : (a.from ?? '');
-    to.value = key === 'to' ? '' : (a.to ?? '');
+const {
+    preset: datePreset,
+    choose: choosePreset,
+    edited: presetEdited,
+    reset: resetPreset,
+} = useDatePreset(from, to, () => search());
+/** A preset fills both dates, then searches once (#215). */
+function pickPreset(value: string | null) {
+    void choosePreset(value as DatePreset | null);
+}
+/** A manual date edit switches the preset to Custom and searches. */
+function editDate() {
+    presetEdited();
     search();
 }
+/** Clear Filters is enabled while any filter or preset is set. */
+const filtersActive = computed(
+    () =>
+        !!(
+            username.value.trim() ||
+            action.value ||
+            from.value ||
+            to.value ||
+            datePreset.value ||
+            Object.values(applied.value).some(Boolean)
+        ),
+);
 function search() {
     validation.value = rangeError.value;
     if (validation.value) return;
@@ -245,6 +247,7 @@ function search() {
     void load();
 }
 function clear() {
+    resetPreset();
     username.value = '';
     action.value = null;
     from.value = '';

@@ -174,3 +174,24 @@ it('ignores a pending save after changing owners without touching either owner c
     expect(localStorage.getItem('grocery_pos_settings_v1:a')).toBeNull();
     expect(localStorage.getItem('grocery_pos_settings_v1:b')).toBeNull();
 });
+it('reads a cache saved before the expiry window existed as 7 days (#213)', () => {
+    const { expiryAlertDays: _drop, ...legacy } = {
+        ...initialSettings,
+        storeName: 'Legacy Shop',
+        version: 3,
+    };
+    void _drop;
+    localStorage.setItem('grocery_pos_settings_v1:old', JSON.stringify(legacy));
+    const store = useSettingsStore();
+    store.setOwner('old');
+    expect(store.settings).toMatchObject({
+        storeName: 'Legacy Shop',
+        expiryAlertDays: 7,
+    });
+    localStorage.setItem(
+        'grocery_pos_settings_v1:bad',
+        JSON.stringify({ ...legacy, expiryAlertDays: 0 }),
+    );
+    store.setOwner('bad');
+    expect(store.settings.storeName).toBe('Grocery POS');
+});

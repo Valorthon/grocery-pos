@@ -10,14 +10,14 @@
                 }}</BaseButton
             >
             <BaseButton
-                v-if="canRestock && applied.lowStock"
+                v-if="canRestock && (applied.lowStock || applied.outOfStock)"
                 size="sm"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
                 @click="createRestock"
                 >Restock listed items</BaseButton
             >
             <BaseButton
-                v-if="canRestock && applied.lowStock"
+                v-if="canRestock && (applied.lowStock || applied.outOfStock)"
                 size="sm"
                 variant="outline"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
@@ -37,11 +37,9 @@
             <FilterBar
                 v-model:search="searchName"
                 search-label="Product Name"
-                :chips="chips"
-                :initially-open="chips.some((chip) => chip.inPanel)"
+                :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
-                @search="applySearch"
-                @remove="removeFilter"
+                @search="onSearch"
                 @clear="resetFilters"
             >
                 <BaseInput
@@ -59,17 +57,24 @@
                         @change="toggleLowStock"
                     />Low stock</label
                 >
-                <div class="flex items-end">
-                    <BaseButton
-                        variant="outline"
-                        class="min-h-11"
-                        @click="resetFilters"
-                    >
-                        <X class="w-4 h-4" />
-                        Clear Filters
-                    </BaseButton>
-                </div>
+                <label
+                    class="flex min-h-11 items-center gap-2 self-end text-sm"
+                    data-testid="out-of-stock-filter"
+                    ><input
+                        v-model="outOfStock"
+                        type="checkbox"
+                        @change="toggleOutOfStock"
+                    />Out of stock</label
+                >
             </FilterBar>
+            <p
+                v-if="route?.query.expiring === 'true'"
+                class="px-5 py-2 text-sm text-muted"
+                data-testid="deep-link-note"
+            >
+                Showing batches expiring within
+                {{ settingsStore.settings.expiryAlertDays }} days
+            </p>
             <BaseTable
                 v-model:page="page"
                 v-model:items-per-page="limit"
@@ -119,14 +124,15 @@
 
 <script setup lang="ts">
 import StockHistory from '@/components/User/Inventory/StockHistory.vue';
+import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import type { ProductView, UnitOfMeasure } from '@grocery-pos/contracts';
 import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Pencil, X } from '@lucide/vue';
+import { Pencil } from '@lucide/vue';
+import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
-import type { FilterChip } from '@/components/ui/page-primitives';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
 import { canOpenRoute, type RouteAccessMeta } from '@/router/access';
@@ -161,12 +167,15 @@ const canAdjust = computed(() =>
     ),
 );
 const route = useRoute();
+const settingsStore = useSettingsStore();
 const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
 const prefill = useRestockPrefillStore();
 const poPrefill = usePurchaseOrderPrefillStore();
 const lowStock = ref(route?.query.lowStock === 'true');
+// Low stock and out of stock are exclusive (#212); low stock wins a URL with both.
+const outOfStock = ref(!lowStock.value && route?.query.outOfStock === 'true');
 const sourceRows = ref<InventoryRow[]>([]);
 async function createRestock() {
     if (
@@ -190,21 +199,33 @@ async function createPurchaseOrder() {
     if (poPrefill.prepare(sourceRows.value))
         await router.push({ name: 'PurchaseOrders' });
 }
-function toggleLowStock() {
+/** Applies the stock filters and mirrors them in the URL. */
+function syncStockQuery() {
     applySearch();
     void router.replace({
         query: {
             ...route?.query,
             lowStock: lowStock.value ? 'true' : undefined,
+            outOfStock: outOfStock.value ? 'true' : undefined,
         },
     });
 }
+function toggleLowStock() {
+    if (lowStock.value) outOfStock.value = false;
+    syncStockQuery();
+}
+function toggleOutOfStock() {
+    if (outOfStock.value) lowStock.value = false;
+    syncStockQuery();
+}
 watch(
-    () => route?.query.lowStock,
-    (value) => {
-        const next = value === 'true';
-        if (lowStock.value !== next) {
-            lowStock.value = next;
+    () => [route?.query.lowStock, route?.query.outOfStock],
+    ([low, out]) => {
+        const nextLow = low === 'true';
+        const nextOut = !nextLow && out === 'true';
+        if (lowStock.value !== nextLow || outOfStock.value !== nextOut) {
+            lowStock.value = nextLow;
+            outOfStock.value = nextOut;
             applySearch();
         }
     },
@@ -219,9 +240,32 @@ const { applied, apply: applySearch } = useAppliedFilters(
         name: searchName.value,
         EAN: searchEAN.value,
         lowStock: lowStock.value,
+        outOfStock: outOfStock.value,
     }),
     search,
 );
+
+/**
+ * A scan (a barcode-shaped term + Enter) opens its one exact product's
+ * Stock history, archived too (#214); otherwise the normal search.
+ */
+async function onSearch() {
+    const code = scannedTerm(searchName.value, searchEAN.value);
+    if (code) {
+        const found = await findExactProduct(code).catch(() => null);
+        if (found) {
+            history.value = {
+                _id: found._id,
+                name: found.name,
+                unit: found.unit,
+                EAN: found.EAN,
+                reorderLevel: formatQuantity(reorderLevelOf(found), found.unit),
+            };
+            return;
+        }
+    }
+    applySearch();
+}
 
 const headers = [
     { key: 'history', title: 'History' },
@@ -250,30 +294,38 @@ interface InventoryListRow {
 
 const serverItems = ref<InventoryListRow[]>([]);
 
-const chips = computed<FilterChip[]>(() => {
-    const a = applied.value;
-    const out: FilterChip[] = [];
-    if (a.name) out.push({ key: 'name', label: `Name: ${a.name}` });
-    if (a.EAN) out.push({ key: 'EAN', label: `EAN: ${a.EAN}`, inPanel: true });
-    if (a.lowStock)
-        out.push({ key: 'lowStock', label: 'Low stock', inPanel: true });
-    return out;
-});
-/** Drops one applied filter; typed-but-unsearched text goes back first. */
-function removeFilter(key: string) {
-    searchName.value = key === 'name' ? '' : applied.value.name;
-    searchEAN.value = key === 'EAN' ? '' : applied.value.EAN;
-    if (key === 'lowStock') {
-        lowStock.value = false;
-        toggleLowStock();
-    } else applySearch();
-}
+/** Clear Filters is enabled while any filter or deep link is set (#215). */
+const filtersActive = computed(
+    () =>
+        !!(
+            searchName.value ||
+            searchEAN.value ||
+            lowStock.value ||
+            outOfStock.value ||
+            applied.value.name ||
+            applied.value.EAN ||
+            applied.value.lowStock ||
+            applied.value.outOfStock ||
+            route?.query.expiring === 'true'
+        ),
+);
 
 const resetFilters = () => {
     searchEAN.value = '';
     searchName.value = '';
     lowStock.value = false;
-    toggleLowStock();
+    outOfStock.value = false;
+    // The `?expiring=` deep link (dashboard) is cleared too, with its panel.
+    if (route?.query.expiring === 'true') showBatches.value = false;
+    applySearch();
+    void router.replace({
+        query: {
+            ...route?.query,
+            lowStock: undefined,
+            outOfStock: undefined,
+            expiring: undefined,
+        },
+    });
 };
 
 const {
@@ -289,6 +341,7 @@ const {
                 name: applied.value.name?.toUpperCase(),
                 EAN: applied.value.EAN,
                 lowStock: applied.value.lowStock || undefined,
+                outOfStock: applied.value.outOfStock || undefined,
             },
         }),
     (result) => {

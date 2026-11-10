@@ -1,5 +1,5 @@
-import { PaymentType, TenderType } from '@grocery-pos/contracts';
-import type { Receipt } from '@grocery-pos/contracts';
+import { DiscountType, PaymentType, TenderType } from '@grocery-pos/contracts';
+import type { Receipt, ReceiptDiscount } from '@grocery-pos/contracts';
 
 /** Characters of the sale id shown as its number on the receipt. */
 export const SALE_NUMBER_LENGTH = 8;
@@ -19,9 +19,18 @@ export function saleNumber(id: string | null | undefined): string {
  * Whether the receipt has a Change line: any sale with a cash tender, even
  * when the change is ₱0.00 (exact cash). A GCash-only sale gives none.
  */
-export function hasCashTender(receipt: Receipt): boolean {
+export function hasCashTender(
+    receipt: Pick<Receipt, 'paymentType' | 'tenders'>,
+): boolean {
     return (
         receipt.paymentType === PaymentType.CASH ||
         receipt.tenders.some((t) => t.type === TenderType.CASH)
     );
+}
+
+/** The discount's kind on a receipt: its percent, or "Fixed". */
+export function discountLabel(discount: ReceiptDiscount): string {
+    return discount.type === DiscountType.PERCENT
+        ? `${discount.value}%`
+        : 'Fixed';
 }

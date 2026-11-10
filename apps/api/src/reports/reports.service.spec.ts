@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import {
+    SALES_REPORT_RECONCILIATION_NOTES,
     SalesReportGroup,
     UnitOfMeasure,
     ReversalType,
@@ -229,6 +230,16 @@ describe('event-date sales reports', () => {
             lateOfflineTransactions: 1,
             lateOfflineNetSales: 202,
         });
+    });
+    it('sends the shared reconciliation notes joined as the note (#216)', async () => {
+        const report = await buildSalesReport(source(), query(), 'Asia/Manila');
+        expect(SALES_REPORT_RECONCILIATION_NOTES).toHaveLength(7);
+        expect(report.reconciliation.note).toBe(
+            SALES_REPORT_RECONCILIATION_NOTES.join(' '),
+        );
+        expect(report.reconciliation.note).toContain(
+            'Original shift Z-reads are immutable closing snapshots',
+        );
     });
     it('records void reversals separately and respects exclusive next midnight', async () => {
         const s = sale({

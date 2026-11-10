@@ -7,6 +7,7 @@ import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
 import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
+import { AxiosError, AxiosHeaders } from 'axios';
 
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -74,30 +75,29 @@ async function rowAction(label: string, row = 'milk') {
 
 const params = () => api.get.mock.calls.map(([, config]) => config?.params);
 
-describe('product list FilterBar (#171)', () => {
-    const chip = (label: string) =>
-        document.querySelector<HTMLButtonElement>(
-            `button[aria-label="Remove filter ${label}"]`,
-        );
+describe('product list FilterBar (#171, #215)', () => {
+    const clear = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
 
-    it('removes one chip with one load and never sends unsearched text', async () => {
+    it('shows no chips; Clear Filters is enabled only off the defaults and resets with one load', async () => {
         await mount();
+        expect(clear().disabled).toBe(true);
         await type('EAN / Barcode', '4006');
+        expect(clear().disabled).toBe(false);
         await type('Product Name', 'milk');
         await click('Search');
-        expect(chip('Name: milk')).not.toBeNull();
-        expect(chip('EAN: 4006')).not.toBeNull();
-        await type('Product Name', 'bread');
-        expect(chip('Name: bread')).toBeNull();
+        expect(document.querySelector('[data-chip]')).toBeNull();
         api.get.mockClear();
 
-        chip('EAN: 4006')!.click();
-        await flush();
+        await click('Clear Filters');
 
         expect(params()).toEqual([
-            expect.objectContaining({ page: 1, name: 'MILK', EAN: '' }),
+            expect.objectContaining({ page: 1, name: '', EAN: '' }),
         ]);
-        expect(field('Product Name').value).toBe('milk');
+        expect(field('Product Name').value).toBe('');
+        expect(clear().disabled).toBe(true);
     });
 });
 
@@ -518,5 +518,73 @@ describe('columns and row menu (#172)', () => {
         expect(api.patch).not.toHaveBeenCalled();
         await click('Cancel');
         await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    });
+});
+
+describe('product list scans (#214)', () => {
+    const SCAN = '4006381333931';
+    function answer(found: object | null) {
+        api.get.mockImplementation((url) =>
+            url === `/products/${SCAN}`
+                ? found
+                    ? Promise.resolve({ data: found })
+                    : Promise.reject(notFound())
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+    }
+    function notFound() {
+        return new AxiosError('x', '404', undefined, undefined, {
+            status: 404,
+            statusText: '',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: {},
+        });
+    }
+    const archived = {
+        _id: 'p1',
+        EAN: SCAN,
+        name: 'milk',
+        price: 5000,
+        isActive: false,
+    };
+    async function scanInto(label: string) {
+        await type(label, SCAN);
+        api.get.mockClear();
+        field(label).form!.requestSubmit();
+        await flush();
+    }
+
+    it('opens Edit for a product editor, archived too, without filtering', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        answer(archived);
+        await mount();
+        await scanInto('EAN / Barcode');
+        expect(document.body.textContent).toContain('Edit Product');
+        expect(params()[0]).toEqual({ includeArchived: true });
+        expect(params()).not.toContainEqual(
+            expect.objectContaining({ status: 'active' }),
+        );
+    });
+
+    it('opens Stock history for an Adjuster, from the name box too', async () => {
+        useAuthStore().user = { username: 'a', roles: [Role.Adjuster] };
+        answer(archived);
+        await mount();
+        await scanInto('Product Name');
+        expect(document.body.textContent).toContain('Stock history — milk');
+        expect(document.body.textContent).not.toContain('Edit Product');
+    });
+
+    it('falls back to the filtered search without one exact match', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        answer(null);
+        await mount();
+        await scanInto('EAN / Barcode');
+        expect(document.body.textContent).not.toContain('Edit Product');
+        expect(params()).toEqual([
+            { includeArchived: true },
+            expect.objectContaining({ page: 1, EAN: SCAN, status: 'active' }),
+        ]);
     });
 });

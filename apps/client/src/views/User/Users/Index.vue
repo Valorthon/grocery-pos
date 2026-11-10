@@ -11,15 +11,9 @@
                 v-model:search="searchName"
                 search-label="Search Name"
                 :maxlength="STRING_LIMITS.USERNAME"
-                :chips="
-                    applied.name
-                        ? [{ key: 'name', label: `Name: ${applied.name}` }]
-                        : []
-                "
+                :clearable="false"
                 class="px-5 py-4 border-b border-line"
                 @search="applySearch"
-                @remove="resetFilters"
-                @clear="resetFilters"
             />
 
             <BaseTable
@@ -93,6 +87,7 @@
     <BaseModal
         v-model="createModel"
         title="Add User"
+        scrollable
         max-width="28rem"
         :closable="!saving"
     >
@@ -157,6 +152,7 @@
     <BaseModal
         v-model="editModel"
         title="Edit User"
+        scrollable
         max-width="28rem"
         :closable="!saving"
     >
@@ -396,11 +392,6 @@ function toggleRole(list: Role[], role: Role, checked: boolean) {
         if (i > -1) list.splice(i, 1);
     }
 }
-
-const resetFilters = () => {
-    searchName.value = '';
-    applySearch();
-};
 
 const {
     loading,

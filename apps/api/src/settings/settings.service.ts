@@ -1,7 +1,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model } from 'mongoose';
-import { type StoreSettings } from '@grocery-pos/contracts';
+import {
+    SETTINGS_LIMITS,
+    type StoreSettings,
+    type StoreToday,
+} from '@grocery-pos/contracts';
+import { calendarDateInZone } from '../common/utils/timezone';
 import { Settings } from './settings.schema';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { ConflictError, ErrorCode, InternalError } from '../common/errors';
@@ -17,6 +22,8 @@ export function settingsView(row: Settings): StoreSettings {
         timezone: row.timezone,
         currency: row.currency,
         defaultReorderLevel: row.defaultReorderLevel,
+        expiryAlertDays:
+            row.expiryAlertDays ?? SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT,
         version: row.version,
     };
 }
@@ -44,6 +51,8 @@ export class SettingsService implements OnModuleInit {
                         timezone: this.config.get('STORE_TIMEZONE'),
                         currency: 'PHP',
                         defaultReorderLevel: 10,
+                        expiryAlertDays:
+                            SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT,
                         version: 0,
                         contextLock: 0,
                     },
@@ -68,6 +77,16 @@ export class SettingsService implements OnModuleInit {
         if (!row)
             throw new InternalError('Store settings have not initialized');
         return settingsView(row);
+    }
+    /** Today's store-calendar date, for client date presets (#215). */
+    async today(now: Date = new Date()): Promise<StoreToday> {
+        const timezone = await this.timezone();
+        const d = calendarDateInZone(now, timezone);
+        const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+        return {
+            today: `${pad(d.year, 4)}-${pad(d.month)}-${pad(d.day)}`,
+            timezone,
+        };
     }
     async timezone(session?: ClientSession): Promise<string> {
         return (await this.read(session)).timezone;

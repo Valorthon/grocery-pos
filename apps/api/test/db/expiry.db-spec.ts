@@ -576,3 +576,75 @@ it('prevents disabling after sell-to-zero so a later expired return cannot bypas
             .status,
     ).toBe(400);
 });
+it('keeps the dashboard expiring count equal to the Expiring list, archived products and the configured window included (#213)', async () => {
+    async function settingsVersion() {
+        return (
+            await read<{ version: number }>(
+                await db.call(admin, 'GET', '/settings'),
+            )
+        ).body.version;
+    }
+    async function setWindow(days: number) {
+        const result = await db.call(admin, 'PATCH', '/settings', {
+            version: await settingsVersion(),
+            expiryAlertDays: days,
+        });
+        expect(result.status).toBe(200);
+    }
+    async function figures() {
+        const dashboard = await read<{
+            expiringBatchCount: number;
+            expiryAlertDays: number;
+        }>(await db.call(admin, 'GET', '/dashboard'));
+        const list = await read<Paginated<InventoryBatchView>>(
+            await db.call(
+                restocker,
+                'GET',
+                '/inventories/expiring?page=1&limit=100',
+            ),
+        );
+        expect(dashboard.status).toBe(200);
+        expect(list.status).toBe(200);
+        expect(dashboard.body.expiringBatchCount).toBe(list.body.totalItems);
+        return {
+            count: list.body.totalItems,
+            days: dashboard.body.expiryAlertDays,
+        };
+    }
+    const kept = await product();
+    const archived = await product();
+    expect((await receive(kept, 2, day(1))).status).toBe(201);
+    expect((await receive(archived, 2, day(1))).status).toBe(201);
+    expect((await receive(kept, 2, day(20))).status).toBe(201);
+    const base = await figures();
+    expect(base.days).toBe(7);
+    await db
+        .model('Product')
+        .collection.updateOne(
+            { _id: new Types.ObjectId(archived) },
+            { $set: { isActive: false } },
+        );
+    expect((await figures()).count).toBe(base.count - 1);
+    await setWindow(30);
+    try {
+        expect((await figures()).days).toBe(30);
+        const own = await read<Paginated<InventoryBatchView>>(
+            await db.call(
+                restocker,
+                'GET',
+                `/inventories/expiring?product=${kept}&page=1&limit=100`,
+            ),
+        );
+        expect(own.body.totalItems).toBe(2);
+        const gone = await read<Paginated<InventoryBatchView>>(
+            await db.call(
+                restocker,
+                'GET',
+                `/inventories/expiring?product=${archived}&page=1&limit=100`,
+            ),
+        );
+        expect(gone.body.totalItems).toBe(0);
+    } finally {
+        await setWindow(7);
+    }
+});

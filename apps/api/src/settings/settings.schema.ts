@@ -33,6 +33,14 @@ export class Settings {
         validate: Number.isInteger,
     })
     defaultReorderLevel!: number;
+    /** Absent on rows saved before #213; read as the default. */
+    @Prop({
+        type: Number,
+        min: SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MIN,
+        max: SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MAX,
+        validate: Number.isInteger,
+    })
+    expiryAlertDays?: number;
     @Prop({
         type: Number,
         required: true,

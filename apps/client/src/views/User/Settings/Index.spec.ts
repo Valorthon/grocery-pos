@@ -173,3 +173,34 @@ it('loads the server version when the owner is set after mount (fresh page load,
         expect.objectContaining({ version: 4, storeName: 'Edited' }),
     );
 });
+it('edits the expiry alert window with the API bounds (#213)', async () => {
+    await mount();
+    const label = 'Expiry alert window (days)';
+    expect(field(label).value).toBe('7');
+    for (const bad of ['0', '91', '2.5', ' ']) {
+        input(label, bad);
+        await flush();
+        await click('Save store settings');
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(document.body.textContent).toContain(
+            'whole number of expiry alert days from 1 to 90',
+        );
+    }
+    vi.mocked(api.patch).mockResolvedValueOnce({
+        data: {
+            ...initialSettings,
+            storeName: 'Current Shop',
+            expiryAlertDays: 30,
+            version: 1,
+        },
+    });
+    input(label, '30');
+    await flush();
+    await click('Save store settings');
+    await flush();
+    expect(api.patch).toHaveBeenCalledWith(
+        '/settings',
+        expect.objectContaining({ version: 0, expiryAlertDays: 30 }),
+    );
+    expect(field(label).value).toBe('30');
+});

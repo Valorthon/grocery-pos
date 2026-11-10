@@ -14,6 +14,7 @@ export const initialSettings: StoreSettings = {
     timezone: 'Asia/Manila',
     currency: 'PHP',
     defaultReorderLevel: 10,
+    expiryAlertDays: SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT,
     version: 0,
 };
 export const storePresentation = shallowRef<StoreSettings>({
@@ -65,7 +66,8 @@ export function validSettings(value: unknown): value is StoreSettings {
         Number(row.version) < 0 ||
         !Number.isInteger(row.defaultReorderLevel) ||
         Number(row.defaultReorderLevel) < 0 ||
-        Number(row.defaultReorderLevel) > SETTINGS_LIMITS.REORDER_LEVEL
+        Number(row.defaultReorderLevel) > SETTINGS_LIMITS.REORDER_LEVEL ||
+        !validExpiryAlertDays(row.expiryAlertDays)
     )
         return false;
     try {
@@ -76,4 +78,12 @@ export function validSettings(value: unknown): value is StoreSettings {
     } catch {
         return false;
     }
+}
+/** Whole days, as the API's settings DTO accepts (#213). */
+export function validExpiryAlertDays(value: unknown): value is number {
+    return (
+        Number.isInteger(value) &&
+        Number(value) >= SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MIN &&
+        Number(value) <= SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_MAX
+    );
 }

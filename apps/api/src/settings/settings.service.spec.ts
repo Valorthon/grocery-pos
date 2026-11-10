@@ -80,6 +80,23 @@ describe('persistent settings', () => {
         lean.mockResolvedValueOnce(null);
         await expect(service.read()).rejects.toThrow('not initialized');
     });
+    it('reads a legacy row without an expiry alert window as 7 days (#213)', async () => {
+        const { service, lean } = harness();
+        expect((await service.read()).expiryAlertDays).toBe(7);
+        lean.mockResolvedValueOnce({ ...row, expiryAlertDays: 30 });
+        expect((await service.read()).expiryAlertDays).toBe(30);
+    });
+    it('initializes new stores with the default expiry alert window', async () => {
+        const { service, model } = harness();
+        await service.onModuleInit();
+        expect(model.updateOne).toHaveBeenCalledWith(
+            { key: 'store' },
+            {
+                $setOnInsert: expect.objectContaining({ expiryAlertDays: 7 }),
+            },
+            expect.anything(),
+        );
+    });
     it('serializes context establishment on the singleton inside the transaction', async () => {
         const { service, model, lean } = harness();
         const session = {} as ClientSession;
@@ -123,4 +140,21 @@ it('binds reads and timezone lookups to the supplied transaction snapshot', asyn
     await service.read(transaction);
     await service.timezone(transaction);
     expect(session).toHaveBeenCalledWith(transaction);
+});
+describe('store today (#215)', () => {
+    it('is the calendar date in the committed store timezone, not UTC', async () => {
+        const { service, lean } = harness();
+        lean.mockResolvedValue({ ...row, timezone: 'Asia/Manila' });
+        // 16:30 UTC on the 31st is 00:30 on Nov 1 in Manila.
+        await expect(
+            service.today(new Date('2026-10-31T16:30:00Z')),
+        ).resolves.toEqual({ today: '2026-11-01', timezone: 'Asia/Manila' });
+        lean.mockResolvedValue({ ...row, timezone: 'America/New_York' });
+        await expect(
+            service.today(new Date('2026-01-01T03:00:00Z')),
+        ).resolves.toEqual({
+            today: '2025-12-31',
+            timezone: 'America/New_York',
+        });
+    });
 });

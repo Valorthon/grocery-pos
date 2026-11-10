@@ -139,6 +139,20 @@ export class GetDto {
     @Trim()
     EAN!: string;
 }
+/**
+ * `GET /products/:EAN` options (#214). `includeArchived=true` returns an
+ * archived product too (the Products/Inventory scan-to-open); without it
+ * an archived product is still refused, as the register and drafts need.
+ */
+export class GetByBarcodeQueryDto {
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsBoolean()
+    @Transform(({ obj, key }) => {
+        const raw = (obj as Record<string, unknown>)[key];
+        return raw === 'true' ? true : raw === 'false' ? false : raw;
+    })
+    includeArchived?: boolean;
+}
 /** A product edit: at least one field, never an empty `$set` (issue #14). */
 @AtLeastOneOf(
     [

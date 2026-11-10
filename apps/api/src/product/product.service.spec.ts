@@ -658,3 +658,40 @@ describe('ProductService expiry tracking transitions', () => {
         expect(inventory.assertTrackingChange).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('ProductService.getByBarcode (#214)', () => {
+    const archived = { EAN: '12345670', name: 'milk', isActive: false };
+    function serviceFor(found: unknown) {
+        const model = {
+            findOne: jest.fn().mockReturnValue({
+                lean: () => Promise.resolve(found),
+            }),
+        };
+        return new ProductService(
+            {} as never,
+            model as never,
+            {} as never,
+            {} as never,
+            undefined,
+            {} as never,
+        );
+    }
+
+    it('refuses an archived product by default', async () => {
+        await expect(
+            serviceFor(archived).getByBarcode({ EAN: '12345670' }),
+        ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('returns an archived product with includeArchived', async () => {
+        await expect(
+            serviceFor(archived).getByBarcode({ EAN: '12345670' }, true),
+        ).resolves.toBe(archived);
+    });
+
+    it('still answers 404 for an unknown code', async () => {
+        await expect(
+            serviceFor(null).getByBarcode({ EAN: '12345670' }, true),
+        ).rejects.toMatchObject({ code: ErrorCode.PRODUCT_NOT_FOUND });
+    });
+});

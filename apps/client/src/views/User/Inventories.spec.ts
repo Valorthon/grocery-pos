@@ -9,6 +9,7 @@ import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import type { ApiGet } from '@/testing/api-mock';
 import Inventories from './Inventories.vue';
+import { AxiosError, AxiosHeaders } from 'axios';
 import RestockAdd from './Restock/Add.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), post: vi.fn() }));
 const nav = vi.hoisted(() => ({
@@ -283,54 +284,72 @@ describe('receipt-cost restock defaults', () => {
     });
 });
 
-describe('inventory FilterBar (#171)', () => {
-    it('removes the low-stock chip with one load and one route change', async () => {
+describe('inventory FilterBar (#171, #215)', () => {
+    const clearButton = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+    const listCalls = () =>
+        api.get.mock.calls.filter(([url]) => url === '/inventories');
+
+    it('Clear Filters drops the low-stock and expiring deep links with one load and one route change', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { lowStock: 'true', expiring: 'true', keep: 'x' },
+        });
+        // The batches panel the expiring link opens lists nothing here.
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve({
+                data:
+                    url === '/inventories'
+                        ? { data: rows(), totalItems: 2 }
+                        : { data: [], totalItems: 0 },
+            }),
+        );
         await mount();
+        expect(document.querySelector('[data-chip]')).toBeNull();
+        expect(clearButton().disabled).toBe(false);
+        expect(
+            document
+                .querySelector('[data-testid="deep-link-note"]')
+                ?.textContent?.replace(/\s+/g, ' '),
+        ).toContain('Showing batches expiring within 7 days');
         api.get.mockClear();
         nav.replace.mockClear();
 
-        document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label="Remove filter Low stock"]',
-            )!
-            .click();
+        clearButton().click();
         await flush();
         // The router then drops the query; its watcher must not reload.
-        route.query = {};
+        route.query = { keep: 'x' };
         await flush();
+        expect(
+            document.querySelector('[data-testid="deep-link-note"]'),
+        ).toBeNull();
 
-        expect(api.get).toHaveBeenCalledTimes(1);
-        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+        expect(listCalls()).toHaveLength(1);
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({
             page: 1,
             lowStock: undefined,
         });
         expect(nav.replace).toHaveBeenCalledTimes(1);
         expect(nav.replace).toHaveBeenCalledWith({
-            query: { lowStock: undefined },
+            query: {
+                keep: 'x',
+                lowStock: undefined,
+                outOfStock: undefined,
+                expiring: undefined,
+            },
         });
+        expect(field('Low stock').checked).toBe(false);
+        expect(clearButton().disabled).toBe(true);
     });
 
-    it('removes the name chip with one load, keeping the low-stock filter', async () => {
+    it('a typed name alone enables Clear Filters', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
         await mount();
+        expect(clearButton().disabled).toBe(true);
         await type('Product Name', 'rice');
-        field('Product Name').form!.requestSubmit();
-        await flush();
-        await type('Product Name', 'bread');
-        api.get.mockClear();
-
-        document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label="Remove filter Name: rice"]',
-            )!
-            .click();
-        await flush();
-
-        expect(api.get).toHaveBeenCalledTimes(1);
-        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
-            page: 1,
-            name: '',
-            lowStock: true,
-        });
+        expect(clearButton().disabled).toBe(false);
     });
 });
 
@@ -340,7 +359,7 @@ describe('low-stock frame (#159)', () => {
         queryTitle: { key: 'lowStock', value: 'true', title: 'Low stock' },
     };
 
-    it('titles the low-stock list and shows its FilterBar chip (#171)', async () => {
+    it('titles the low-stock list, ticks its filter and enables Clear (#215)', async () => {
         route = reactive({
             name: 'Inventories',
             query: { lowStock: 'true' },
@@ -350,27 +369,167 @@ describe('low-stock frame (#159)', () => {
         const h1s = document.querySelectorAll('h1');
         expect(h1s).toHaveLength(1);
         expect(h1s[0].textContent?.trim()).toBe('Low stock');
-        // The FilterBar chip replaced the header badge (#171).
         expect(
             document.querySelector('[data-testid="low-stock-chip"]'),
         ).toBeNull();
+        expect(field('Low stock').checked).toBe(true);
         expect(
-            document.querySelector(
-                'button[aria-label="Remove filter Low stock"]',
-            ),
-        ).not.toBeNull();
+            [...document.querySelectorAll('button')].find((b) =>
+                b.textContent?.includes('Clear Filters'),
+            )?.disabled,
+        ).toBe(false);
     });
 
-    it('shows plain Inventory without the chip', async () => {
+    it('shows plain Inventory with Clear disabled', async () => {
         route = reactive({ name: 'Inventories', query: {}, meta });
         await mount();
         expect(document.querySelector('h1')?.textContent?.trim()).toBe(
             'Inventory',
         );
+        expect(field('Low stock').checked).toBe(false);
         expect(
-            document.querySelector(
-                'button[aria-label="Remove filter Low stock"]',
-            ),
-        ).toBeNull();
+            [...document.querySelectorAll('button')].find((b) =>
+                b.textContent?.includes('Clear Filters'),
+            )?.disabled,
+        ).toBe(true);
+    });
+});
+
+describe('out-of-stock view (#212)', () => {
+    const meta = (): RouteMeta =>
+        appRouter.getRoutes().find((r) => r.name === 'Inventories')!.meta;
+
+    it('titles the list from the route and sends outOfStock', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+            meta: meta(),
+        });
+        await mount();
+        expect(document.querySelector('h1')?.textContent?.trim()).toBe(
+            'Out of stock',
+        );
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            outOfStock: true,
+            lowStock: undefined,
+        });
+        expect(field('Out of stock').checked).toBe(true);
+        expect(field('Low stock').checked).toBe(false);
+    });
+
+    it('offers Restock listed items and Create purchase order with reorder quantities', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+        });
+        await mount();
+        await click('Create purchase order');
+        expect(nav.push).toHaveBeenCalledWith({ name: 'PurchaseOrders' });
+        expect(
+            usePurchaseOrderPrefillStore()
+                .take()
+                .map((line) => line.name),
+        ).toEqual(['rice', 'bread']);
+        await click('Restock listed items');
+        expect(nav.push).toHaveBeenCalledWith({ name: 'Restocks/Add' });
+    });
+
+    it('offers no draft actions on the plain list', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(document.body.textContent).not.toContain('Restock listed items');
+        expect(document.body.textContent).not.toContain(
+            'Create purchase order',
+        );
+    });
+
+    it('turns Low stock off when Out of stock is picked, and back', async () => {
+        await mount(); // starts on ?lowStock=true
+        api.get.mockClear();
+        nav.replace.mockClear();
+        const out = field('Out of stock');
+        out.checked = true;
+        out.dispatchEvent(new Event('change'));
+        await flush();
+        expect(field('Low stock').checked).toBe(false);
+        expect(api.get).toHaveBeenCalledTimes(1);
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            outOfStock: true,
+            lowStock: undefined,
+        });
+        expect(nav.replace).toHaveBeenLastCalledWith({
+            query: { lowStock: undefined, outOfStock: 'true' },
+        });
+
+        route.query = { outOfStock: 'true' };
+        await flush();
+        api.get.mockClear();
+        const low = field('Low stock');
+        low.checked = true;
+        low.dispatchEvent(new Event('change'));
+        await flush();
+        expect(field('Out of stock').checked).toBe(false);
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            lowStock: true,
+            outOfStock: undefined,
+        });
+    });
+
+    it('Clear Filters drops the out-of-stock filter', async () => {
+        route = reactive({
+            name: 'Inventories',
+            query: { outOfStock: 'true' },
+        });
+        await mount();
+        api.get.mockClear();
+        await click('Clear Filters');
+        expect(api.get.mock.calls[0]?.[1]?.params).toMatchObject({
+            outOfStock: undefined,
+        });
+        expect(field('Out of stock').checked).toBe(false);
+    });
+});
+
+describe('inventory list scans (#214)', () => {
+    it('opens Stock history for one exact match, else searches', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        api.get.mockImplementation((url) =>
+            url === '/products/12345670'
+                ? Promise.resolve({
+                      data: {
+                          _id: 'bread',
+                          EAN: '12345670',
+                          name: 'bread',
+                          isActive: false,
+                      },
+                  })
+                : url.startsWith('/products/')
+                  ? Promise.reject(
+                        new AxiosError('x', '404', undefined, undefined, {
+                            status: 404,
+                            statusText: '',
+                            headers: {},
+                            config: { headers: new AxiosHeaders() },
+                            data: {},
+                        }),
+                    )
+                  : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        await type('EAN / Barcode', '12345670');
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        expect(document.body.textContent).toContain('Stock history — bread');
+        expect(
+            api.get.mock.calls.filter(([url]) => url === '/inventories'),
+        ).toHaveLength(1);
+        await type('EAN / Barcode', '4006381333931');
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        const calls = api.get.mock.calls;
+        const last = calls[calls.length - 1];
+        expect(last?.[0]).toBe('/inventories');
+        expect(last?.[1]?.params).toMatchObject({ EAN: '4006381333931' });
     });
 });

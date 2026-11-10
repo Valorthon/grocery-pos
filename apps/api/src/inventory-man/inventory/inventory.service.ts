@@ -59,9 +59,19 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
         // No preserveNullAndEmptyArrays: an orphan row (its product gone)
         // is dropped here, before both the count and the page.
         { $unwind: '$product' },
-        ...(dto.lowStock
+        ...(dto.outOfStock
             ? [
-                  reorderMatchStage(),
+                  {
+                      $match: {
+                          'product.isActive': { $ne: false },
+                          stock: { $lte: 0 },
+                      },
+                  },
+              ]
+            : []),
+        ...(dto.lowStock ? [reorderMatchStage()] : []),
+        ...(dto.lowStock || dto.outOfStock
+            ? [
                   {
                       $addFields: {
                           __reorderSeverity: {
@@ -120,13 +130,14 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
                 metadata: [{ $count: 'total' }],
                 data: [
                     {
-                        $sort: dto.lowStock
-                            ? {
-                                  __reorderSeverity: -1,
-                                  'product.name': 1,
-                                  _id: 1,
-                              }
-                            : { 'product.name': 1, _id: 1 },
+                        $sort:
+                            dto.lowStock || dto.outOfStock
+                                ? {
+                                      __reorderSeverity: -1,
+                                      'product.name': 1,
+                                      _id: 1,
+                                  }
+                                : { 'product.name': 1, _id: 1 },
                     },
                     { $project: { offlineShortfall: 0, __reorderSeverity: 0 } },
                     { $skip: (page - 1) * limit },

@@ -168,6 +168,32 @@ it('matches dashboard/list counts, includes zero/negative, excludes archived/orp
         lowStockCount: all.body.totalItems,
         outOfStockCount: 2,
     });
+    const out = await read<{
+        data: { product: ProductView }[];
+        totalItems: number;
+    }>(
+        await db.call(
+            admin,
+            'GET',
+            '/inventories?page=1&limit=100&outOfStock=true',
+        ),
+    );
+    expect(out.status).toBe(200);
+    // Archived (-100) and the orphan row (0) are excluded, as on the dashboard.
+    expect(out.body.totalItems).toBe(dashboard.body.outOfStockCount);
+    expect(out.body.data.map((row) => row.product._id)).toEqual([
+        highShortage,
+        zero,
+    ]);
+    expect(
+        (
+            await db.call(
+                admin,
+                'GET',
+                '/inventories?page=1&limit=100&outOfStock=maybe',
+            )
+        ).status,
+    ).toBe(400);
     const second = await read<{ data: { product: ProductView }[] }>(
         await db.call(
             admin,

@@ -15,6 +15,9 @@ import { useUIStore } from '@/stores/ui';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { field, flush, pickFirstMatch, type } from '@/testing/form-dom';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
+import { wedgeScan } from '@/testing/scanner';
+import { AxiosError, AxiosHeaders } from 'axios';
+import { ErrorCode } from '@grocery-pos/contracts';
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -379,7 +382,7 @@ describe('Purchase order list and receipts (#123)', () => {
         );
     });
 
-    it('removes the status chip with one request (#171)', async () => {
+    it('clears the status from its select with one request; no chips or Clear (#215)', async () => {
         api.get.mockImplementation((url: string) =>
             url === '/purchase-orders'
                 ? Promise.resolve({ data: { data: [order()], totalItems: 45 } })
@@ -389,12 +392,9 @@ describe('Purchase order list and receipts (#123)', () => {
         await choose('Status', PurchaseOrderStatus.SENT);
         api.get.mockClear();
 
-        document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label^="Remove filter Status:"]',
-            )!
-            .click();
-        await flush();
+        expect(document.querySelector('[data-chip]')).toBeNull();
+        expect(document.body.textContent).not.toContain('Clear Filters');
+        await choose('Status', '');
 
         expect(
             api.get.mock.calls.filter(([url]) => url === '/purchase-orders'),
@@ -525,5 +525,114 @@ describe('Purchase order references and draft warnings (#123)', () => {
             name: 'Restocks',
             query: { purchaseOrder: ID },
         });
+    });
+});
+
+describe('Purchase order scanning (#214)', () => {
+    const products: Record<string, unknown> = {
+        '4800000000017': {
+            _id: 'p1',
+            name: 'soap',
+            EAN: '4800000000017',
+            unit: UnitOfMeasure.PIECE,
+        },
+        '4800000000024': {
+            _id: 'p2',
+            name: 'rice',
+            EAN: '4800000000024',
+            unit: UnitOfMeasure.KG,
+        },
+    };
+    function archived() {
+        return new AxiosError('x', '400', undefined, undefined, {
+            status: 400,
+            statusText: '',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: {
+                statusCode: 400,
+                error: ErrorCode.VALIDATION_INVALID_INPUT,
+                message: 'Product discontinued',
+            },
+        });
+    }
+    beforeEach(() => {
+        const base = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url: string, config?: unknown) => {
+            const code = url.startsWith('/products/') ? url.slice(10) : null;
+            if (code === '4800000000031') return Promise.reject(archived());
+            if (code) return Promise.resolve({ data: products[code] });
+            return base(url, config) as Promise<unknown>;
+        });
+    });
+
+    it('adds a scanned piece as a line, then counts it up by one', async () => {
+        await mount();
+        await press('New purchase order');
+        wedgeScan('4800000000017');
+        await flush();
+        expect(input('Ordered quantity (pc) for soap').value).toBe('1');
+        wedgeScan('4800000000017');
+        await flush();
+        expect(input('Ordered quantity (pc) for soap').value).toBe('2');
+        expect(document.body.textContent).not.toContain('already on');
+    });
+
+    it('makes one line of 2 from two quick scans of a new product', async () => {
+        await mount();
+        await press('New purchase order');
+        const base = api.get.getMockImplementation()!;
+        const answers: (() => void)[] = [];
+        api.get.mockImplementation((url: string, config?: unknown) =>
+            url === '/products/4800000000017'
+                ? new Promise((resolve) =>
+                      answers.push(() =>
+                          resolve({ data: products[url.slice(10)] }),
+                      ),
+                  )
+                : (base(url, config) as Promise<unknown>),
+        );
+        wedgeScan('4800000000017');
+        wedgeScan('4800000000017');
+        await flush();
+        while (answers.length) {
+            answers.shift()!();
+            await flush();
+        }
+        await flush();
+        expect(
+            document.querySelectorAll('input[aria-label^="Ordered quantity"]'),
+        ).toHaveLength(1);
+        expect(input('Ordered quantity (pc) for soap').value).toBe('2');
+    });
+
+    it('focuses a measured line instead of counting it up', async () => {
+        await mount();
+        await press('New purchase order');
+        wedgeScan('4800000000024');
+        await flush();
+        const qty = input('Ordered quantity (kg) for rice');
+        expect(qty.value).toBe('');
+        expect(document.activeElement).toBe(qty);
+        qty.blur();
+        wedgeScan('4800000000024');
+        await flush();
+        expect(qty.value).toBe('');
+        expect(document.activeElement).toBe(qty);
+    });
+
+    it('refuses an archived product', async () => {
+        await mount();
+        await press('New purchase order');
+        wedgeScan('4800000000031');
+        await flush();
+        expect(useUIStore().toasts[0]?.lines).toEqual(['Product archived']);
+    });
+
+    it('ignores scans outside a draft', async () => {
+        await mount();
+        wedgeScan('4800000000017');
+        await flush();
+        expect(api.get).not.toHaveBeenCalledWith('/products/4800000000017');
     });
 });

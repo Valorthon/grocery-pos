@@ -8,7 +8,10 @@ import {
 import type { PurchaseOrderDraftLine } from '@/components/User/PurchaseOrder/purchase-order';
 import { useAuthStore } from './auth';
 
-/** Low-stock handoff into an unsaved PO draft (#123): in memory, consumed once. */
+/**
+ * Low-stock or out-of-stock list handoff (#123, #212) into an unsaved PO
+ * draft: in memory, consumed once.
+ */
 export const usePurchaseOrderPrefillStore = defineStore(
     'purchase-order-prefill',
     () => {

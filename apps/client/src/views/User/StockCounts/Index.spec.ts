@@ -14,6 +14,7 @@ import { useAuthStore } from '@/stores/auth';
 import { Color, useUIStore } from '@/stores/ui';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { field, flush, type } from '@/testing/form-dom';
+import { wedgeScan } from '@/testing/scanner';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 const routing = vi.hoisted(() => ({ guard: vi.fn() }));
@@ -335,6 +336,31 @@ describe('physical stock count workflow', () => {
         );
         await flush();
         expect(document.body.textContent).toContain('not in this count');
+    });
+    it('focuses a scanned line page-wide, the first uncounted batch first (#214)', async () => {
+        const second = '507f1f77bcf86cd799439014';
+        const base = count.lines[0];
+        count.lines = [
+            { ...base, tracksExpiry: true, batch: 'b1', batchNo: 'L7' },
+            { ...base, _id: second, tracksExpiry: true, batch: 'b2' },
+        ];
+        await mount();
+        await exact('Open count');
+        (document.activeElement as HTMLElement | null)?.blur();
+        wedgeScan('12345678', document.body);
+        await flush();
+        expect(document.activeElement?.id).toBe(`count-${line}`);
+        await enter('5');
+        (document.activeElement as HTMLElement).blur();
+        wedgeScan('12345670', document.body);
+        await flush();
+        expect(document.body.textContent).toContain(
+            'Barcode is not in this count scope.',
+        );
+        wedgeScan('12345678', document.body);
+        await flush();
+        expect(document.activeElement?.id).toBe(`count-${second}`);
+        expect(document.body.textContent).not.toContain('not in this count');
     });
     it('colours the variance by sign in a right-aligned numeric column (#169)', async () => {
         await mount();

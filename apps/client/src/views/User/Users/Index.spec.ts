@@ -306,7 +306,7 @@ describe('users search and create errors (issue #20 review)', () => {
         ]);
     });
 
-    it('removes the name chip with one request, and its form submits (#171)', async () => {
+    it('clears the name with the box (x) in one request, and its form submits (#171, #215)', async () => {
         api.get.mockResolvedValue({ data: USERS });
         await mount();
         expect(
@@ -316,10 +316,10 @@ describe('users search and create errors (issue #20 review)', () => {
         await click('Search');
         api.get.mockClear();
 
+        expect(document.querySelector('[data-chip]')).toBeNull();
+        expect(document.body.textContent).not.toContain('Clear Filters');
         document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label="Remove filter Name: Ana"]',
-            )!
+            .querySelector<HTMLButtonElement>('button[aria-label="Clear"]')!
             .click();
         await flush();
 
@@ -572,6 +572,14 @@ describe('renaming users (issue #106)', () => {
         expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
             ['User updated'],
         ]);
+    });
+
+    it('scrolls a tall Edit User body inside the dialog (#217)', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('ana');
+        const body = document.querySelector<HTMLElement>('[data-modal-body]')!;
+        expect(body.className).toContain('overflow-y-auto');
     });
 
     it('keeps the dialog and the typed name when the rename is cancelled', async () => {

@@ -14,11 +14,9 @@
             <FilterBar
                 v-model:search="searchName"
                 search-label="Product Name"
-                :chips="chips"
-                :initially-open="chips.some((chip) => chip.inPanel)"
+                :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
-                @search="applySearch"
-                @remove="removeFilter"
+                @search="onSearch"
                 @clear="resetFilters"
             >
                 <BaseInput
@@ -50,31 +48,21 @@
                     all-label="All categories"
                     @update:model-value="applySearch"
                 />
-                <p
-                    v-if="categoryError"
-                    role="alert"
-                    class="text-sm text-red-700"
-                >
-                    {{ categoryError }}
-                    <button
-                        type="button"
-                        class="min-h-11 underline"
-                        @click="refreshCategories"
-                    >
-                        Retry
-                    </button>
-                </p>
-                <div class="flex items-end">
-                    <BaseButton
-                        variant="outline"
-                        class="min-h-11"
-                        @click="resetFilters"
-                    >
-                        <X class="w-4 h-4" />
-                        Clear Filters
-                    </BaseButton>
-                </div>
             </FilterBar>
+            <p
+                v-if="categoryError"
+                role="alert"
+                class="px-5 py-3 text-sm text-red-700"
+            >
+                {{ categoryError }}
+                <button
+                    type="button"
+                    class="min-h-11 underline"
+                    @click="refreshCategories"
+                >
+                    Retry
+                </button>
+            </p>
 
             <BaseTable
                 v-model:page="page"
@@ -130,13 +118,13 @@
 
 <script setup lang="ts">
 import { useCategories } from '@/composables/useCategories';
+import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import ProductCostSummary from '@/components/User/Product/ProductCostSummary.vue';
 import { Role, unitLabel } from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Plus, X } from '@lucide/vue';
+import { Plus } from '@lucide/vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
-import type { FilterChip } from '@/components/ui/page-primitives';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
@@ -225,6 +213,25 @@ const { applied, apply: applySearch } = useAppliedFilters(
     search,
 );
 
+/**
+ * A scan (a barcode-shaped term + Enter) opens its one exact product,
+ * archived too: Edit for product editors, else Stock history (#214).
+ * Anything else, or no single exact match, is the normal search.
+ */
+async function onSearch() {
+    const code = scannedTerm(searchName.value, searchEAN.value);
+    if (code) {
+        const found = await findExactProduct(code).catch(() => null);
+        if (found) {
+            const row = { ...found, id: found._id };
+            if (canAddProducts.value) editing.value = row;
+            else history.value = row;
+            return;
+        }
+    }
+    applySearch();
+}
+
 // Name first, then Category and Price (#172). The list API returns no
 // stock, so Stock is not a column here (recorded on #172).
 const headers = [
@@ -269,37 +276,20 @@ interface ProductListRow extends ProductView {
 
 const serverItems = ref<ProductListRow[]>([]);
 
-const STATUS_LABELS: Record<string, string> = {
-    archived: 'Archived',
-    all: 'All',
-};
-const chips = computed<FilterChip[]>(() => {
-    const a = applied.value;
-    const out: FilterChip[] = [];
-    if (a.name) out.push({ key: 'name', label: `Name: ${a.name}` });
-    if (a.EAN) out.push({ key: 'EAN', label: `EAN: ${a.EAN}`, inPanel: true });
-    if (a.status && a.status !== 'active')
-        out.push({
-            key: 'status',
-            label: `Status: ${STATUS_LABELS[String(a.status)] ?? a.status}`,
-            inPanel: true,
-        });
-    if (a.category)
-        out.push({
-            key: 'category',
-            label: `Category: ${categories.value.find((row) => row._id === a.category)?.name ?? a.category}`,
-            inPanel: true,
-        });
-    return out;
-});
-/** Drops one applied filter; typed-but-unsearched text goes back first. */
-function removeFilter(key: string) {
-    searchName.value = key === 'name' ? '' : applied.value.name;
-    searchEAN.value = key === 'EAN' ? '' : applied.value.EAN;
-    if (key === 'status') status.value = 'active';
-    if (key === 'category') categoryFilter.value = null;
-    applySearch();
-}
+/** Clear Filters is enabled while any filter is off its default (#215). */
+const filtersActive = computed(
+    () =>
+        !!(
+            searchName.value ||
+            searchEAN.value ||
+            status.value !== 'active' ||
+            categoryFilter.value ||
+            applied.value.name ||
+            applied.value.EAN ||
+            applied.value.status !== 'active' ||
+            applied.value.category
+        ),
+);
 
 const resetFilters = () => {
     searchEAN.value = '';

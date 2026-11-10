@@ -18,6 +18,14 @@ describe('business audit field allowlist', () => {
             }),
         ).toEqual({ name: 'staff', roles: ['SELLER'], isActive: true });
     });
+    it('records the store expiry alert window on settings updates (#213)', () => {
+        expect(
+            auditFields(AuditAction.SETTINGS_UPDATED, {
+                expiryAlertDays: 14,
+                contextLock: 3,
+            }),
+        ).toEqual({ expiryAlertDays: 14 });
+    });
     it('records only the fact of a credential change', () => {
         expect(
             auditFields(AuditAction.USER_PASSWORD_RESET, {

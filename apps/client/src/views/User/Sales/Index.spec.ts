@@ -547,8 +547,11 @@ describe('sales-history applied filters and receipt identity', () => {
         document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
         await flush();
         expect(
-            document.querySelector('[data-testid="sale-full-id"]')?.textContent,
-        ).toContain('Sale #DEADBEEF · 0123456789abcdefdeadbeef');
+            document.querySelector('[data-testid="sale-number"]')?.textContent,
+        ).toContain('Sale #DEADBEEF');
+        expect(
+            document.querySelector('[data-testid="sale-full-id"]'),
+        ).toBeNull();
     });
     it('rejects malformed identity/date filters without replacing the current result', async () => {
         serve(CASH_SALE, []);
@@ -596,42 +599,49 @@ describe('sales-history applied filters and receipt identity', () => {
         await flush();
         expect(salesParams()).toEqual({ page: 1, limit: 5 });
     });
-    it('removes one chip with one request, despite a refused range or unsearched text (#171)', async () => {
+    it('a date preset loads page 1 once with the server today; an edit makes it Custom; Clear resets it (#215)', async () => {
         serve(CASH_SALE, []);
+        const original = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/settings/today'
+                ? Promise.resolve({
+                      data: { today: '2026-11-10', timezone: 'Asia/Manila' },
+                  })
+                : original(url, config),
+        );
         await history();
-        expect(
-            document
-                .querySelector('#sales-number')!
-                .closest('form[role="search"]')
-                ?.querySelector('button[type="submit"]'),
-        ).not.toBeNull();
-        input('sales-from', '2026-11-02', 'change');
-        const payment =
-            document.querySelector<HTMLSelectElement>('#sales-payment')!;
-        payment.value = PaymentType.CASH;
-        payment.dispatchEvent(new Event('change'));
-        await flush();
-        // A refused reversed To and typed-but-unsearched text.
-        input('sales-to', '2026-11-01', 'change');
-        input('sales-number', 'deadbeef');
-        await flush();
+        expect(document.querySelector('[data-chip]')).toBeNull();
+        expect(button('Filters')).toBeUndefined();
+        expect(button('Clear Filters')?.disabled).toBe(true);
         const count = () =>
             api.get.mock.calls.filter(([url]) => url === '/sales').length;
         const before = count();
+        const preset =
+            document.querySelector<HTMLSelectElement>('#sales-preset')!;
 
-        document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label="Remove filter Payment: CASH"]',
-            )!
-            .click();
+        preset.value = 'Today';
+        preset.dispatchEvent(new Event('change'));
         await flush();
 
         expect(count()).toBe(before + 1);
         expect(salesParams()).toEqual({
             page: 1,
             limit: 5,
-            dateFrom: '2026-11-02',
+            dateFrom: '2026-11-10',
+            dateTo: '2026-11-10',
         });
+        expect(button('Clear Filters')?.disabled).toBe(false);
+
+        input('sales-from', '2026-11-01', 'change');
+        await flush();
+        expect(preset.value).toBe('Custom');
+        expect(salesParams()).toMatchObject({ dateFrom: '2026-11-01' });
+
+        button('Clear Filters')!.click();
+        await flush();
+        expect(salesParams()).toEqual({ page: 1, limit: 5 });
+        expect(preset.value).not.toBe('Custom');
+        expect(button('Clear Filters')?.disabled).toBe(true);
     });
     it('uses managed cashier/category selectors for administrators', async () => {
         serve(CASH_SALE, []);
@@ -702,5 +712,301 @@ describe('page frame per layout (#159)', () => {
     it('leaves scrolling to the admin layout main', async () => {
         const classes = await rootClasses('SalesHistory');
         expect(classes).not.toContain('overflow-y-auto');
+    });
+});
+
+describe('sale details receipt (#218)', () => {
+    async function openSale(sale: object, open: object[] = []) {
+        serve(sale, open);
+        await mountAndOpen();
+    }
+    async function mountAndOpen() {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await flush();
+    }
+    const byTestId = (id: string) =>
+        document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const button = (text: string) =>
+        [...document.querySelectorAll<HTMLButtonElement>('button')].find(
+            (b) => b.textContent?.trim() === text,
+        );
+
+    const APPROVED = {
+        ...CASH_SALE,
+        discount: {
+            type: 'FIXED',
+            value: 5_000,
+            reason: 'loyal customer',
+            amount: 5_000,
+            approvedBy: 'u-boss',
+            approvedByName: 'maria',
+        },
+        status: SaleStatus.REFUNDED,
+        reversal: {
+            type: 'REFUND',
+            reason: 'returned',
+            approvedBy: 'u-sup',
+            approvedByName: 'sam',
+            at: '2026-09-25T02:00:00.000Z',
+            payoutShift: '0123456789abcdef12345678',
+            payoutAmount: 75_000,
+        },
+    };
+
+    it('hides the full ID behind a toggle, with Copy once shown', async () => {
+        const writeText = vi.fn().mockResolvedValue(undefined);
+        Object.defineProperty(navigator, 'clipboard', {
+            value: { writeText },
+            configurable: true,
+        });
+        await openSale({ ...CASH_SALE, _id: '0123456789abcdefdeadbeef' });
+
+        expect(byTestId('sale-number')?.textContent).toContain(
+            'Sale #DEADBEEF',
+        );
+        expect(byTestId('sale-full-id')).toBeNull();
+        expect(byTestId('sale-id-copy')).toBeNull();
+
+        byTestId('sale-id-toggle')!.click();
+        await flush();
+        expect(byTestId('sale-full-id')?.textContent).toBe(
+            '0123456789abcdefdeadbeef',
+        );
+        expect(byTestId('sale-id-toggle')?.textContent).toContain(
+            'Hide full ID',
+        );
+        byTestId('sale-id-copy')!.click();
+        await flush();
+        expect(writeText).toHaveBeenCalledWith('0123456789abcdefdeadbeef');
+    });
+
+    it('shows a zero Change for exact cash', async () => {
+        await openSale({
+            ...CASH_SALE,
+            tenders: [{ type: TenderType.CASH, amount: 80_000 }],
+            changeGiven: 0,
+        });
+        expect(byTestId('sale-change')?.textContent).toContain('0.00');
+    });
+
+    it('shows no Change for GCash only, and the reference to a seller', async () => {
+        useAuthStore().user = { username: 'ana', roles: [Role.Seller] };
+        await openSale({
+            ...CASH_SALE,
+            paymentType: PaymentType.GCASH,
+            tenders: [{ type: TenderType.GCASH, amount: 80_000 }],
+            changeGiven: 0,
+            referenceNumber: '1234567890123',
+        });
+        expect(byTestId('sale-change')).toBeNull();
+        expect(byTestId('sale-reference')?.textContent).toContain(
+            '1234567890123',
+        );
+    });
+
+    it('shows when an offline sale occurred and when it was recorded', async () => {
+        await openSale({
+            ...CASH_SALE,
+            offline: true,
+            soldAt: '2026-09-24T01:00:00.000Z',
+            stockShortfall: true,
+            lateOffline: true,
+        });
+        const date = byTestId('sale-detail-date')!;
+        expect(date.textContent).toContain('Occurred');
+        expect(date.querySelector('time')?.getAttribute('datetime')).toBe(
+            '2026-09-24T01:00:00.000Z',
+        );
+        expect(
+            byTestId('sale-detail-recorded')
+                ?.querySelector('time')
+                ?.getAttribute('datetime'),
+        ).toBe('2026-09-25T01:00:00.000Z');
+        expect(byTestId('sale-offline-notice')?.textContent).toContain(
+            'Stock shortfall',
+        );
+        expect(byTestId('sale-offline-notice')?.textContent).toContain(
+            'addendum',
+        );
+    });
+
+    it('lists lines compactly, measured quantities per unit', async () => {
+        serve(CASH_SALE, []);
+        const serveRest = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/sales/details/sale1'
+                ? Promise.resolve({
+                      data: [
+                          {
+                              _id: 'l1',
+                              product: { name: 'Rice' },
+                              quantity: 450,
+                              unit: 'KG',
+                              unitPrice: 18_000,
+                          },
+                      ],
+                  })
+                : serveRest(url, config),
+        );
+        await mountAndOpen();
+
+        const line = byTestId('sale-line')!;
+        expect(line.textContent).toContain('Rice');
+        expect(line.textContent).toContain('0.45');
+        expect(line.textContent).toContain('81.00');
+        expect(byTestId('details-table')?.querySelector('thead')).toBeNull();
+    });
+
+    it('shows approvers and the paying shift to an admin', async () => {
+        await openSale(APPROVED);
+        const facts = byTestId('sale-admin-facts')?.textContent ?? '';
+        expect(facts).toContain('Discount approved by');
+        expect(facts).toContain('maria');
+        expect(facts).toContain('Refund approved by');
+        expect(facts).toContain('sam');
+        expect(facts).toContain('#12345678');
+        expect(byTestId('sale-reversal')?.textContent).toContain('750.00');
+        expect(byTestId('sale-discount')?.textContent).toContain(
+            'loyal customer',
+        );
+    });
+
+    it('never shows approvers or the paying shift to a seller', async () => {
+        useAuthStore().user = { username: 'ana', roles: [Role.Seller] };
+        await openSale(APPROVED);
+        expect(byTestId('sale-admin-facts')).toBeNull();
+        expect(document.body.textContent).not.toContain('maria');
+        expect(byTestId('sale-reversal')?.textContent).toContain('returned');
+    });
+
+    it('swaps the receipt for the void panel, and Back keeps the inputs', async () => {
+        await openSale(CASH_SALE, [
+            openShift(OTHER_SHIFT, 'ben'),
+            openShift('shift-3', 'cy'),
+        ]);
+        button('Void sale')!.click();
+        await flush();
+        expect(byTestId('sale-receipt')).toBeNull();
+        expect(byTestId('reversal-panel')).not.toBeNull();
+        expect(byTestId('reversal-amount')?.textContent).toContain('800.00');
+        const confirm = byTestId('reversal-confirm') as HTMLButtonElement;
+        expect(confirm.disabled).toBe(true);
+        expect(confirm.className).toContain('disabled:bg-paper');
+
+        const reason =
+            document.querySelector<HTMLInputElement>('#reversal-reason')!;
+        reason.value = 'mis-ring';
+        reason.dispatchEvent(new Event('input'));
+        const select = document.querySelector<HTMLSelectElement>(
+            '[data-testid="payout-shift"] select',
+        )!;
+        select.value = OTHER_SHIFT;
+        select.dispatchEvent(new Event('change'));
+        await flush();
+
+        byTestId('reversal-back')!.click();
+        await flush();
+        expect(byTestId('reversal-panel')).toBeNull();
+        expect(byTestId('sale-receipt')).not.toBeNull();
+
+        button('Void sale')!.click();
+        await flush();
+        expect(
+            document.querySelector<HTMLInputElement>('#reversal-reason')!.value,
+        ).toBe('mis-ring');
+        expect(
+            document.querySelector<HTMLSelectElement>(
+                '[data-testid="payout-shift"] select',
+            )!.value,
+        ).toBe(OTHER_SHIFT);
+        expect(
+            (byTestId('reversal-confirm') as HTMLButtonElement).disabled,
+        ).toBe(false);
+
+        // Another type starts afresh.
+        byTestId('reversal-back')!.click();
+        await flush();
+        button('Refund sale')!.click();
+        await flush();
+        expect(
+            document.querySelector<HTMLInputElement>('#reversal-reason')!.value,
+        ).toBe('');
+    });
+
+    /** `/shifts` answers held until the test resolves them, in call order. */
+    function serveDeferredShifts(sales: object[]) {
+        const pending: ((open: object[]) => void)[] = [];
+        api.get.mockImplementation((url: string) => {
+            if (url === '/sales')
+                return Promise.resolve({
+                    data: { data: sales, totalItems: sales.length },
+                });
+            if (url === '/shifts')
+                return new Promise((resolve) =>
+                    pending.push((open) =>
+                        resolve({
+                            data: { data: open, totalItems: open.length },
+                        }),
+                    ),
+                );
+            return Promise.resolve({ data: [] });
+        });
+        return pending;
+    }
+
+    it('keeps only the latest open-shift answer, out of order', async () => {
+        const pending = serveDeferredShifts([CASH_SALE]);
+        await mountAndOpen();
+        button('Void sale')!.click();
+        await flush();
+        byTestId('reversal-back')!.click();
+        await flush();
+        button('Void sale')!.click();
+        await flush();
+
+        // The latest answer: the own shift is open.
+        pending[1]!([openShift(OWN_SHIFT, 'ana')]);
+        await flush();
+        expect(byTestId('payout-own-shift')).not.toBeNull();
+        // The stale one lands late and changes nothing.
+        pending[0]!([]);
+        await flush();
+        expect(byTestId('payout-own-shift')).not.toBeNull();
+        expect(byTestId('payout-no-open-shift')).toBeNull();
+    });
+
+    it('drops an open-shift answer for a sale switched away from', async () => {
+        const SALE_B = { ...CASH_SALE, _id: 'sale2', shift: undefined };
+        const pending = serveDeferredShifts([CASH_SALE, SALE_B]);
+        await mountAndOpen();
+        button('Void sale')!.click();
+        await flush();
+        button('Back')!.click();
+        await flush();
+        document
+            .querySelectorAll<HTMLElement>('tbody tr.cursor-pointer')[1]!
+            .click();
+        await flush();
+        button('Void sale')!.click();
+        await flush();
+        expect(byTestId('payout-loading')).not.toBeNull();
+
+        // The first sale's answer lands late: still loading for sale2.
+        pending[0]!([openShift(OWN_SHIFT, 'ana')]);
+        await flush();
+        expect(byTestId('payout-loading')).not.toBeNull();
+        expect(byTestId('payout-own-shift')).toBeNull();
+
+        pending[1]!([openShift(OTHER_SHIFT, 'ben')]);
+        await flush();
+        expect(
+            document.querySelector('[data-testid="payout-shift"] select'),
+        ).not.toBeNull();
     });
 });

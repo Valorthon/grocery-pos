@@ -33,6 +33,11 @@ describe('store settings boundaries', () => {
         { version: 0, defaultReorderLevel: null },
         { version: 0, defaultReorderLevel: 0.5 },
         { version: 0, defaultReorderLevel: SETTINGS_LIMITS.REORDER_LEVEL + 1 },
+        { version: 0, expiryAlertDays: null },
+        { version: 0, expiryAlertDays: 0 },
+        { version: 0, expiryAlertDays: 91 },
+        { version: 0, expiryAlertDays: 1.5 },
+        { version: 0, expiryAlertDays: '7' },
         { version: 0, receiptFooter: 'x'.repeat(SETTINGS_LIMITS.FOOTER + 1) },
     ])('rejects invalid patches %j', (body) => {
         expect(
@@ -49,6 +54,23 @@ describe('store settings boundaries', () => {
                 }),
             ),
         ).toEqual([]);
+    });
+    it.each([1, 7, 90])('accepts an expiry alert window of %i days', (days) =>
+        expect(
+            validateSync(
+                plainToInstance(UpdateSettingsDto, {
+                    version: 0,
+                    expiryAlertDays: days,
+                }),
+            ),
+        ).toEqual([]),
+    );
+    it('keeps the expiry alert bounds in contracts', () => {
+        expect(SETTINGS_LIMITS).toMatchObject({
+            EXPIRY_ALERT_DAYS_MIN: 1,
+            EXPIRY_ALERT_DAYS_MAX: 90,
+            EXPIRY_ALERT_DAYS_DEFAULT: 7,
+        });
     });
     it.each(['Asia/Manila', 'America/New_York', 'UTC'])(
         'accepts IANA %s',

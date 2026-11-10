@@ -97,21 +97,26 @@ export const RECEIPT_SHAPE: WireShape<Receipt> = {
 
 /** A sale's stored discount. */
 export interface SaleDiscountView extends ReceiptDiscount {
-    /** Who authorized it: today the cashier who rang the sale. */
-    approvedBy: string;
+    /** The ADMIN who approved it (#34); never sent to a non-admin (#218). */
+    approvedBy?: string;
+    /** The approver's name, in an ADMIN's `GET /sales` (#218). */
+    approvedByName?: string;
 }
 
 export const SALE_DISCOUNT_VIEW_SHAPE: WireShape<SaleDiscountView> = {
     ...RECEIPT_DISCOUNT_SHAPE,
-    approvedBy: 'required',
+    approvedBy: 'optional',
+    approvedByName: 'optional',
 };
 
 /** How a sale was voided or refunded. */
 export interface SaleReversalView {
     type: ReversalType;
     reason: string;
-    /** The ADMIN who reversed it. */
-    approvedBy: string;
+    /** The manager who approved it; never sent to a non-admin (#218). */
+    approvedBy?: string;
+    /** The approver's name, in an ADMIN's `GET /sales` (#218). */
+    approvedByName?: string;
     /** ISO timestamp. */
     at: string;
     /**
@@ -126,7 +131,8 @@ export interface SaleReversalView {
 export const SALE_REVERSAL_VIEW_SHAPE: WireShape<SaleReversalView> = {
     type: 'required',
     reason: 'required',
-    approvedBy: 'required',
+    approvedBy: 'optional',
+    approvedByName: 'optional',
     at: 'required',
     payoutShift: 'optional',
     payoutAmount: 'optional',

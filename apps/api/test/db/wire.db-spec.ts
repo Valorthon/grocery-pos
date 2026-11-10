@@ -67,6 +67,8 @@ import {
     SALE_ROW_SHAPE,
     SALE_VIEW_SHAPE,
     SHIFT_LIST_ITEM_SHAPE,
+    STORE_SETTINGS_SHAPE,
+    STORE_TODAY_SHAPE,
     TENDER_SHAPE,
     TenderType,
     USER_REF_SHAPE,
@@ -459,6 +461,21 @@ afterAll(async () => {
 
 // ---------------------------------------------------------------- shifts
 
+describe('settings', () => {
+    it('GET /settings and GET /settings/today match their shapes (#215)', async () => {
+        expectShape(
+            'GET /settings',
+            await get(seller, '/settings'),
+            STORE_SETTINGS_SHAPE,
+        );
+        for (const who of [seller, restocker, admin]) {
+            const body = await get(who, '/settings/today');
+            expectShape('GET /settings/today', body, STORE_TODAY_SHAPE);
+            expect(body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        }
+    });
+});
+
 describe('shifts', () => {
     it('POST /shifts and the drawer answer CurrentShiftView, every movement a DrawerMovementView', () => {
         expectShape('POST /shifts', seed.opened, CURRENT_SHIFT_VIEW_SHAPE);
@@ -621,6 +638,26 @@ describe('sales', () => {
             expect(
                 rows.filter((row) => row.reversal).length,
             ).toBeGreaterThanOrEqual(2);
+            // Approvers are ADMIN-only, named for the admin (#218). Every
+            // approver seeded here is a live user, so the name is present;
+            // a deleted approver would carry the id alone.
+            const parts = rows.flatMap(
+                (row) =>
+                    [row.discount, row.reversal].filter((part) => !!part) as {
+                        approvedBy?: unknown;
+                        approvedByName?: unknown;
+                    }[],
+            );
+            expect(parts.length).toBeGreaterThanOrEqual(2);
+            for (const part of parts) {
+                if (who() === admin) {
+                    expectId('approvedBy', part.approvedBy);
+                    expect(typeof part.approvedByName).toBe('string');
+                } else {
+                    expect(part).not.toHaveProperty('approvedBy');
+                    expect(part).not.toHaveProperty('approvedByName');
+                }
+            }
         },
     );
 

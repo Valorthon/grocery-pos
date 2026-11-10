@@ -32,7 +32,7 @@ VITE_APP_ENV=prod VITE_API_URL=https://api.ci-test.com VITE_DOMAIN=ci-test.com V
 CI runs the same steps (plus audit, depcheck and `pnpm licenses:check`) and
 passes on a clean checkout since #28, so a red run is a real failure. Lint is `--max-warnings 0`, and
 `test` enforces coverage thresholds (jest `coverageThreshold` in
-`apps/api/package.json`, vitest `thresholds` in the client and contracts
+`apps/api/jest.config.ts`, vitest `thresholds` in the client and contracts
 `vitest.config.ts`). Raise a threshold when coverage rises; never lower it.
 
 ## Workflow for issues under #31
@@ -332,6 +332,23 @@ requestId}`. A 5xx never carries details or internals.
   scanned; the rules are in contracts `barcode.ts`. Typed codes in the
   generated 200… range are refused.
 - A restock line needs exactly one of `newProduct` or `product`.
+- Scanners outside the register (#214, owner decisions 2026-11-10) are
+  keyboard wedges only, no camera. Products/Inventory searches: a
+  barcode-shaped term (`isBarcode`, check digit not enforced) + Enter
+  opens its exact product, archived too, via
+  `GET /products/:EAN?includeArchived=true` (same roles; without the flag
+  an archived product is still refused) (Products: Edit for RESTOCKER/ADMIN, else
+  Stock history; Inventory: Stock history), else the normal search.
+  Restock, adjustments, stock counts and the DRAFT PO editor capture scans
+  page-wide with `useBarcodeCapture` (digits at most 200 ms apart + Enter,
+  generous for slow Bluetooth wedges; not in
+  text/number/select fields, IME, key repeats or while a modal is open).
+  Restock/adjustment scans open the add dialog as a new line (archived is
+  refused; an unknown restock code opens a new product only if
+  `barcodeError` passes). The PO applies scans in order, adding a line or
+  +1 piece; a measured unit
+  focuses its quantity. Counts focus the first uncounted matching line.
+  Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via
   `common/utils/regex.ts` and `product/product-search.ts`.
 - `Inventory.updatedBy` means the last writer.
@@ -362,7 +379,10 @@ requestId}`. A 5xx never carries details or internals.
   void/refund net and original COGS. Do not restate prior sale dates. Existing
   dashboard original-sale-day exclusion remains visibly distinguished.
 - Store-calendar inclusive ranges cap at 366 days. Presets use server-provided
-  timezone/today; weeks start Monday. Group by day/product/category/cashier/payment
+  timezone/today; weeks start Monday. A preset applies at once; manual date
+  and Group by/Cashier/Payment/Category changes wait for Run report. Clear
+  Filters (beside Run report, at field height) resets to Today with day
+  grouping (#215). Group by day/product/category/cashier/payment
   type; SPLIT is a group, not allocated tenders. Mixed quantities stay per unit.
 - Allocate sale-level discounts by exact largest-remainder cents, stable detail
   order, before product/category filtering. Group transaction counts can overlap;
@@ -420,7 +440,8 @@ requestId}`. A 5xx never carries details or internals.
   Void/refund also allow SELLER for their own current-shift sales, with approval
   enforced inside the monetary transaction (#34). Contracts `PERMISSIONS` marks those rows `ownRoleOnly`,
   and `role-permissions.spec.ts` checks it against the metadata.
-- Dashboard money is ADMIN-only and stripped on the server. A cashier sees only
+- Dashboard money and today's sales count are ADMIN-only and stripped on the
+  server (#213). Total Products counts active products. A cashier sees only
   their own sales. Price changes are ADMIN-only.
 - Only RESTOCKER (and ADMIN) add or edit products (`POST /products/bulk`,
   `GET /products/ensureValid`, `PATCH /products`); ADJUSTER keeps stock
@@ -555,6 +576,22 @@ requestId}`. A 5xx never carries details or internals.
 - Text searches run on Enter, a Search button or clearing the box (×).
   Select and date filters apply on change. `BaseSelect`'s opt-in
   `allLabel` adds an "All" option that maps to `null`.
+- Filter bars (#215): `FilterBar` is one inline, wrapping row: the search
+  box with its Search button, the filters, then Clear Filters at the end
+  (no Filters toggle, panel or chips). Clear is enabled only while a filter
+  is entered, applied, a date preset or a deep link (Restock `?source=` and
+  `?purchaseOrder=`, Adjustments `?source=`, Inventory `?lowStock=`,
+  `?outOfStock=` and `?expiring=`), and clears those too. A deep link shows
+  a muted line above the table (`data-testid="deep-link-note"`), e.g.
+  "Showing receipts for PO-…" (owner-default assumption, reversible).
+  Purchase orders and Users have no Clear button.
+- Dated lists (Sales, Restock, Adjustments, Audit) have a "Dates" preset
+  select before From/To (`useDatePreset`, `Reports/presets.ts`): Today,
+  Yesterday, This week, Last week, This month, Last month, Last 30 days,
+  Custom; "All dates" (none) is the default. A pick reads the store date
+  from `GET /settings/today` (every role, `StoreToday`), fills both dates
+  and applies once on page 1; a manual edit switches to Custom; Clear
+  resets it. Weeks start Monday.
 - Requests read the last applied filters (`useAppliedFilters`, or the
   `applied` snapshot on restock/adjustment history), so paging, a page-size
   change and Retry never send typed-but-unsearched text.
@@ -886,7 +923,10 @@ on upstream fixes).
   aggregate Inventory.stock, including deficit/reconciliation balances. Batches
   and aggregate changes roll back together. Costing remains latest receipt (#41),
   not lot/FIFO valuation. Expiring view includes already-expired lots; dashboard
-  alerts count remaining lots expired or expiring within seven store days.
+  alerts count remaining lots expired or expiring within the store's
+  `expiryAlertDays` (Store settings, ADMIN, 1–90, default 7; a legacy row
+  reads 7). The tile and the Expiring list share one query and both skip
+  archived products (#213).
 
 **Stock movement ledger** (#45, owner decision 2026-11-05)
 
