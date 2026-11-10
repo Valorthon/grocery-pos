@@ -68,36 +68,5 @@
         "ts-node": "^10.9.2",
         "typescript": "^5.7.3",
         "typescript-eslint": "^8.20.0"
-    },
-    "jest": {
-        "moduleFileExtensions": [
-            "js",
-            "json",
-            "ts"
-        ],
-        "rootDir": "src",
-        "testRegex": ".*\\.spec\\.ts$",
-        "transform": {
-            "^.+\\.(t|j)s$": "ts-jest"
-        },
-        "collectCoverageFrom": [
-            "**/*.(t|j)s",
-            "!**/testing/**"
-        ],
-        "coverageDirectory": "../coverage",
-        "testEnvironment": "node",
-        "maxWorkers": "25%",
-        "coverageReporters": [
-            "text-summary",
-            "lcov"
-        ],
-        "coverageThreshold": {
-            "global": {
-                "statements": 97,
-                "branches": 85,
-                "functions": 96,
-                "lines": 97
-            }
-        }
     }
 }
