@@ -262,7 +262,7 @@
                                     <BaseButton
                                         variant="ghost"
                                         size="sm"
-                                        class="w-11 h-11 p-0"
+                                        class="w-11 h-11"
                                         aria-label="Copy full ID"
                                         title="Copy full ID"
                                         data-testid="sale-id-copy"
@@ -580,6 +580,7 @@
                         <template v-if="pendingReversal">
                             <BaseButton
                                 variant="outline"
+                                class="min-h-11"
                                 :disabled="reversing"
                                 data-testid="reversal-back"
                                 @click="backToReceipt"
@@ -587,7 +588,7 @@
                             >
                             <BaseButton
                                 variant="danger-solid"
-                                class="disabled:bg-paper disabled:text-muted disabled:border disabled:border-line-strong disabled:shadow-none"
+                                class="min-h-11 disabled:bg-paper disabled:text-muted disabled:border disabled:border-line-strong disabled:shadow-none"
                                 :loading="reversing"
                                 :disabled="!canConfirmReversal"
                                 data-testid="reversal-confirm"
@@ -606,20 +607,20 @@
                             >
                                 <BaseButton
                                     variant="danger"
-                                    class="border border-danger-border bg-danger-bg"
+                                    class="min-h-11 border border-danger-border bg-danger-bg"
                                     @click="startReversal(ReversalType.VOID)"
                                     >Void sale</BaseButton
                                 >
                                 <BaseButton
                                     variant="danger"
-                                    class="border border-danger-border bg-danger-bg"
+                                    class="min-h-11 border border-danger-border bg-danger-bg"
                                     @click="startReversal(ReversalType.REFUND)"
                                     >Refund sale</BaseButton
                                 >
                             </div>
                             <BaseButton
                                 variant="outline"
-                                class="sm:ml-auto"
+                                class="min-h-11 sm:ml-auto"
                                 data-testid="sale-close"
                                 @click="isDialogOpen = false"
                                 >Close</BaseButton
@@ -984,8 +985,6 @@ const adminFacts = computed(() => {
     }
     return facts;
 });
-
-/** The full id shows only on request (#218). */
 
 async function copyId() {
     try {

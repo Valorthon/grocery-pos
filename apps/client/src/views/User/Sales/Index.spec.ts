@@ -804,6 +804,8 @@ describe('sale details receipt (#218)', () => {
             b.textContent?.trim(),
         );
         expect(texts).toEqual(['Void sale', 'Refund sale', 'Close']);
+        for (const b of footer.querySelectorAll('button'))
+            expect(b.className).toContain('min-h-11');
         const actions = byTestId('sale-reverse-actions')!;
         for (const b of actions.querySelectorAll('button'))
             expect(b.className).toContain('text-danger');
