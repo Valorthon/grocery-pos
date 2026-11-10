@@ -119,9 +119,13 @@
                             :key="row.id ?? index"
                             :class="[
                                 'hover:bg-paper transition-colors',
-                                rowClick ? 'cursor-pointer' : '',
+                                rowClick ? 'cursor-pointer focus-ring' : '',
                             ]"
-                            @click="rowClick && emit('click:row', row)"
+                            :tabindex="rowClick ? 0 : undefined"
+                            :aria-describedby="rowClick ? rowHintId : undefined"
+                            :data-row-click="rowClick ? '' : undefined"
+                            @click="onRowClick($event, row)"
+                            @keydown="onRowKeydown($event, row)"
                         >
                             <component
                                 :is="header.rowHeader ? 'th' : 'td'"
@@ -155,6 +159,9 @@
                     <slot name="footer" />
                 </tfoot>
             </table>
+            <span v-if="rowClick" :id="rowHintId" class="sr-only">{{
+                rowHint
+            }}</span>
         </div>
 
         <!-- No pager beside an error: its page count is from the last load. -->
@@ -226,7 +233,15 @@ const props = withDefaults(
         caption?: string;
         emptyText?: string;
         emptyIcon?: Component;
+        /**
+         * Opt-in row activation (#234): the whole row is focusable and a
+         * click, Enter or Space on it emits `click:row`. Clicks and keys on
+         * inner buttons, links and fields never do. Keep the row's explicit
+         * open button too.
+         */
         rowClick?: boolean;
+        /** Screen-reader hint tied to each clickable row. */
+        rowHint?: string;
         itemsLength?: number;
         page?: number;
         itemsPerPage?: number;
@@ -239,6 +254,7 @@ const props = withDefaults(
         caption: '',
         emptyText: 'No data found',
         rowClick: false,
+        rowHint: 'Press Enter to open details',
         itemsLength: 0,
         page: 1,
         itemsPerPage: 5,
@@ -250,6 +266,33 @@ const props = withDefaults(
 
 // Ties the visible "Rows per page" label to its select (#142).
 const rowsPerPageId = useId();
+const rowHintId = useId();
+
+/** Buttons, links and fields inside a row keep their own action. */
+const INTERACTIVE =
+    'a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [contenteditable="true"]';
+
+function fromInnerControl(event: Event): boolean {
+    const target = event.target as Element | null;
+    const row = event.currentTarget as Element | null;
+    const hit = target?.closest?.(INTERACTIVE);
+    return !!hit && hit !== row && !!row?.contains(hit);
+}
+
+function onRowClick(event: MouseEvent, row: T) {
+    if (!props.rowClick || fromInnerControl(event)) return;
+    emit('click:row', row);
+}
+
+function onRowKeydown(event: KeyboardEvent, row: T) {
+    if (!props.rowClick) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    // Only the row itself: a focused inner control handles its own keys.
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    if (event.repeat) return;
+    emit('click:row', row);
+}
 
 const emit = defineEmits<{
     (e: 'update:page', value: number): void;

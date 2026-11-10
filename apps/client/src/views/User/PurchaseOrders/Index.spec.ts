@@ -182,6 +182,35 @@ describe('Purchase orders page (#123)', () => {
         );
     });
 
+    it('opens an order from its row by click, Enter or Space (#234)', async () => {
+        const receiveShown = () =>
+            [...document.querySelectorAll('button')].some(
+                (b) => b.textContent?.trim() === 'Receive',
+            );
+        await mount();
+        const row = () =>
+            document.querySelector<HTMLTableRowElement>('tbody tr')!;
+        expect(row().tabIndex).toBe(0);
+        expect(row().getAttribute('aria-describedby')).toBeTruthy();
+        expect(document.body.textContent).toContain(
+            'Press Enter to open the order',
+        );
+        expect(receiveShown()).toBe(false);
+        row().querySelector('td')!.click();
+        await flush();
+        expect(receiveShown()).toBe(true);
+        for (const key of ['Enter', ' ']) {
+            app?.unmount();
+            document.body.innerHTML = '';
+            await mount();
+            row().dispatchEvent(
+                new KeyboardEvent('keydown', { key, bubbles: true }),
+            );
+            await flush();
+            expect(receiveShown()).toBe(true);
+        }
+    });
+
     it('reuses the key only for an unchanged body and reloads after a 409', async () => {
         await mount();
         await press('Open');

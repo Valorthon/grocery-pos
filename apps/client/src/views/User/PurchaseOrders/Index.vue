@@ -34,6 +34,9 @@
                         :error="listError"
                         empty-text="No purchase orders"
                         :items-length="totalItems"
+                        row-click
+                        row-hint="Press Enter to open the order"
+                        @click:row="open"
                         @retry="load"
                     >
                         <template #cell-reference="{ item }">
