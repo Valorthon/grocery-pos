@@ -10,14 +10,14 @@
                 }}</BaseButton
             >
             <BaseButton
-                v-if="canRestock && applied.lowStock"
+                v-if="canRestock && (applied.lowStock || applied.outOfStock)"
                 size="sm"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
                 @click="createRestock"
                 >Restock listed items</BaseButton
             >
             <BaseButton
-                v-if="canRestock && applied.lowStock"
+                v-if="canRestock && (applied.lowStock || applied.outOfStock)"
                 size="sm"
                 variant="outline"
                 :disabled="loading || !!loadError || sourceRows.length === 0"
@@ -58,6 +58,15 @@
                         type="checkbox"
                         @change="toggleLowStock"
                     />Low stock</label
+                >
+                <label
+                    class="flex min-h-11 items-center gap-2 self-end text-sm"
+                    data-testid="out-of-stock-filter"
+                    ><input
+                        v-model="outOfStock"
+                        type="checkbox"
+                        @change="toggleOutOfStock"
+                    />Out of stock</label
                 >
                 <div class="flex items-end">
                     <BaseButton
@@ -167,6 +176,8 @@ const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
 const prefill = useRestockPrefillStore();
 const poPrefill = usePurchaseOrderPrefillStore();
 const lowStock = ref(route?.query.lowStock === 'true');
+// Low stock and out of stock are exclusive (#212); low stock wins a URL with both.
+const outOfStock = ref(!lowStock.value && route?.query.outOfStock === 'true');
 const sourceRows = ref<InventoryRow[]>([]);
 async function createRestock() {
     if (
@@ -190,21 +201,33 @@ async function createPurchaseOrder() {
     if (poPrefill.prepare(sourceRows.value))
         await router.push({ name: 'PurchaseOrders' });
 }
-function toggleLowStock() {
+/** Applies the stock filters and mirrors them in the URL. */
+function syncStockQuery() {
     applySearch();
     void router.replace({
         query: {
             ...route?.query,
             lowStock: lowStock.value ? 'true' : undefined,
+            outOfStock: outOfStock.value ? 'true' : undefined,
         },
     });
 }
+function toggleLowStock() {
+    if (lowStock.value) outOfStock.value = false;
+    syncStockQuery();
+}
+function toggleOutOfStock() {
+    if (outOfStock.value) lowStock.value = false;
+    syncStockQuery();
+}
 watch(
-    () => route?.query.lowStock,
-    (value) => {
-        const next = value === 'true';
-        if (lowStock.value !== next) {
-            lowStock.value = next;
+    () => [route?.query.lowStock, route?.query.outOfStock],
+    ([low, out]) => {
+        const nextLow = low === 'true';
+        const nextOut = !nextLow && out === 'true';
+        if (lowStock.value !== nextLow || outOfStock.value !== nextOut) {
+            lowStock.value = nextLow;
+            outOfStock.value = nextOut;
             applySearch();
         }
     },
@@ -219,6 +242,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
         name: searchName.value,
         EAN: searchEAN.value,
         lowStock: lowStock.value,
+        outOfStock: outOfStock.value,
     }),
     search,
 );
@@ -257,6 +281,8 @@ const chips = computed<FilterChip[]>(() => {
     if (a.EAN) out.push({ key: 'EAN', label: `EAN: ${a.EAN}`, inPanel: true });
     if (a.lowStock)
         out.push({ key: 'lowStock', label: 'Low stock', inPanel: true });
+    if (a.outOfStock)
+        out.push({ key: 'outOfStock', label: 'Out of stock', inPanel: true });
     return out;
 });
 /** Drops one applied filter; typed-but-unsearched text goes back first. */
@@ -265,7 +291,10 @@ function removeFilter(key: string) {
     searchEAN.value = key === 'EAN' ? '' : applied.value.EAN;
     if (key === 'lowStock') {
         lowStock.value = false;
-        toggleLowStock();
+        syncStockQuery();
+    } else if (key === 'outOfStock') {
+        outOfStock.value = false;
+        syncStockQuery();
     } else applySearch();
 }
 
@@ -273,7 +302,8 @@ const resetFilters = () => {
     searchEAN.value = '';
     searchName.value = '';
     lowStock.value = false;
-    toggleLowStock();
+    outOfStock.value = false;
+    syncStockQuery();
 };
 
 const {
@@ -289,6 +319,7 @@ const {
                 name: applied.value.name?.toUpperCase(),
                 EAN: applied.value.EAN,
                 lowStock: applied.value.lowStock || undefined,
+                outOfStock: applied.value.outOfStock || undefined,
             },
         }),
     (result) => {

@@ -909,6 +909,32 @@ describe('InventoryService.getAll (issue #14)', () => {
         expect(pipeline[0]).toEqual({ $match: { stock: { $lte: 0 } } });
     });
 
+    it('outOfStock keeps active products at or below zero after the product lookup, sorted by shortfall', () => {
+        const pipeline = inventoryListPipeline({ ...page, outOfStock: true });
+
+        const unwindAt = pipeline.findIndex((s) => '$unwind' in s);
+        const matchAt = pipeline.findIndex(
+            (s) =>
+                '$match' in s &&
+                JSON.stringify(s) ===
+                    JSON.stringify({
+                        $match: {
+                            'product.isActive': { $ne: false },
+                            stock: { $lte: 0 },
+                        },
+                    }),
+        );
+        expect(matchAt).toBeGreaterThan(unwindAt);
+        const facet = pipeline[pipeline.length - 1] as {
+            $facet: { data: { $sort?: unknown }[] };
+        };
+        expect(facet.$facet.data[0].$sort).toEqual({
+            __reorderSeverity: -1,
+            'product.name': 1,
+            _id: 1,
+        });
+    });
+
     it('has no stock filter when maxStock is absent', () => {
         const pipeline = inventoryListPipeline({ ...page });
 

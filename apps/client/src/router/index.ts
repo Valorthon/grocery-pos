@@ -152,11 +152,14 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Inventories.vue'),
                 meta: {
                     title: 'Inventory',
-                    queryTitle: {
-                        key: 'lowStock',
-                        value: 'true',
-                        title: 'Low stock',
-                    },
+                    queryTitle: [
+                        { key: 'lowStock', value: 'true', title: 'Low stock' },
+                        {
+                            key: 'outOfStock',
+                            value: 'true',
+                            title: 'Out of stock',
+                        },
+                    ],
                     roles: [Role.Restocker, Role.Adjuster, Role.Admin],
                 },
             },

@@ -24,6 +24,15 @@ export class GetAllDto {
     })
     lowStock?: boolean;
 
+    /** Active products at or below zero stock: the dashboard's Out of Stock count. */
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsBoolean()
+    @Transform(({ obj, key }) => {
+        const raw = (obj as Record<string, unknown>)[key];
+        return raw === 'true' ? true : raw === 'false' ? false : raw;
+    })
+    outOfStock?: boolean;
+
     /** Rows with stock at or below this; 0 lists what is out of stock. */
     @IsOptional()
     @IsInt()
