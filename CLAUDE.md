@@ -335,15 +335,18 @@ requestId}`. A 5xx never carries details or internals.
 - Scanners outside the register (#214, owner decisions 2026-11-10) are
   keyboard wedges only, no camera. Products/Inventory searches: a
   barcode-shaped term (`isBarcode`, check digit not enforced) + Enter
-  opens its one exact product, archived too, resolved through
-  `GET /products?status=all` (Products: Edit for RESTOCKER/ADMIN, else
+  opens its exact product, archived too, via
+  `GET /products/:EAN?includeArchived=true` (same roles; without the flag
+  an archived product is still refused) (Products: Edit for RESTOCKER/ADMIN, else
   Stock history; Inventory: Stock history), else the normal search.
   Restock, adjustments, stock counts and the DRAFT PO editor capture scans
-  page-wide with `useBarcodeCapture` (scanner-speed digits + Enter; not in
+  page-wide with `useBarcodeCapture` (digits at most 200 ms apart + Enter,
+  generous for slow Bluetooth wedges; not in
   text/number/select fields, IME, key repeats or while a modal is open).
   Restock/adjustment scans open the add dialog as a new line (archived is
   refused; an unknown restock code opens a new product only if
-  `barcodeError` passes). The PO adds a line or +1 piece; a measured unit
+  `barcodeError` passes). The PO applies scans in order, adding a line or
+  +1 piece; a measured unit
   focuses its quantity. Counts focus the first uncounted matching line.
   Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via

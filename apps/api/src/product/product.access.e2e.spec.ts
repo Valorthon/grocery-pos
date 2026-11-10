@@ -99,6 +99,13 @@ const ROUTES: Route[] = [
         body: { newProducts: [{ name: 'milk', price: 1999 }] },
         allowed: [Role.Restocker],
     },
+    {
+        // The list scan-to-open (#214): same roles as the plain lookup.
+        label: 'GET /products/:EAN?includeArchived=true',
+        method: 'GET',
+        path: `/products/${EAN}?includeArchived=true`,
+        allowed: [Role.Restocker, Role.Adjuster, Role.Seller],
+    },
 ];
 
 describe('Product route access by role (e2e)', () => {
@@ -415,10 +422,30 @@ describe('Product route access by role (e2e)', () => {
         const name = 'x'.repeat(STRING_LIMITS.PRODUCT_NAME + 1);
 
         const res = await call(
-            { ...ROUTES[0], path: `/products/matches?name=${name}` },
+            {
+                ...ROUTES[0],
+                path: `/products/matches?name=${name}`,
+            },
             [Role.Seller],
         );
 
         expect(res.status).toBe(400);
+    });
+
+    it('passes includeArchived to the lookup and refuses a bad value (#214)', async () => {
+        const lookup = ROUTES[ROUTES.length - 1];
+        service.getByBarcode.mockClear();
+        await call(lookup, [Role.Adjuster]);
+        expect(service.getByBarcode).toHaveBeenLastCalledWith({ EAN }, true);
+        await call({ ...lookup, path: `/products/${EAN}` }, [Role.Adjuster]);
+        expect(service.getByBarcode).toHaveBeenLastCalledWith(
+            { EAN },
+            undefined,
+        );
+        const bad = await call(
+            { ...lookup, path: `/products/${EAN}?includeArchived=yes` },
+            [Role.Adjuster],
+        );
+        expect(bad.status).toBe(400);
     });
 });

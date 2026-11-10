@@ -9,6 +9,7 @@ import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
 import type { ApiGet } from '@/testing/api-mock';
 import Inventories from './Inventories.vue';
+import { AxiosError, AxiosHeaders } from 'axios';
 import RestockAdd from './Restock/Add.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), post: vi.fn() }));
 const nav = vi.hoisted(() => ({
@@ -493,26 +494,27 @@ describe('out-of-stock view (#212)', () => {
 describe('inventory list scans (#214)', () => {
     it('opens Stock history for one exact match, else searches', async () => {
         route = reactive({ name: 'Inventories', query: {} });
-        api.get.mockImplementation((url, config) =>
-            Promise.resolve({
-                data:
-                    url === '/products'
-                        ? {
-                              data:
-                                  config?.params?.EAN === '12345670'
-                                      ? [
-                                            {
-                                                _id: 'bread',
-                                                EAN: '12345670',
-                                                name: 'bread',
-                                                isActive: false,
-                                            },
-                                        ]
-                                      : [],
-                              totalItems: 1,
-                          }
-                        : { data: [], totalItems: 0 },
-            }),
+        api.get.mockImplementation((url) =>
+            url === '/products/12345670'
+                ? Promise.resolve({
+                      data: {
+                          _id: 'bread',
+                          EAN: '12345670',
+                          name: 'bread',
+                          isActive: false,
+                      },
+                  })
+                : url.startsWith('/products/')
+                  ? Promise.reject(
+                        new AxiosError('x', '404', undefined, undefined, {
+                            status: 404,
+                            statusText: '',
+                            headers: {},
+                            config: { headers: new AxiosHeaders() },
+                            data: {},
+                        }),
+                    )
+                  : Promise.resolve({ data: { data: [], totalItems: 0 } }),
         );
         await mount();
         await type('EAN / Barcode', '12345670');

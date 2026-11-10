@@ -790,9 +790,15 @@ async function onScan(code: string) {
     void prefillCosts([line]);
     if (!piece) await focusQuantity(product._id);
 }
-useBarcodeCapture((code) => void onScan(code), {
-    enabled: () => isDraft.value && !busy.value,
-});
+// Scans apply one at a time, in order: two quick scans of a new product
+// make one line of 2, never two lines (#214 review).
+let scans: Promise<void> = Promise.resolve();
+useBarcodeCapture(
+    (code) => {
+        scans = scans.then(() => onScan(code));
+    },
+    { enabled: () => isDraft.value && !busy.value },
+);
 
 /** Known latest costs fill untouched lines only, never an edit (#41, #123). */
 async function prefillCosts(lines: PurchaseOrderDraftLine[]) {

@@ -7,6 +7,7 @@ import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
 import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
+import { AxiosError, AxiosHeaders } from 'axios';
 
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -522,15 +523,23 @@ describe('columns and row menu (#172)', () => {
 
 describe('product list scans (#214)', () => {
     const SCAN = '4006381333931';
-    function answer(rows: object[]) {
-        api.get.mockImplementation((url, config) =>
-            Promise.resolve({
-                data:
-                    url === '/products' && config?.params?.status === 'all'
-                        ? { data: rows, totalItems: rows.length }
-                        : { data: [], totalItems: 0 },
-            }),
+    function answer(found: object | null) {
+        api.get.mockImplementation((url) =>
+            url === `/products/${SCAN}`
+                ? found
+                    ? Promise.resolve({ data: found })
+                    : Promise.reject(notFound())
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
         );
+    }
+    function notFound() {
+        return new AxiosError('x', '404', undefined, undefined, {
+            status: 404,
+            statusText: '',
+            headers: {},
+            config: { headers: new AxiosHeaders() },
+            data: {},
+        });
     }
     const archived = {
         _id: 'p1',
@@ -548,16 +557,11 @@ describe('product list scans (#214)', () => {
 
     it('opens Edit for a product editor, archived too, without filtering', async () => {
         useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
-        answer([archived]);
+        answer(archived);
         await mount();
         await scanInto('EAN / Barcode');
         expect(document.body.textContent).toContain('Edit Product');
-        expect(params()[0]).toEqual({
-            EAN: SCAN,
-            status: 'all',
-            page: 1,
-            limit: 100,
-        });
+        expect(params()[0]).toEqual({ includeArchived: true });
         expect(params()).not.toContainEqual(
             expect.objectContaining({ status: 'active' }),
         );
@@ -565,7 +569,7 @@ describe('product list scans (#214)', () => {
 
     it('opens Stock history for an Adjuster, from the name box too', async () => {
         useAuthStore().user = { username: 'a', roles: [Role.Adjuster] };
-        answer([archived]);
+        answer(archived);
         await mount();
         await scanInto('Product Name');
         expect(document.body.textContent).toContain('Stock history — milk');
@@ -574,12 +578,12 @@ describe('product list scans (#214)', () => {
 
     it('falls back to the filtered search without one exact match', async () => {
         useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
-        answer([{ ...archived, EAN: `${SCAN}9` }]);
+        answer(null);
         await mount();
         await scanInto('EAN / Barcode');
         expect(document.body.textContent).not.toContain('Edit Product');
         expect(params()).toEqual([
-            { EAN: SCAN, status: 'all', page: 1, limit: 100 },
+            { includeArchived: true },
             expect.objectContaining({ page: 1, EAN: SCAN, status: 'active' }),
         ]);
     });

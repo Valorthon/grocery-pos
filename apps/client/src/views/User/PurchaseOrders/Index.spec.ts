@@ -578,6 +578,34 @@ describe('Purchase order scanning (#214)', () => {
         expect(document.body.textContent).not.toContain('already on');
     });
 
+    it('makes one line of 2 from two quick scans of a new product', async () => {
+        await mount();
+        await press('New purchase order');
+        const base = api.get.getMockImplementation()!;
+        const answers: (() => void)[] = [];
+        api.get.mockImplementation((url: string, config?: unknown) =>
+            url === '/products/4800000000017'
+                ? new Promise((resolve) =>
+                      answers.push(() =>
+                          resolve({ data: products[url.slice(10)] }),
+                      ),
+                  )
+                : (base(url, config) as Promise<unknown>),
+        );
+        wedgeScan('4800000000017');
+        wedgeScan('4800000000017');
+        await flush();
+        while (answers.length) {
+            answers.shift()!();
+            await flush();
+        }
+        await flush();
+        expect(
+            document.querySelectorAll('input[aria-label^="Ordered quantity"]'),
+        ).toHaveLength(1);
+        expect(input('Ordered quantity (pc) for soap').value).toBe('2');
+    });
+
     it('focuses a measured line instead of counting it up', async () => {
         await mount();
         await press('New purchase order');

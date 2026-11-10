@@ -136,22 +136,19 @@ describe('barcode lookups (#214)', () => {
         expect(scannedTerm('1234', '')).toBeNull();
     });
 
-    it('findExactProduct keeps only one exact match, any status', async () => {
-        const row = { _id: 'p1', EAN: '123456789012' };
-        api.get.mockResolvedValueOnce({
-            data: { data: [row, { _id: 'p2', EAN: '1234567890128' }] },
-        });
+    it('findExactProduct asks for the exact code, archived included', async () => {
+        const row = { _id: 'p1', EAN: '123456789012', isActive: false };
+        api.get.mockResolvedValueOnce({ data: row });
         await expect(findExactProduct('123456789012')).resolves.toBe(row);
-        expect(api.get).toHaveBeenCalledWith('/products', {
-            params: {
-                EAN: '123456789012',
-                status: 'all',
-                page: 1,
-                limit: 100,
-            },
+        expect(api.get).toHaveBeenCalledWith('/products/123456789012', {
+            params: { includeArchived: true },
         });
-        api.get.mockResolvedValueOnce({ data: { data: [] } });
+        api.get.mockRejectedValueOnce(
+            failure(404, ErrorCode.PRODUCT_NOT_FOUND),
+        );
         await expect(findExactProduct('12345670')).resolves.toBeNull();
+        api.get.mockRejectedValueOnce(failure(500, ErrorCode.INTERNAL_ERROR));
+        await expect(findExactProduct('12345670')).rejects.toBeTruthy();
     });
 
     it('lookupActiveBarcode tells found, archived and unknown apart', async () => {

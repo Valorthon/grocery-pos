@@ -1,10 +1,6 @@
 import { onBeforeUnmount, onMounted } from 'vue';
 import { isAxiosError } from 'axios';
-import {
-    ErrorCode,
-    type Paginated,
-    type ProductView,
-} from '@grocery-pos/contracts';
+import { ErrorCode, type ProductView } from '@grocery-pos/contracts';
 import api from '@/axios';
 import { anyModalOpen } from '@/components/ui/modal-stack';
 import { isBarcode } from '@/components/User/Sales/product-search';
@@ -16,7 +12,7 @@ import { isTextEntry } from './useRegisterShortcuts';
  * typing is far slower; Bluetooth wedges can be slow or bursty, so this is
  * generous.
  */
-export const SCAN_KEY_INTERVAL_MS = 120;
+export const SCAN_KEY_INTERVAL_MS = 200;
 
 export interface BarcodeCaptureOptions {
     /** Scans are ignored while this is false (e.g. a locked PO). */
@@ -130,18 +126,23 @@ export async function lookupActiveBarcode(code: string): Promise<ScanLookup> {
 }
 
 /**
- * The one product, active or archived, whose stored barcode is exactly
- * `code`, or null (issue #214). Lists show archived products, so this goes
- * through the list query (prefix, all statuses) and keeps exact matches.
+ * The product, active or archived, whose stored barcode is exactly `code`,
+ * or null when there is none (issue #214): `GET /products/:EAN` with
+ * `includeArchived=true`, since the lists show archived products.
  */
 export async function findExactProduct(
     code: string,
 ): Promise<ProductView | null> {
-    const { data } = await api.get<Paginated<ProductView>>('/products', {
-        params: { EAN: code, status: 'all', page: 1, limit: 100 },
-    });
-    const exact = data.data.filter((row) => row.EAN === code);
-    return exact.length === 1 ? exact[0] : null;
+    try {
+        const { data } = await api.get<ProductView>(
+            `/products/${encodeURIComponent(code)}`,
+            { params: { includeArchived: true } },
+        );
+        return data;
+    } catch (error) {
+        if (isAxiosError(error) && error.response?.status === 404) return null;
+        throw error;
+    }
 }
 
 /** The barcode-shaped term of a list search, or null (issue #214). */
