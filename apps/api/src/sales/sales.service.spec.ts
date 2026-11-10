@@ -5,6 +5,7 @@ import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { ClientSession, Types } from 'mongoose';
 import {
     CASHIER_HIDDEN_SALE_FIELDS,
+    withoutApprover,
     saleScope,
     salesListFilter,
     SalesService,
@@ -1168,6 +1169,35 @@ describe('SalesService.reverse', () => {
         );
     });
 
+    it('answers a cashier’s own void without the approvers (#218)', async () => {
+        const manager = new Types.ObjectId();
+        findOneAndUpdate.mockReturnValue(
+            chain({
+                _id: SALE,
+                status: SaleStatus.VOIDED,
+                discount: { reason: 'promo', approvedBy: manager },
+                reversal: {
+                    type: ReversalType.VOID,
+                    reason: 'x',
+                    approvedBy: manager,
+                },
+            }),
+        );
+        const seller: AuthUser = {
+            userId: '507f1f77bcf86cd799439002',
+            username: 'ana',
+            roles: [Role.Seller],
+        };
+
+        const sale = await service.reverse(seller, SALE, {
+            type: ReversalType.VOID,
+            reason: 'x',
+        });
+
+        expect(sale.reversal).toEqual({ type: ReversalType.VOID, reason: 'x' });
+        expect(sale.discount).toEqual({ reason: 'promo' });
+    });
+
     it('marks a refund as REFUNDED and also returns stock', async () => {
         findOneAndUpdate.mockReturnValue(
             chain({ _id: SALE, status: SaleStatus.REFUNDED }),
@@ -1406,8 +1436,11 @@ describe('Sales history scoping (issues #13, #2)', () => {
     let exists: jest.Mock;
     let detailsFind: jest.Mock;
     let openShiftIdOf: jest.Mock;
+    let historyConnection: { collection?: jest.Mock };
+    const moduleConnection = () => historyConnection;
 
     beforeEach(async () => {
+        historyConnection = {};
         const page = {
             sort: () => page,
             skip: () => page,
@@ -1433,7 +1466,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
                 },
                 SalesService,
                 MOCK_MANAGER_APPROVALS,
-                { provide: getConnectionToken(), useValue: {} },
+                { provide: getConnectionToken(), useValue: historyConnection },
                 {
                     provide: getModelToken(Sales.name),
                     useValue: {
@@ -1479,11 +1512,78 @@ describe('Sales history scoping (issues #13, #2)', () => {
         expect(estimatedDocumentCount).not.toHaveBeenCalled();
     });
 
-    it('hides who paid a reversal back, and how much, from a non-admin', () => {
+    it('hides who paid a reversal back, how much, and the approvers from a non-admin', () => {
         expect(CASHIER_HIDDEN_SALE_FIELDS).toEqual({
             'reversal.payoutShift': 0,
             'reversal.payoutAmount': 0,
+            'reversal.approvedBy': 0,
+            'discount.approvedBy': 0,
         });
+    });
+
+    it('drops the approver from a non-admin’s void/refund answer (#218)', () => {
+        const reversal = {
+            type: ReversalType.VOID,
+            reason: 'x',
+            approvedBy: 'm1',
+            at: 'now',
+        };
+        expect(withoutApprover(reversal)).toEqual({
+            type: ReversalType.VOID,
+            reason: 'x',
+            at: 'now',
+        });
+        expect(reversal.approvedBy).toBe('m1');
+    });
+
+    it('names the discount and reversal approvers for an admin (#218)', async () => {
+        const boss = new Types.ObjectId();
+        const gone = new Types.ObjectId();
+        const rows = [
+            {
+                discount: { approvedBy: boss },
+                reversal: { approvedBy: gone },
+            },
+            { discount: null },
+        ];
+        find.mockReturnValue({
+            sort: () => ({
+                skip: () => ({
+                    limit: () => ({
+                        populate: () => ({ lean: () => Promise.resolve(rows) }),
+                    }),
+                }),
+            }),
+        });
+        const toArray = jest
+            .fn()
+            .mockResolvedValue([{ _id: boss, name: 'maria' }]);
+        const usersFind = jest.fn(() => ({ toArray }));
+        const connection = moduleConnection();
+        connection.collection = jest.fn(() => ({ find: usersFind }));
+
+        const result = await service.getAll(ADMIN, { page: 1, limit: 10 });
+
+        expect(connection.collection).toHaveBeenCalledWith('users');
+        expect(usersFind).toHaveBeenCalledTimes(1);
+        expect(result.data[0]).toEqual({
+            discount: { approvedBy: boss, approvedByName: 'maria' },
+            reversal: { approvedBy: gone },
+        });
+    });
+
+    it('reads no users when no row on the page was approved', async () => {
+        const connection = moduleConnection();
+        connection.collection = jest.fn();
+        await service.getAll(ADMIN, { page: 1, limit: 10 });
+        expect(connection.collection).not.toHaveBeenCalled();
+    });
+
+    it('never looks approvers up for a non-admin', async () => {
+        const connection = moduleConnection();
+        connection.collection = jest.fn();
+        await service.getAll(SELLER, { page: 1, limit: 10 });
+        expect(connection.collection).not.toHaveBeenCalled();
     });
 
     it('never lists the idempotency key or request hash, to anyone (#27)', () => {
