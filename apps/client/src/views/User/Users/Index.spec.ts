@@ -574,6 +574,14 @@ describe('renaming users (issue #106)', () => {
         ]);
     });
 
+    it('scrolls a tall Edit User body inside the dialog (#217)', async () => {
+        api.get.mockResolvedValue({ data: ROWS });
+        await mount();
+        await editRow('ana');
+        const body = document.querySelector<HTMLElement>('[data-modal-body]')!;
+        expect(body.className).toContain('overflow-y-auto');
+    });
+
     it('keeps the dialog and the typed name when the rename is cancelled', async () => {
         api.get.mockResolvedValue({ data: ROWS });
         await mount();

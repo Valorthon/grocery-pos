@@ -83,6 +83,7 @@
                         </div>
 
                         <div
+                            data-modal-body
                             :class="[
                                 'p-4 sm:p-5',
                                 // min-h-0 lets the body shrink inside the capped

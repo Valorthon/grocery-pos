@@ -93,6 +93,7 @@
     <BaseModal
         v-model="createModel"
         title="Add User"
+        scrollable
         max-width="28rem"
         :closable="!saving"
     >
@@ -157,6 +158,7 @@
     <BaseModal
         v-model="editModel"
         title="Edit User"
+        scrollable
         max-width="28rem"
         :closable="!saving"
     >

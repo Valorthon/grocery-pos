@@ -402,10 +402,9 @@ describe('BaseModal tokens (#156)', () => {
 describe('scrollable BaseModal (#217)', () => {
     const parts = () => {
         const [dialog] = dialogs();
-        const save = byTestId('save');
-        const footer = save.parentElement!;
-        const body = byTestId('first').parentElement!;
-        const header = dialog.firstElementChild as HTMLElement;
+        const body = dialog.querySelector<HTMLElement>('[data-modal-body]')!;
+        const header = body.previousElementSibling as HTMLElement;
+        const footer = body.nextElementSibling as HTMLElement;
         return { dialog, header, body, footer };
     };
     const classes = (el: HTMLElement) => el.className.split(/\s+/);
