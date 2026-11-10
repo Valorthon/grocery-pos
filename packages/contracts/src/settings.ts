@@ -54,6 +54,16 @@ export const STORE_SETTINGS_SHAPE: WireShape<StoreSettings> = {
     version: 'required',
 };
 
+/** The store-calendar date now (`YYYY-MM-DD`) in the committed store timezone (#215). */
+export interface StoreToday {
+    today: string;
+    timezone: string;
+}
+export const STORE_TODAY_SHAPE: WireShape<StoreToday> = {
+    today: 'required',
+    timezone: 'required',
+};
+
 /** Identity captured for a receipt/report; not mutable store configuration. */
 export interface ReceiptStoreIdentity extends StoreIdentity {
     timezone: string;

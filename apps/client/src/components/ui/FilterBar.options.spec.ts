@@ -39,4 +39,9 @@ describe('FilterBar options (#171)', () => {
         );
         expect(hint?.textContent?.trim()).toBe('Exact name.');
     });
+
+    it('hides Clear Filters when not clearable (#215)', () => {
+        const host = mountBar({ clearable: false });
+        expect(host.textContent).not.toContain('Clear Filters');
+    });
 });

@@ -599,42 +599,49 @@ describe('sales-history applied filters and receipt identity', () => {
         await flush();
         expect(salesParams()).toEqual({ page: 1, limit: 5 });
     });
-    it('removes one chip with one request, despite a refused range or unsearched text (#171)', async () => {
+    it('a date preset loads page 1 once with the server today; an edit makes it Custom; Clear resets it (#215)', async () => {
         serve(CASH_SALE, []);
+        const original = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url, config) =>
+            url === '/settings/today'
+                ? Promise.resolve({
+                      data: { today: '2026-11-10', timezone: 'Asia/Manila' },
+                  })
+                : original(url, config),
+        );
         await history();
-        expect(
-            document
-                .querySelector('#sales-number')!
-                .closest('form[role="search"]')
-                ?.querySelector('button[type="submit"]'),
-        ).not.toBeNull();
-        input('sales-from', '2026-11-02', 'change');
-        const payment =
-            document.querySelector<HTMLSelectElement>('#sales-payment')!;
-        payment.value = PaymentType.CASH;
-        payment.dispatchEvent(new Event('change'));
-        await flush();
-        // A refused reversed To and typed-but-unsearched text.
-        input('sales-to', '2026-11-01', 'change');
-        input('sales-number', 'deadbeef');
-        await flush();
+        expect(document.querySelector('[data-chip]')).toBeNull();
+        expect(button('Filters')).toBeUndefined();
+        expect(button('Clear Filters')?.disabled).toBe(true);
         const count = () =>
             api.get.mock.calls.filter(([url]) => url === '/sales').length;
         const before = count();
+        const preset =
+            document.querySelector<HTMLSelectElement>('#sales-preset')!;
 
-        document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label="Remove filter Payment: CASH"]',
-            )!
-            .click();
+        preset.value = 'Today';
+        preset.dispatchEvent(new Event('change'));
         await flush();
 
         expect(count()).toBe(before + 1);
         expect(salesParams()).toEqual({
             page: 1,
             limit: 5,
-            dateFrom: '2026-11-02',
+            dateFrom: '2026-11-10',
+            dateTo: '2026-11-10',
         });
+        expect(button('Clear Filters')?.disabled).toBe(false);
+
+        input('sales-from', '2026-11-01', 'change');
+        await flush();
+        expect(preset.value).toBe('Custom');
+        expect(salesParams()).toMatchObject({ dateFrom: '2026-11-01' });
+
+        button('Clear Filters')!.click();
+        await flush();
+        expect(salesParams()).toEqual({ page: 1, limit: 5 });
+        expect(preset.value).not.toBe('Custom');
+        expect(button('Clear Filters')?.disabled).toBe(true);
     });
     it('uses managed cashier/category selectors for administrators', async () => {
         serve(CASH_SALE, []);

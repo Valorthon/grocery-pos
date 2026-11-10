@@ -37,11 +37,9 @@
             <FilterBar
                 v-model:search="searchName"
                 search-label="Product Name"
-                :chips="chips"
-                :initially-open="chips.some((chip) => chip.inPanel)"
+                :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
                 @search="applySearch"
-                @remove="removeFilter"
                 @clear="resetFilters"
             >
                 <BaseInput
@@ -68,17 +66,15 @@
                         @change="toggleOutOfStock"
                     />Out of stock</label
                 >
-                <div class="flex items-end">
-                    <BaseButton
-                        variant="outline"
-                        class="min-h-11"
-                        @click="resetFilters"
-                    >
-                        <X class="w-4 h-4" />
-                        Clear Filters
-                    </BaseButton>
-                </div>
             </FilterBar>
+            <p
+                v-if="route?.query.expiring === 'true'"
+                class="px-5 py-2 text-sm text-muted"
+                data-testid="deep-link-note"
+            >
+                Showing batches expiring within
+                {{ settingsStore.settings.expiryAlertDays }} days
+            </p>
             <BaseTable
                 v-model:page="page"
                 v-model:items-per-page="limit"
@@ -133,9 +129,9 @@ import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { Pencil, X } from '@lucide/vue';
+import { Pencil } from '@lucide/vue';
+import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
-import type { FilterChip } from '@/components/ui/page-primitives';
 import api from '@/axios';
 import { useAuthStore, Role } from '@/stores/auth';
 import { canOpenRoute, type RouteAccessMeta } from '@/router/access';
@@ -170,6 +166,7 @@ const canAdjust = computed(() =>
     ),
 );
 const route = useRoute();
+const settingsStore = useSettingsStore();
 const showBatches = ref(route?.query.expiring === 'true');
 const auth = useAuthStore();
 const canRestock = computed(() => auth.isAdmin || auth.hasRole(Role.Restocker));
@@ -274,36 +271,38 @@ interface InventoryListRow {
 
 const serverItems = ref<InventoryListRow[]>([]);
 
-const chips = computed<FilterChip[]>(() => {
-    const a = applied.value;
-    const out: FilterChip[] = [];
-    if (a.name) out.push({ key: 'name', label: `Name: ${a.name}` });
-    if (a.EAN) out.push({ key: 'EAN', label: `EAN: ${a.EAN}`, inPanel: true });
-    if (a.lowStock)
-        out.push({ key: 'lowStock', label: 'Low stock', inPanel: true });
-    if (a.outOfStock)
-        out.push({ key: 'outOfStock', label: 'Out of stock', inPanel: true });
-    return out;
-});
-/** Drops one applied filter; typed-but-unsearched text goes back first. */
-function removeFilter(key: string) {
-    searchName.value = key === 'name' ? '' : applied.value.name;
-    searchEAN.value = key === 'EAN' ? '' : applied.value.EAN;
-    if (key === 'lowStock') {
-        lowStock.value = false;
-        syncStockQuery();
-    } else if (key === 'outOfStock') {
-        outOfStock.value = false;
-        syncStockQuery();
-    } else applySearch();
-}
+/** Clear Filters is enabled while any filter or deep link is set (#215). */
+const filtersActive = computed(
+    () =>
+        !!(
+            searchName.value ||
+            searchEAN.value ||
+            lowStock.value ||
+            outOfStock.value ||
+            applied.value.name ||
+            applied.value.EAN ||
+            applied.value.lowStock ||
+            applied.value.outOfStock ||
+            route?.query.expiring === 'true'
+        ),
+);
 
 const resetFilters = () => {
     searchEAN.value = '';
     searchName.value = '';
     lowStock.value = false;
     outOfStock.value = false;
-    syncStockQuery();
+    // The `?expiring=` deep link (dashboard) is cleared too, with its panel.
+    if (route?.query.expiring === 'true') showBatches.value = false;
+    applySearch();
+    void router.replace({
+        query: {
+            ...route?.query,
+            lowStock: undefined,
+            outOfStock: undefined,
+            expiring: undefined,
+        },
+    });
 };
 
 const {

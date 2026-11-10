@@ -12,10 +12,8 @@
         <PageCard>
             <FilterBar
                 :searchable="false"
-                :chips="chips"
-                initially-open
+                :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
-                @remove="removeFilter"
                 @clear="resetFilters"
             >
                 <BaseSelect
@@ -25,12 +23,19 @@
                     all-label="All users"
                     @update:model-value="applyFilters"
                 />
+                <BaseSelect
+                    :model-value="datePreset"
+                    label="Dates"
+                    all-label="All dates"
+                    :options="DATE_PRESET_OPTIONS"
+                    @update:model-value="pickPreset"
+                />
                 <BaseInput
                     v-model="searchDateStart"
                     label="From"
                     type="date"
                     :max="searchDateEnd || undefined"
-                    @update:model-value="applyFilters"
+                    @update:model-value="editDate"
                 />
                 <BaseInput
                     v-model="searchDateEnd"
@@ -38,19 +43,16 @@
                     type="date"
                     :min="searchDateStart || undefined"
                     :error="rangeError"
-                    @update:model-value="applyFilters"
+                    @update:model-value="editDate"
                 />
-                <div class="flex items-end">
-                    <BaseButton
-                        variant="outline"
-                        class="min-h-11"
-                        @click="resetFilters"
-                    >
-                        <X class="w-4 h-4" />
-                        Clear Filters
-                    </BaseButton>
-                </div>
             </FilterBar>
+            <p
+                v-if="sourceId"
+                class="px-5 py-2 text-sm text-muted"
+                data-testid="deep-link-note"
+            >
+                Showing the adjustment from source {{ sourceId }}
+            </p>
 
             <BaseTable
                 v-model:page="page"
@@ -81,14 +83,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Pencil, X } from '@lucide/vue';
+import { Pencil } from '@lucide/vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
-import type { FilterChip } from '@/components/ui/page-primitives';
+import { useDatePreset } from '@/composables/useDatePreset';
+import {
+    DATE_PRESET_OPTIONS,
+    type DatePreset,
+} from '@/views/User/Reports/presets';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -183,55 +189,37 @@ const applyFilters = () => {
     search();
 };
 
-// Chips read the applied snapshot and the deep link, never the inputs.
-const chips = computed<FilterChip[]>(() => {
-    const a = applied.value;
-    const out: FilterChip[] = [];
-    if (a.adjustedBy)
-        out.push({
-            key: 'adjustedBy',
-            label: `Adjusted by: ${userOptions.value.find((o) => o.value === a.adjustedBy)?.label ?? a.adjustedBy}`,
-            inPanel: true,
-        });
-    if (a.dateFrom)
-        out.push({
-            key: 'dateFrom',
-            label: `From: ${a.dateFrom}`,
-            inPanel: true,
-        });
-    if (a.dateTo)
-        out.push({ key: 'dateTo', label: `To: ${a.dateTo}`, inPanel: true });
-    if (sourceId.value)
-        out.push({ key: 'source', label: `Source: ${sourceId.value}` });
-    return out;
-});
-
-/** Drops one applied filter with exactly one reload. */
-function removeFilter(key: string) {
-    if (key === 'source') {
-        // The route watcher performs the single reload.
-        void router.replace({
-            query: { ...router.currentRoute.value.query, source: undefined },
-        });
-        return;
-    }
-    // The inputs go back to the applied range first, so a reversed range
-    // still being typed never applies.
-    searchAdjustedBy.value = applied.value.adjustedBy ?? null;
-    searchDateStart.value = applied.value.dateFrom ?? '';
-    searchDateEnd.value = applied.value.dateTo ?? '';
-    if (key === 'adjustedBy') searchAdjustedBy.value = null;
-    if (key === 'dateFrom') searchDateStart.value = '';
-    if (key === 'dateTo') searchDateEnd.value = '';
-    applied.value = {
-        adjustedBy: searchAdjustedBy.value ?? undefined,
-        dateFrom: searchDateStart.value || undefined,
-        dateTo: searchDateEnd.value || undefined,
-    };
-    search();
+const {
+    preset: datePreset,
+    choose: choosePreset,
+    edited: presetEdited,
+    reset: resetPreset,
+} = useDatePreset(searchDateStart, searchDateEnd, applyFilters);
+/** A preset fills both dates, then applies once (#215). */
+function pickPreset(value: string | null) {
+    void choosePreset(value as DatePreset | null);
+}
+/** A manual date edit switches the preset to Custom and applies. */
+function editDate() {
+    presetEdited();
+    applyFilters();
 }
 
+/** Clear Filters is enabled while any filter, preset or deep link is set. */
+const filtersActive = computed(
+    () =>
+        !!(
+            searchAdjustedBy.value ||
+            searchDateStart.value ||
+            searchDateEnd.value ||
+            datePreset.value ||
+            Object.values(applied.value).some(Boolean) ||
+            sourceId.value
+        ),
+);
+
 const resetFilters = () => {
+    resetPreset();
     searchAdjustedBy.value = null;
     searchDateStart.value = '';
     searchDateEnd.value = '';

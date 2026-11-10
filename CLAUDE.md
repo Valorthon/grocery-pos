@@ -362,7 +362,10 @@ requestId}`. A 5xx never carries details or internals.
   void/refund net and original COGS. Do not restate prior sale dates. Existing
   dashboard original-sale-day exclusion remains visibly distinguished.
 - Store-calendar inclusive ranges cap at 366 days. Presets use server-provided
-  timezone/today; weeks start Monday. Group by day/product/category/cashier/payment
+  timezone/today; weeks start Monday. A preset applies at once; manual date
+  and Group by/Cashier/Payment/Category changes wait for Run report. Clear
+  Filters (beside Run report, at field height) resets to Today with day
+  grouping (#215). Group by day/product/category/cashier/payment
   type; SPLIT is a group, not allocated tenders. Mixed quantities stay per unit.
 - Allocate sale-level discounts by exact largest-remainder cents, stable detail
   order, before product/category filtering. Group transaction counts can overlap;
@@ -556,6 +559,22 @@ requestId}`. A 5xx never carries details or internals.
 - Text searches run on Enter, a Search button or clearing the box (×).
   Select and date filters apply on change. `BaseSelect`'s opt-in
   `allLabel` adds an "All" option that maps to `null`.
+- Filter bars (#215): `FilterBar` is one inline, wrapping row: the search
+  box with its Search button, the filters, then Clear Filters at the end
+  (no Filters toggle, panel or chips). Clear is enabled only while a filter
+  is entered, applied, a date preset or a deep link (Restock `?source=` and
+  `?purchaseOrder=`, Adjustments `?source=`, Inventory `?lowStock=`,
+  `?outOfStock=` and `?expiring=`), and clears those too. A deep link shows
+  a muted line above the table (`data-testid="deep-link-note"`), e.g.
+  "Showing receipts for PO-…" (owner-default assumption, reversible).
+  Purchase orders and Users have no Clear button.
+- Dated lists (Sales, Restock, Adjustments, Audit) have a "Dates" preset
+  select before From/To (`useDatePreset`, `Reports/presets.ts`): Today,
+  Yesterday, This week, Last week, This month, Last month, Last 30 days,
+  Custom; "All dates" (none) is the default. A pick reads the store date
+  from `GET /settings/today` (every role, `StoreToday`), fills both dates
+  and applies once on page 1; a manual edit switches to Custom; Clear
+  resets it. Weeks start Monday.
 - Requests read the last applied filters (`useAppliedFilters`, or the
   `applied` snapshot on restock/adjustment history), so paging, a page-size
   change and Retry never send typed-but-unsearched text.

@@ -379,7 +379,7 @@ describe('Purchase order list and receipts (#123)', () => {
         );
     });
 
-    it('removes the status chip with one request (#171)', async () => {
+    it('clears the status from its select with one request; no chips or Clear (#215)', async () => {
         api.get.mockImplementation((url: string) =>
             url === '/purchase-orders'
                 ? Promise.resolve({ data: { data: [order()], totalItems: 45 } })
@@ -389,12 +389,9 @@ describe('Purchase order list and receipts (#123)', () => {
         await choose('Status', PurchaseOrderStatus.SENT);
         api.get.mockClear();
 
-        document
-            .querySelector<HTMLButtonElement>(
-                'button[aria-label^="Remove filter Status:"]',
-            )!
-            .click();
-        await flush();
+        expect(document.querySelector('[data-chip]')).toBeNull();
+        expect(document.body.textContent).not.toContain('Clear Filters');
+        await choose('Status', '');
 
         expect(
             api.get.mock.calls.filter(([url]) => url === '/purchase-orders'),
