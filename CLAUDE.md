@@ -640,8 +640,9 @@ requestId}`. A 5xx never carries details or internals.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
 - Column help (#263): a `TableHeader` may carry `help` (text or
   `{term, meaning}[]`); BaseTable renders an ⓘ `InfoTooltip` (#258,
-  popover top layer, "About {title}", 44px with `-my-3`) after the title,
-  before it in right-aligned columns. Only non-obvious columns get help;
+  popover top layer, "About {title}", 44px with `-my-3`) after the title
+  in every column, right-aligned too (#272). An ⓘ always follows its
+  label/title, never precedes it. Only non-obvious columns get help;
   a status, type or role column lists every value. Texts live in `.ts`
   modules beside the badge maps (`purchase-order.ts`, `sale-status.ts`,
   `inventory-help.ts`, `stock-count-help.ts`, `Reports/column-help.ts`,
