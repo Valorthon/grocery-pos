@@ -188,7 +188,8 @@ Rules:
   Back to list and the state's actions sit in the page header (draft: Save
   draft, Mark as sent, Cancel order; SENT/PARTIAL: Receive, Cancel order;
   RECEIVED/CANCELLED: none). A draft has a Supplier/Note band, the Add
-  product row above the lines, an in-table "No lines yet" row and Expected
+  product row above the lines, a Line total column (`quantityAmount`), an
+  in-table "No lines yet" row and Expected
   total as the table footer. An existing order shows a #260-style heading
   (supplier, total), a muted meta line (created in store time, by, Closed
   short, View receipts) and the note when set.

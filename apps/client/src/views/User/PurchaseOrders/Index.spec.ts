@@ -30,6 +30,7 @@ vi.mock('vue-router', async (importOriginal) => ({
     ...(await importOriginal<typeof import('vue-router')>()),
     onBeforeRouteLeave: vi.fn(),
     useRouter: () => ({
+        resolve: () => ({ meta: { roles: ['ADMIN', 'RESTOCKER'] } }),
         push: nav.push,
         replace: nav.replace,
         currentRoute: nav.route,
@@ -746,6 +747,12 @@ describe('Purchase order scanning (#214)', () => {
 });
 
 describe('Purchase order editor layout and order view (#275)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+    afterEach(() => {
+        vi.useRealTimers();
+    });
     const h1 = () => document.querySelector('h1')?.textContent?.trim();
     const header = () => document.querySelector('header')!;
     const headerButtons = () =>
@@ -781,6 +788,7 @@ describe('Purchase order editor layout and order view (#275)', () => {
             'Product',
             'Ordered',
             'Expected cost',
+            'Line total',
             'Action',
         ]);
         expect(byId('po-no-lines')!.closest('tbody')).not.toBeNull();
@@ -859,5 +867,28 @@ describe('Purchase order editor layout and order view (#275)', () => {
         expect(byId('po-title-status')!.textContent).toContain('Cancelled');
         expect(headerButtons()).toEqual(['Back to list']);
         expect(byId('details-meta')!.textContent).toContain('Closed short');
+    });
+
+    it('totals a measured line exactly and puts Expected total under it', async () => {
+        await mount();
+        await press('New purchase order');
+        await addMilk();
+        costs({ data: [] });
+        await flush();
+        const lineCell = () =>
+            document.querySelector('[data-testid="po-line-total"]')!;
+        expect(lineCell().textContent?.trim()).toBe('—');
+        const qty = input('Ordered quantity (L) for milk');
+        qty.value = '0.45';
+        qty.dispatchEvent(new Event('input'));
+        const cost = input('Expected unit cost (₱/L) for milk');
+        cost.value = '180';
+        cost.dispatchEvent(new Event('input'));
+        await flush();
+        expect(lineCell().textContent).toContain('₱81.00');
+        const foot = document.querySelector('tfoot tr')!;
+        const label = foot.querySelector('th')!;
+        expect(label.getAttribute('colspan')).toBe('3');
+        expect(foot.querySelectorAll('td')[0]!.textContent).toContain('₱81.00');
     });
 });

@@ -261,6 +261,13 @@
                                     scope="col"
                                     :class="draftTable.thNum"
                                 >
+                                    Line total
+                                </th>
+                                <th
+                                    v-if="isDraft"
+                                    scope="col"
+                                    :class="draftTable.thNum"
+                                >
                                     Action
                                 </th>
                             </tr>
@@ -314,6 +321,16 @@
                                         :error="lineErrors[index]?.cost"
                                         :disabled="busy"
                                     />
+                                </td>
+                                <td
+                                    :class="draftTable.tdNum"
+                                    data-testid="po-line-total"
+                                >
+                                    {{
+                                        lineTotal(line) === null
+                                            ? '—'
+                                            : formatCurrency(lineTotal(line)!)
+                                    }}
                                 </td>
                                 <td :class="draftTable.tdActions">
                                     <BaseButton
@@ -376,7 +393,7 @@
                             <tr class="border-t border-line font-bold text-ink">
                                 <th
                                     scope="row"
-                                    :colspan="isDraft ? 2 : 4"
+                                    :colspan="isDraft ? 3 : 4"
                                     class="py-3 px-5 text-right"
                                 >
                                     Expected total
@@ -515,7 +532,7 @@ import {
     purchaseOrderReference,
     PURCHASE_ORDER_LIMITS,
     PurchaseOrderStatus,
-    Role,
+    quantityAmount,
     STRING_LIMITS,
     SUPPLIER_LIMITS,
     formatQuantity,
@@ -554,6 +571,7 @@ import type { Breadcrumb } from '@/components/ui/page-primitives';
 import { META_ITEM } from '@/components/User/details-meta';
 import { useAuthStore } from '@/stores/auth';
 import { formatStoreDateTime } from '@/utils/datetime';
+import { canOpenRoute, type RouteAccessMeta } from '@/router/access';
 import SupplierSelect from '@/components/User/Supplier/SupplierSelect.vue';
 import { zeroCostRequest } from '@/components/User/Restock/validation';
 import {
@@ -719,10 +737,19 @@ const pageTitle = computed(() =>
         : undefined,
 );
 const authStore = useAuthStore();
-/** Restock History's roles (router `Restocks`): ADMIN and RESTOCKER. */
-const canViewReceipts = computed(
-    () => authStore.hasRole(Role.Admin) || authStore.hasRole(Role.Restocker),
+// Offered only to whoever the router lets onto Restock History.
+const canViewReceipts = computed(() =>
+    canOpenRoute(
+        router.resolve({ name: 'Restocks' }).meta as RouteAccessMeta,
+        authStore.user?.roles ?? [],
+    ),
 );
+/** A draft line's total in centavos, or null while qty/cost are invalid. */
+function lineTotal(line: PurchaseOrderDraftLine): number | null {
+    const qty = parseQuantity(line.quantity, line.unit);
+    const cost = parsePesos(line.cost);
+    return qty && cost !== null ? quantityAmount(cost, qty, line.unit) : null;
+}
 const isOpen = computed(
     () =>
         !!current.value &&
