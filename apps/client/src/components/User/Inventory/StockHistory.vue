@@ -26,7 +26,7 @@
                     "
                 />
                 <StatTile
-                    label="Reorder level"
+                    label="Low stock at"
                     :value="reorderLevel || '—'"
                     :help="INVENTORY_HELP.reorderLevel"
                 />

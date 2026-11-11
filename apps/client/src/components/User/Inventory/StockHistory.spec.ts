@@ -175,7 +175,7 @@ it('applies a preset from the store date and Clear resets the range', async () =
 it('shows Current stock from the server, reorder level and EAN tiles', async () => {
     await mount({ ean: '4800000000017', reorderLevel: '10.000 kg' });
     expect(tile('Current stock')).toBe('1.550 kg');
-    expect(tile('Reorder level')).toBe('10.000 kg');
+    expect(tile('Low stock at')).toBe('10.000 kg');
     expect(tile('EAN')).toBe('4800000000017');
 });
 it('shows skeletons while the check loads', async () => {
@@ -264,7 +264,7 @@ it('opens the balances note by keyboard focus with aria-describedby', async () =
 it('explains the reorder level tile with the shared Inventory text (#271)', async () => {
     await mount();
     const button = document.querySelector<HTMLButtonElement>(
-        '[aria-label="About reorder level"]',
+        '[aria-label="About low stock at"]',
     )!;
     const tip = document.getElementById(
         button.getAttribute('aria-describedby')!,
@@ -290,7 +290,7 @@ it('keeps every tile label row one text line tall (#271)', async () => {
     for (const trigger of triggers)
         expect(trigger.parentElement!.classList).toContain('-my-3');
     // Each ⓘ directly follows its label (#271, #272).
-    for (const name of ['Ledger', 'Reorder level']) {
+    for (const name of ['Ledger', 'Low stock at']) {
         const label = [
             ...document.querySelectorAll(
                 '[data-testid="stock-history-tiles"] p',

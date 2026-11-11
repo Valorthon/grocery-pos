@@ -64,13 +64,13 @@ function labelled(text: string) {
 describe('EditProductDialog help notes (#273)', () => {
     it('reorder fields carry the shared notes after their labels', async () => {
         await mount();
-        const level = note('About reorder level');
-        const qty = note('About restock quantity');
+        const level = note('About low stock at');
+        const qty = note('About restock amount');
         expect(level.tip.textContent?.trim()).toBe(INVENTORY_HELP.reorderLevel);
         expect(qty.tip.textContent?.trim()).toBe(
             INVENTORY_HELP.reorderQuantity,
         );
-        const { label } = labelled('Reorder level');
+        const { label } = labelled('Low stock at');
         expect(
             label.compareDocumentPosition(level.button) &
                 Node.DOCUMENT_POSITION_FOLLOWING,
@@ -81,9 +81,9 @@ describe('EditProductDialog help notes (#273)', () => {
 
     it('the label is tied to its input; the note does not focus it', async () => {
         await mount();
-        const { label, input } = labelled('Restock quantity');
+        const { label, input } = labelled('Restock amount');
         expect(input.tagName).toBe('INPUT');
-        note('About restock quantity').button.click();
+        note('About restock amount').button.click();
         await flush();
         expect(document.activeElement).not.toBe(input);
         // jsdom doesn't run label activation; the for/id tie is what does.
@@ -93,7 +93,7 @@ describe('EditProductDialog help notes (#273)', () => {
 
     it('Escape closes only the note, not the dialog', async () => {
         await mount();
-        const { button, tip } = note('About reorder level');
+        const { button, tip } = note('About low stock at');
         button.focus();
         await flush();
         expect(tip.classList.contains('hidden')).toBe(false);

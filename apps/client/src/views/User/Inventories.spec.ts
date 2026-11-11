@@ -199,14 +199,14 @@ describe('reorder list and restock draft', () => {
         expect(ths.map((t) => headerText(t))).toEqual([
             'Product',
             'Stock',
-            'Reorder at',
+            'Low stock at',
             'Status',
             'History',
         ]);
         const th = (text: string) =>
-            ths.find((cell) => cell.textContent?.includes(text))!;
+            ths.find((cell) => headerText(cell) === text)!;
         const classes = (el: Element) => el.className.split(/\s+/);
-        expect(classes(th('Reorder at'))).toEqual(
+        expect(classes(th('Low stock at'))).toEqual(
             expect.arrayContaining(['hidden', 'md:table-cell']),
         );
         expect(classes(th('Status'))).toEqual(
@@ -215,7 +215,7 @@ describe('reorder list and restock draft', () => {
         for (const shown of ['Product', 'Stock', 'History'])
             expect(classes(th(shown))).not.toContain('hidden');
         expect(classes(th('Stock'))).toContain('text-right');
-        expect(classes(th('Reorder at'))).toContain('text-right');
+        expect(classes(th('Low stock at'))).toContain('text-right');
         const button = document.querySelector<HTMLElement>(
             '[data-testid="stock-history-button"]',
         )!;
@@ -232,7 +232,7 @@ describe('reorder list and restock draft', () => {
             '[data-testid="stock-history-tiles"]',
         );
         expect(product?.textContent).toContain('EAN4006381333931');
-        expect(tileValue('Reorder level')).toBe('9.000 kg');
+        expect(tileValue('Low stock at')).toBe('9.000 kg');
     });
     it('shows the EAN under the name, as typed, at every width (#232)', async () => {
         await mount();
