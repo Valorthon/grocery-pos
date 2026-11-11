@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { type App, createApp, h } from 'vue';
+import { type App, type VNode, createApp, h } from 'vue';
 import FilterBar from './FilterBar.vue';
+import SegmentedFilter from './SegmentedFilter.vue';
 
 let app: App | null = null;
 
@@ -11,11 +12,14 @@ afterEach(() => {
 });
 
 describe('FilterBar options (#171)', () => {
-    function mountBar(props: Record<string, unknown>) {
+    function mountBar(
+        props: Record<string, unknown>,
+        children: () => VNode[] = () => [h('select')],
+    ) {
         const host = document.createElement('div');
         document.body.appendChild(host);
         app = createApp({
-            render: () => h(FilterBar, props, () => h('select')),
+            render: () => h(FilterBar, props, children),
         });
         app.mount(host);
         return host;
@@ -43,5 +47,25 @@ describe('FilterBar options (#171)', () => {
     it('hides Clear Filters when not clearable (#215)', () => {
         const host = mountBar({ clearable: false });
         expect(host.textContent).not.toContain('Clear Filters');
+    });
+
+    it('caps a lone select at 16rem but not chips (#261)', () => {
+        const host = mountBar({ searchable: false }, () => [
+            h('select'),
+            h(SegmentedFilter, {
+                modelValue: 'a',
+                options: [{ value: 'a', label: 'A' }],
+                label: 'Pick',
+            }),
+        ]);
+        const wrapper = host.querySelector('select')!.parentElement!;
+        expect(wrapper.classList).toContain('*:max-w-64');
+        expect(wrapper.classList).toContain('*:data-segmented:max-w-none');
+        expect(
+            host.querySelector('select')!.hasAttribute('data-segmented'),
+        ).toBe(false);
+        expect(
+            host.querySelector('[role=group]')!.hasAttribute('data-segmented'),
+        ).toBe(true);
     });
 });

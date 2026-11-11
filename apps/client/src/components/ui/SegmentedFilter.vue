@@ -2,7 +2,8 @@
     <div
         role="group"
         :aria-label="label"
-        class="flex self-end rounded-control border border-line overflow-hidden"
+        data-segmented
+        class="flex flex-wrap self-end rounded-control border border-line overflow-hidden"
     >
         <button
             v-for="option in options"

@@ -94,7 +94,10 @@
                 <template #icon><SearchIcon :size="16" /></template>
                 Search
             </BaseButton>
-            <div class="contents *:min-w-40 *:flex-1 *:basis-40">
+            <!-- #261: inputs and selects stop at 16rem; chips keep their width. -->
+            <div
+                class="contents *:min-w-40 *:flex-1 *:basis-40 *:max-w-64 *:data-segmented:max-w-none"
+            >
                 <slot />
             </div>
             <BaseButton

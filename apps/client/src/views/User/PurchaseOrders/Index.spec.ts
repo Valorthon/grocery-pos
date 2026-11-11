@@ -328,6 +328,14 @@ async function choose(label: string, value: string) {
     select.dispatchEvent(new Event('change'));
     await flush();
 }
+/** Taps a status chip (#261). */
+async function chip(label: string) {
+    const button = [
+        ...document.querySelectorAll('[role=group][aria-label=Status] button'),
+    ].find((b) => b.textContent?.trim() === label) as HTMLButtonElement;
+    button.click();
+    await flush();
+}
 async function addMilk() {
     await type('Add product', 'milk');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
@@ -438,7 +446,12 @@ describe('Purchase order list and receipts (#123)', () => {
         expect(api.get).toHaveBeenLastCalledWith('/purchase-orders', {
             params: { page: 2, limit: 10 },
         });
-        await choose('Status', PurchaseOrderStatus.SENT);
+        await chip('Sent');
+        expect(
+            document
+                .querySelector('[aria-label=Status] [data-value=SENT]')!
+                .getAttribute('aria-pressed'),
+        ).toBe('true');
         expect(api.get).toHaveBeenLastCalledWith('/purchase-orders', {
             params: { page: 1, limit: 10, status: PurchaseOrderStatus.SENT },
         });
@@ -456,19 +469,37 @@ describe('Purchase order list and receipts (#123)', () => {
         );
     });
 
-    it('clears the status from its select with one request; no chips or Clear (#215)', async () => {
+    it('offers every status as a chip and All sends no status with one request; no Clear (#261)', async () => {
         api.get.mockImplementation((url: string) =>
             url === '/purchase-orders'
                 ? Promise.resolve({ data: { data: [order()], totalItems: 45 } })
                 : Promise.resolve({ data: [] }),
         );
         await mount();
-        await choose('Status', PurchaseOrderStatus.SENT);
+        expect(
+            [
+                ...document.querySelectorAll(
+                    '[role=group][aria-label=Status] button',
+                ),
+            ].map((b) => b.textContent?.trim()),
+        ).toEqual([
+            'All',
+            'Draft',
+            'Sent',
+            'Partially received',
+            'Received',
+            'Cancelled',
+        ]);
+        expect(
+            [...document.querySelectorAll('label')].some((l) =>
+                l.textContent?.includes('Status'),
+            ),
+        ).toBe(false);
+        await chip('Sent');
         api.get.mockClear();
 
-        expect(document.querySelector('[data-chip]')).toBeNull();
         expect(document.body.textContent).not.toContain('Clear Filters');
-        await choose('Status', '');
+        await chip('All');
 
         expect(
             api.get.mock.calls.filter(([url]) => url === '/purchase-orders'),

@@ -585,7 +585,13 @@ requestId}`. A 5xx never carries details or internals.
   `?outOfStock=` and `?expiring=`), and clears those too. A deep link shows
   a muted line above the table (`data-testid="deep-link-note"`), e.g.
   "Showing receipts for PO-…" (owner-default assumption, reversible).
-  Purchase orders and Users have no Clear button.
+  Purchase orders and Users have no Clear button. In the labelled row each
+  slotted input or select stops at `max-w-64` (16rem) and the search box is
+  uncapped; a `SegmentedFilter` (`data-segmented`) is exempt and wraps
+  (#261). Purchase orders filter status with `SegmentedFilter` chips (All ·
+  Draft · Sent · Partially received · Received · Cancelled, labels from
+  `STATUS_LABELS`, "All" is `''` and sends no status) inside the card,
+  with no FilterBar; a tap applies on page 1 with one load.
 - Compact filter rows (#254, owner decision 2026-11-11; supersedes #215's
   "no Filters toggle, panel or chips" on these screens): Sales, Adjustments,
   Restocks, Audit and Reports use `FilterBar compact`: one aligned row of
