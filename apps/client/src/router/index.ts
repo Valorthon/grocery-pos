@@ -98,7 +98,7 @@ const routes: RouteRecordRaw[] = [
                 meta: {
                     title: 'Audit log',
                     description:
-                        "Sensitive actions such as price changes, discounts and voids. Entries can't be edited or deleted.",
+                        "Sensitive actions such as price changes, discounts and voids. Entries can't be edited or deleted in the app.",
                     roles: [Role.Admin],
                 },
             },
@@ -170,7 +170,7 @@ const routes: RouteRecordRaw[] = [
                 meta: {
                     title: 'Product list',
                     description:
-                        'Look up products and their stock. Restockers edit names and categories; only an admin changes prices.',
+                        'Look up products and stock. Restockers edit, archive and set reorder levels; only an admin changes prices.',
                     roles: [Role.Restocker, Role.Adjuster, Role.Admin],
                 },
             },
@@ -221,7 +221,7 @@ const routes: RouteRecordRaw[] = [
                 meta: {
                     title: 'Restock history',
                     description:
-                        'Every delivery received from suppliers, with quantities, costs and invoice numbers.',
+                        'Every stock receipt, with supplier, quantities, costs and invoice numbers.',
                     roles: [Role.Restocker, Role.Admin],
                 },
             },

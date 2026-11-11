@@ -3,7 +3,7 @@
         <div class="space-y-4">
             <p class="text-sm">
                 Recorded from deployment onward; earlier actions are not
-                backfilled. Entries never expire.
+                backfilled. No automatic expiry is configured.
             </p>
             <FilterBar
                 v-model:search="username"
