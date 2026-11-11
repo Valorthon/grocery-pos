@@ -128,3 +128,13 @@ export function headerText(th: Element): string {
     copy.querySelectorAll('[role="tooltip"]').forEach((tip) => tip.remove());
     return copy.textContent?.trim() ?? '';
 }
+
+/** A stock history tile's value, found by its label text (#271). */
+export function tileValue(label: string): string | undefined {
+    return [
+        ...document.querySelectorAll('[data-testid="stock-history-tiles"] > *'),
+    ]
+        .find((el) => el.querySelector('p')?.textContent?.trim() === label)
+        ?.querySelector('.font-display')
+        ?.textContent?.trim();
+}

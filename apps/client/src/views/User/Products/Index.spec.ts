@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { click, field, flush, type, headerText } from '@/testing/form-dom';
+import {
+    click,
+    field,
+    flush,
+    type,
+    headerText,
+    tileValue,
+} from '@/testing/form-dom';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
@@ -584,8 +591,11 @@ describe('product list scans (#214)', () => {
             '[data-testid="stock-history-tiles"]',
         )!.textContent!;
         expect(tiles).toContain(`EAN${SCAN}`);
-        expect(tiles).toContain(
-            `Reorder level${formatQuantity(reorderLevelOf({ unit: UnitOfMeasure.PIECE }), UnitOfMeasure.PIECE)}`,
+        expect(tileValue('Reorder level')).toBe(
+            formatQuantity(
+                reorderLevelOf({ unit: UnitOfMeasure.PIECE }),
+                UnitOfMeasure.PIECE,
+            ),
         );
     });
 

@@ -99,4 +99,25 @@ describe('StatTile (#157)', () => {
         const plain = await mount({ label: 'Sales', value: 4 });
         expect(plain.querySelector('[data-tile-link]')).toBeNull();
     });
+    it('adds an About note after the label without a taller row (#271)', async () => {
+        const el = await mount({
+            label: 'Reorder level',
+            value: 5,
+            help: 'Note text.',
+        });
+        const button = el.querySelector<HTMLButtonElement>(
+            '[data-info-tooltip]',
+        )!;
+        expect(button.getAttribute('aria-label')).toBe('About reorder level');
+        expect(button.parentElement!.classList).toContain('-my-3');
+        expect(
+            document
+                .getElementById(button.getAttribute('aria-describedby')!)!
+                .textContent?.trim(),
+        ).toBe('Note text.');
+    });
+    it('has no note without help', async () => {
+        const el = await mount({ label: 'EAN', value: '1' });
+        expect(el.querySelector('[data-info-tooltip]')).toBeNull();
+    });
 });

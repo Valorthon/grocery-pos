@@ -19,12 +19,22 @@
             aria-hidden="true"
         />
         <div class="flex items-center justify-between gap-2">
-            <p class="text-xs font-semibold text-muted">
-                {{ label
-                }}<span v-if="tone !== 'neutral'" class="sr-only"
-                    >, {{ toneText }}</span
+            <div class="flex items-center gap-1">
+                <p class="text-xs font-semibold text-muted">
+                    {{ label
+                    }}<span v-if="tone !== 'neutral'" class="sr-only"
+                        >, {{ toneText }}</span
+                    >
+                </p>
+                <!-- -my-3 keeps the 44px trigger from making the label
+                     row taller than a text line (#271). -->
+                <InfoTooltip
+                    v-if="help"
+                    class="-my-3"
+                    :label="`About ${label.toLowerCase()}`"
+                    >{{ help }}</InfoTooltip
                 >
-            </p>
+            </div>
             <span v-if="$slots.icon" class="text-muted" aria-hidden="true">
                 <slot name="icon" />
             </span>
@@ -59,6 +69,7 @@
 import { computed } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import { ChevronRight } from '@lucide/vue';
+import InfoTooltip from './InfoTooltip.vue';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger';
 
@@ -87,6 +98,8 @@ const props = withDefaults(
         to?: RouteLocationRaw;
         /** Shows a skeleton in place of the value. */
         loading?: boolean;
+        /** An ⓘ note after the label (#271). */
+        help?: string;
     }>(),
     {
         value: '',
@@ -95,6 +108,7 @@ const props = withDefaults(
         toneLabel: undefined,
         to: undefined,
         loading: false,
+        help: undefined,
     },
 );
 

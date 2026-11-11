@@ -1010,7 +1010,9 @@ on upstream fixes).
   shows, Escape from anywhere closes only the tooltip (a prevented capture
   listener the modal stack ignores). Dates are `DateRangeFilter` + `useDatePreset` in a compact
   `FilterBar` (apply at once on page 1, Clear Filters resets); the API keeps
-  `from`/`to`.
+  `from`/`to`. The Reorder level tile has an ⓘ with the shared
+  `INVENTORY_HELP.reorderLevel` text via `StatTile`'s `help` prop; tile ⓘ
+  triggers carry `-my-3` so every label row is one text line tall (#271).
 
 **Store settings** (#47, owner decision 2026-11-05)
 
