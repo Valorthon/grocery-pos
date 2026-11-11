@@ -1,10 +1,16 @@
-import { INVENTORY_HELP } from '@/components/User/Inventory/inventory-help';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, reactive, type App } from 'vue';
 import type { RouteMeta, Router } from 'vue-router';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
-import { click, field, flush, type, headerText } from '@/testing/form-dom';
+import {
+    click,
+    field,
+    flush,
+    type,
+    headerText,
+    tileValue,
+} from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
@@ -226,9 +232,7 @@ describe('reorder list and restock draft', () => {
             '[data-testid="stock-history-tiles"]',
         );
         expect(product?.textContent).toContain('EAN4006381333931');
-        expect(product?.textContent).toContain(
-            `Reorder level${INVENTORY_HELP.reorderLevel}9`,
-        );
+        expect(tileValue('Reorder level')).toBe('9.000 kg');
     });
     it('shows the EAN under the name, as typed, at every width (#232)', async () => {
         await mount();

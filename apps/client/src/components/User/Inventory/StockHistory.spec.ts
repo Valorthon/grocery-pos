@@ -17,6 +17,7 @@ import {
     openDates,
     pick,
     headerText,
+    tileValue,
 } from '@/testing/form-dom';
 import StockHistory from './StockHistory.vue';
 import { INVENTORY_HELP } from './inventory-help';
@@ -115,11 +116,7 @@ async function setDate(label: string, value: string) {
 }
 const badge = () =>
     document.querySelector('[data-testid="ledger-badge"]')?.textContent?.trim();
-const tile = (label: string) =>
-    [...document.querySelectorAll('[data-testid="stock-history-tiles"] > *')]
-        .find((el) => el.querySelector('p')?.textContent?.trim() === label)
-        ?.querySelector('.font-display')
-        ?.textContent?.trim();
+const tile = tileValue;
 it('applies a date edit at once on page 1, retries applied filters and holds a reversed range', async () => {
     await mount();
     await click('Next');
@@ -292,6 +289,18 @@ it('keeps every tile label row one text line tall (#271)', async () => {
     expect(triggers).toHaveLength(2);
     for (const trigger of triggers)
         expect(trigger.parentElement!.classList).toContain('-my-3');
+    // Each ⓘ directly follows its label (#271, #272).
+    for (const name of ['Ledger', 'Reorder level']) {
+        const label = [
+            ...document.querySelectorAll(
+                '[data-testid="stock-history-tiles"] p',
+            ),
+        ].find((p) => p.textContent?.trim() === name)!;
+        expect(
+            label.nextElementSibling?.querySelector('[data-info-tooltip]'),
+        ).not.toBeNull();
+        expect(label.parentElement!.className).not.toContain('justify-between');
+    }
 });
 it('shows derived unattributed history and flags ledger mismatch', async () => {
     api.get.mockImplementation(async (url: string) =>

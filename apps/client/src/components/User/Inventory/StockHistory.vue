@@ -36,7 +36,7 @@
                     data-testid="ledger-status"
                     :aria-busy="checking ? 'true' : undefined"
                 >
-                    <div class="flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-1">
                         <p class="text-xs font-semibold text-muted">Ledger</p>
                         <InfoTooltip
                             class="-my-3"
