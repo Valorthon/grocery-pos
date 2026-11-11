@@ -234,6 +234,24 @@ it('starts the expiring list at the store expiry alert window (#213)', async () 
     store.setOwner(undefined);
 });
 
+it('notes the live store window behind "Expiring soon" (#247)', async () => {
+    const { useSettingsStore } = await import('@/stores/settings');
+    const store = useSettingsStore();
+    const original = store.settings;
+    store.settings = { ...original, expiryAlertDays: 14 };
+    await mount();
+    const note = () =>
+        document
+            .querySelector('[data-testid="expiring-soon-note"]')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim();
+    expect(note()).toBe('Expiring soon = within 14 days (store setting)');
+    store.settings = { ...store.settings, expiryAlertDays: 1 };
+    await flush();
+    expect(note()).toBe('Expiring soon = within 1 day (store setting)');
+    store.settings = original;
+});
+
 it('says no products track expiry instead of the filters and table (#233)', async () => {
     api.get.mockImplementation((url: string) =>
         Promise.resolve({

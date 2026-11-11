@@ -42,6 +42,10 @@
                     >All remaining batches</BaseButton
                 >
             </div>
+            <p data-testid="expiring-soon-note" class="text-xs text-muted">
+                Expiring soon = within {{ alertDays }}
+                {{ alertDays === 1 ? 'day' : 'days' }} (store setting)
+            </p>
             <p v-if="daysError" role="alert" class="text-sm text-danger-fg">
                 {{ daysError }}
             </p>
@@ -178,6 +182,8 @@ const headers: TableHeader[] = [
     { key: 'remaining', title: 'Remaining', align: 'right' },
     { key: 'action', title: 'Action', align: 'right' },
 ];
+/** Live store alert window behind the "Expiring soon" badge (#247). */
+const alertDays = computed(() => settings.settings.expiryAlertDays);
 type BatchStatus = 'expired' | 'soon' | 'ok' | 'check' | 'reconciliation';
 /** Expiring soon means within the store's alert window, like the dashboard (#213). */
 function batchStatus(batch: InventoryBatchView): BatchStatus {
