@@ -170,6 +170,12 @@ Rules:
   unchanged body after a lost answer, makes a new one after any edit or
   HTTP refusal, and reloads the PO after a 409. The list uses `BaseTable` +
   `useListPaging`/`useListFetch`/`useAppliedFilters`.
+- A DRAFT adds lines through an Add product button in the "Lines" card
+  header and in the empty table ("No products yet"), opening
+  `PurchaseOrder/AddLineDialog` (product, Ordered, Expected cost
+  prefilled from the latest receipt without overwriting a typed cost),
+  validated inline like the line rules (#284). Picking a product already
+  on the order edits that line (Edit line / Update), never a second one.
 - Low-stock list offers "Create purchase order" beside "Restock listed items"
   via a consume-once in-memory handoff (`purchaseOrderPrefill`) with reorder
   quantities; known latest costs fill untouched lines asynchronously.
@@ -355,9 +361,10 @@ requestId}`. A 5xx never carries details or internals.
   text/number/select fields, IME, key repeats or while a modal is open).
   Restock/adjustment scans open the add dialog as a new line (archived is
   refused; an unknown restock code opens a new product only if
-  `barcodeError` passes). The PO applies scans in order, adding a line or
-  +1 piece; a measured unit
-  focuses its quantity. Counts focus the first uncounted matching line.
+  `barcodeError` passes). The PO applies scans in order: a product not on
+  the order opens its Add product dialog with it picked (#284), a repeat
+  is +1 piece and a measured unit focuses its line's quantity; a scan
+  while the dialog is open is ignored. Counts focus the first uncounted matching line.
   Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via
   `common/utils/regex.ts` and `product/product-search.ts`.
