@@ -31,6 +31,7 @@
                     type="number"
                     :min="0"
                     :max="EXPIRY_LIMITS.DAYS_MAX"
+                    aria-describedby="expiring-soon-note"
                 />
                 <BaseButton :disabled="loading" @click="search"
                     >Show expiring</BaseButton
@@ -42,7 +43,11 @@
                     >All remaining batches</BaseButton
                 >
             </div>
-            <p data-testid="expiring-soon-note" class="text-xs text-muted">
+            <p
+                id="expiring-soon-note"
+                data-testid="expiring-soon-note"
+                class="text-xs text-muted"
+            >
                 Expiring soon = within {{ alertDays }}
                 {{ alertDays === 1 ? 'day' : 'days' }} (store setting)
             </p>
