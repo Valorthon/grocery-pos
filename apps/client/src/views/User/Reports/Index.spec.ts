@@ -7,7 +7,13 @@ import {
     type SalesReport,
     UnitOfMeasure,
 } from '@grocery-pos/contracts';
-import { click, flush, type } from '@/testing/form-dom';
+import {
+    click,
+    flush,
+    openDates,
+    openMoreFilters,
+    type,
+} from '@/testing/form-dom';
 import type { ApiGet } from '@/testing/api-mock';
 import Index from './Index.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
@@ -136,11 +142,11 @@ describe('event-date reports UI', () => {
                 ),
             ].map((o) => [o.textContent?.trim(), o.value]),
         ).toEqual([
-            ['Day', 'day'],
-            ['Product', 'product'],
-            ['Category', 'category'],
-            ['Cashier', 'cashier'],
-            ['Payment type', 'paymentType'],
+            ['Group by day', 'day'],
+            ['Group by product', 'product'],
+            ['Group by category', 'category'],
+            ['Group by cashier', 'cashier'],
+            ['Group by payment type', 'paymentType'],
         ]);
         expect(
             document.querySelector('[data-testid="report-applied"]')
@@ -151,6 +157,7 @@ describe('event-date reports UI', () => {
         expect(
             document.querySelector('svg[aria-label="Daily net sales trend"]'),
         ).not.toBeNull();
+        await openMoreFilters();
         expect(document.body.textContent).toContain('Frozen (archived)');
     });
     it('shows reconciliation figures as tiles, a closed explanation and a Shifts link (#216)', async () => {
@@ -233,6 +240,7 @@ describe('event-date reports UI', () => {
     });
     it('validates reversed, missing and oversized ranges without requests', async () => {
         await mount();
+        await openDates();
         const count = api.get.mock.calls.filter(
             ([url]) => url === '/reports/sales',
         ).length;
@@ -253,6 +261,7 @@ describe('event-date reports UI', () => {
     });
     it('presets come from store day and custom edits do not alter applied CSV filters', async () => {
         await mount();
+        await openDates();
         const preset =
             document.querySelector<HTMLSelectElement>('#report-preset')!;
         preset.value = 'This month';
@@ -273,6 +282,7 @@ describe('event-date reports UI', () => {
     });
     it('a preset applies at once with one request; other changes wait for Run report (#215)', async () => {
         await mount();
+        await openDates();
         const sales = () =>
             api.get.mock.calls.filter(([url]) => url === '/reports/sales');
         const before = sales().length;
@@ -302,6 +312,7 @@ describe('event-date reports UI', () => {
     });
     it('Clear resets to Today with the default grouping, enabled only off the defaults (#215)', async () => {
         await mount();
+        await openDates();
         const clear = () =>
             [...document.querySelectorAll('button')].find((b) =>
                 b.textContent?.includes('Clear Filters'),
@@ -330,7 +341,7 @@ describe('event-date reports UI', () => {
         expect(group.value).toBe(SalesReportGroup.DAY);
         expect(clear().disabled).toBe(true);
     });
-    it('Run report and Clear sit together at the row end at field height (#215)', async () => {
+    it('Run report then Clear end the one filter row at field height (#215, #254)', async () => {
         await mount();
         const run = [...document.querySelectorAll('button')].find((b) =>
             b.textContent?.includes('Run report'),
@@ -338,12 +349,45 @@ describe('event-date reports UI', () => {
         const clear = [...document.querySelectorAll('button')].find((b) =>
             b.textContent?.includes('Clear Filters'),
         )!;
-        expect(run.parentElement).toBe(clear.parentElement);
-        expect(run.parentElement!.classList).toContain('items-end');
+        const row = document.querySelector('[data-filter-row]')!;
+        expect(run.parentElement).toBe(row);
+        expect(clear.parentElement).toBe(row);
+        expect(row.lastElementChild).toBe(clear);
+        expect(clear.previousElementSibling).toBe(run);
         expect(run.classList).toContain('min-h-11');
-        expect(run.parentElement!.parentElement!.lastElementChild).toBe(
-            run.parentElement,
-        );
+        // No labels above the row's fields; aria-labels name them.
+        expect(row.querySelector('label')).toBeNull();
+        expect(
+            document.querySelector('#report-group')!.getAttribute('aria-label'),
+        ).toBe('Group by');
+    });
+    it('Filters dialog changes wait for Run report and its count shows applied filters only (#254)', async () => {
+        await mount();
+        const sales = () =>
+            api.get.mock.calls.filter(([url]) => url === '/reports/sales');
+        const before = sales().length;
+        const more = () =>
+            document.querySelector('[data-more-filters]')!.textContent?.trim();
+        expect(more()).toBe('Filters');
+        await openMoreFilters();
+        const cashier =
+            document.querySelector<HTMLSelectElement>('#report-cashier')!;
+        cashier.value = 'user';
+        cashier.dispatchEvent(new Event('change'));
+        await flush();
+        expect(sales()).toHaveLength(before);
+        expect(more()).toBe('Filters');
+        await click('Run report');
+        expect(sales()).toHaveLength(before + 1);
+        expect(sales()[sales().length - 1]?.[1]).toEqual({
+            params: {
+                from: '2026-11-05',
+                to: '2026-11-05',
+                groupBy: 'day',
+                cashier: 'user',
+            },
+        });
+        expect(more()).toBe('Filters · 1');
     });
     it('shows settings failures and retries initialization', async () => {
         const original = api.get.getMockImplementation()!;
@@ -391,6 +435,8 @@ describe('event-date reports UI', () => {
     });
     it('retries the failed query rather than the last success or unapplied edits', async () => {
         await mount();
+        await openDates();
+        await openMoreFilters();
         const original = api.get.getMockImplementation()!;
         const failed = deferred<{ data: SalesReport }>();
         const retried = deferred<{ data: SalesReport }>();

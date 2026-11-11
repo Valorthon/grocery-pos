@@ -11,36 +11,27 @@
                 search-label="Username"
                 :maxlength="STRING_LIMITS.USERNAME"
                 search-hint="Current username. Also finds that account's entries under earlier names, and failed logins typed with this name."
+                compact
                 :active="filtersActive"
                 @search="search"
                 @clear="clear"
             >
+                <DateRangeFilter
+                    v-model:from="from"
+                    v-model:to="to"
+                    :preset="datePreset"
+                    :error="rangeError"
+                    edit-on="change"
+                    :limit-range="false"
+                    @preset="pickPreset"
+                    @edit="editDate"
+                />
                 <BaseSelect
                     v-model="action"
-                    label="Action"
+                    aria-label="Action"
                     all-label="All actions"
                     :options="actionOptions"
                     @update:model-value="search"
-                />
-                <BaseSelect
-                    :model-value="datePreset"
-                    label="Dates"
-                    all-label="All dates"
-                    :options="DATE_PRESET_OPTIONS"
-                    @update:model-value="pickPreset"
-                />
-                <BaseInput
-                    v-model="from"
-                    label="From"
-                    type="date"
-                    @change="editDate"
-                />
-                <BaseInput
-                    v-model="to"
-                    label="To"
-                    type="date"
-                    :error="rangeError"
-                    @change="editDate"
                 />
             </FilterBar>
             <p v-if="validation" role="alert" class="text-sm text-danger-fg">
@@ -165,13 +156,10 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
 import { ScrollText } from '@lucide/vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
+import DateRangeFilter from '@/components/ui/DateRangeFilter.vue';
 import { useDatePreset } from '@/composables/useDatePreset';
-import {
-    DATE_PRESET_OPTIONS,
-    type DatePreset,
-} from '@/views/User/Reports/presets';
+import { type DatePreset } from '@/views/User/Reports/presets';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import { apiErrorText } from '@/utils/api-error';

@@ -8,7 +8,14 @@ import {
     type AuditLogView,
 } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
-import { click, field, flush, pick, selectField } from '@/testing/form-dom';
+import {
+    click,
+    field,
+    flush,
+    openDates,
+    pick,
+    selectField,
+} from '@/testing/form-dom';
 import type { ApiGet } from '@/testing/api-mock';
 import Index from './Index.vue';
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>() }));
@@ -69,6 +76,7 @@ it('shows safe actor/action/detail diff text without treating stored strings as 
 });
 it('pages and retries applied filters rather than unsearched edits', async () => {
     await mount();
+    await openDates();
     input('From', '2026-11-01');
     await click('Search');
     await click('Next');
@@ -104,6 +112,7 @@ it('a date preset searches page 1 once with the server today; an edit makes it C
         }),
     );
     await mount();
+    await openDates();
     const clear = () =>
         [...document.querySelectorAll('button')].find((b) =>
             b.textContent?.includes('Clear Filters'),
@@ -139,6 +148,7 @@ it('a date preset searches page 1 once with the server today; an edit makes it C
 });
 it('validates date ordering and applies exact action selection', async () => {
     await mount();
+    await openDates();
     input('Username', 'Cashier1');
     input('From', '2026-11-02');
     input('To', '2026-11-01');

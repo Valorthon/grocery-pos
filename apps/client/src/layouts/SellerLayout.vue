@@ -32,7 +32,7 @@
                     </span>
                 </header>
                 <main
-                    class="flex-1 flex flex-col min-h-0 overflow-hidden min-w-0"
+                    class="relative flex-1 flex flex-col min-h-0 overflow-hidden min-w-0"
                 >
                     <!-- The not-found page renders itself here (#193). -->
                     <slot><router-view /></slot>

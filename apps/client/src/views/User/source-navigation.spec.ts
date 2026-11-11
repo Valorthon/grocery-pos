@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia } from 'pinia';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
-import { click, flush, type } from '@/testing/form-dom';
+import { click, flush, openDates, type } from '@/testing/form-dom';
 import type { ApiGet } from '@/testing/api-mock';
 import Restocks from './Restock/Index.vue';
 import Adjustments from './Adjustments/Index.vue';
@@ -51,6 +51,7 @@ describe.each([
     it('follows source changes and sidebar navigation without remounting or applying typed dates', async () => {
         const router = await mount();
         expect(requests()[requests().length - 1]?.source).toBe(first);
+        await openDates();
         await type('From', '2026-11-05');
         // A reversed end date remains an unapplied edit.
         await type('To', '2026-11-01');

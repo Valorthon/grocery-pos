@@ -21,8 +21,16 @@ function labelled(text: string): HTMLElement {
     const label =
         labels.find((l) => l.textContent?.trim() === text) ??
         labels.find((l) => l.textContent?.includes(text));
-    if (!label) throw new Error(`No field labelled "${text}"`);
-    return label.querySelector('input') ? label : label.parentElement!;
+    if (label)
+        return label.querySelector('input') ? label : label.parentElement!;
+    // A compact filter row names its fields by aria-label only (#254).
+    const named = [
+        ...document.body.querySelectorAll<HTMLElement>(
+            'input[aria-label], select[aria-label]',
+        ),
+    ].find((el) => el.getAttribute('aria-label') === text);
+    if (!named) throw new Error(`No field labelled "${text}"`);
+    return named.parentElement!;
 }
 
 /** The input (or textarea) of the field whose label contains `text`. */
@@ -85,6 +93,25 @@ export function selectField(text: string): HTMLSelectElement {
     const el = labelled(text).querySelector<HTMLSelectElement>('select');
     if (!el) throw new Error(`No select for "${text}"`);
     return el;
+}
+
+/** Opens the filter row's date-range dialog (#254). */
+export async function openDates(): Promise<void> {
+    const button =
+        document.body.querySelector<HTMLButtonElement>('[data-date-range]');
+    if (!button) throw new Error('No date-range button');
+    button.click();
+    await flush();
+}
+
+/** Opens the filter row's Filters dialog (#254). */
+export async function openMoreFilters(): Promise<void> {
+    const button = document.body.querySelector<HTMLButtonElement>(
+        '[data-more-filters]',
+    );
+    if (!button) throw new Error('No Filters button');
+    button.click();
+    await flush();
 }
 
 /** Picks `value` in the select labelled `text`, as a user would. */

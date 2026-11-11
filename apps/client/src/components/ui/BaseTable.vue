@@ -1,6 +1,6 @@
 <template>
     <div
-        class="bg-surface rounded-card border border-line overflow-hidden shadow-card"
+        class="relative bg-surface rounded-card border border-line overflow-hidden shadow-card"
     >
         <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse">
