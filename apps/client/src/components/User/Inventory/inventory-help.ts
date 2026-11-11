@@ -81,4 +81,6 @@ export const INVENTORY_HELP = {
     reorderLevel:
         'Listed as low stock at or below this level (out of stock included).',
     status: stockStatusHelp,
+    reorderQuantity:
+        'Suggested amount to order when low; pre-fills restocks and purchase orders.',
 } satisfies Record<string, ColumnHelp>;

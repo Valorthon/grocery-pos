@@ -159,3 +159,35 @@ describe('BaseInput numeric (#173)', () => {
         expect(mount({}).className).not.toContain('text-right');
     });
 });
+
+describe('BaseInput help (#273)', () => {
+    it('puts an About note after the label, outside it', () => {
+        const input = mount({ label: 'Level (kg)', help: 'Note text.' });
+        const label = document.querySelector('label')!;
+        expect(label.htmlFor).toBe(input.id);
+        const button = document.querySelector<HTMLButtonElement>(
+            '[data-info-tooltip]',
+        )!;
+        expect(button.getAttribute('aria-label')).toBe('About Level (kg)');
+        expect(label.contains(button)).toBe(false);
+        expect(button.parentElement!.classList).toContain('-my-3');
+        expect(
+            document
+                .getElementById(button.getAttribute('aria-describedby')!)!
+                .textContent?.trim(),
+        ).toBe('Note text.');
+    });
+
+    it('takes a helpLabel; no note without help', () => {
+        mount({ label: 'Level (kg)', help: 'N', helpLabel: 'About level' });
+        expect(
+            document
+                .querySelector('[data-info-tooltip]')!
+                .getAttribute('aria-label'),
+        ).toBe('About level');
+        app?.unmount();
+        document.body.innerHTML = '';
+        mount({ label: 'Name' });
+        expect(document.querySelector('[data-info-tooltip]')).toBeNull();
+    });
+});

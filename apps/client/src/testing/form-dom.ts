@@ -21,8 +21,15 @@ function labelled(text: string): HTMLElement {
     const label =
         labels.find((l) => l.textContent?.trim() === text) ??
         labels.find((l) => l.textContent?.includes(text));
-    if (label)
-        return label.querySelector('input') ? label : label.parentElement!;
+    if (label) {
+        if (label.querySelector('input')) return label;
+        // A label with an ⓘ note sits in its own row (#273): climb to
+        // the field's wrapper.
+        let el = label.parentElement!;
+        while (!el.querySelector('input, textarea, select') && el.parentElement)
+            el = el.parentElement;
+        return el;
+    }
     // A compact filter row names its fields by aria-label only (#254).
     const named = [
         ...document.body.querySelectorAll<HTMLElement>(

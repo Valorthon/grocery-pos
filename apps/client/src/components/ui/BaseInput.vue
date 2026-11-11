@@ -1,6 +1,17 @@
 <template>
     <div :class="attrs.class" :style="attrs.style">
-        <label v-if="label" :for="fieldId" :class="FIELD_LABEL">
+        <!-- With help, the ⓘ follows the label outside it, so a click on
+             it never focuses the input; -my-3 keeps the 44px trigger from
+             making the row taller (#273). -->
+        <div v-if="label && help" class="flex items-center gap-1 mb-1.5">
+            <label :for="fieldId" :class="[FIELD_LABEL, 'mb-0']">
+                {{ label }}
+            </label>
+            <InfoTooltip class="-my-3" :label="helpLabel || `About ${label}`">{{
+                help
+            }}</InfoTooltip>
+        </div>
+        <label v-else-if="label" :for="fieldId" :class="FIELD_LABEL">
             {{ label }}
         </label>
 
@@ -60,6 +71,7 @@ import {
 } from './field-style';
 import { computed, useAttrs, useId } from 'vue';
 import { X } from '@lucide/vue';
+import InfoTooltip from './InfoTooltip.vue';
 
 /*
  * Attributes the caller sets (min, step, inputmode, name, autocomplete,
@@ -96,6 +108,10 @@ const props = withDefaults(
         mono?: boolean;
         /** Right-aligned tabular figures, for quantity/cost cells (#173). */
         numeric?: boolean;
+        /** An ⓘ note after the label (#273). */
+        help?: string;
+        /** The ⓘ's accessible name; default "About {label}". */
+        helpLabel?: string;
     }>(),
     {
         modelValue: '',
@@ -110,6 +126,8 @@ const props = withDefaults(
         icon: false,
         mono: false,
         numeric: false,
+        help: '',
+        helpLabel: '',
     },
 );
 
