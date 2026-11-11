@@ -381,8 +381,9 @@ requestId}`. A 5xx never carries details or internals.
 - Store-calendar inclusive ranges cap at 366 days. Presets use server-provided
   timezone/today; weeks start Monday. A preset applies at once; manual date
   and Group by/Cashier/Payment/Category changes wait for Run report. Clear
-  Filters (beside Run report, at field height) resets to Today with day
-  grouping (#215). Group by day/product/category/cashier/payment
+  Filters (after Run report, at the end of the compact row, #254) resets to
+  Today with day grouping (#215). Cashier/Payment/Category sit in the
+  Filters dialog. Group by day/product/category/cashier/payment
   type; SPLIT is a group, not allocated tenders. Mixed quantities stay per unit.
 - Allocate sale-level discounts by exact largest-remainder cents, stable detail
   order, before product/category filtering. Group transaction counts can overlap;
@@ -585,6 +586,22 @@ requestId}`. A 5xx never carries details or internals.
   a muted line above the table (`data-testid="deep-link-note"`), e.g.
   "Showing receipts for PO-…" (owner-default assumption, reversible).
   Purchase orders and Users have no Clear button.
+- Compact filter rows (#254, owner decision 2026-11-11; supersedes #215's
+  "no Filters toggle, panel or chips" on these screens): Sales, Adjustments,
+  Restocks, Audit and Reports use `FilterBar compact`: one aligned row of
+  44px controls (`COMPACT_HEIGHT` in `filter-bar.ts`) with no labels above
+  them (aria-labels, placeholders and "All …" options name them): search +
+  Search, one `DateRangeFilter`, the main filter (Sales Payment,
+  Adjustments Adjusted By, Restocks Restocked By, Audit Action, Reports
+  Group by), a "Filters · N" button (`more` slot, a BaseModal on the modal
+  stack; N = the page's applied filters in it; omitted when the slot is
+  empty: Sales Cashier/Category for ADMIN, Reports Cashier/Payment/Category),
+  the `actions` slot (Reports' Run report), then Clear. Below `sm` the
+  search has its own line. Other FilterBar screens keep the labelled row.
+- `DateRangeFilter` is a button naming the preset or range ("Today",
+  "Nov 1 – Nov 11") that opens the presets and From/To in a dialog; it
+  stays open after a pick (Done/Escape close it). Specs open it with
+  `openDates()` / `openMoreFilters()` from `testing/form-dom.ts`.
 - Dated lists (Sales, Restock, Adjustments, Audit) have a "Dates" preset
   select before From/To (`useDatePreset`, `Reports/presets.ts`): Today,
   Yesterday, This week, Last week, This month, Last month, Last 30 days,

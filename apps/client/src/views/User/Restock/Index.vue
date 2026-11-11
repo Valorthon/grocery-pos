@@ -12,38 +12,25 @@
         <PageCard>
             <FilterBar
                 :searchable="false"
+                compact
                 :active="filtersActive"
                 class="px-5 py-4 border-b border-line"
                 @clear="resetFilters"
             >
+                <DateRangeFilter
+                    v-model:from="searchDateStart"
+                    v-model:to="searchDateEnd"
+                    :preset="datePreset"
+                    :error="rangeError"
+                    @preset="pickPreset"
+                    @edit="editDate"
+                />
                 <BaseSelect
                     v-model="searchRestockedBy"
                     :options="userOptions"
-                    label="Restocked By"
+                    aria-label="Restocked By"
                     all-label="All users"
                     @update:model-value="applyFilters"
-                />
-                <BaseSelect
-                    :model-value="datePreset"
-                    label="Dates"
-                    all-label="All dates"
-                    :options="DATE_PRESET_OPTIONS"
-                    @update:model-value="pickPreset"
-                />
-                <BaseInput
-                    v-model="searchDateStart"
-                    label="From"
-                    type="date"
-                    :max="searchDateEnd || undefined"
-                    @update:model-value="editDate"
-                />
-                <BaseInput
-                    v-model="searchDateEnd"
-                    label="To"
-                    type="date"
-                    :min="searchDateStart || undefined"
-                    :error="rangeError"
-                    @update:model-value="editDate"
                 />
             </FilterBar>
             <p
@@ -92,13 +79,10 @@ import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
+import DateRangeFilter from '@/components/ui/DateRangeFilter.vue';
 import { useDatePreset } from '@/composables/useDatePreset';
-import {
-    DATE_PRESET_OPTIONS,
-    type DatePreset,
-} from '@/views/User/Reports/presets';
+import { type DatePreset } from '@/views/User/Reports/presets';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';

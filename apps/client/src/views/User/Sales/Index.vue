@@ -32,37 +32,31 @@
                     search-id="sales-number"
                     search-label="Sale number or full ID"
                     :maxlength="24"
+                    compact
                     :active="filtersActive"
+                    :filters-count="moreFiltersApplied"
                     class="px-5 py-4 border-b border-line"
                     @search="applyFilters"
                     @clear="clearFilters"
                 >
-                    <BaseSelect
-                        id="sales-preset"
-                        :model-value="datePreset"
-                        label="Dates"
-                        all-label="All dates"
-                        :options="DATE_PRESET_OPTIONS"
-                        @update:model-value="pickPreset"
-                    />
-                    <BaseInput
-                        id="sales-from"
-                        v-model="filters.dateFrom"
-                        label="From"
-                        type="date"
-                        @change="editDate"
-                    />
-                    <BaseInput
-                        id="sales-to"
-                        v-model="filters.dateTo"
-                        label="To (inclusive)"
-                        type="date"
-                        @change="editDate"
+                    <DateRangeFilter
+                        v-model:from="filters.dateFrom"
+                        v-model:to="filters.dateTo"
+                        id-prefix="sales"
+                        to-label="To (inclusive)"
+                        :preset="datePreset"
+                        :error="
+                            dateRangeError(filters.dateFrom, filters.dateTo)
+                        "
+                        edit-on="change"
+                        :limit-range="false"
+                        @preset="pickPreset"
+                        @edit="editDate"
                     />
                     <BaseSelect
                         id="sales-payment"
                         v-model="filters.paymentType"
-                        label="Payment"
+                        aria-label="Payment"
                         all-label="All payments"
                         :options="
                             Object.values(PaymentType).map((value) => ({
@@ -72,36 +66,36 @@
                         "
                         @update:model-value="applyFilters"
                     />
-                    <BaseSelect
-                        v-if="authStore.isAdmin"
-                        id="sales-cashier"
-                        v-model="filters.cashier"
-                        label="Cashier"
-                        all-label="All cashiers"
-                        :options="
-                            cashiers.map((row) => ({
-                                label: row.name,
-                                value: row._id,
-                            }))
-                        "
-                        @update:model-value="applyFilters"
-                    />
-                    <BaseSelect
-                        v-if="authStore.isAdmin"
-                        id="sales-category"
-                        v-model="filters.category"
-                        label="Category"
-                        all-label="All categories"
-                        :options="
-                            categories.map((row) => ({
-                                label:
-                                    row.name +
-                                    (row.isActive ? '' : ' (archived)'),
-                                value: row._id,
-                            }))
-                        "
-                        @update:model-value="applyFilters"
-                    />
+                    <template v-if="authStore.isAdmin" #more>
+                        <BaseSelect
+                            id="sales-cashier"
+                            v-model="filters.cashier"
+                            label="Cashier"
+                            all-label="All cashiers"
+                            :options="
+                                cashiers.map((row) => ({
+                                    label: row.name,
+                                    value: row._id,
+                                }))
+                            "
+                            @update:model-value="applyFilters"
+                        />
+                        <BaseSelect
+                            id="sales-category"
+                            v-model="filters.category"
+                            label="Category"
+                            all-label="All categories"
+                            :options="
+                                categories.map((row) => ({
+                                    label:
+                                        row.name +
+                                        (row.isActive ? '' : ' (archived)'),
+                                    value: row._id,
+                                }))
+                            "
+                            @update:model-value="applyFilters"
+                        />
+                    </template>
                 </FilterBar>
                 <p
                     v-if="filterError"
@@ -675,11 +669,9 @@ import Spinner from '@/components/ui/Spinner.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import PageCard from '@/components/ui/PageCard.vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
+import DateRangeFilter from '@/components/ui/DateRangeFilter.vue';
 import { useDatePreset } from '@/composables/useDatePreset';
-import {
-    DATE_PRESET_OPTIONS,
-    type DatePreset,
-} from '@/views/User/Reports/presets';
+import { type DatePreset } from '@/views/User/Reports/presets';
 import { useSalesLookups } from '@/composables/useSalesLookups';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -870,6 +862,13 @@ function editDate() {
     presetEdited();
     applyFilters();
 }
+/** Applied filters in the Filters dialog: Cashier and Category (#254). */
+const moreFiltersApplied = computed(
+    () =>
+        [appliedFilters.value.cashier, appliedFilters.value.category].filter(
+            Boolean,
+        ).length,
+);
 /** Clear Filters is enabled while any filter or preset is set. */
 const filtersActive = computed(
     () =>

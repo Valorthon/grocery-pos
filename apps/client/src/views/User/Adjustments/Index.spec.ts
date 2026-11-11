@@ -9,6 +9,7 @@ import {
     pick,
     selectField,
     type,
+    openDates,
 } from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import Index from './Index.vue';
@@ -117,6 +118,7 @@ describe('adjustment history filters (issue #20)', () => {
 
     it('refuses a reversed date range without sending it', async () => {
         await mount();
+        await openDates();
         await type('From', '2026-03-02');
         await flush();
         api.get.mockClear();
@@ -137,6 +139,7 @@ describe('adjustment history date presets (#215)', () => {
 
     it('a preset sets both dates from the server today and loads page 1 once', async () => {
         await mount();
+        await openDates();
         api.get.mockClear();
 
         await pick('Dates', 'Last month');
@@ -153,6 +156,7 @@ describe('adjustment history date presets (#215)', () => {
 
     it('a manual date edit switches the preset to Custom', async () => {
         await mount();
+        await openDates();
         await pick('Dates', 'Yesterday');
         expect(field('From').value).toBe('2026-11-09');
         await type('To', '2026-11-10');
@@ -162,6 +166,7 @@ describe('adjustment history date presets (#215)', () => {
 
     it('Clear Filters is disabled at defaults and resets the preset with one load', async () => {
         await mount();
+        await openDates();
         expect(clearButton().disabled).toBe(true);
         await pick('Dates', 'Last 30 days');
         expect(clearButton().disabled).toBe(false);
