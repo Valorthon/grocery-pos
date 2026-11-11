@@ -38,11 +38,15 @@
             <BaseInput
                 v-model="reorderLevel"
                 :label="`Reorder level (${unitLabel(product.unit)})`"
+                :help="INVENTORY_HELP.reorderLevel"
+                help-label="About reorder level"
                 inputmode="decimal"
             />
             <BaseInput
                 v-model="reorderQuantity"
                 :label="`Restock quantity (${unitLabel(product.unit)})`"
+                :help="INVENTORY_HELP.reorderQuantity"
+                help-label="About restock quantity"
                 inputmode="decimal"
             />
             <p v-if="error" role="alert" class="text-sm text-red-700">
@@ -81,6 +85,7 @@ import {
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import CategorySelect from './CategorySelect.vue';
+import { INVENTORY_HELP } from '@/components/User/Inventory/inventory-help';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import api from '@/axios';
 import { useAuthStore } from '@/stores/auth';

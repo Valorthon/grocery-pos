@@ -651,6 +651,11 @@ requestId}`. A 5xx never carries details or internals.
   the lists. Help hides with its column; Inventory's Stock also explains
   the statuses shown under it below `sm`. Specs read header titles with
   `headerText` (`testing/form-dom.ts`).
+- Field help (#273): `BaseInput` takes `help` (and an optional
+  `helpLabel`, default "About {label}"); the ⓘ sits after the label,
+  outside it (so a click never focuses the input), with `-my-3`. Edit
+  Product's reorder level and restock quantity use the shared
+  `INVENTORY_HELP.reorderLevel`/`reorderQuantity` texts.
 - Page summaries (#262): every admin page shows a one-line summary under
   its title from the route's `meta.description` (a `queryTitle` may carry
   its own, e.g. Low stock), via `routeDescription` in PageFrame; at most
