@@ -2,9 +2,8 @@
     <PageFrame>
         <div class="space-y-4">
             <p class="text-sm">
-                Sensitive actions recorded from deployment onward. Entries
-                cannot be edited or deleted through the app. No automatic expiry
-                is configured.
+                Recorded from deployment onward; earlier actions are not
+                backfilled. No automatic expiry is configured.
             </p>
             <FilterBar
                 v-model:search="username"

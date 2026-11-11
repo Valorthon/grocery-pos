@@ -1,7 +1,5 @@
 <template>
-    <PageFrame
-        description="Every cashier's shifts, newest first, with their close reports"
-    >
+    <PageFrame>
         <template #actions>
             <SegmentedFilter
                 v-model="statusFilter"

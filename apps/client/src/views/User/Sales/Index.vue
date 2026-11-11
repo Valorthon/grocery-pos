@@ -5,7 +5,7 @@
             inSellerLayout ? 'flex-1 min-h-0 overflow-y-auto p-4 sm:p-6' : ''
         "
     >
-        <PageFrame description="View transaction history">
+        <PageFrame>
             <template #actions>
                 <div
                     class="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl text-right"
