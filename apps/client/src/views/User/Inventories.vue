@@ -295,7 +295,7 @@ const headers = [
     { key: 'history', title: 'History' },
 ];
 
-/** The #40 / dashboard predicate: out at ≤ 0, low at ≤ the reorder level. */
+/** The #40 / dashboard predicate: out at ≤ 0, low at ≤ the low stock level. */
 function stockStatus(stock: number, reorderLevel: number): StockStatus {
     if (stock <= 0) return 'out';
     return stock <= reorderLevel ? 'low' : 'ok';

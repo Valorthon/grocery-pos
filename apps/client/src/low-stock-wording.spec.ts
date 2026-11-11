@@ -10,9 +10,11 @@ const sources = import.meta.glob<string>(
     { query: '?raw', import: 'default', eager: true },
 );
 
+/** Comments and bound prop names (`:reorder-level=`) are code, not text. */
 function withoutComments(text: string): string {
     return text
         .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/(?:^|\s)(?::|v-bind:)[\w-]+=/g, ' ')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
