@@ -38,11 +38,14 @@
                     </li>
                 </ol>
             </nav>
-            <h1
-                class="font-display text-2xl font-extrabold text-ink leading-tight"
-            >
-                {{ title }}
-            </h1>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h1
+                    class="font-display text-2xl font-extrabold text-ink leading-tight"
+                >
+                    {{ title }}
+                </h1>
+                <slot name="badge" />
+            </div>
             <p v-if="description" class="mt-1 text-sm text-muted">
                 {{ description }}
             </p>

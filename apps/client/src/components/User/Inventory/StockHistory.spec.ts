@@ -17,8 +17,10 @@ import {
     openDates,
     pick,
     headerText,
+    tileValue,
 } from '@/testing/form-dom';
 import StockHistory from './StockHistory.vue';
+import { INVENTORY_HELP } from './inventory-help';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 let app: App | undefined,
@@ -114,11 +116,7 @@ async function setDate(label: string, value: string) {
 }
 const badge = () =>
     document.querySelector('[data-testid="ledger-badge"]')?.textContent?.trim();
-const tile = (label: string) =>
-    [...document.querySelectorAll('[data-testid="stock-history-tiles"] > *')]
-        .find((el) => el.querySelector('p')?.textContent?.trim() === label)
-        ?.textContent?.replace(label, '')
-        .trim();
+const tile = tileValue;
 it('applies a date edit at once on page 1, retries applied filters and holds a reversed range', async () => {
     await mount();
     await click('Next');
@@ -177,7 +175,7 @@ it('applies a preset from the store date and Clear resets the range', async () =
 it('shows Current stock from the server, reorder level and EAN tiles', async () => {
     await mount({ ean: '4800000000017', reorderLevel: '10.000 kg' });
     expect(tile('Current stock')).toBe('1.550 kg');
-    expect(tile('Reorder level')).toBe('10.000 kg');
+    expect(tile('Low stock at')).toBe('10.000 kg');
     expect(tile('EAN')).toBe('4800000000017');
 });
 it('shows skeletons while the check loads', async () => {
@@ -233,7 +231,7 @@ it('loads the check once, not on every page change', async () => {
 it('opens the balances note by keyboard focus with aria-describedby', async () => {
     await mount();
     const button = document.querySelector<HTMLButtonElement>(
-        '[data-info-tooltip]',
+        '[aria-label="About stock history balances"]',
     )!;
     const tip = document.getElementById(
         button.getAttribute('aria-describedby')!,
@@ -262,6 +260,47 @@ it('opens the balances note by keyboard focus with aria-describedby', async () =
     await flush();
     expect(tip.className).toContain('hidden');
     expect(closed).not.toHaveBeenCalled();
+});
+it('explains the reorder level tile with the shared Inventory text (#271)', async () => {
+    await mount();
+    const button = document.querySelector<HTMLButtonElement>(
+        '[aria-label="About low stock at"]',
+    )!;
+    const tip = document.getElementById(
+        button.getAttribute('aria-describedby')!,
+    )!;
+    expect(tip.textContent?.trim()).toBe(INVENTORY_HELP.reorderLevel);
+    button.focus();
+    await flush();
+    expect(tip.className).not.toContain('hidden');
+    button.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await flush();
+    expect(tip.className).toContain('hidden');
+    expect(document.body.textContent).toContain('Stock history — Milk');
+    expect(closed).not.toHaveBeenCalled();
+});
+it('keeps every tile label row one text line tall (#271)', async () => {
+    await mount();
+    const triggers = document.querySelectorAll(
+        '[data-testid="stock-history-tiles"] [data-info-tooltip]',
+    );
+    expect(triggers).toHaveLength(2);
+    for (const trigger of triggers)
+        expect(trigger.parentElement!.classList).toContain('-my-3');
+    // Each ⓘ directly follows its label (#271, #272).
+    for (const name of ['Ledger', 'Low stock at']) {
+        const label = [
+            ...document.querySelectorAll(
+                '[data-testid="stock-history-tiles"] p',
+            ),
+        ].find((p) => p.textContent?.trim() === name)!;
+        expect(
+            label.nextElementSibling?.querySelector('[data-info-tooltip]'),
+        ).not.toBeNull();
+        expect(label.parentElement!.className).not.toContain('justify-between');
+    }
 });
 it('shows derived unattributed history and flags ledger mismatch', async () => {
     api.get.mockImplementation(async (url: string) =>

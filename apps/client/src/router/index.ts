@@ -170,7 +170,7 @@ const routes: RouteRecordRaw[] = [
                 meta: {
                     title: 'Product list',
                     description:
-                        'Look up products and stock. Restockers edit, archive and set reorder levels; only an admin changes prices.',
+                        'Look up products and stock. Restockers edit, archive and set low stock levels; only an admin changes prices.',
                     roles: [Role.Restocker, Role.Adjuster, Role.Admin],
                 },
             },
@@ -200,7 +200,7 @@ const routes: RouteRecordRaw[] = [
                             value: 'true',
                             title: 'Low stock',
                             description:
-                                'Active products at or below their reorder level, biggest shortfall first.',
+                                'Active products at or below their low stock level, biggest shortfall first.',
                         },
                         {
                             key: 'outOfStock',

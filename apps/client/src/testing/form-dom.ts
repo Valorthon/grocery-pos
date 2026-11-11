@@ -21,8 +21,27 @@ function labelled(text: string): HTMLElement {
     const label =
         labels.find((l) => l.textContent?.trim() === text) ??
         labels.find((l) => l.textContent?.includes(text));
-    if (label)
-        return label.querySelector('input') ? label : label.parentElement!;
+    if (label) {
+        if (label.querySelector('input')) return label;
+        // Prefer the for/id tie: the wrapper is the nearest ancestor
+        // holding both the label and its control.
+        const control = label.htmlFor
+            ? document.getElementById(label.htmlFor)
+            : null;
+        if (control) {
+            let el = label.parentElement!;
+            while (!el.contains(control)) el = el.parentElement!;
+            return el;
+        }
+        // Else the parent, or one level more for a label with an ⓘ in
+        // its own row (#273).
+        const parent = label.parentElement!;
+        const sel = 'input, textarea, select';
+        if (parent.querySelector(sel)) return parent;
+        if (parent.parentElement?.querySelector(sel))
+            return parent.parentElement;
+        throw new Error(`No control for label "${text}"`);
+    }
     // A compact filter row names its fields by aria-label only (#254).
     const named = [
         ...document.body.querySelectorAll<HTMLElement>(
@@ -127,4 +146,14 @@ export function headerText(th: Element): string {
     const copy = th.cloneNode(true) as Element;
     copy.querySelectorAll('[role="tooltip"]').forEach((tip) => tip.remove());
     return copy.textContent?.trim() ?? '';
+}
+
+/** A stock history tile's value, found by its label text (#271). */
+export function tileValue(label: string): string | undefined {
+    return [
+        ...document.querySelectorAll('[data-testid="stock-history-tiles"] > *'),
+    ]
+        .find((el) => el.querySelector('p')?.textContent?.trim() === label)
+        ?.querySelector('.font-display')
+        ?.textContent?.trim();
 }

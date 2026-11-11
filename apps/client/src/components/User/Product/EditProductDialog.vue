@@ -37,12 +37,16 @@
             />
             <BaseInput
                 v-model="reorderLevel"
-                :label="`Reorder level (${unitLabel(product.unit)})`"
+                :label="`Low stock at (${unitLabel(product.unit)})`"
+                :help="INVENTORY_HELP.reorderLevel"
+                help-label="About low stock at"
                 inputmode="decimal"
             />
             <BaseInput
                 v-model="reorderQuantity"
-                :label="`Restock quantity (${unitLabel(product.unit)})`"
+                :label="`Restock amount (${unitLabel(product.unit)})`"
+                :help="INVENTORY_HELP.reorderQuantity"
+                help-label="About restock amount"
                 inputmode="decimal"
             />
             <p v-if="error" role="alert" class="text-sm text-red-700">
@@ -81,6 +85,7 @@ import {
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import CategorySelect from './CategorySelect.vue';
+import { INVENTORY_HELP } from '@/components/User/Inventory/inventory-help';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import api from '@/axios';
 import { useAuthStore } from '@/stores/auth';
@@ -140,7 +145,7 @@ async function save() {
     const quantity = parseQuantity(reorderQuantity.value, props.product.unit);
     if (level === null || level < 0 || quantity === null || quantity < 1) {
         error.value =
-            'Enter a valid reorder level and positive restock quantity.';
+            'Enter a valid low stock level and a positive restock amount.';
         return;
     }
     const update = {

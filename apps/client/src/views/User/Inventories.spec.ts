@@ -3,7 +3,14 @@ import { createApp, reactive, type App } from 'vue';
 import type { RouteMeta, Router } from 'vue-router';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
-import { click, field, flush, type, headerText } from '@/testing/form-dom';
+import {
+    click,
+    field,
+    flush,
+    type,
+    headerText,
+    tileValue,
+} from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
@@ -192,14 +199,14 @@ describe('reorder list and restock draft', () => {
         expect(ths.map((t) => headerText(t))).toEqual([
             'Product',
             'Stock',
-            'Reorder at',
+            'Low stock at',
             'Status',
             'History',
         ]);
         const th = (text: string) =>
-            ths.find((cell) => cell.textContent?.includes(text))!;
+            ths.find((cell) => headerText(cell) === text)!;
         const classes = (el: Element) => el.className.split(/\s+/);
-        expect(classes(th('Reorder at'))).toEqual(
+        expect(classes(th('Low stock at'))).toEqual(
             expect.arrayContaining(['hidden', 'md:table-cell']),
         );
         expect(classes(th('Status'))).toEqual(
@@ -208,7 +215,7 @@ describe('reorder list and restock draft', () => {
         for (const shown of ['Product', 'Stock', 'History'])
             expect(classes(th(shown))).not.toContain('hidden');
         expect(classes(th('Stock'))).toContain('text-right');
-        expect(classes(th('Reorder at'))).toContain('text-right');
+        expect(classes(th('Low stock at'))).toContain('text-right');
         const button = document.querySelector<HTMLElement>(
             '[data-testid="stock-history-button"]',
         )!;
@@ -225,7 +232,7 @@ describe('reorder list and restock draft', () => {
             '[data-testid="stock-history-tiles"]',
         );
         expect(product?.textContent).toContain('EAN4006381333931');
-        expect(product?.textContent).toContain('Reorder level9');
+        expect(tileValue('Low stock at')).toBe('9.000 kg');
     });
     it('shows the EAN under the name, as typed, at every width (#232)', async () => {
         await mount();

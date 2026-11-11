@@ -63,8 +63,8 @@ export const STOCK_STATUS: StatusMap<StockStatus> = {
 };
 const stockStatusHelp = statusHelp(STOCK_STATUS, {
     out: 'Stock is 0 or less.',
-    low: 'Stock is above 0 and at or below the reorder level.',
-    ok: 'Stock is above the reorder level.',
+    low: 'Stock is above 0 and at or below its Low stock at level.',
+    ok: 'Stock is above its Low stock at level.',
 });
 
 /** Column help for the inventory list (#263). */
@@ -81,4 +81,6 @@ export const INVENTORY_HELP = {
     reorderLevel:
         'Listed as low stock at or below this level (out of stock included).',
     status: stockStatusHelp,
+    reorderQuantity:
+        'Suggested amount to order when low; pre-fills restocks and purchase orders.',
 } satisfies Record<string, ColumnHelp>;

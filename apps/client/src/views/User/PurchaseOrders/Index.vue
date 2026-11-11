@@ -1,110 +1,195 @@
 <template>
-    <PageFrame :breadcrumbs="breadcrumbs">
+    <PageFrame :breadcrumbs="breadcrumbs" :title="pageTitle">
+        <template v-if="editing && current" #badge>
+            <StatusBadge
+                :status="current.status"
+                :map="PURCHASE_ORDER_STATUS"
+                data-testid="po-title-status"
+            />
+        </template>
         <template #actions>
             <BaseButton v-if="!editing" size="sm" @click="startNew([])"
                 >New purchase order</BaseButton
             >
-            <BaseButton
-                v-else
-                size="sm"
-                variant="outline"
-                :disabled="busy"
-                @click="closeEditor"
-                >Back to list</BaseButton
-            >
+            <template v-else>
+                <BaseButton
+                    size="sm"
+                    variant="outline"
+                    :disabled="busy"
+                    @click="closeEditor"
+                    >Back to list</BaseButton
+                >
+                <template v-if="isDraft">
+                    <BaseButton
+                        size="sm"
+                        :variant="sendReady ? 'outline' : 'primary'"
+                        :disabled="busy"
+                        @click="saveDraft"
+                        >Save draft</BaseButton
+                    >
+                    <BaseButton
+                        v-if="current"
+                        size="sm"
+                        :variant="sendReady ? 'primary' : 'outline'"
+                        :disabled="busy || dirty"
+                        @click="send"
+                        >Mark as sent</BaseButton
+                    >
+                </template>
+                <BaseButton
+                    v-if="isOpen"
+                    size="sm"
+                    :disabled="busy"
+                    @click="openReceive"
+                    >Receive</BaseButton
+                >
+                <BaseButton
+                    v-if="current && (isDraft || isOpen)"
+                    size="sm"
+                    variant="outline"
+                    :disabled="busy"
+                    @click="cancelOrder"
+                    >Cancel order</BaseButton
+                >
+                <p
+                    v-if="isDraft && current && dirty"
+                    class="basis-full text-right text-sm text-muted"
+                    data-testid="po-send-hint"
+                >
+                    Save the draft before marking it as sent.
+                </p>
+            </template>
         </template>
         <PageCard>
-            <div class="space-y-4 p-5">
-                <template v-if="!editing">
-                    <SegmentedFilter
-                        v-model="statusFilter"
-                        label="Status"
-                        :options="statusOptions"
-                        @update:model-value="apply"
+            <div v-if="!editing" class="space-y-4 p-5">
+                <SegmentedFilter
+                    v-model="statusFilter"
+                    label="Status"
+                    :options="statusOptions"
+                    @update:model-value="apply"
+                />
+                <BaseTable
+                    v-model:page="page"
+                    v-model:items-per-page="limit"
+                    :headers="headers"
+                    :items="rows"
+                    :loading="listLoading"
+                    :error="listError"
+                    empty-text="No purchase orders"
+                    :items-length="totalItems"
+                    row-click
+                    row-hint="Press Enter to open the order"
+                    @click:row="open"
+                    @retry="load"
+                >
+                    <template #cell-reference="{ item }">
+                        {{ purchaseOrderReference(item._id) }}
+                    </template>
+                    <template #cell-createdAt="{ item }">
+                        {{ formatDate(item.createdAt) }}
+                    </template>
+                    <template #cell-supplier="{ item }">
+                        {{ supplierLabel(item) }}
+                    </template>
+                    <template #cell-status="{ item }">
+                        <StatusBadge
+                            :status="item.status"
+                            :map="PURCHASE_ORDER_STATUS"
+                            data-testid="po-status"
+                        />
+                        <span
+                            v-if="draftSendBlockers(item).length"
+                            class="block text-xs font-medium text-amber-700"
+                            >Needs review before sending</span
+                        >
+                    </template>
+                    <template #cell-lines="{ item }">
+                        {{ item.lines.length }}
+                    </template>
+                    <template #cell-expectedTotal="{ item }">
+                        {{ formatCurrency(item.expectedTotal) }}
+                    </template>
+                    <template #cell-action="{ item }">
+                        <RowOpenButton
+                            :label="`Open ${purchaseOrderReference(item._id)}`"
+                            data-testid="po-open"
+                            @open="open(item)"
+                        />
+                    </template>
+                </BaseTable>
+            </div>
+            <template v-else>
+                <div
+                    v-if="isDraft"
+                    class="px-5 py-4 bg-paper border-b border-line grid grid-cols-1 md:grid-cols-2 gap-3"
+                    data-testid="po-top-band"
+                >
+                    <SupplierSelect v-model="supplier" :disabled="busy" />
+                    <BaseInput
+                        v-model="note"
+                        label="Note (optional)"
+                        :maxlength="PURCHASE_ORDER_LIMITS.NOTE"
+                        :disabled="busy"
                     />
-                    <BaseTable
-                        v-model:page="page"
-                        v-model:items-per-page="limit"
-                        :headers="headers"
-                        :items="rows"
-                        :loading="listLoading"
-                        :error="listError"
-                        empty-text="No purchase orders"
-                        :items-length="totalItems"
-                        row-click
-                        row-hint="Press Enter to open the order"
-                        @click:row="open"
-                        @retry="load"
-                    >
-                        <template #cell-reference="{ item }">
-                            {{ purchaseOrderReference(item._id) }}
-                        </template>
-                        <template #cell-createdAt="{ item }">
-                            {{ formatDate(item.createdAt) }}
-                        </template>
-                        <template #cell-supplier="{ item }">
-                            {{ supplierLabel(item) }}
-                        </template>
-                        <template #cell-status="{ item }">
-                            <StatusBadge
-                                :status="item.status"
-                                :map="PURCHASE_ORDER_STATUS"
-                                data-testid="po-status"
-                            />
-                            <span
-                                v-if="draftSendBlockers(item).length"
-                                class="block text-xs font-medium text-amber-700"
-                                >Needs review before sending</span
-                            >
-                        </template>
-                        <template #cell-lines="{ item }">
-                            {{ item.lines.length }}
-                        </template>
-                        <template #cell-expectedTotal="{ item }">
-                            {{ formatCurrency(item.expectedTotal) }}
-                        </template>
-                        <template #cell-action="{ item }">
-                            <RowOpenButton
-                                :label="`Open ${purchaseOrderReference(item._id)}`"
-                                data-testid="po-open"
-                                @open="open(item)"
-                            />
-                        </template>
-                    </BaseTable>
-                </template>
-                <template v-else>
-                    <div v-if="current" class="text-sm text-ink space-y-1">
-                        <p>
-                            <strong>{{
-                                purchaseOrderReference(current._id)
-                            }}</strong>
-                            ·
-                            <strong>{{ STATUS_LABELS[current.status] }}</strong>
-                            · created {{ formatDate(current.createdAt) }}
-                            <span v-if="current.createdBy">
-                                by {{ current.createdBy.name }}</span
-                            >
-                        </p>
-                        <p v-if="current.closedShort">
-                            Cancelled after a partial receipt: the outstanding
-                            quantities were closed short.
-                        </p>
-                        <p v-if="current.receipts.length">
-                            {{ current.receipts.length }} linked
-                            {{
-                                current.receipts.length === 1
-                                    ? 'receipt'
-                                    : 'receipts'
-                            }}
-                            in Restock History.
-                            <BaseButton
-                                size="sm"
-                                variant="outline"
-                                @click="viewReceipts(current._id)"
-                                >View receipts</BaseButton
-                            >
-                        </p>
+                </div>
+                <div v-else-if="current" class="px-5 py-4 border-b border-line">
+                    <div class="flex items-start justify-between gap-4">
+                        <h2
+                            class="min-w-0 break-words text-base"
+                            :class="
+                                current.supplier
+                                    ? 'font-bold'
+                                    : 'font-medium text-muted'
+                            "
+                            data-testid="details-heading"
+                        >
+                            {{ supplierLabel(current) }}
+                        </h2>
+                        <div
+                            class="shrink-0 text-base font-bold text-leaf-600 num"
+                            data-testid="details-total"
+                        >
+                            {{ formatCurrency(current.expectedTotal) }}
+                        </div>
                     </div>
+                    <ul
+                        class="mt-1 flex flex-wrap items-center text-sm text-muted"
+                        data-testid="details-meta"
+                    >
+                        <li :class="META_ITEM">
+                            Created {{ formatStoreDateTime(current.createdAt) }}
+                        </li>
+                        <li v-if="current.createdBy" :class="META_ITEM">
+                            by {{ current.createdBy.name }}
+                        </li>
+                        <li v-if="current.closedShort" :class="META_ITEM">
+                            Closed short
+                        </li>
+                        <li
+                            v-if="current.receipts.length && canViewReceipts"
+                            :class="META_ITEM"
+                        >
+                            <button
+                                type="button"
+                                class="rounded text-leaf-700 underline hover:text-ink focus-ring"
+                                @click="viewReceipts(current._id)"
+                            >
+                                View receipts
+                            </button>
+                        </li>
+                    </ul>
+                    <p
+                        v-if="current.note"
+                        class="mt-1 text-sm text-muted break-words"
+                        data-testid="details-note"
+                    >
+                        Note: {{ current.note }}
+                    </p>
+                </div>
+                <div
+                    v-if="blockers.length || validation"
+                    class="space-y-3 px-5 pt-4"
+                >
                     <div
                         v-if="blockers.length"
                         role="status"
@@ -119,23 +204,6 @@
                             products, then save.
                         </p>
                     </div>
-                    <template v-if="isDraft">
-                        <SupplierSelect v-model="supplier" :disabled="busy" />
-                        <BaseInput
-                            v-model="note"
-                            label="Note (optional)"
-                            :maxlength="PURCHASE_ORDER_LIMITS.NOTE"
-                            :disabled="busy"
-                        />
-                    </template>
-                    <template v-else-if="current">
-                        <p class="text-sm">
-                            Supplier: {{ supplierLabel(current) }}
-                        </p>
-                        <p v-if="current.note" class="text-sm">
-                            Note: {{ current.note }}
-                        </p>
-                    </template>
                     <p
                         v-if="validation"
                         role="alert"
@@ -143,216 +211,208 @@
                     >
                         {{ validation }}
                     </p>
-
-                    <EmptyState
-                        v-if="isDraft && draft.length === 0"
-                        title="No lines yet"
-                        hint="Add a product below by EAN or name."
-                    >
-                        <template #icon
-                            ><ClipboardList class="w-6 h-6"
-                        /></template>
-                    </EmptyState>
-                    <div
-                        v-else
-                        :class="[
-                            draftTable.wrap,
-                            'rounded-card border border-line',
-                        ]"
-                    >
-                        <table :class="draftTable.table">
-                            <thead>
-                                <tr :class="draftTable.headRow">
-                                    <th scope="col" :class="draftTable.th">
-                                        Product
-                                    </th>
-                                    <th scope="col" :class="draftTable.thNum">
-                                        Ordered
-                                    </th>
-                                    <th
-                                        v-if="!isDraft"
-                                        scope="col"
-                                        :class="draftTable.thNum"
-                                    >
-                                        Received
-                                    </th>
-                                    <th
-                                        v-if="!isDraft"
-                                        scope="col"
-                                        :class="draftTable.thNum"
-                                    >
-                                        Outstanding
-                                    </th>
-                                    <th scope="col" :class="draftTable.thNum">
-                                        Expected cost
-                                    </th>
-                                    <th
-                                        v-if="isDraft"
-                                        scope="col"
-                                        :class="draftTable.thNum"
-                                    >
-                                        Action
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody v-if="isDraft" :class="draftTable.body">
-                                <tr
-                                    v-for="(line, index) in draft"
-                                    :key="line.product"
-                                    :class="draftTable.row"
+                </div>
+                <div
+                    v-if="isDraft"
+                    class="px-5 py-4 border-b border-line"
+                    data-testid="po-add-product"
+                >
+                    <BaseCombobox
+                        v-model="searchText"
+                        v-model:selected="picked"
+                        :options="matchOptions"
+                        label="Add product (EAN or name)"
+                        :maxlength="STRING_LIMITS.PRODUCT_NAME"
+                        :loading="matchesLoading"
+                        :error="matchError"
+                        :disabled="busy"
+                        @search="debouncedSearch"
+                    />
+                </div>
+                <div :class="draftTable.wrap">
+                    <table :class="draftTable.table">
+                        <thead>
+                            <tr :class="draftTable.headRow">
+                                <th scope="col" :class="draftTable.th">
+                                    Product
+                                </th>
+                                <th scope="col" :class="draftTable.thNum">
+                                    Ordered
+                                </th>
+                                <th
+                                    v-if="!isDraft"
+                                    scope="col"
+                                    :class="draftTable.thNum"
                                 >
-                                    <td :class="draftTable.tdName">
-                                        {{ line.name }}
-                                        <span
-                                            class="block text-xs font-normal text-muted num"
-                                            >{{ line.EAN }}</span
-                                        >
-                                    </td>
-                                    <td :class="draftTable.tdNum">
-                                        <BaseInput
-                                            v-model="line.quantity"
-                                            class="min-w-24"
-                                            :data-scan-line="line.product"
-                                            numeric
-                                            :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
-                                            :inputmode="
-                                                decimalUnit(line.unit)
-                                                    ? 'decimal'
-                                                    : 'numeric'
-                                            "
-                                            :error="lineErrors[index]?.quantity"
-                                            :disabled="busy"
-                                        />
-                                    </td>
-                                    <td :class="draftTable.tdNum">
-                                        <BaseInput
-                                            v-model="line.cost"
-                                            class="min-w-28"
-                                            numeric
-                                            :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
-                                            inputmode="decimal"
-                                            :error="lineErrors[index]?.cost"
-                                            :disabled="busy"
-                                        />
-                                    </td>
-                                    <td :class="draftTable.tdActions">
-                                        <BaseButton
-                                            size="sm"
-                                            variant="outline"
-                                            class="min-h-11 min-w-11"
-                                            :aria-label="`Remove ${line.name}`"
-                                            :disabled="busy"
-                                            @click="removeLine(index)"
-                                            >Remove</BaseButton
-                                        >
-                                    </td>
-                                </tr>
-                            </tbody>
-                            <tbody v-else-if="current" :class="draftTable.body">
-                                <tr
-                                    v-for="line in current.lines"
-                                    :key="line._id"
-                                    :class="draftTable.row"
+                                    Received
+                                </th>
+                                <th
+                                    v-if="!isDraft"
+                                    scope="col"
+                                    :class="draftTable.thNum"
                                 >
-                                    <td :class="draftTable.tdName">
-                                        {{ line.name }}
-                                        <span
-                                            class="block text-xs font-normal text-muted num"
-                                            >{{ line.EAN }}</span
-                                        >
-                                    </td>
-                                    <td :class="draftTable.tdNum">
-                                        {{
-                                            formatQuantity(
-                                                line.orderedQty,
-                                                line.unit,
-                                            )
-                                        }}
-                                    </td>
-                                    <td :class="draftTable.tdNum">
-                                        {{
-                                            formatQuantity(
-                                                line.receivedQty,
-                                                line.unit,
-                                            )
-                                        }}
-                                    </td>
-                                    <td :class="draftTable.tdNum">
-                                        {{
-                                            formatQuantity(
-                                                line.outstandingQty,
-                                                line.unit,
-                                            )
-                                        }}
-                                    </td>
-                                    <td :class="draftTable.tdNum">
-                                        {{
-                                            formatCurrency(line.expectedCost)
-                                        }}/{{ unitLabel(line.unit) }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <p class="text-sm text-right font-bold text-ink num">
-                        Expected total:
-                        {{
-                            formatCurrency(
-                                isDraft
-                                    ? draftTotal(draft)
-                                    : (current?.expectedTotal ?? 0),
-                            )
-                        }}
-                    </p>
-
-                    <div v-if="isDraft" class="flex flex-wrap items-end gap-3">
-                        <BaseCombobox
-                            v-model="searchText"
-                            v-model:selected="picked"
-                            :options="matchOptions"
-                            label="Add product (EAN or name)"
-                            :maxlength="STRING_LIMITS.PRODUCT_NAME"
-                            :loading="matchesLoading"
-                            :error="matchError"
-                            :disabled="busy"
-                            @search="debouncedSearch"
-                        />
-                    </div>
-
-                    <div class="flex flex-wrap gap-2">
-                        <template v-if="isDraft">
-                            <BaseButton :disabled="busy" @click="saveDraft"
-                                >Save draft</BaseButton
+                                    Outstanding
+                                </th>
+                                <th scope="col" :class="draftTable.thNum">
+                                    Expected cost
+                                </th>
+                                <th
+                                    v-if="isDraft"
+                                    scope="col"
+                                    :class="draftTable.thNum"
+                                >
+                                    Line total
+                                </th>
+                                <th
+                                    v-if="isDraft"
+                                    scope="col"
+                                    :class="draftTable.thNum"
+                                >
+                                    Action
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody v-if="isDraft" :class="draftTable.body">
+                            <tr v-if="draft.length === 0">
+                                <td
+                                    colspan="4"
+                                    class="py-6 px-5 text-center text-sm text-muted"
+                                    data-testid="po-no-lines"
+                                >
+                                    No lines yet. Add a product above by EAN or
+                                    name.
+                                </td>
+                            </tr>
+                            <tr
+                                v-for="(line, index) in draft"
+                                :key="line.product"
+                                :class="draftTable.row"
                             >
-                            <BaseButton
-                                v-if="current"
-                                :disabled="busy || dirty"
-                                @click="send"
-                                >Mark as sent</BaseButton
+                                <td :class="draftTable.tdName">
+                                    {{ line.name }}
+                                    <span
+                                        class="block text-xs font-normal text-muted num"
+                                        >{{ line.EAN }}</span
+                                    >
+                                </td>
+                                <td :class="draftTable.tdNum">
+                                    <BaseInput
+                                        v-model="line.quantity"
+                                        class="min-w-24"
+                                        :data-scan-line="line.product"
+                                        numeric
+                                        :aria-label="`Ordered quantity (${unitLabel(line.unit)}) for ${line.name}`"
+                                        :inputmode="
+                                            decimalUnit(line.unit)
+                                                ? 'decimal'
+                                                : 'numeric'
+                                        "
+                                        :error="lineErrors[index]?.quantity"
+                                        :disabled="busy"
+                                    />
+                                </td>
+                                <td :class="draftTable.tdNum">
+                                    <BaseInput
+                                        v-model="line.cost"
+                                        class="min-w-28"
+                                        numeric
+                                        :aria-label="`Expected unit cost (₱/${unitLabel(line.unit)}) for ${line.name}`"
+                                        inputmode="decimal"
+                                        :error="lineErrors[index]?.cost"
+                                        :disabled="busy"
+                                    />
+                                </td>
+                                <td
+                                    :class="draftTable.tdNum"
+                                    data-testid="po-line-total"
+                                >
+                                    {{
+                                        lineTotal(line) === null
+                                            ? '—'
+                                            : formatCurrency(lineTotal(line)!)
+                                    }}
+                                </td>
+                                <td :class="draftTable.tdActions">
+                                    <BaseButton
+                                        size="sm"
+                                        variant="outline"
+                                        class="min-h-11 min-w-11"
+                                        :aria-label="`Remove ${line.name}`"
+                                        :disabled="busy"
+                                        @click="removeLine(index)"
+                                        >Remove</BaseButton
+                                    >
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tbody v-else-if="current" :class="draftTable.body">
+                            <tr
+                                v-for="line in current.lines"
+                                :key="line._id"
+                                :class="draftTable.row"
                             >
-                        </template>
-                        <BaseButton
-                            v-if="isOpen"
-                            :disabled="busy"
-                            @click="openReceive"
-                            >Receive</BaseButton
-                        >
-                        <BaseButton
-                            v-if="current && (isDraft || isOpen)"
-                            variant="outline"
-                            :disabled="busy"
-                            @click="cancelOrder"
-                            >Cancel order</BaseButton
-                        >
-                    </div>
-                    <p
-                        v-if="isDraft && current && dirty"
-                        class="text-sm text-muted"
-                    >
-                        Save the draft before marking it as sent.
-                    </p>
-                </template>
-            </div>
+                                <td :class="draftTable.tdName">
+                                    {{ line.name }}
+                                    <span
+                                        class="block text-xs font-normal text-muted num"
+                                        >{{ line.EAN }}</span
+                                    >
+                                </td>
+                                <td :class="draftTable.tdNum">
+                                    {{
+                                        formatQuantity(
+                                            line.orderedQty,
+                                            line.unit,
+                                        )
+                                    }}
+                                </td>
+                                <td :class="draftTable.tdNum">
+                                    {{
+                                        formatQuantity(
+                                            line.receivedQty,
+                                            line.unit,
+                                        )
+                                    }}
+                                </td>
+                                <td :class="draftTable.tdNum">
+                                    {{
+                                        formatQuantity(
+                                            line.outstandingQty,
+                                            line.unit,
+                                        )
+                                    }}
+                                </td>
+                                <td :class="draftTable.tdNum">
+                                    {{ formatCurrency(line.expectedCost) }}/{{
+                                        unitLabel(line.unit)
+                                    }}
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot data-testid="po-expected-total">
+                            <tr class="border-t border-line font-bold text-ink">
+                                <th
+                                    scope="row"
+                                    :colspan="isDraft ? 3 : 4"
+                                    class="py-3 px-5 text-right"
+                                >
+                                    Expected total
+                                </th>
+                                <td class="py-3 px-5 text-right num">
+                                    {{
+                                        formatCurrency(
+                                            isDraft
+                                                ? draftTotal(draft)
+                                                : (current?.expectedTotal ?? 0),
+                                        )
+                                    }}
+                                </td>
+                                <td v-if="isDraft" />
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </template>
 
             <BaseModal
                 v-model="receiving"
@@ -472,6 +532,7 @@ import {
     purchaseOrderReference,
     PURCHASE_ORDER_LIMITS,
     PurchaseOrderStatus,
+    quantityAmount,
     STRING_LIMITS,
     SUPPLIER_LIMITS,
     formatQuantity,
@@ -505,10 +566,12 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCombobox from '@/components/ui/BaseCombobox.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import type { ComboboxOption } from '@/components/ui/types';
-import EmptyState from '@/components/ui/EmptyState.vue';
 import { draftTable } from '@/components/ui/draft-table';
 import type { Breadcrumb } from '@/components/ui/page-primitives';
-import { ClipboardList } from '@lucide/vue';
+import { META_ITEM } from '@/components/User/details-meta';
+import { useAuthStore } from '@/stores/auth';
+import { formatStoreDateTime } from '@/utils/datetime';
+import { canOpenRoute, type RouteAccessMeta } from '@/router/access';
 import SupplierSelect from '@/components/User/Supplier/SupplierSelect.vue';
 import { zeroCostRequest } from '@/components/User/Restock/validation';
 import {
@@ -665,6 +728,28 @@ const breadcrumbs = computed<Breadcrumb[] | undefined>(() =>
           ]
         : undefined,
 );
+/** Editor title (#275): "New purchase order" or the order's reference. */
+const pageTitle = computed(() =>
+    editing.value
+        ? current.value
+            ? purchaseOrderReference(current.value._id)
+            : 'New purchase order'
+        : undefined,
+);
+const authStore = useAuthStore();
+// Offered only to whoever the router lets onto Restock History.
+const canViewReceipts = computed(() =>
+    canOpenRoute(
+        router.resolve({ name: 'Restocks' }).meta as RouteAccessMeta,
+        authStore.user?.roles ?? [],
+    ),
+);
+/** A draft line's total in centavos, or null while qty/cost are invalid. */
+function lineTotal(line: PurchaseOrderDraftLine): number | null {
+    const qty = parseQuantity(line.quantity, line.unit);
+    const cost = parsePesos(line.cost);
+    return qty && cost !== null ? quantityAmount(cost, qty, line.unit) : null;
+}
 const isOpen = computed(
     () =>
         !!current.value &&
@@ -673,6 +758,8 @@ const isOpen = computed(
 const snapshot = () =>
     JSON.stringify({ s: supplier.value, n: note.value, d: draft.value });
 const dirty = computed(() => isDraft.value && snapshot() !== saved.value);
+/** A saved, unchanged draft: Mark as sent is the primary action. */
+const sendReady = computed(() => !!current.value && !dirty.value);
 
 useUnsavedDraftsGuard({
     count: () => (dirty.value ? Math.max(1, draft.value.length) : 0),

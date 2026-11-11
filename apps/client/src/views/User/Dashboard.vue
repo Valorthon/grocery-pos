@@ -315,7 +315,7 @@ const attentionStats = computed<Stat[]>(() => {
             key: 'lowStock',
             title: 'Low Stock Items',
             value: count(d?.lowStockCount),
-            hint: 'Active products at or below their reorder level',
+            hint: 'Active products at or below their low stock level',
             icon: AlertCircle,
             tone: attention(d?.lowStockCount, 'warning'),
         },

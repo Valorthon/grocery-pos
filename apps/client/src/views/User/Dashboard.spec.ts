@@ -637,7 +637,7 @@ describe('Dashboard card subtitles (#213)', () => {
         );
         expect(hint('products')).toContain('Active products');
         expect(hint('lowStock')).toContain(
-            'Active products at or below their reorder level',
+            'Active products at or below their low stock level',
         );
         expect(hint('outOfStock')).toContain(
             'Active products with zero or less on hand',

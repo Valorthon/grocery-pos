@@ -183,6 +183,16 @@ Rules:
   (`productActive: false` on the line) shows a warning in the list and the
   editor (`draftSendBlockers`); sending still refuses it. ₱0 expected cost
   on a draft needs no confirmation (only at receipt).
+- PO screen layout (#275): the title is "New purchase order" or the
+  reference, with the status badge beside it (PageFrame `badge` slot).
+  Back to list and the state's actions sit in the page header (draft: Save
+  draft, Mark as sent, Cancel order; SENT/PARTIAL: Receive, Cancel order;
+  RECEIVED/CANCELLED: none). A draft has a Supplier/Note band, the Add
+  product row above the lines, a Line total column (`quantityAmount`), an
+  in-table "No lines yet" row and Expected
+  total as the table footer. An existing order shows a #260-style heading
+  (supplier, total), a muted meta line (created in store time, by, Closed
+  short, View receipts) and the note when set.
 - Every PO action (create, edit draft, send, cancel, receive) writes an
   allowlisted `PURCHASE_ORDER.*` audit entry in the change's transaction
   (#123 round 3): reference, supplier, status, version, `lineCount`, `lines`
@@ -640,8 +650,9 @@ requestId}`. A 5xx never carries details or internals.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
 - Column help (#263): a `TableHeader` may carry `help` (text or
   `{term, meaning}[]`); BaseTable renders an ⓘ `InfoTooltip` (#258,
-  popover top layer, "About {title}", 44px with `-my-3`) after the title,
-  before it in right-aligned columns. Only non-obvious columns get help;
+  popover top layer, "About {title}", 44px with `-my-3`) after the title
+  in every column, right-aligned too (#272). An ⓘ always follows its
+  label/title, never precedes it. Only non-obvious columns get help;
   a status, type or role column lists every value. Texts live in `.ts`
   modules beside the badge maps (`purchase-order.ts`, `sale-status.ts`,
   `inventory-help.ts`, `stock-count-help.ts`, `Reports/column-help.ts`,
@@ -650,6 +661,11 @@ requestId}`. A 5xx never carries details or internals.
   the lists. Help hides with its column; Inventory's Stock also explains
   the statuses shown under it below `sm`. Specs read header titles with
   `headerText` (`testing/form-dom.ts`).
+- Field help (#273): `BaseInput` takes `help` (and an optional
+  `helpLabel`, default "About {label}"); the ⓘ sits after the label,
+  outside it (so a click never focuses the input), with `-my-3`. Edit
+  Product's Low stock at and Restock amount use the shared
+  `INVENTORY_HELP.reorderLevel`/`reorderQuantity` texts.
 - Page summaries (#262): every admin page shows a one-line summary under
   its title from the route's `meta.description` (a `queryTitle` may carry
   its own, e.g. Low stock), via `routeDescription` in PageFrame; at most
@@ -937,6 +953,13 @@ on upstream fixes).
 
 **Reorder planning** (#40)
 
+- UI wording (#274, owner decision 2026-11-11): `reorderLevel` is shown as
+  "Low stock at" (Inventory column, Stock history tile, Edit Product, ⓘ
+  "About low stock at"), `reorderQuantity` as "Restock amount"; prose says
+  "low stock level" (Settings: "Default low stock level for new products").
+  API, wire and code names are unchanged. `low-stock-wording.spec.ts`
+  refuses "reorder" (not part of an identifier) and "Restock quantity" in client source text.
+
 - `reorderLevel` and `reorderQuantity` use safe integer minor units, like stock.
   Legacy missing settings default to ten displayed units (10,000 grams for KG,
   10,000 mL for L, ten pieces/grams otherwise). Level may be zero; restock
@@ -997,7 +1020,7 @@ on upstream fixes).
   or unrestricted sales finances. Integrity compares ledger sum to inventory in one
   snapshot and reports discrepancies without changing either side.
 - Stock history header (#258): tiles for Current stock (the integrity
-  check's server `stock`, never the row's), Reorder level and EAN (Inventory
+  check's server `stock`, never the row's), Low stock at and EAN (Inventory
   and Products pass the same `ean`/`reorderLevel` props), then a Ledger badge:
   "Reconciled", "Mismatch" (both figures and "Investigate before posting
   more stock", `role=alert`) or "Unavailable" with "Retry check" (stock
@@ -1009,7 +1032,9 @@ on upstream fixes).
   shows, Escape from anywhere closes only the tooltip (a prevented capture
   listener the modal stack ignores). Dates are `DateRangeFilter` + `useDatePreset` in a compact
   `FilterBar` (apply at once on page 1, Clear Filters resets); the API keeps
-  `from`/`to`.
+  `from`/`to`. The Low stock at tile has an ⓘ with the shared
+  `INVENTORY_HELP.reorderLevel` text via `StatTile`'s `help` prop; tile ⓘ
+  triggers carry `-my-3` so every label row is one text line tall (#271).
 
 **Store settings** (#47, owner decision 2026-11-05)
 
