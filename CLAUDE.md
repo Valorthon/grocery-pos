@@ -972,6 +972,17 @@ on upstream fixes).
 - Inventory roles see quantities and permitted source links, never procurement costs
   or unrestricted sales finances. Integrity compares ledger sum to inventory in one
   snapshot and reports discrepancies without changing either side.
+- Stock history header (#258): tiles for Current stock (the integrity
+  check's server `stock`, never the row's), Reorder level and EAN (Inventory
+  and Products pass the same `ean`/`reorderLevel` props), then a Ledger badge:
+  "Reconciled", "Mismatch" (both figures and "Investigate before posting
+  more stock", `role=alert`) or "Unavailable" with "Retry check" (stock
+  tile "—"). Integrity loads once on open, apart from the movements page, so
+  either can fail alone. The balances note is an ⓘ `InfoTooltip`
+  (`components/ui`, hover/focus/tap, `aria-describedby`, Escape closes it
+  only). Dates are `DateRangeFilter` + `useDatePreset` in a compact
+  `FilterBar` (apply at once on page 1, Clear Filters resets); the API keeps
+  `from`/`to`.
 
 **Store settings** (#47, owner decision 2026-11-05)
 

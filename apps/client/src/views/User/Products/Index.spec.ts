@@ -5,7 +5,12 @@ import { click, field, flush, type } from '@/testing/form-dom';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
-import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
+import {
+    Role,
+    UnitOfMeasure,
+    formatQuantity,
+    reorderLevelOf,
+} from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
 import { AxiosError, AxiosHeaders } from 'axios';
 
@@ -574,6 +579,14 @@ describe('product list scans (#214)', () => {
         await scanInto('Product Name');
         expect(document.body.textContent).toContain('Stock history — milk');
         expect(document.body.textContent).not.toContain('Edit Product');
+        // The same EAN and reorder level tiles as Inventory (#258).
+        const tiles = document.querySelector(
+            '[data-testid="stock-history-tiles"]',
+        )!.textContent!;
+        expect(tiles).toContain(`EAN${SCAN}`);
+        expect(tiles).toContain(
+            `Reorder level${formatQuantity(reorderLevelOf({ unit: UnitOfMeasure.PIECE }), UnitOfMeasure.PIECE)}`,
+        );
     });
 
     it('falls back to the filtered search without one exact match', async () => {
