@@ -402,16 +402,26 @@ describe('BaseTable column help (#263)', () => {
         expect(tip.className).toContain('normal-case');
     });
 
-    it('puts the ⓘ before the title in a right-aligned column', () => {
+    it('puts the ⓘ after the title in every column, right-aligned too (#272)', () => {
         const host = mountTables({ headers, items });
-        const th = host.querySelectorAll('th')[2]!;
-        const wrap = th.querySelector('[data-column-help]')!;
-        expect(
-            wrap.firstElementChild?.querySelector('[data-info-tooltip]'),
-        ).not.toBeNull();
-        expect(wrap.textContent?.trim().endsWith('Total')).toBe(true);
-        const status = host.querySelectorAll('th')[1]!;
-        expect(status.textContent?.trim().startsWith('Status')).toBe(true);
+        const ths = [...host.querySelectorAll('th')];
+        for (const index of [1, 2]) {
+            const wrap = ths[index]!.querySelector('[data-column-help]')!;
+            const title = headers[index]!.title;
+            const tip = wrap.querySelector('[data-info-tooltip]')!;
+            const text = [...wrap.childNodes].find(
+                (n) =>
+                    n.nodeType === Node.TEXT_NODE &&
+                    n.textContent?.trim() === title,
+            )!;
+            expect(text).toBeDefined();
+            expect(
+                text.compareDocumentPosition(tip) &
+                    Node.DOCUMENT_POSITION_FOLLOWING,
+            ).toBeTruthy();
+            expect(wrap.textContent?.trim().startsWith(title)).toBe(true);
+        }
+        expect(ths[2]!.className).toContain('text-right');
     });
 
     it('hides the help with its column under hideBelow', () => {

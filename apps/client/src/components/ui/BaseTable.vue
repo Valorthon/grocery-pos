@@ -30,9 +30,7 @@
                                 class="inline-flex items-center gap-0.5"
                                 data-column-help
                             >
-                                <template v-if="header.align !== 'right'">{{
-                                    header.title
-                                }}</template>
+                                {{ header.title }}
                                 <InfoTooltip
                                     class="-my-3"
                                     :label="`About ${header.title}`"
@@ -47,9 +45,6 @@
                                             : ''
                                     }}</InfoTooltip
                                 >
-                                <template v-if="header.align === 'right'">{{
-                                    header.title
-                                }}</template>
                             </span>
                             <template v-else>{{ header.title }}</template>
                         </th>
