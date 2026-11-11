@@ -291,6 +291,14 @@ describe('BaseTable opt-in row click (issue #234)', () => {
         );
         return { host, rows, clicks, inner };
     }
+    it('keeps the sr-only row hint inside a positioned table wrapper (#252)', () => {
+        const { host } = mountClickable(true);
+        const hint = host.querySelector('.sr-only')!;
+        expect(hint).not.toBeNull();
+        const wrapper = host.firstElementChild as HTMLElement;
+        expect(wrapper.contains(hint)).toBe(true);
+        expect(wrapper.classList.contains('relative')).toBe(true);
+    });
     const key = (el: Element, k: string, repeat = false) => {
         const ev = new KeyboardEvent('keydown', {
             key: k,

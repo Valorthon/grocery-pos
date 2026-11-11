@@ -638,6 +638,13 @@ describe('SellerLayout: one navigation on every seller page (#161)', () => {
                 document.querySelector('[data-testid="seller-nav-drawer"]'),
             ).toBeNull();
             expect(document.querySelectorAll('main')).toHaveLength(1);
+            // #252: <main> is the positioned scroll container, so absolute
+            // descendants (sr-only hints) can't grow the document.
+            const main = document.querySelector('main')!;
+            expect(main.classList.contains('relative')).toBe(true);
+            expect(main.classList.contains('overflow-hidden')).toBe(true);
+            const root = document.querySelector('.h-screen')!;
+            expect(root.classList.contains('overflow-hidden')).toBe(true);
             expect(
                 [...sidebar.querySelectorAll('nav a')].map((a) =>
                     a.textContent?.trim(),
