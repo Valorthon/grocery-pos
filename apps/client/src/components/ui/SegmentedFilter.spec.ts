@@ -70,8 +70,9 @@ describe('SegmentedFilter (#242)', () => {
     });
     it('wraps so every chip stays reachable on a phone (#261)', async () => {
         await mount(vi.fn());
-        expect(document.querySelector('[role=group]')!.classList).toContain(
-            'flex-wrap',
-        );
+        const group = document.querySelector('[role=group]')!;
+        for (const c of ['flex-wrap', 'gap-px', 'bg-line'])
+            expect(group.classList).toContain(c);
+        for (const b of buttons()) expect(b.className).not.toMatch(/border-l/);
     });
 });
