@@ -14,6 +14,7 @@ vi.mock('@/axios', () => ({ default: api }));
 
 let app: App | null = null;
 const isOpen = ref(false);
+const current = ref<ProductView | null>(null);
 
 afterEach(() => {
     app?.unmount();
@@ -57,12 +58,13 @@ async function mount(options: MountOptions = {}) {
         username: 'someone',
         roles: options.roles ?? [Role.Restocker],
     };
+    current.value = product;
     app = createApp({
         render: () =>
             h(EditProductDialog, {
                 modelValue: isOpen.value,
                 'onUpdate:modelValue': (v: boolean) => (isOpen.value = v),
-                product,
+                product: current.value!,
             }),
     });
     app.use(pinia);
@@ -319,6 +321,7 @@ describe('EditProductDialog expiry box (#282)', () => {
 describe('EditProductDialog stock answers (#282 review)', () => {
     it("a late answer for product A never sets product B's box", async () => {
         const pending = new Map<string, (stock: number) => void>();
+        await mount({ product: { _id: 'a' } });
         api.get.mockImplementation((url: string) =>
             url.endsWith('/movements/integrity')
                 ? new Promise((resolve) =>
@@ -334,38 +337,12 @@ describe('EditProductDialog stock answers (#282 review)', () => {
                   )
                 : Promise.resolve({ data: { data: [], total: 0 } }),
         );
-        const base = { EAN: '4006381333931', price: 5000, unit: 'PIECE' };
-        const product = ref({
-            ...base,
-            _id: 'a',
-            name: 'apple',
-        } as unknown as ProductView);
-        const pinia = createPinia();
-        setActivePinia(pinia);
-        useAuthStore().user = {
-            userId: 'u1',
-            username: 'r',
-            roles: [Role.Restocker],
-        };
-        const host = document.createElement('div');
-        document.body.appendChild(host);
-        isOpen.value = true;
-        app = createApp({
-            render: () =>
-                h(EditProductDialog, {
-                    modelValue: isOpen.value,
-                    'onUpdate:modelValue': (v: boolean) => (isOpen.value = v),
-                    product: product.value,
-                }),
-        });
-        app.use(pinia);
-        app.mount(host);
+        // Reopen for A with its answer pending, then switch to B.
+        isOpen.value = false;
         await flush();
-        product.value = {
-            ...base,
-            _id: 'b',
-            name: 'banana',
-        } as unknown as ProductView;
+        isOpen.value = true;
+        await flush();
+        current.value = { ...current.value!, _id: 'b', name: 'banana' };
         await flush();
         pending.get('b')!(0);
         await flush();
