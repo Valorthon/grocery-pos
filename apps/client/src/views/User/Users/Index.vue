@@ -143,9 +143,7 @@
                 @click="createModel = false"
                 >Cancel</BaseButton
             >
-            <BaseButton class="flex-1" :loading="saving" @click="createUser"
-                >Save</BaseButton
-            >
+            <BaseButton :loading="saving" @click="createUser">Save</BaseButton>
         </template>
     </BaseModal>
 
@@ -215,7 +213,6 @@
                 >Cancel</BaseButton
             >
             <BaseButton
-                class="flex-1"
                 :loading="saving"
                 :disabled="!!editPasswordError"
                 @click="updateUser"
@@ -258,7 +255,6 @@ import {
     canGrantRole,
     canManageUser,
     type CreateUsersRequest,
-    ErrorCode,
     type Paginated,
     STRING_LIMITS,
     type UpdateUsersRequest,
@@ -270,7 +266,7 @@ import {
     useListFetch,
     useListPaging,
 } from '@/composables/useListFetch';
-import { apiErrorBody, apiErrorMessages } from '@/utils/api-error';
+import { apiErrorMessages, isDuplicateName } from '@/utils/api-error';
 
 const { page, limit, search } = useListPaging(() => fetchUsers());
 const totalItems = ref(0);
@@ -510,21 +506,6 @@ function confirmRename(): Promise<boolean> {
         } will log in as ${name}.`,
         confirmLabel: 'Rename',
     });
-}
-
-/** A `DB_DUPLICATE_KEY` whose details name the `name` field. */
-function isDuplicateName(error: unknown): boolean {
-    const body = apiErrorBody(error);
-    return (
-        body?.error === ErrorCode.DB_DUPLICATE_KEY &&
-        Array.isArray(body.details) &&
-        body.details.some(
-            (d: unknown) =>
-                typeof d === 'object' &&
-                d !== null &&
-                (d as { property?: unknown }).property === 'name',
-        )
-    );
 }
 
 async function updateUser() {

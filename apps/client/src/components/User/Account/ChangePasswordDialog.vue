@@ -47,11 +47,7 @@
                 @click="model = false"
                 >Cancel</BaseButton
             >
-            <BaseButton
-                class="flex-1"
-                type="submit"
-                :form="formId"
-                :loading="saving"
+            <BaseButton type="submit" :form="formId" :loading="saving"
                 >Change password</BaseButton
             >
         </template>

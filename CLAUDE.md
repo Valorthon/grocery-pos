@@ -170,6 +170,12 @@ Rules:
   unchanged body after a lost answer, makes a new one after any edit or
   HTTP refusal, and reloads the PO after a 409. The list uses `BaseTable` +
   `useListPaging`/`useListFetch`/`useAppliedFilters`.
+- A DRAFT adds lines through an Add product button in the "Lines" card
+  header and in the empty table ("No products yet"), opening
+  `PurchaseOrder/AddLineDialog` (product, Ordered, Expected cost
+  prefilled from the latest receipt without overwriting a typed cost),
+  validated inline like the line rules (#284). Picking a product already
+  on the order edits that line (Edit line / Update), never a second one.
 - Low-stock list offers "Create purchase order" beside "Restock listed items"
   via a consume-once in-memory handoff (`purchaseOrderPrefill`) with reorder
   quantities; known latest costs fill untouched lines asynchronously.
@@ -355,10 +361,11 @@ requestId}`. A 5xx never carries details or internals.
   text/number/select fields, IME, key repeats or while a modal is open).
   Restock/adjustment scans open the add dialog as a new line (archived is
   refused; an unknown restock code opens a new product only if
-  `barcodeError` passes). The PO applies scans in order, adding a line or
-  +1 piece; a measured unit
-  focuses its quantity. Counts focus the first uncounted matching line.
-  Never mounted on the register.
+  `barcodeError` passes). The PO applies scans in order: a product not on
+  the order opens its Add product dialog with it picked (#284), a repeat
+  is +1 piece and a measured unit focuses its line's quantity; a scan
+  while the dialog is open is ignored. Counts focus the first uncounted
+  matching line. Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via
   `common/utils/regex.ts` and `product/product-search.ts`.
 - `Inventory.updatedBy` means the last writer.
@@ -559,6 +566,21 @@ requestId}`. A 5xx never carries details or internals.
   the ₱0 lines, and "Go back" keeps the drafts (#85).
 - `BaseInput` has `inheritAttrs: false`: attrs go on the `<input>`, class and
   style on the wrapper.
+- Dialog footers (#282): `BaseModal`'s footer is right-aligned
+  (`justify-end`), Cancel then the primary action, with no `flex-1`
+  buttons, in every dialog using it (Restock Add and the PO receive dialog included); only Receipt and Z-read keep
+  full-width `flex-1` buttons and DateRangeFilter its `ml-auto` Done.
+- Edit Product (#282) groups Details, Pricing (ADMIN only, the
+  latest-receipt summary beside the price) and Stock planning under a
+  header of barcode, unit badge (unit can't change) and status (display
+  only; Archive/Restore stays in the row menu). Client checks are inline
+  per field, and a taken name (`isDuplicateName` in `utils/api-error.ts`,
+  shared with the Users editor) shows "A product with this name already
+  exists" under the name; other failures are toasts. The expiry box is
+  disabled ("Only at zero stock") while the integrity check reports
+  nonzero stock; batch history isn't visible to the client, so the
+  server stays the final check. An ⓘ sits 4px after its label
+  (`-ml-3.5` after `gap-1`, `-ml-3` in table headers).
 - The product combobox binds a snapshot taken at pick time; toggling "new
   product" clears it. Product search goes through `useProductMatches`
   (debounced, out-of-order answers dropped).

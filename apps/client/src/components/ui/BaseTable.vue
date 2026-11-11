@@ -32,7 +32,7 @@
                             >
                                 {{ header.title }}
                                 <InfoTooltip
-                                    class="-my-3"
+                                    class="-my-3 -ml-3"
                                     :label="`About ${header.title}`"
                                     :items="
                                         typeof header.help === 'string'

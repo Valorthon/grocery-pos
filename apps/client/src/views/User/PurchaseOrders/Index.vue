@@ -214,20 +214,20 @@
                 </div>
                 <div
                     v-if="isDraft"
-                    class="px-5 py-4 border-b border-line"
-                    data-testid="po-add-product"
+                    class="flex items-center justify-between gap-3 px-5 py-3 border-b border-line"
+                    data-testid="po-lines-header"
                 >
-                    <BaseCombobox
-                        v-model="searchText"
-                        v-model:selected="picked"
-                        :options="matchOptions"
-                        label="Add product (EAN or name)"
-                        :maxlength="STRING_LIMITS.PRODUCT_NAME"
-                        :loading="matchesLoading"
-                        :error="matchError"
+                    <h2 class="text-base font-bold">Lines</h2>
+                    <BaseButton
+                        size="sm"
+                        class="min-h-11"
                         :disabled="busy"
-                        @search="debouncedSearch"
-                    />
+                        data-testid="po-add-product"
+                        @click="openAddLine(null)"
+                    >
+                        <Plus class="w-4 h-4" aria-hidden="true" />
+                        Add product
+                    </BaseButton>
                 </div>
                 <div :class="draftTable.wrap">
                     <table :class="draftTable.table">
@@ -275,12 +275,29 @@
                         <tbody v-if="isDraft" :class="draftTable.body">
                             <tr v-if="draft.length === 0">
                                 <td
-                                    colspan="4"
-                                    class="py-6 px-5 text-center text-sm text-muted"
+                                    colspan="5"
+                                    class="py-10 px-5 text-center"
                                     data-testid="po-no-lines"
                                 >
-                                    No lines yet. Add a product above by EAN or
-                                    name.
+                                    <p class="font-bold text-ink">
+                                        No products yet
+                                    </p>
+                                    <p class="mt-1 text-sm text-muted">
+                                        Scan a barcode or click Add product.
+                                    </p>
+                                    <BaseButton
+                                        size="sm"
+                                        class="mt-4 min-h-11"
+                                        :disabled="busy"
+                                        data-testid="po-empty-add"
+                                        @click="openAddLine(null)"
+                                    >
+                                        <Plus
+                                            class="w-4 h-4"
+                                            aria-hidden="true"
+                                        />
+                                        Add product
+                                    </BaseButton>
                                 </td>
                             </tr>
                             <tr
@@ -414,6 +431,12 @@
                 </div>
             </template>
 
+            <AddLineDialog
+                v-model="addingLine"
+                :lines="draft"
+                :scanned="scannedProduct"
+                @save="saveLine"
+            />
             <BaseModal
                 v-model="receiving"
                 title="Receive purchase order"
@@ -509,11 +532,7 @@
                         @click="receiving = false"
                         >Close</BaseButton
                     >
-                    <BaseButton
-                        class="flex-1"
-                        :disabled="busy"
-                        @click="submitReceive"
-                    >
+                    <BaseButton :disabled="busy" @click="submitReceive">
                         {{ busy ? 'Receiving…' : 'Record receipt' }}
                     </BaseButton>
                 </template>
@@ -544,6 +563,7 @@ import {
     unitOf,
     type Paginated,
     type ProductCostView,
+    type ProductView,
     type PurchaseOrderView,
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
@@ -563,9 +583,10 @@ import {
     useListPaging,
 } from '@/composables/useListFetch';
 import BaseModal from '@/components/ui/BaseModal.vue';
-import BaseCombobox from '@/components/ui/BaseCombobox.vue';
+import AddLineDialog from '@/components/User/PurchaseOrder/AddLineDialog.vue';
+import { anyModalOpen } from '@/components/ui/modal-stack';
+import { Plus } from '@lucide/vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
-import type { ComboboxOption } from '@/components/ui/types';
 import { draftTable } from '@/components/ui/draft-table';
 import type { Breadcrumb } from '@/components/ui/page-primitives';
 import { META_ITEM } from '@/components/User/details-meta';
@@ -593,7 +614,6 @@ import {
 } from '@/components/User/PurchaseOrder/purchase-order';
 import { useConfirm } from '@/composables/useConfirm';
 import { useUnsavedDraftsGuard } from '@/composables/useDrafts';
-import { useProductMatches } from '@/composables/useProductMatches';
 import {
     lookupActiveBarcode,
     useBarcodeCapture,
@@ -804,41 +824,23 @@ function removeLine(index: number) {
     lineErrors.value = {};
 }
 
-const {
-    matches,
-    options: matchOptions,
-    loading: matchesLoading,
-    error: matchError,
-    debouncedSearch,
-    reset: resetMatches,
-} = useProductMatches();
-const searchText = ref('');
-const picked = computed<ComboboxOption | null>({
-    get: () => null,
-    set: (option) => {
-        if (!option) return;
-        const match = matches.value.find((m) => m.product === option.value);
-        if (!match) return;
-        searchText.value = '';
-        resetMatches();
-        if (draft.value.some((line) => line.product === match.product)) {
-            validation.value = `${match.name} is already on this order.`;
-            return;
-        }
-        validation.value = '';
-        const line: PurchaseOrderDraftLine = {
-            product: match.product,
-            name: match.name,
-            EAN: match.EAN,
-            unit: unitOf(match.unit),
-            tracksExpiry: match.tracksExpiry,
-            quantity: '',
-            cost: '',
-        };
-        draft.value = [...draft.value, line];
-        void prefillCosts([line]);
-    },
-});
+// ------------------------------------------------ add / edit a line (#284)
+const addingLine = ref(false);
+const scannedProduct = ref<ProductView | null>(null);
+function openAddLine(product: ProductView | null) {
+    scannedProduct.value = product;
+    addingLine.value = true;
+}
+/** A dialog's line: updates the product's line, else appends it. */
+function saveLine(line: PurchaseOrderDraftLine) {
+    validation.value = '';
+    const existing = draft.value.find((l) => l.product === line.product);
+    if (existing) {
+        existing.quantity = line.quantity;
+        existing.cost = line.cost;
+    } else draft.value = [...draft.value, line];
+    lineErrors.value = {};
+}
 
 /** Focuses a draft line's ordered quantity field. */
 async function focusQuantity(product: string) {
@@ -849,10 +851,10 @@ async function focusQuantity(product: string) {
 }
 
 /**
- * A page-wide scan on a DRAFT (#214): adds the product as a line, or +1
- * displayed unit when it is already on the order. A measured unit
- * (KG/G/L) is never counted up: its quantity field takes the focus so the
- * weight is typed. Locked orders ignore scans.
+ * A page-wide scan on a DRAFT (#214, #284): a product not on the order
+ * opens the Add product dialog with it picked; one already on it gets +1
+ * piece. A measured unit (KG/G/L) is never counted up: its quantity field
+ * takes the focus so the weight is typed. Locked orders ignore scans.
  */
 async function onScan(code: string) {
     let found;
@@ -866,7 +868,15 @@ async function onScan(code: string) {
             );
         return;
     }
-    if (unmounted || !isDraft.value || busy.value) return;
+    // The lookup may answer after the dialog (or another modal) opened.
+    if (
+        unmounted ||
+        !isDraft.value ||
+        busy.value ||
+        addingLine.value ||
+        anyModalOpen.value
+    )
+        return;
     if (found.kind === 'archived') {
         ui.queueMessage(Color.ERROR, 'Product archived');
         return;
@@ -887,27 +897,16 @@ async function onScan(code: string) {
         else await focusQuantity(product._id);
         return;
     }
-    const line: PurchaseOrderDraftLine = {
-        product: product._id,
-        name: product.name,
-        EAN: product.EAN,
-        unit,
-        tracksExpiry: product.tracksExpiry,
-        quantity: piece ? '1' : '',
-        cost: '',
-    };
-    draft.value = [...draft.value, line];
-    void prefillCosts([line]);
-    if (!piece) await focusQuantity(product._id);
+    openAddLine(product);
 }
-// Scans apply one at a time, in order: two quick scans of a new product
-// make one line of 2, never two lines (#214 review).
+// Scans apply one at a time, in order; a scan while the dialog is open is
+// ignored (#284).
 let scans: Promise<void> = Promise.resolve();
 useBarcodeCapture(
     (code) => {
         scans = scans.then(() => onScan(code));
     },
-    { enabled: () => isDraft.value && !busy.value },
+    { enabled: () => isDraft.value && !busy.value && !addingLine.value },
 );
 
 /** Known latest costs fill untouched lines only, never an edit (#41, #123). */

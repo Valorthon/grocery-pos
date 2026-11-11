@@ -13,9 +13,16 @@ import Index from './Index.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useUIStore } from '@/stores/ui';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
-import { field, flush, pickFirstMatch, type } from '@/testing/form-dom';
+import {
+    field,
+    fieldError,
+    flush,
+    pickFirstMatch,
+    type,
+} from '@/testing/form-dom';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
 import { wedgeScan } from '@/testing/scanner';
+import { anyModalOpen } from '@/components/ui/modal-stack';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { ErrorCode } from '@grocery-pos/contracts';
 
@@ -337,11 +344,23 @@ async function chip(label: string) {
     button.click();
     await flush();
 }
-async function addMilk() {
-    await type('Add product', 'milk');
+/** Opens Add product and picks milk (#284). */
+async function pickMilk() {
+    document
+        .querySelector<HTMLButtonElement>('[data-testid="po-add-product"]')!
+        .click();
+    await flush();
+    await type('Product (EAN or name)', 'milk');
     await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
     await flush();
     await pickFirstMatch();
+}
+/** Adds milk through the dialog with `qty` L at ₱`cost`. */
+async function addMilk(qty = '1.5', cost = '80') {
+    await pickMilk();
+    await type('Ordered', qty);
+    await type('Expected cost', cost);
+    await press('Add');
 }
 
 describe('Purchase order drafting (#123)', () => {
@@ -364,23 +383,34 @@ describe('Purchase order drafting (#123)', () => {
         expect(document.body.textContent).toContain(
             'Add at least one product.',
         );
-        await addMilk();
+        await addMilk('1', '70');
         costs({ data: [{ product: 'p9' }] });
         await flush();
-        await addMilk();
-        expect(document.body.textContent).toContain(
-            'milk is already on this order.',
-        );
+        // Picking milk again edits its line: no second line (#284).
+        await pickMilk();
+        expect(field('Ordered').value).toBe('1');
+        expect(field('Expected cost').value).toBe('70');
+        expect(document.body.textContent).toContain('Edit line');
+        await type('Ordered', '');
+        await press('Update');
+        expect(fieldError('Ordered')).not.toBe('');
+        await type('Ordered', '1.5');
+        await type('Expected cost', '80');
+        await press('Update');
+        expect(
+            document.querySelectorAll('input[aria-label^="Ordered quantity"]'),
+        ).toHaveLength(1);
+        expect(document.body.textContent).not.toContain('already on');
+        const qty = input('Ordered quantity (L) for milk');
+        expect(qty.value).toBe('1.5');
+        qty.value = '';
+        qty.dispatchEvent(new Event('input'));
         await press('Save draft');
         expect(document.body.textContent).toContain(
             'Fix the highlighted lines.',
         );
-        const qty = input('Ordered quantity (L) for milk');
         qty.value = '1.5';
         qty.dispatchEvent(new Event('input'));
-        const cost = input('Expected unit cost (₱/L) for milk');
-        cost.value = '80';
-        cost.dispatchEvent(new Event('input'));
         await type('Note', ' weekly ');
         const created = { ...order(PurchaseOrderStatus.DRAFT), version: 0 };
         api.post.mockResolvedValueOnce({ data: created });
@@ -670,24 +700,53 @@ describe('Purchase order scanning (#214)', () => {
         api.get.mockImplementation((url: string, config?: unknown) => {
             const code = url.startsWith('/products/') ? url.slice(10) : null;
             if (code === '4800000000031') return Promise.reject(archived());
+            if (code === '4800000000048')
+                return Promise.reject(
+                    new AxiosError('x', '404', undefined, undefined, {
+                        status: 404,
+                        statusText: '',
+                        headers: {},
+                        config: { headers: new AxiosHeaders() },
+                        data: {},
+                    }),
+                );
             if (code) return Promise.resolve({ data: products[code] });
             return base(url, config) as Promise<unknown>;
         });
     });
 
-    it('adds a scanned piece as a line, then counts it up by one', async () => {
+    const dialogOpen = () => anyModalOpen.value;
+    const selectedProduct = () =>
+        document
+            .querySelector('[data-testid="combobox-selected"]')
+            ?.textContent?.trim();
+
+    it('opens the dialog for a new product, then counts a repeat up by one (#284)', async () => {
         await mount();
         await press('New purchase order');
         wedgeScan('4800000000017');
         await flush();
+        expect(dialogOpen()).toBe(true);
+        expect(selectedProduct()).toContain('soap');
+        expect(field('Ordered (pc)').value).toBe('1');
+        expect(api.get).toHaveBeenCalledWith('/suppliers/costs', {
+            params: { products: 'p1' },
+        });
+        await type('Ordered', '1');
+        await type('Expected cost', '5');
+        await press('Add');
+        expect(dialogOpen()).toBe(false);
         expect(input('Ordered quantity (pc) for soap').value).toBe('1');
         wedgeScan('4800000000017');
         await flush();
+        expect(dialogOpen()).toBe(false);
         expect(input('Ordered quantity (pc) for soap').value).toBe('2');
-        expect(document.body.textContent).not.toContain('already on');
+        expect(
+            document.querySelectorAll('input[aria-label^="Ordered quantity"]'),
+        ).toHaveLength(1);
     });
 
-    it('makes one line of 2 from two quick scans of a new product', async () => {
+    it('ignores a scan whose lookup answers while the dialog is open (#284)', async () => {
         await mount();
         await press('New purchase order');
         const base = api.get.getMockImplementation()!;
@@ -709,25 +768,48 @@ describe('Purchase order scanning (#214)', () => {
             await flush();
         }
         await flush();
+        expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+        await type('Ordered', '3');
+        await type('Expected cost', '5');
+        await press('Add');
         expect(
             document.querySelectorAll('input[aria-label^="Ordered quantity"]'),
         ).toHaveLength(1);
-        expect(input('Ordered quantity (pc) for soap').value).toBe('2');
+        expect(input('Ordered quantity (pc) for soap').value).toBe('3');
+        // A scan while the dialog is open is never captured.
+        await press('Add product');
+        api.get.mockClear();
+        wedgeScan('4800000000024');
+        await flush();
+        expect(api.get).not.toHaveBeenCalledWith('/products/4800000000024');
     });
 
-    it('focuses a measured line instead of counting it up', async () => {
+    it('focuses Ordered for a scanned measured product, and its line on a repeat', async () => {
         await mount();
         await press('New purchase order');
         wedgeScan('4800000000024');
         await flush();
+        expect(document.activeElement).toBe(field('Ordered (kg)'));
+        await type('Ordered', '2.5');
+        await type('Expected cost', '50');
+        await press('Add');
         const qty = input('Ordered quantity (kg) for rice');
-        expect(qty.value).toBe('');
-        expect(document.activeElement).toBe(qty);
+        expect(qty.value).toBe('2.5');
         qty.blur();
         wedgeScan('4800000000024');
         await flush();
-        expect(qty.value).toBe('');
+        expect(dialogOpen()).toBe(false);
+        expect(qty.value).toBe('2.5');
         expect(document.activeElement).toBe(qty);
+    });
+
+    it('refuses an unknown code', async () => {
+        await mount();
+        await press('New purchase order');
+        wedgeScan('4800000000048');
+        await flush();
+        expect(useUIStore().toasts[0]?.lines).toEqual(['Product not found']);
+        expect(dialogOpen()).toBe(false);
     });
 
     it('refuses an archived product', async () => {
@@ -780,7 +862,9 @@ describe('Purchase order editor layout and order view (#275)', () => {
         const band = byId('po-top-band')!;
         expect(band.textContent).toContain('Supplier');
         expect(band.textContent).toContain('Note (optional)');
+        expect(byId('po-lines-header')!.textContent).toContain('Lines');
         expect(byId('po-add-product')!.textContent).toContain('Add product');
+        expect(byId('po-add-product')!.className).toContain('min-h-11');
         const heads = [...document.querySelectorAll('thead th')].map((th) =>
             th.textContent?.trim(),
         );
@@ -792,7 +876,22 @@ describe('Purchase order editor layout and order view (#275)', () => {
             'Action',
         ]);
         expect(byId('po-no-lines')!.closest('tbody')).not.toBeNull();
-        expect(byId('po-no-lines')!.textContent).toContain('No lines yet');
+        expect(byId('po-no-lines')!.textContent).toContain('No products yet');
+        expect(byId('po-no-lines')!.textContent).toContain(
+            'Scan a barcode or click Add product.',
+        );
+        expect(byId('po-no-lines')!.getAttribute('colspan')).toBe('5');
+        // Both Add product buttons open the same dialog (#284).
+        for (const id of ['po-add-product', 'po-empty-add']) {
+            byId(id)!.click();
+            await flush();
+            expect(byId('po-line-dialog')).not.toBeNull();
+            expect(document.body.textContent).toContain('Add product');
+            await press('Cancel');
+            expect(anyModalOpen.value).toBe(false);
+        }
+        // No inline add combobox: Add product is a button (#284).
+        expect(byId('po-add-product')!.tagName).toBe('BUTTON');
         const foot = byId('po-expected-total')!;
         expect(foot.tagName).toBe('TFOOT');
         expect(foot.textContent).toContain('Expected total');
@@ -837,6 +936,7 @@ describe('Purchase order editor layout and order view (#275)', () => {
         );
         expect(byId('po-top-band')).toBeNull();
         expect(byId('po-add-product')).toBeNull();
+        expect(byId('po-lines-header')).toBeNull();
         expect(byId('po-expected-total')!.textContent).toContain('₱3.00');
         await press('View receipts');
         expect(nav.push).toHaveBeenCalledWith({
@@ -872,18 +972,18 @@ describe('Purchase order editor layout and order view (#275)', () => {
     it('totals a measured line exactly and puts Expected total under it', async () => {
         await mount();
         await press('New purchase order');
-        await addMilk();
+        await addMilk('0.45', '180');
         costs({ data: [] });
         await flush();
         const lineCell = () =>
             document.querySelector('[data-testid="po-line-total"]')!;
-        expect(lineCell().textContent?.trim()).toBe('—');
         const qty = input('Ordered quantity (L) for milk');
+        qty.value = '';
+        qty.dispatchEvent(new Event('input'));
+        await flush();
+        expect(lineCell().textContent?.trim()).toBe('—');
         qty.value = '0.45';
         qty.dispatchEvent(new Event('input'));
-        const cost = input('Expected unit cost (₱/L) for milk');
-        cost.value = '180';
-        cost.dispatchEvent(new Event('input'));
         await flush();
         expect(lineCell().textContent).toContain('₱81.00');
         const foot = document.querySelector('tfoot tr')!;

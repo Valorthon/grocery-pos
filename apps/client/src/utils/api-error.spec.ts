@@ -6,6 +6,7 @@ import {
     apiErrorCode,
     apiErrorMessages,
     apiErrorText,
+    isDuplicateName,
     NETWORK_ERROR_MESSAGE,
 } from './api-error';
 import { newProductLines } from './payloads';
@@ -291,5 +292,23 @@ describe('apiErrorBody and apiErrorCode (#27)', () => {
     ])('find nothing for %s', (_label, error) => {
         expect(apiErrorBody(error)).toBeNull();
         expect(apiErrorCode(error)).toBeUndefined();
+    });
+});
+
+describe('isDuplicateName (#282)', () => {
+    const dup = (property: string) =>
+        httpError(400, {
+            ...body('Duplicate', [{ property, msg: 'Already exists' }]),
+            error: ErrorCode.DB_DUPLICATE_KEY,
+        });
+    it('is true only for a duplicate key naming `name`', () => {
+        expect(isDuplicateName(dup('name'))).toBe(true);
+        expect(isDuplicateName(dup('EAN'))).toBe(false);
+        expect(
+            isDuplicateName(
+                httpError(400, body('x', [{ property: 'name', msg: 'm' }])),
+            ),
+        ).toBe(false);
+        expect(isDuplicateName(new Error('offline'))).toBe(false);
     });
 });

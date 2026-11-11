@@ -422,6 +422,11 @@ describe('scrollable BaseModal (#217)', () => {
         expect(classes(footer)).toContain('shrink-0');
     });
 
+    it('right-aligns the footer buttons (#282)', async () => {
+        await mountOne();
+        expect(classes(parts().footer)).toContain('justify-end');
+    });
+
     it('leaves a non-scrollable body at its natural height', async () => {
         await mountOne();
         const { body } = parts();

@@ -148,3 +148,21 @@ export function apiErrorText(
 ): string {
     return apiErrorMessages(error, fallback, options).join('; ');
 }
+
+/**
+ * A `DB_DUPLICATE_KEY` whose details name the `name` field: a taken
+ * user or product name, shown inline under the name (#106, #282).
+ */
+export function isDuplicateName(error: unknown): boolean {
+    const body = apiErrorBody(error);
+    return (
+        body?.error === ErrorCode.DB_DUPLICATE_KEY &&
+        Array.isArray(body.details) &&
+        body.details.some(
+            (d: unknown) =>
+                typeof d === 'object' &&
+                d !== null &&
+                (d as { property?: unknown }).property === 'name',
+        )
+    );
+}

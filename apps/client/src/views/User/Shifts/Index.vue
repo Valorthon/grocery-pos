@@ -107,7 +107,6 @@
                 <BaseButton
                     v-if="selected && !selected.report"
                     variant="danger"
-                    class="flex-1"
                     :loading="closing"
                     @click="forceClose"
                     >Force-close shift</BaseButton

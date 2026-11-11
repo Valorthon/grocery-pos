@@ -171,6 +171,8 @@ describe('BaseInput help (#273)', () => {
         expect(button.getAttribute('aria-label')).toBe('About Level (kg)');
         expect(label.contains(button)).toBe(false);
         expect(button.parentElement!.classList).toContain('-my-3');
+        // Snug: the 16px icon sits about 4px after the label (#282).
+        expect(button.parentElement!.classList).toContain('-ml-3.5');
         expect(
             document
                 .getElementById(button.getAttribute('aria-describedby')!)!

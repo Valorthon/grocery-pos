@@ -420,6 +420,8 @@ describe('BaseTable column help (#263)', () => {
                     Node.DOCUMENT_POSITION_FOLLOWING,
             ).toBeTruthy();
             expect(wrap.textContent?.trim().startsWith(title)).toBe(true);
+            // Snug after the title (#282).
+            expect(tip.parentElement!.classList).toContain('-ml-3');
         }
         expect(ths[2]!.className).toContain('text-right');
     });

@@ -24,7 +24,7 @@
                 @click="model = false"
                 >Cancel</BaseButton
             >
-            <BaseButton class="flex-1" :loading="saving" @click="handleSubmit">
+            <BaseButton :loading="saving" @click="handleSubmit">
                 <Save class="w-4 h-4" />
                 Save
             </BaseButton>
