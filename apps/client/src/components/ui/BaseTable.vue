@@ -25,7 +25,33 @@
                                 hideClass(header.hideBelow),
                             ]"
                         >
-                            {{ header.title }}
+                            <span
+                                v-if="header.help"
+                                class="inline-flex items-center gap-0.5"
+                                data-column-help
+                            >
+                                <template v-if="header.align !== 'right'">{{
+                                    header.title
+                                }}</template>
+                                <InfoTooltip
+                                    class="-my-3"
+                                    :label="`About ${header.title}`"
+                                    :items="
+                                        typeof header.help === 'string'
+                                            ? undefined
+                                            : header.help
+                                    "
+                                    >{{
+                                        typeof header.help === 'string'
+                                            ? header.help
+                                            : ''
+                                    }}</InfoTooltip
+                                >
+                                <template v-if="header.align === 'right'">{{
+                                    header.title
+                                }}</template>
+                            </span>
+                            <template v-else>{{ header.title }}</template>
                         </th>
                     </tr>
                 </thead>
@@ -216,6 +242,7 @@ import { computed, useId } from 'vue';
 import { AlertCircle, Inbox, RotateCw } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import BaseSelect from './BaseSelect.vue';
+import InfoTooltip from './InfoTooltip.vue';
 import type { Component } from 'vue';
 import type { TableHeader, TableRow } from './types';
 

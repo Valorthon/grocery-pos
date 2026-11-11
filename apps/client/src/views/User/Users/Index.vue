@@ -229,6 +229,7 @@
 </template>
 
 <script setup lang="ts">
+import { USER_HELP } from '../list-help';
 import { computed, ref } from 'vue';
 import { Pencil, Plus } from '@lucide/vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
@@ -304,8 +305,13 @@ function canEdit(item: UserView): boolean {
 
 const headers = [
     { key: 'name', title: 'Name' },
-    { key: 'roles', title: 'Roles', hideBelow: 'sm' as const },
-    { key: 'isActive', title: 'Status' },
+    {
+        key: 'roles',
+        title: 'Roles',
+        hideBelow: 'sm' as const,
+        help: USER_HELP.roles,
+    },
+    { key: 'isActive', title: 'Status', help: USER_HELP.status },
     { key: 'actions', title: 'Actions', align: 'right' as const },
 ];
 

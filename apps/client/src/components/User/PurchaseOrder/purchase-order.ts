@@ -11,6 +11,8 @@ import {
 } from '@grocery-pos/contracts';
 import { NUMERIC_LIMITS } from '@grocery-pos/contracts';
 import type { StatusMap } from '@/components/ui/status-badge';
+import { statusHelp } from '@/components/ui/column-help';
+import type { ColumnHelp } from '@/components/ui/types';
 import { centavosToPesoInput, parsePesos } from '@/utils/currency';
 import { fieldErrors, moneyError, quantityError } from '@/utils/rules';
 
@@ -205,3 +207,19 @@ export function toReceiveBody(
 export function newReceiveKey(): string {
     return `po-${crypto.randomUUID()}`;
 }
+
+/** Column help for the purchase order list (#263). */
+export const PURCHASE_ORDER_HELP = {
+    status: statusHelp(PURCHASE_ORDER_STATUS, {
+        [PurchaseOrderStatus.DRAFT]: 'Editable, not yet sent.',
+        [PurchaseOrderStatus.SENT]: 'Lines locked, awaiting delivery.',
+        [PurchaseOrderStatus.PARTIALLY_RECEIVED]:
+            'Some stock received, the rest outstanding.',
+        [PurchaseOrderStatus.RECEIVED]: 'Everything ordered was received.',
+        [PurchaseOrderStatus.CANCELLED]:
+            'Closed; stock already received stays.',
+    }),
+    lines: 'Number of products on the order (one line per product).',
+    expectedTotal:
+        'Ordered quantity × expected cost, summed over the lines. The cost entered at receipt may differ.',
+} satisfies Record<string, ColumnHelp>;

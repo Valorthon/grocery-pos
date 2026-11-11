@@ -27,7 +27,22 @@ export interface TableHeader {
      * screen shows the important columns without scrolling sideways.
      */
     hideBelow?: 'sm' | 'md' | 'lg';
+    /**
+     * Column help (#263): an ⓘ in the header with a short definition, or
+     * one line per value of a status/type/role column. Only for columns
+     * whose meaning isn't obvious. Texts live in `.ts` modules next to the
+     * label maps (`column-help.ts`).
+     */
+    help?: ColumnHelp;
 }
+
+/** One defined term of column help. */
+export interface HelpItem {
+    term: string;
+    meaning: string;
+}
+/** A column's help: free text or a list of terms. */
+export type ColumnHelp = string | HelpItem[];
 
 /** A row of `BaseTable`: any object, keyed in the DOM by `id` when set. */
 export type TableRow = object & { id?: string | number };

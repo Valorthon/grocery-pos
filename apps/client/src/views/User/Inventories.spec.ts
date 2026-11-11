@@ -3,7 +3,7 @@ import { createApp, reactive, type App } from 'vue';
 import type { RouteMeta, Router } from 'vue-router';
 import { createPinia, disposePinia, setActivePinia } from 'pinia';
 import { Role, UnitOfMeasure, type InventoryRow } from '@grocery-pos/contracts';
-import { click, field, flush, type } from '@/testing/form-dom';
+import { click, field, flush, type, headerText } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import { usePurchaseOrderPrefillStore } from '@/stores/purchaseOrderPrefill';
 import { useRestockPrefillStore } from '@/stores/restockPrefill';
@@ -189,7 +189,7 @@ describe('reorder list and restock draft', () => {
                 .querySelectorAll('table')[0]
                 .querySelectorAll('thead th'),
         ];
-        expect(ths.map((t) => t.textContent?.trim())).toEqual([
+        expect(ths.map((t) => headerText(t))).toEqual([
             'Product',
             'Stock',
             'Reorder at',

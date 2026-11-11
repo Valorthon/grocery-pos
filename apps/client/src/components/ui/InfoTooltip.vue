@@ -31,7 +31,7 @@
             data-tooltip
             :style="position"
             :class="[
-                'fixed m-0 w-72 max-w-[80vw] rounded-control border border-line bg-surface p-3 text-left text-xs font-normal text-ink shadow-card',
+                'fixed m-0 w-72 max-w-[80vw] rounded-control border border-line bg-surface p-3 text-left text-xs font-normal normal-case tracking-normal text-ink shadow-card',
                 shown ? 'block' : 'hidden',
             ]"
         >

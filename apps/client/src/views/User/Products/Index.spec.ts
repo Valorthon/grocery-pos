@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { click, field, flush, type } from '@/testing/form-dom';
+import { click, field, flush, type, headerText } from '@/testing/form-dom';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
@@ -460,7 +460,7 @@ describe('columns and row menu (#172)', () => {
     it('puts Name first, then Category and Price', async () => {
         await mount();
         const titles = [...document.querySelectorAll('thead th')].map((th) =>
-            th.textContent?.trim(),
+            headerText(th),
         );
         expect(titles.slice(0, 3)).toEqual(['Name', 'Category', 'Price']);
         expect(titles).not.toContain('History');
@@ -613,7 +613,7 @@ describe('shared table pieces (#242)', () => {
     it('merges the EAN under the name and drops the EAN column', async () => {
         await mount();
         const titles = [...document.querySelectorAll('thead th')].map((th) =>
-            th.textContent?.trim(),
+            headerText(th),
         );
         expect(titles).not.toContain('EAN');
         expect(titles).toContain('Status');

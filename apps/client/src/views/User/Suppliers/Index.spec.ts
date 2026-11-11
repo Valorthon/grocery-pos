@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import Index from './Index.vue';
-import { click, flush, type } from '@/testing/form-dom';
+import { click, flush, type, headerText } from '@/testing/form-dom';
 import { useUIStore } from '@/stores/ui';
 const api = vi.hoisted(() => ({
     get: vi.fn(),
@@ -235,7 +235,7 @@ describe('columns and row menu (#172)', () => {
     it('splits contact details into columns and collapses actions into one menu', async () => {
         await mount();
         const titles = [...document.querySelectorAll('thead th')].map((th) =>
-            th.textContent?.trim(),
+            headerText(th),
         );
         expect(titles).toEqual([
             'Supplier',

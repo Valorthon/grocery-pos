@@ -125,6 +125,7 @@
 </template>
 
 <script setup lang="ts">
+import { SHIFT_HELP, SHIFT_STATUS } from '../list-help';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import { computed, ref, watch } from 'vue';
 import {
@@ -144,7 +145,6 @@ import { useConfirm } from '@/composables/useConfirm';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import type { StatusMap } from '@/components/ui/status-badge';
 import BillCountInput from '@/components/User/Sales/BillCountInput.vue';
 import { countsError } from '@/components/User/Sales/shift';
 import ZReadReportView from '@/components/User/Sales/ZReadReportView.vue';
@@ -172,18 +172,18 @@ const statusOptions: { label: string; value: '' | ShiftStatus }[] = [
     { label: 'Closed', value: ShiftStatus.CLOSED },
 ];
 
-const SHIFT_STATUS: StatusMap<ShiftStatus> = {
-    [ShiftStatus.OPEN]: { label: 'Open', color: 'success' },
-    [ShiftStatus.CLOSED]: { label: 'Closed', color: 'neutral' },
-};
-
 const headers = [
     { key: 'cashier', title: 'Cashier' },
-    { key: 'terminal', title: 'Terminal' },
-    { key: 'status', title: 'Status' },
+    { key: 'terminal', title: 'Terminal', help: SHIFT_HELP.terminal },
+    { key: 'status', title: 'Status', help: SHIFT_HELP.status },
     { key: 'opened', title: 'Opened' },
     { key: 'closed', title: 'Closed' },
-    { key: 'overShort', title: 'Over / Short', align: 'right' as const },
+    {
+        key: 'overShort',
+        title: 'Over / Short',
+        align: 'right' as const,
+        help: SHIFT_HELP.overShort,
+    },
 ];
 
 const rows = computed(() =>

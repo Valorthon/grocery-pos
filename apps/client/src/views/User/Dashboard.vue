@@ -199,7 +199,7 @@ import {
 import api from '@/axios';
 import Badge from '@/components/ui/Badge.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import { SALE_STATUS } from '@/components/User/Sales/sale-status';
+import { SALE_HELP, SALE_STATUS } from '@/components/User/Sales/sale-status';
 import StatTile from '@/components/ui/StatTile.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -405,8 +405,8 @@ const showsSalesTable = computed(() =>
 
 const saleHeaders: TableHeader[] = [
     { key: 'cashier', title: 'Cashier' },
-    { key: 'amount', title: 'Amount', align: 'right' },
-    { key: 'paymentType', title: 'Payment' },
+    { key: 'amount', title: 'Amount', align: 'right', help: SALE_HELP.amount },
+    { key: 'paymentType', title: 'Payment', help: SALE_HELP.payment },
     { key: 'createdAt', title: 'Date' },
 ];
 

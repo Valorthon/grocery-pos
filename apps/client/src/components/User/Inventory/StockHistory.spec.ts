@@ -10,7 +10,14 @@ import {
     type StockMovementView,
 } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
-import { click, flush, field, openDates, pick } from '@/testing/form-dom';
+import {
+    click,
+    flush,
+    field,
+    openDates,
+    pick,
+    headerText,
+} from '@/testing/form-dom';
 import StockHistory from './StockHistory.vue';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -317,7 +324,7 @@ it('right-aligns quantity columns with tabular figures (#170)', async () => {
     const heads = [...document.querySelectorAll('thead th')];
     for (const title of ['Change', 'Balance after'])
         expect(
-            heads.find((th) => th.textContent?.trim() === title)!.className,
+            heads.find((th) => headerText(th) === title)!.className,
         ).toContain('text-right num');
 });
 it('shows an empty state once loaded with no movements (#170)', async () => {

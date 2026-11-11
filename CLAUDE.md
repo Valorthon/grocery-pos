@@ -638,6 +638,18 @@ requestId}`. A 5xx never carries details or internals.
   nothing. Create validates name (trimmed), password and roles like
   `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
+- Column help (#263): a `TableHeader` may carry `help` (text or
+  `{term, meaning}[]`); BaseTable renders an ⓘ `InfoTooltip` (#258,
+  popover top layer, "About {title}", 44px with `-my-3`) after the title,
+  before it in right-aligned columns. Only non-obvious columns get help;
+  a status, type or role column lists every value. Texts live in `.ts`
+  modules beside the badge maps (`purchase-order.ts`, `sale-status.ts`,
+  `inventory-help.ts`, `stock-count-help.ts`, `Reports/column-help.ts`,
+  `views/User/list-help.ts`), built with `statusHelp`/`enumHelp` so a new
+  value without a meaning fails to compile; `column-help.spec.ts` checks
+  the lists. Help hides with its column; Inventory's Stock also explains
+  the statuses shown under it below `sm`. Specs read header titles with
+  `headerText` (`testing/form-dom.ts`).
 - Page summaries (#262): every admin page shows a one-line summary under
   its title from the route's `meta.description` (a `queryTitle` may carry
   its own, e.g. Low stock), via `routeDescription` in PageFrame; at most

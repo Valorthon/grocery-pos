@@ -10,6 +10,7 @@ import {
     fieldError,
     flush,
     type,
+    headerText,
 } from '@/testing/form-dom';
 import { PASSWORD_HINT, REQUIRED } from '@/utils/rules';
 import { useAuthStore } from '@/stores/auth';
@@ -899,7 +900,7 @@ describe('manager PIN entry point (#34)', () => {
 function narrowHeaders(): string[] {
     return Array.from(document.querySelectorAll('thead th'))
         .filter((th) => !th.className.split(/\s+/).includes('hidden'))
-        .map((th) => th.textContent?.trim() ?? '');
+        .map((th) => headerText(th));
 }
 
 describe('users list at 375px (issue #208)', () => {
@@ -907,5 +908,26 @@ describe('users list at 375px (issue #208)', () => {
         api.get.mockResolvedValue({ data: USERS });
         await mount();
         expect(narrowHeaders()).toEqual(['Name', 'Status', 'Actions']);
+    });
+});
+
+describe('column help (#263)', () => {
+    it('explains Roles (hidden with it below sm) and Status', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        const about = (label: string) =>
+            document.querySelector<HTMLButtonElement>(
+                `thead [aria-label="About ${label}"]`,
+            );
+        expect(about('Status')).not.toBeNull();
+        const roles = about('Roles')!;
+        expect(roles.closest('th')!.className).toContain(
+            'hidden sm:table-cell',
+        );
+        const tip = document.getElementById(
+            roles.getAttribute('aria-describedby')!,
+        )!;
+        expect(tip.querySelectorAll('dt')).toHaveLength(6);
+        expect(about('Name')).toBeNull();
     });
 });
