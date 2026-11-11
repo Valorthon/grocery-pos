@@ -30,7 +30,7 @@
                      row taller than a text line (#271). -->
                 <InfoTooltip
                     v-if="help"
-                    class="-my-3"
+                    class="-my-3 -ml-3.5"
                     :label="`About ${label.toLowerCase()}`"
                     >{{ help }}</InfoTooltip
                 >

@@ -566,6 +566,21 @@ requestId}`. A 5xx never carries details or internals.
   the ₱0 lines, and "Go back" keeps the drafts (#85).
 - `BaseInput` has `inheritAttrs: false`: attrs go on the `<input>`, class and
   style on the wrapper.
+- Dialog footers (#282): `BaseModal`'s footer is right-aligned
+  (`justify-end`), Cancel then the primary action, with no `flex-1`
+  buttons, in every dialog using it; only Receipt and Z-read keep
+  full-width `flex-1` buttons and DateRangeFilter its `ml-auto` Done.
+- Edit Product (#282) groups Details, Pricing (ADMIN only, the
+  latest-receipt summary beside the price) and Stock planning under a
+  header of barcode, unit badge (unit can't change) and status (display
+  only; Archive/Restore stays in the row menu). Client checks are inline
+  per field, and a taken name (`isDuplicateName` in `utils/api-error.ts`,
+  shared with the Users editor) shows "A product with this name already
+  exists" under the name; other failures are toasts. The expiry box is
+  disabled ("Only at zero stock") while the integrity check reports
+  nonzero stock; batch history isn't visible to the client, so the
+  server stays the final check. An ⓘ sits 4px after its label
+  (`-ml-3.5` after `gap-1`, `-ml-3` in table headers).
 - The product combobox binds a snapshot taken at pick time; toggling "new
   product" clears it. Product search goes through `useProductMatches`
   (debounced, out-of-order answers dropped).

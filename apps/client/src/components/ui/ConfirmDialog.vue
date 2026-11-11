@@ -17,7 +17,6 @@
                 >{{ shown.cancelLabel ?? 'Cancel' }}</BaseButton
             >
             <BaseButton
-                class="flex-1"
                 :variant="shown.danger ? 'danger-solid' : 'primary'"
                 :aria-describedby="messageId"
                 @click="emit('answer', true)"

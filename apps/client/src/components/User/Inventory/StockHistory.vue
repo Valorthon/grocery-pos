@@ -39,7 +39,7 @@
                     <div class="flex items-center gap-1">
                         <p class="text-xs font-semibold text-muted">Ledger</p>
                         <InfoTooltip
-                            class="-my-3"
+                            class="-my-3 -ml-3.5"
                             label="About stock history balances"
                         >
                             Balances follow posting order. Offline sale time is

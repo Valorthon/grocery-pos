@@ -19,6 +19,7 @@ import {
     reorderLevelOf,
 } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
+import { useUIStore } from '@/stores/ui';
 import { AxiosError, AxiosHeaders } from 'axios';
 
 const api = vi.hoisted(() => ({ get: vi.fn<ApiGet>(), patch: vi.fn() }));
@@ -290,7 +291,8 @@ describe('product editing and archival', () => {
                 reject(new Error('network'));
                 await flush();
                 expect(document.querySelector('[role=dialog]')).not.toBeNull();
-                expect(document.querySelector('[role=alert]')).not.toBeNull();
+                // A server failure is a toast (#282).
+                expect(useUIStore().toasts).toHaveLength(1);
                 expect(
                     document.querySelector('[data-modal-close]'),
                 ).not.toBeNull();
@@ -321,7 +323,7 @@ describe('product editing and archival', () => {
         await rowAction('Edit');
         await click('Save');
         expect(document.querySelector('[role=dialog]')).not.toBeNull();
-        expect(document.querySelector('[role=alert]')).not.toBeNull();
+        expect(useUIStore().toasts).toHaveLength(1);
     });
     it('confirms archiving and cancellation does not write', async () => {
         await mount();
@@ -353,16 +355,12 @@ it('validates product names and prices before saving', async () => {
     await type('Product name', ' ');
     await click('Save');
     expect(api.patch).not.toHaveBeenCalled();
-    expect(document.querySelector('[role=alert]')?.textContent).toContain(
-        'name',
-    );
+    expect(document.body.textContent).toContain('Enter a valid product name.');
     await type('Product name', 'milk');
     await type('Selling price (₱)', '0');
     await click('Save');
     expect(api.patch).not.toHaveBeenCalled();
-    expect(document.querySelector('[role=alert]')?.textContent).toContain(
-        'price',
-    );
+    expect(document.body.textContent).toContain('Enter a valid selling price.');
 });
 it('restores archived products after confirmation', async () => {
     useAuthStore().user = {
@@ -443,19 +441,17 @@ it('rejects fractional pieces, negative levels and blank reorder quantities befo
     };
     await mount();
     await rowAction('Edit');
-    for (const [label, value] of [
-        ['Low stock at (pc)', '0.5'],
-        ['Low stock at (pc)', '-1'],
-        ['Restock amount (pc)', ''],
+    for (const [label, value, message] of [
+        ['Low stock at (pc)', '0.5', 'Enter a valid low stock level.'],
+        ['Low stock at (pc)', '-1', 'Enter a valid low stock level.'],
+        ['Restock amount (pc)', '', 'Enter a positive restock amount.'],
     ]) {
         await type('Low stock at (pc)', '10');
         await type('Restock amount (pc)', '10');
         await type(label!, value!);
         await click('Save');
         expect(api.patch).not.toHaveBeenCalled();
-        expect(document.querySelector('[role=alert]')?.textContent).toContain(
-            'restock amount',
-        );
+        expect(document.body.textContent).toContain(message);
     }
 });
 

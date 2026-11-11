@@ -42,7 +42,6 @@
                 >Cancel</BaseButton
             >
             <BaseButton
-                class="flex-1"
                 :loading="submitting"
                 data-testid="shift-in-confirm"
                 @click="confirm"

@@ -99,7 +99,7 @@
 
                         <div
                             v-if="$slots.footer"
-                            class="shrink-0 px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex gap-2.5 items-center"
+                            class="shrink-0 px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex justify-end gap-2.5 items-center"
                         >
                             <slot name="footer" />
                         </div>
