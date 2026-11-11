@@ -279,7 +279,7 @@ const headers = [
     },
     {
         key: 'reorderLevel',
-        title: 'Reorder at',
+        title: 'Low stock at',
         align: 'right' as const,
         help: INVENTORY_HELP.reorderLevel,
         // Hidden below md (#210); the Stock history dialog shows it.

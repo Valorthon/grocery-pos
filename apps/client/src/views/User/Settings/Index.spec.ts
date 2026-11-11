@@ -89,7 +89,7 @@ it('validates timezone and reorder fields before submitting', async () => {
     expect(api.patch).not.toHaveBeenCalled();
     expect(document.body.textContent).toContain('valid IANA');
     input('Store timezone (IANA)', 'Asia/Manila');
-    input('Default reorder level for new products (display units)', '0.5');
+    input('Default low stock level for new products (display units)', '0.5');
     await flush();
     await click('Save store settings');
     expect(api.patch).not.toHaveBeenCalled();
@@ -123,7 +123,7 @@ it('locks settings edits until initial load settles, then saves with the loaded 
     expect(field('Store name').disabled).toBe(true);
     expect(field('Store timezone (IANA)').disabled).toBe(true);
     expect(
-        field('Default reorder level for new products (display units)')
+        field('Default low stock level for new products (display units)')
             .disabled,
     ).toBe(true);
     expect(

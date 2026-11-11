@@ -74,7 +74,7 @@ describe('route summaries (#262)', () => {
             routeDescription(
                 router.resolve('/admin/inventories?lowStock=true'),
             ),
-        ).toMatch(/reorder level/);
+        ).toMatch(/low stock level/);
         expect(
             routeDescription(
                 router.resolve('/admin/inventories?outOfStock=true'),

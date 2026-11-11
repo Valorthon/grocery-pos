@@ -32,13 +32,13 @@ describe('StatTile (#157)', () => {
         const el = await mount({
             label: 'Low stock',
             value: 12,
-            hint: 'At or below reorder level',
+            hint: 'At or below low stock level',
         });
         const value = el.querySelector('.font-display')!;
         expect(value.textContent?.trim()).toBe('12');
         expect(value.classList).toContain('num');
         expect(el.textContent).toContain('Low stock');
-        expect(el.textContent).toContain('At or below reorder level');
+        expect(el.textContent).toContain('At or below low stock level');
     });
 
     it.each([
@@ -101,14 +101,14 @@ describe('StatTile (#157)', () => {
     });
     it('adds an About note after the label without a taller row (#271)', async () => {
         const el = await mount({
-            label: 'Reorder level',
+            label: 'Low stock at',
             value: 5,
             help: 'Note text.',
         });
         const button = el.querySelector<HTMLButtonElement>(
             '[data-info-tooltip]',
         )!;
-        expect(button.getAttribute('aria-label')).toBe('About reorder level');
+        expect(button.getAttribute('aria-label')).toBe('About low stock at');
         expect(button.parentElement!.classList).toContain('-my-3');
         expect(
             document

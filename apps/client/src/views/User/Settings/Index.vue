@@ -53,7 +53,7 @@
                     <BaseInput
                         id="settings-reorder"
                         v-model="reorderInput"
-                        label="Default reorder level for new products (display units)"
+                        label="Default low stock level for new products (display units)"
                         inputmode="numeric"
                         :disabled="saving || loadingForm"
                     />
@@ -272,7 +272,7 @@ async function save() {
         level > SETTINGS_LIMITS.REORDER_LEVEL
     ) {
         saveError.value =
-            'Enter a store name and a valid whole-number reorder default.';
+            'Enter a store name and a valid whole-number low stock default.';
         return;
     }
     const expiryDays = Number(expiryInput.value);

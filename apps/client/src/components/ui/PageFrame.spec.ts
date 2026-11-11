@@ -31,7 +31,7 @@ async function mount(
                         key: 'lowStock',
                         value: 'true',
                         title: 'Low stock',
-                        description: 'Below reorder level',
+                        description: 'Below low stock level',
                     },
                 },
             },
@@ -94,7 +94,7 @@ describe('PageFrame (#159)', () => {
         expect(text()).toBe('All stock');
         await router.push('/inv?lowStock=true');
         await flush();
-        expect(text()).toBe('Below reorder level');
+        expect(text()).toBe('Below low stock level');
         app?.unmount();
         document.body.innerHTML = '';
         const other = await mount('/inv', { description: 'Welcome back' });

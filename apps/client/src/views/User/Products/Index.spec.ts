@@ -419,8 +419,8 @@ it('restocker sets measured reorder settings without gaining price permission', 
     await mount();
     await rowAction('Edit', 'rice');
     expect(document.body.textContent).not.toContain('Selling price (₱)');
-    await type('Reorder level (kg)', '0.450');
-    await type('Restock quantity (kg)', '2.500');
+    await type('Low stock at (kg)', '0.450');
+    await type('Restock amount (kg)', '2.500');
     await click('Save');
     expect(api.patch).toHaveBeenCalledWith('/products', {
         updates: [
@@ -444,17 +444,17 @@ it('rejects fractional pieces, negative levels and blank reorder quantities befo
     await mount();
     await rowAction('Edit');
     for (const [label, value] of [
-        ['Reorder level (pc)', '0.5'],
-        ['Reorder level (pc)', '-1'],
-        ['Restock quantity (pc)', ''],
+        ['Low stock at (pc)', '0.5'],
+        ['Low stock at (pc)', '-1'],
+        ['Restock amount (pc)', ''],
     ]) {
-        await type('Reorder level (pc)', '10');
-        await type('Restock quantity (pc)', '10');
+        await type('Low stock at (pc)', '10');
+        await type('Restock amount (pc)', '10');
         await type(label!, value!);
         await click('Save');
         expect(api.patch).not.toHaveBeenCalled();
         expect(document.querySelector('[role=alert]')?.textContent).toContain(
-            'reorder',
+            'restock amount',
         );
     }
 });
@@ -591,7 +591,7 @@ describe('product list scans (#214)', () => {
             '[data-testid="stock-history-tiles"]',
         )!.textContent!;
         expect(tiles).toContain(`EAN${SCAN}`);
-        expect(tileValue('Reorder level')).toBe(
+        expect(tileValue('Low stock at')).toBe(
             formatQuantity(
                 reorderLevelOf({ unit: UnitOfMeasure.PIECE }),
                 UnitOfMeasure.PIECE,
