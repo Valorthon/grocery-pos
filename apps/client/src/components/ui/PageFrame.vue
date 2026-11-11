@@ -9,6 +9,9 @@
             :description="shownDescription"
             :breadcrumbs="breadcrumbs"
         >
+            <template v-if="$slots.badge" #badge>
+                <slot name="badge" />
+            </template>
             <template v-if="$slots.actions" #actions>
                 <slot name="actions" />
             </template>

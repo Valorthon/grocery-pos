@@ -183,6 +183,16 @@ Rules:
   (`productActive: false` on the line) shows a warning in the list and the
   editor (`draftSendBlockers`); sending still refuses it. ₱0 expected cost
   on a draft needs no confirmation (only at receipt).
+- PO screen layout (#275): the title is "New purchase order" or the
+  reference, with the status badge beside it (PageFrame `badge` slot).
+  Back to list and the state's actions sit in the page header (draft: Save
+  draft, Mark as sent, Cancel order; SENT/PARTIAL: Receive, Cancel order;
+  RECEIVED/CANCELLED: none). A draft has a Supplier/Note band, the Add
+  product row above the lines, a Line total column (`quantityAmount`), an
+  in-table "No lines yet" row and Expected
+  total as the table footer. An existing order shows a #260-style heading
+  (supplier, total), a muted meta line (created in store time, by, Closed
+  short, View receipts) and the note when set.
 - Every PO action (create, edit draft, send, cancel, receive) writes an
   allowlisted `PURCHASE_ORDER.*` audit entry in the change's transaction
   (#123 round 3): reference, supplier, status, version, `lineCount`, `lines`
