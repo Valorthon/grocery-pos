@@ -979,8 +979,11 @@ on upstream fixes).
   more stock", `role=alert`) or "Unavailable" with "Retry check" (stock
   tile "—"). Integrity loads once on open, apart from the movements page, so
   either can fail alone. The balances note is an ⓘ `InfoTooltip`
-  (`components/ui`, hover/focus/tap, `aria-describedby`, Escape closes it
-  only). Dates are `DateRangeFilter` + `useDatePreset` in a compact
+  (`components/ui`, hover/focus/tap, `aria-describedby`): a manual
+  `popover` in the top layer placed by `:style`, so overflow containers
+  never clip it; `items` (`{term, meaning}[]`) renders a `<dl>`; while it
+  shows, Escape from anywhere closes only the tooltip (a prevented capture
+  listener the modal stack ignores). Dates are `DateRangeFilter` + `useDatePreset` in a compact
   `FilterBar` (apply at once on page 1, Clear Filters resets); the API keeps
   `from`/`to`.
 

@@ -244,6 +244,17 @@ it('opens the balances note by keyboard focus with aria-describedby', async () =
     expect(tip.className).toContain('hidden');
     // Escape closed the tooltip only, not the dialog.
     expect(document.body.textContent).toContain('Stock history — Milk');
+    // Hover-opened with focus elsewhere: Escape still closes only the note.
+    button.blur();
+    button.parentElement!.dispatchEvent(new MouseEvent('mouseenter'));
+    await flush();
+    expect(tip.className).not.toContain('hidden');
+    document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }),
+    );
+    await flush();
+    expect(tip.className).toContain('hidden');
+    expect(closed).not.toHaveBeenCalled();
 });
 it('shows derived unattributed history and flags ledger mismatch', async () => {
     api.get.mockImplementation(async (url: string) =>
