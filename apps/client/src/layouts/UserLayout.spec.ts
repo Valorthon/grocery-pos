@@ -612,6 +612,13 @@ describe('UserLayout sidebar below lg: a drawer (#89)', () => {
         await mountAt('/elsewhere');
         await router.push('/admin/products');
         await flush();
+        // #252: <main> is the positioned scroll container, so absolute
+        // descendants (sr-only hints) can't grow the document.
+        const main = document.querySelector('main')!;
+        expect(main.classList.contains('relative')).toBe(true);
+        expect(main.classList.contains('overflow-y-auto')).toBe(true);
+        const root = document.querySelector('.h-screen')!;
+        expect(root.classList.contains('overflow-hidden')).toBe(true);
         menuButton().focus();
         menuButton().click();
         await flush();

@@ -8,7 +8,7 @@
             <UserAppbar :drawer-open="drawer" @open-drawer="drawer = true" />
 
             <OfflineStatus />
-            <main class="flex-1 overflow-y-auto p-4 sm:p-6">
+            <main class="relative flex-1 overflow-y-auto p-4 sm:p-6">
                 <!-- The not-found page renders itself here (#193). -->
                 <slot><router-view /></slot>
             </main>
