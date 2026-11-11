@@ -16,15 +16,12 @@
         <PageCard>
             <div class="space-y-4 p-5">
                 <template v-if="!editing">
-                    <FilterBar :searchable="false" :clearable="false">
-                        <BaseSelect
-                            v-model="statusFilter"
-                            label="Status"
-                            all-label="All statuses"
-                            :options="statusOptions"
-                            @update:model-value="apply"
-                        />
-                    </FilterBar>
+                    <SegmentedFilter
+                        v-model="statusFilter"
+                        label="Status"
+                        :options="statusOptions"
+                        @update:model-value="apply"
+                    />
                     <BaseTable
                         v-model:page="page"
                         v-model:items-per-page="limit"
@@ -497,8 +494,7 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import RowOpenButton from '@/components/ui/RowOpenButton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
-import BaseSelect from '@/components/ui/BaseSelect.vue';
-import FilterBar from '@/components/ui/FilterBar.vue';
+import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import {
     useAppliedFilters,
@@ -571,11 +567,15 @@ const headers = [
 ];
 const rows = ref<PurchaseOrderView[]>([]);
 const totalItems = ref(0);
-const statusFilter = ref<string | number | null>(null);
-const statusOptions = Object.values(PurchaseOrderStatus).map((value) => ({
-    label: STATUS_LABELS[value],
-    value,
-}));
+// Chips (#261): '' is "All" (SegmentedFilter has no null) and sends no status.
+const statusFilter = ref<PurchaseOrderStatus | ''>('');
+const statusOptions = [
+    { label: 'All', value: '' as const },
+    ...Object.values(PurchaseOrderStatus).map((value) => ({
+        label: STATUS_LABELS[value],
+        value,
+    })),
+];
 const { page, limit, search } = useListPaging(() => load(), 10);
 const { applied, apply } = useAppliedFilters(
     () => ({ status: statusFilter.value }),

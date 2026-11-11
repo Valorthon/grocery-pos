@@ -68,4 +68,11 @@ describe('SegmentedFilter (#242)', () => {
         expect(buttons()[1].getAttribute('aria-pressed')).toBe('true');
         expect(buttons()[1].dataset.value).toBe('b');
     });
+    it('wraps so every chip stays reachable on a phone (#261)', async () => {
+        await mount(vi.fn());
+        const group = document.querySelector('[role=group]')!;
+        for (const c of ['flex-wrap', 'gap-px', 'bg-line'])
+            expect(group.classList).toContain(c);
+        for (const b of buttons()) expect(b.className).not.toMatch(/border-l/);
+    });
 });
