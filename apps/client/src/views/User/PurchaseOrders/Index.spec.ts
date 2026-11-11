@@ -75,9 +75,12 @@ async function mount() {
     await flush();
 }
 async function press(text: string) {
-    const button = [...document.querySelectorAll('button')]
-        .reverse()
-        .find((b) => b.textContent?.trim() === text);
+    const button = [...document.querySelectorAll('button')].reverse().find(
+        (b) =>
+            b.textContent?.trim() === text ||
+            // The trailing row-open icon is named by its aria-label (#243).
+            b.getAttribute('aria-label')?.startsWith(`${text} `),
+    );
     if (!button) throw new Error(`No button ${text}`);
     button.click();
     await flush();
@@ -138,6 +141,48 @@ describe('Purchase orders page (#123)', () => {
         await mount();
         expect(document.body.textContent).toContain('Farm (archived)');
         expect(document.body.textContent).toContain('Sent');
+    });
+
+    it('badges every status and opens from a 44px trailing icon (#243)', async () => {
+        const all = Object.values(PurchaseOrderStatus).map((status, i) => ({
+            ...order(status),
+            _id: `po${i}`,
+        }));
+        const base = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url: string): Promise<unknown> =>
+            url === '/purchase-orders'
+                ? Promise.resolve({
+                      data: { data: all, totalItems: all.length },
+                  })
+                : (base(url) as Promise<unknown>),
+        );
+        await mount();
+        const badges = [
+            ...document.querySelectorAll('[data-testid="po-status"]'),
+        ];
+        expect(badges.map((b) => [b.textContent?.trim(), b.className])).toEqual(
+            [
+                ['Draft', expect.stringContaining('bg-paper')],
+                ['Sent', expect.stringContaining('bg-warning-bg')],
+                [
+                    'Partially received',
+                    expect.stringContaining('bg-warning-bg'),
+                ],
+                ['Received', expect.stringContaining('bg-success-bg')],
+                ['Cancelled', expect.stringContaining('bg-danger-bg')],
+            ],
+        );
+        const open = document.querySelector<HTMLButtonElement>(
+            '[data-testid="po-open"]',
+        )!;
+        expect(open.getAttribute('aria-label')).toBe('Open PO-PO0');
+        expect(open.className).toContain('min-h-11');
+        expect(open.className).toContain('min-w-11');
+        expect(
+            [...document.querySelectorAll('button')].some(
+                (b) => b.textContent?.trim() === 'Open',
+            ),
+        ).toBe(false);
     });
 
     it('takes the low-stock handoff and fills known costs without overwriting edits', async () => {

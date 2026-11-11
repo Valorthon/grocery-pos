@@ -396,6 +396,61 @@ describe('Dashboard tiles per role (issue #166)', () => {
         expect(amount?.textContent).toContain('₱125.00');
     });
 
+    it('badges recent sales by status and opens Sale Details on click, Enter or Space (#243)', async () => {
+        const ID = 'a'.repeat(24);
+        const router = await renderWithRouter(['ADMIN'], {
+            ...WITH_MONEY,
+            recentSales: [
+                { ...WITH_MONEY.recentSales[0], _id: ID },
+                {
+                    ...WITH_MONEY.recentSales[0],
+                    _id: 'b'.repeat(24),
+                    status: 'VOIDED',
+                },
+                {
+                    ...WITH_MONEY.recentSales[0],
+                    _id: 'c'.repeat(24),
+                    status: 'REFUNDED',
+                },
+            ],
+        });
+        const badges = [
+            ...document.querySelectorAll('[data-testid="recent-sale-status"]'),
+        ];
+        expect(badges.map((b) => b.textContent?.trim())).toEqual([
+            'Completed',
+            'Voided',
+            'Refunded',
+        ]);
+        expect(badges[0].className).toContain('bg-success-bg');
+        expect(badges[1].className).toContain('bg-danger-bg');
+        expect(badges[2].className).toContain('bg-warning-bg');
+
+        const rows = [
+            ...document.querySelectorAll<HTMLElement>(
+                '[data-testid="recent-sales"] tr[data-row-click]',
+            ),
+        ];
+        expect(rows).toHaveLength(3);
+        rows[0].click();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(router.currentRoute.value).toMatchObject({
+            name: 'SalesHistory',
+            query: { saleNumber: ID, details: '1' },
+        });
+        for (const key of ['Enter', ' ']) {
+            await router.push('/');
+            rows[1].dispatchEvent(
+                new KeyboardEvent('keydown', { key, bubbles: true }),
+            );
+            await new Promise((r) => setTimeout(r, 0));
+            expect(router.currentRoute.value.query).toEqual({
+                saleNumber: 'b'.repeat(24),
+                details: '1',
+            });
+        }
+    });
+
     it('marks attention tiles with a tone a screen reader hears', async () => {
         await renderWithRouter(['ADJUSTER'], STATS);
         const low = document.querySelector('[data-stat="lowStock"]');

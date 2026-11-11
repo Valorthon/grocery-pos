@@ -70,7 +70,11 @@
             empty-text="No details found"
             :items-length="totalItems"
             @retry="fetchDetails"
-        />
+        >
+            <template #cell-name="{ item: line }"
+                ><ProductCell :name="line.name" :ean="line.EAN"
+            /></template>
+        </BaseTable>
     </div>
 </template>
 
@@ -80,6 +84,7 @@ import { onMounted, ref } from 'vue';
 import { Search, X } from '@lucide/vue';
 import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
+import ProductCell from '@/components/ui/ProductCell.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import {
@@ -105,7 +110,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
 );
 
 const headers = [
-    { key: 'name', title: 'Name' },
+    { key: 'name', title: 'Product', rowHeader: true },
     { key: 'change', title: 'Change', align: 'right' as const },
     { key: 'reason', title: 'Reason' },
 ];
@@ -114,6 +119,7 @@ const headers = [
 interface AdjustmentLineRow {
     id: string;
     name: string;
+    EAN: string;
     change: string;
     reason: string;
 }
@@ -147,6 +153,7 @@ const {
         serverItems.value = result.data.data.map((details) => ({
             id: details._id,
             name: details.product.name,
+            EAN: details.product.EAN,
             change: formatQuantity(details.change, details.product.unit),
             reason: details.reason,
         }));

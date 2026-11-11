@@ -11,6 +11,7 @@ import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 import { click, field, flush } from '@/testing/form-dom';
 import InventoryBatches from './InventoryBatches.vue';
 import BatchSelect from './BatchSelect.vue';
+import { initialSettings, storePresentation } from '@/settings/presentation';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -50,6 +51,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     disposePinia(pinia);
+    storePresentation.value = { ...initialSettings };
     document.body.innerHTML = '';
     vi.clearAllMocks();
 });
@@ -234,6 +236,28 @@ it('starts the expiring list at the store expiry alert window (#213)', async () 
     store.setOwner(undefined);
 });
 
+it('notes the live store window behind "Expiring soon" (#247)', async () => {
+    const { useSettingsStore } = await import('@/stores/settings');
+    const store = useSettingsStore();
+    store.settings = { ...store.settings, expiryAlertDays: 14 };
+    await mount();
+    const note = () =>
+        document
+            .querySelector('[data-testid="expiring-soon-note"]')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim();
+    expect(note()).toBe('Expiring soon = within 14 days (store setting)');
+    expect(
+        field('Expiring within days (expired included)').getAttribute(
+            'aria-describedby',
+        ),
+    ).toBe('expiring-soon-note');
+    expect(document.getElementById('expiring-soon-note')).not.toBeNull();
+    store.settings = { ...store.settings, expiryAlertDays: 1 };
+    await flush();
+    expect(note()).toBe('Expiring soon = within 1 day (store setting)');
+});
+
 it('says no products track expiry instead of the filters and table (#233)', async () => {
     api.get.mockImplementation((url: string) =>
         Promise.resolve({
@@ -270,4 +294,47 @@ it('keeps the widen hint when tracked products have no matching batch (#233)', a
     expect(
         document.querySelector('[data-testid="no-expiry-tracking"]'),
     ).toBeNull();
+});
+it('shows the product cell and a status badge per batch, with no row click (#242)', async () => {
+    const lots: InventoryBatchView[] = [
+        batch(),
+        { ...batch(), _id: 'soon', daysLeft: 3 },
+        { ...batch(), _id: 'ok', daysLeft: 30 },
+        {
+            ...batch(),
+            _id: 'rec',
+            expiryDate: undefined,
+            daysLeft: undefined,
+            reconciliation: true,
+        },
+        { ...batch(), _id: 'nodays', daysLeft: undefined },
+    ];
+    api.get.mockResolvedValue({ data: { data: lots, totalItems: 4 } });
+    await mount();
+    expect(
+        [...document.querySelectorAll('[data-testid=batch-status]')].map(
+            (b) => [
+                b.textContent?.trim(),
+                b.className.match(/bg-[a-z]+-bg|bg-paper/)?.[0],
+            ],
+        ),
+    ).toEqual([
+        ['Expired', 'bg-danger-bg'],
+        ['Expiring soon', 'bg-warning-bg'],
+        ['OK', 'bg-success-bg'],
+        ['Reconciliation', 'bg-paper'],
+        ['Check expiry', 'bg-warning-bg'],
+    ]);
+    const firstRow = document.querySelector('tbody tr')!;
+    expect(firstRow.textContent).toContain('Milk');
+    expect(firstRow.querySelector('[data-testid=row-ean]')?.textContent).toBe(
+        '12345670',
+    );
+    expect(document.querySelector('[data-row-click]')).toBeNull();
+    expect(firstRow.getAttribute('tabindex')).toBeNull();
+    (firstRow as HTMLElement).click();
+    await flush();
+    expect(nav.push).not.toHaveBeenCalled();
+    await click('Write off');
+    expect(nav.push).toHaveBeenCalledWith({ name: 'Adjustments/Add' });
 });

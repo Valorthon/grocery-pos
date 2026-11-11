@@ -34,29 +34,13 @@
                 @search="onSearch"
                 @clear="resetFilters"
             >
-                <div
-                    role="group"
-                    aria-label="Stock status"
-                    class="flex self-end rounded-control border border-line overflow-hidden"
+                <SegmentedFilter
+                    :model-value="stockFilter"
+                    :options="STOCK_FILTERS"
+                    label="Stock status"
                     data-testid="stock-filter"
-                >
-                    <button
-                        v-for="option in STOCK_FILTERS"
-                        :key="option.value"
-                        type="button"
-                        :aria-pressed="stockFilter === option.value"
-                        :data-value="option.value"
-                        :class="[
-                            'focus-ring min-h-11 flex-1 px-3 text-sm font-semibold whitespace-nowrap border-l border-line first:border-l-0',
-                            stockFilter === option.value
-                                ? 'bg-leaf-600 text-white'
-                                : 'bg-surface text-ink hover:bg-paper',
-                        ]"
-                        @click="setStockFilter(option.value)"
-                    >
-                        {{ option.label }}
-                    </button>
-                </div>
+                    @update:model-value="setStockFilter"
+                />
             </FilterBar>
             <p
                 v-if="route?.query.expiring === 'true'"
@@ -80,43 +64,33 @@
                 @retry="fetchInventory"
             >
                 <template #cell-name="{ item }"
-                    ><span class="block">{{ item.name }}</span
-                    ><span
-                        class="block text-xs text-muted font-normal num"
-                        data-testid="row-ean"
-                        >{{ item.EAN }}</span
-                    ></template
-                >
+                    ><ProductCell :name="item.name" :ean="item.EAN"
+                /></template>
                 <template #cell-stock="{ item }"
                     ><span class="block">{{ item.stock }}</span
-                    ><span class="mt-1 block sm:hidden"
-                        ><Badge :color="STATUS[item.status].color">{{
-                            STATUS[item.status].label
-                        }}</Badge></span
-                    ></template
-                >
+                    ><StatusBadge
+                        :status="item.status"
+                        :map="STATUS"
+                        placement="under"
+                /></template>
                 <template #cell-reorderLevel="{ item }"
                     ><span class="text-muted">{{
                         item.reorderLevel
                     }}</span></template
                 >
                 <template #cell-status="{ item }"
-                    ><Badge
-                        :color="STATUS[item.status].color"
+                    ><StatusBadge
+                        :status="item.status"
+                        :map="STATUS"
                         data-testid="stock-status"
-                        >{{ STATUS[item.status].label }}</Badge
-                    ></template
-                >
+                /></template>
                 <template #cell-history="{ item }"
-                    ><BaseButton
-                        size="sm"
-                        variant="ghost"
-                        class="-my-2 min-h-11 min-w-11 w-11 h-11 p-0"
-                        :aria-label="`Stock history for ${item.name}`"
+                    ><RowOpenButton
+                        :label="`Stock history for ${item.name}`"
                         data-testid="stock-history-button"
-                        @click="openHistory(item)"
+                        @open="openHistory(item)"
                         ><History class="w-5 h-5" aria-hidden="true"
-                    /></BaseButton>
+                    /></RowOpenButton>
                 </template>
             </BaseTable>
         </PageCard>
@@ -142,7 +116,11 @@ import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { History, Pencil } from '@lucide/vue';
-import Badge from '@/components/ui/Badge.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import ProductCell from '@/components/ui/ProductCell.vue';
+import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
+import RowOpenButton from '@/components/ui/RowOpenButton.vue';
+import type { StatusMap } from '@/components/ui/status-badge';
 import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
@@ -197,7 +175,6 @@ const stockFilter = computed<StockFilter>(() =>
     lowStock.value ? 'low' : outOfStock.value ? 'out' : 'all',
 );
 function setStockFilter(value: StockFilter) {
-    if (value === stockFilter.value) return;
     lowStock.value = value === 'low';
     outOfStock.value = value === 'out';
     syncStockQuery();
@@ -309,10 +286,7 @@ function stockStatus(stock: number, reorderLevel: number): StockStatus {
     if (stock <= 0) return 'out';
     return stock <= reorderLevel ? 'low' : 'ok';
 }
-const STATUS: Record<
-    StockStatus,
-    { label: string; color: 'error' | 'warning' | 'success' }
-> = {
+const STATUS: StatusMap<StockStatus> = {
     out: { label: 'Out of stock', color: 'error' },
     low: { label: 'Low stock', color: 'warning' },
     ok: { label: 'In stock', color: 'success' },

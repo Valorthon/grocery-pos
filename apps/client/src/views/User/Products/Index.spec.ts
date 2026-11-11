@@ -588,3 +588,106 @@ describe('product list scans (#214)', () => {
         ]);
     });
 });
+
+describe('shared table pieces (#242)', () => {
+    const row = () =>
+        document.querySelector<HTMLElement>('tr[data-row-click]')!;
+    const dialogText = () =>
+        document.querySelector('[role=dialog]')?.textContent ?? '';
+    function as(roles: Role[]) {
+        useAuthStore().user = { userId: 'u', username: 'u', roles };
+    }
+    it('merges the EAN under the name and drops the EAN column', async () => {
+        await mount();
+        const titles = [...document.querySelectorAll('thead th')].map((th) =>
+            th.textContent?.trim(),
+        );
+        expect(titles).not.toContain('EAN');
+        expect(titles).toContain('Status');
+        const cell = row().querySelector('th, td')!;
+        expect(cell.textContent).toContain('milk');
+        expect(cell.querySelector('[data-testid=row-ean]')?.textContent).toBe(
+            '4006381333931',
+        );
+    });
+    it.each([
+        [undefined, 'Active', 'bg-success-bg'],
+        [true, 'Active', 'bg-success-bg'],
+        [false, 'Archived', 'bg-paper'],
+    ])('isActive %s shows %s', async (isActive, label, cls) => {
+        api.get.mockResolvedValue({
+            data: {
+                data: [
+                    {
+                        _id: 'p1',
+                        EAN: '4006381333931',
+                        name: 'milk',
+                        price: 5000,
+                        isActive,
+                    },
+                ],
+                totalItems: 1,
+            },
+        });
+        await mount();
+        const badge = document.querySelector('[data-testid=product-status]')!;
+        expect(badge.textContent?.trim()).toBe(label);
+        expect(badge.classList).toContain(cls);
+    });
+    it('filters status with a segmented control sending the same values', async () => {
+        await mount();
+        const group = document.querySelector('[data-testid=status-filter]')!;
+        const buttons = [...group.querySelectorAll('button')];
+        expect(buttons.map((b) => b.textContent?.trim())).toEqual([
+            'Active',
+            'Archived',
+            'All',
+        ]);
+        expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
+        for (const [i, value] of ['archived', 'all', 'active'].entries()) {
+            api.get.mockClear();
+            buttons[(i + 1) % 3].click();
+            await flush();
+            expect(params()).toEqual([
+                expect.objectContaining({ page: 1, status: value }),
+            ]);
+        }
+    });
+    it.each([
+        [[Role.Admin], 'Edit Product'],
+        [[Role.Restocker], 'Edit Product'],
+        [[Role.Adjuster], 'Stock history — milk'],
+    ])('a row click for %s opens %s', async (roles, title) => {
+        as(roles);
+        await mount();
+        const hint = document.getElementById(
+            row().getAttribute('aria-describedby')!,
+        )!.textContent;
+        expect(hint).toBe(
+            roles.includes(Role.Adjuster)
+                ? 'Press Enter to open its stock history'
+                : 'Press Enter to edit the product',
+        );
+        row().click();
+        await flush();
+        expect(dialogText()).toContain(title);
+    });
+    it.each(['Enter', ' '])('the row opens with %j', async (key) => {
+        as([Role.Adjuster]);
+        await mount();
+        row().focus();
+        row().dispatchEvent(
+            new KeyboardEvent('keydown', { key, bubbles: true }),
+        );
+        await flush();
+        expect(dialogText()).toContain('Stock history — milk');
+    });
+    it('the row menu works without opening the row', async () => {
+        as([Role.Admin]);
+        await mount();
+        await rowAction('Archive');
+        expect(dialogText()).toContain('Archive product?');
+        expect(dialogText()).not.toContain('Edit Product');
+        expect(document.querySelectorAll('[role=dialog]')).toHaveLength(1);
+    });
+});

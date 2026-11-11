@@ -25,15 +25,12 @@
                     clearable
                     @clear="applySearch"
                 />
-                <BaseSelect
-                    v-model="status"
+                <SegmentedFilter
+                    :model-value="status"
+                    :options="STATUS_FILTERS"
                     label="Status"
-                    :options="[
-                        { value: 'active', label: 'Active' },
-                        { value: 'archived', label: 'Archived' },
-                        { value: 'all', label: 'All' },
-                    ]"
-                    @update:model-value="applySearch"
+                    data-testid="status-filter"
+                    @update:model-value="setStatus"
                 />
                 <BaseSelect
                     v-model="categoryFilter"
@@ -71,10 +68,24 @@
                 :items="serverItems"
                 :loading="loading"
                 :error="loadError"
+                row-click
+                :row-hint="rowHint"
                 empty-text="No products found"
                 :items-length="totalItems"
+                @click:row="openRow"
                 @retry="fetchProducts"
             >
+                <template #cell-name="{ item }"
+                    ><ProductCell :name="item.name" :ean="item.EAN"
+                /></template>
+                <template #cell-status="{ item }"
+                    ><StatusBadge
+                        :status="
+                            item.isActive === false ? 'archived' : 'active'
+                        "
+                        :map="PRODUCT_STATUS"
+                        data-testid="product-status"
+                /></template>
                 <template #cell-price="{ item }">
                     <span class="font-medium">{{
                         formatCurrency(item.price) + '/' + unitLabel(item.unit)
@@ -131,6 +142,10 @@ import PageFrame from '@/components/ui/PageFrame.vue';
 import StockHistory from '@/components/User/Inventory/StockHistory.vue';
 import EditProductDialog from '@/components/User/Product/EditProductDialog.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
+import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
+import ProductCell from '@/components/ui/ProductCell.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import type { StatusMap } from '@/components/ui/status-badge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { useConfirm } from '@/composables/useConfirm';
 import { useUIStore, Color } from '@/stores/ui';
@@ -171,7 +186,21 @@ const { page, limit, search } = useListPaging(() => fetchProducts());
 const totalItems = ref(0);
 const searchName = ref('');
 const searchEAN = ref('');
-const status = ref<string | number | null>('active');
+type StatusFilter = 'active' | 'archived' | 'all';
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+    { value: 'active', label: 'Active' },
+    { value: 'archived', label: 'Archived' },
+    { value: 'all', label: 'All' },
+];
+const status = ref<StatusFilter>('active');
+function setStatus(value: StatusFilter) {
+    status.value = value;
+    applySearch();
+}
+const PRODUCT_STATUS: StatusMap<'active' | 'archived'> = {
+    active: { label: 'Active', color: 'success' },
+    archived: { label: 'Archived', color: 'neutral' },
+};
 const editing = ref<ProductListRow | null>(null);
 const saving = ref(false);
 const { request, confirm, answer } = useConfirm();
@@ -235,6 +264,7 @@ async function onSearch() {
 // Name first, then Category and Price (#172). The list API returns no
 // stock, so Stock is not a column here (recorded on #172).
 const headers = [
+    // Name with its EAN below (#242).
     { key: 'name', title: 'Name', rowHeader: true },
     { key: 'category', title: 'Category' },
     { key: 'price', title: 'Price', align: 'right' as const },
@@ -247,9 +277,20 @@ const headers = [
               },
           ]
         : []),
-    { key: 'EAN', title: 'EAN' },
+    { key: 'status', title: 'Status' },
     { key: 'actions', title: 'Actions' },
 ];
+
+/** A row opens Edit for product editors, else Stock history (#242, as #214). */
+const rowHint = computed(() =>
+    canAddProducts.value
+        ? 'Press Enter to edit the product'
+        : 'Press Enter to open its stock history',
+);
+function openRow(item: ProductListRow) {
+    if (canAddProducts.value) editing.value = item;
+    else history.value = item;
+}
 
 /** History for everyone here; Edit and Archive/Restore as before (#83). */
 function rowActions(item: ProductListRow): RowAction[] {

@@ -114,6 +114,14 @@
                     >
                 </p>
                 <p
+                    v-if="linkNotice"
+                    role="status"
+                    data-testid="sale-link-notice"
+                    class="px-5 py-3 text-sm text-muted"
+                >
+                    {{ linkNotice }}
+                </p>
+                <p
                     v-if="searchError"
                     role="alert"
                     class="px-5 py-3 text-sm text-red-700"
@@ -130,6 +138,7 @@
                     empty-text="No orders found"
                     :items-length="totalItems"
                     row-click
+                    row-hint="Press Enter to open the sale details"
                     @click:row="showDetails"
                     @retry="fetchSales"
                 >
@@ -144,11 +153,12 @@
                             >{{ value }}</Badge
                         >
                     </template>
-                    <template #cell-status="{ item, value }">
-                        <Badge :color="statusColor(item.status)">{{
-                            value
-                        }}</Badge>
-                    </template>
+                    <template #cell-status="{ item }"
+                        ><StatusBadge
+                            :status="item.status"
+                            :map="SALE_STATUS"
+                            data-testid="sale-status"
+                    /></template>
                 </BaseTable>
             </PageCard>
 
@@ -185,9 +195,10 @@
                             >
                                 {{ formatCurrency(selectedSale.amount) }}
                             </p>
-                            <Badge :color="statusColor(selectedSale.status)">{{
-                                selectedSale.status
-                            }}</Badge>
+                            <StatusBadge
+                                :status="selectedSale.status"
+                                :map="SALE_STATUS"
+                            />
                         </div>
                         <dl
                             class="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-1 text-xs"
@@ -673,6 +684,8 @@ import { useSalesLookups } from '@/composables/useSalesLookups';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
+import StatusBadge from '@/components/ui/StatusBadge.vue';
+import { SALE_STATUS } from '@/components/User/Sales/sale-status';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
 import { dateRangeError } from '@/utils/rules';
@@ -786,12 +799,39 @@ const filters = reactive({
     cashier: null as string | null,
     category: null as string | null,
 });
+/**
+ * `?saleNumber=<full id>&details=1` (the dashboard's Recent Sales row, #243)
+ * opens that sale's details once its row loads.
+ */
+let openOnLoad =
+    router.currentRoute?.value.query.details === '1' &&
+    /^[a-f\d]{24}$/i.test(filters.saleNumber)
+        ? filters.saleNumber.toLowerCase()
+        : null;
 const appliedFilters = ref<Record<string, string>>(
     filters.saleNumber ? { saleNumber: filters.saleNumber } : {},
 );
 const searchError = ref('');
+/**
+ * Says why a dashboard deep link opened no details (#248). Cleared by the
+ * next applied search, filter, date preset or Clear Filters.
+ */
+const linkNotice = ref('');
+/**
+ * Consumed once: a reload or Back must not reopen it (#243), and a later
+ * search or filter must not raise the not-found notice (#248).
+ */
+function consumeDeepLink() {
+    if (openOnLoad === null) return;
+    openOnLoad = null;
+    const query = { ...router.currentRoute.value.query };
+    delete query.details;
+    void router.replace({ query });
+}
 function applyFilters() {
+    consumeDeepLink();
     searchError.value = '';
+    linkNotice.value = '';
     if (
         filters.saleNumber &&
         !REPORT_LIMITS.SALE_SEARCH.test(filters.saleNumber.trim())
@@ -867,10 +907,6 @@ function formatDate(value: string | Date): string {
     );
 }
 
-function statusColor(status: SaleStatus) {
-    return status === SaleStatus.COMPLETED ? 'success' : 'error';
-}
-
 function reversalLabel(type: ReversalType): string {
     return type === ReversalType.VOID ? 'Void' : 'Refund';
 }
@@ -922,6 +958,17 @@ const {
         }));
 
         totalItems.value = result.data.totalItems;
+        const opening = serverItems.value.find(
+            (row) => openOnLoad !== null && row.id.toLowerCase() === openOnLoad,
+        );
+        const linkMissing = openOnLoad !== null && !opening;
+        consumeDeepLink();
+        if (opening) void showDetails(opening);
+        else if (linkMissing) {
+            linkNotice.value = authStore.isAdmin
+                ? "That sale couldn't be found."
+                : "That sale isn't available here. Sales history shows only your current shift's sales.";
+        }
     },
     'Could not load the sales.',
 );

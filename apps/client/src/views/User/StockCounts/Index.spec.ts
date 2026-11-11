@@ -74,9 +74,12 @@ async function mount() {
     await flush();
 }
 async function exact(text: string) {
-    const button = [...document.querySelectorAll('button')]
-        .reverse()
-        .find((b) => b.textContent?.trim() === text);
+    const button = [...document.querySelectorAll('button')].reverse().find(
+        (b) =>
+            b.textContent?.trim() === text ||
+            // The trailing row-open icon is named by its aria-label (#243).
+            b.getAttribute('aria-label')?.startsWith(`${text} `),
+    );
     if (!button) throw new Error(text);
     button.click();
     await flush();
@@ -181,6 +184,46 @@ describe('physical stock count workflow', () => {
         await exact('Back to counts');
         await exact('Open count');
         expect(api.get).toHaveBeenCalledWith(`/stock-counts/${id}`);
+    });
+    it('opens a count from its row (click, Enter, Space) or the trailing icon, badged by status; count lines are not clickable (#243)', async () => {
+        await mount();
+        const badge = document.querySelector('[data-testid="count-status"]')!;
+        expect(badge.textContent?.trim()).toBe('Open');
+        expect(badge.className).toContain('bg-info-bg');
+        const icon = document.querySelector<HTMLButtonElement>(
+            '[data-testid="count-open"]',
+        )!;
+        expect(icon.getAttribute('aria-label')).toMatch(/^Open count from /);
+        expect(icon.className).toContain('min-h-11');
+        expect(icon.className).toContain('min-w-11');
+        expect(document.body.textContent).toContain(
+            'Press Enter to open the count',
+        );
+        const row = () =>
+            document.querySelector<HTMLTableRowElement>('tbody tr')!;
+        expect(row().tabIndex).toBe(0);
+        row().querySelector('td')!.click();
+        await flush();
+        expect(api.get).toHaveBeenCalledWith(`/stock-counts/${id}`);
+        expect(document.querySelector('tr[data-row-click]')).toBeNull();
+        for (const key of ['Enter', ' ']) {
+            await exact('Back to counts');
+            api.get.mockClear();
+            row().dispatchEvent(
+                new KeyboardEvent('keydown', { key, bubbles: true }),
+            );
+            await flush();
+            expect(api.get).toHaveBeenCalledWith(`/stock-counts/${id}`);
+        }
+        await exact('Back to counts');
+        api.get.mockClear();
+        document
+            .querySelector<HTMLButtonElement>('[data-testid="count-open"]')!
+            .click();
+        await flush();
+        expect(
+            api.get.mock.calls.filter(([url]) => url === `/stock-counts/${id}`),
+        ).toHaveLength(1);
     });
     it('saves explicit zero and measured quantities without overwriting opening expectations', async () => {
         await mount();
