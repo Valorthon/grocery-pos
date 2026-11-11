@@ -57,7 +57,11 @@ const routes: RouteRecordRaw[] = [
                 path: 'orders',
                 name: 'Sales',
                 component: () => import('@/views/User/Sales/Index.vue'),
-                meta: { title: 'Sales history' },
+                meta: {
+                    title: 'Sales history',
+                    description:
+                        "Your sales in your current shift. Voids and refunds need a manager's approval.",
+                },
             },
         ],
     },
@@ -80,19 +84,34 @@ const routes: RouteRecordRaw[] = [
                 path: 'settings',
                 name: 'Settings',
                 component: () => import('@/views/User/Settings/Index.vue'),
-                meta: { title: 'Store settings', roles: [Role.Admin] },
+                meta: {
+                    title: 'Store settings',
+                    description:
+                        "Your store's name, timezone and defaults. A timezone change needs all shifts closed and terminals released.",
+                    roles: [Role.Admin],
+                },
             },
             {
                 path: 'audit',
                 name: 'AuditLog',
                 component: () => import('@/views/User/Audit/Index.vue'),
-                meta: { title: 'Audit log', roles: [Role.Admin] },
+                meta: {
+                    title: 'Audit log',
+                    description:
+                        "Sensitive actions such as price changes, discounts and voids. Entries can't be edited or deleted.",
+                    roles: [Role.Admin],
+                },
             },
             {
                 path: 'reports',
                 name: 'Reports',
                 component: () => import('@/views/User/Reports/Index.vue'),
-                meta: { title: 'Sales reports', roles: [Role.Admin] },
+                meta: {
+                    title: 'Sales reports',
+                    description:
+                        'Sales, discounts, costs and margins for any date range, with CSV export.',
+                    roles: [Role.Admin],
+                },
             },
             {
                 // Admins void and refund sales from here; sellers see the
@@ -100,7 +119,12 @@ const routes: RouteRecordRaw[] = [
                 path: 'sales',
                 name: 'SalesHistory',
                 component: () => import('@/views/User/Sales/Index.vue'),
-                meta: { title: 'Sales history', roles: [Role.Admin] },
+                meta: {
+                    title: 'Sales history',
+                    description:
+                        'Every sale, with payment, cashier and items. Open a sale to void or refund it.',
+                    roles: [Role.Admin],
+                },
             },
             {
                 // Every cashier's shifts and Z-reads, and force-close
@@ -109,7 +133,12 @@ const routes: RouteRecordRaw[] = [
                 path: 'shifts',
                 name: 'Shifts',
                 component: () => import('@/views/User/Shifts/Index.vue'),
-                meta: { title: 'Shifts', roles: [Role.Admin] },
+                meta: {
+                    title: 'Shifts',
+                    description:
+                        "Every cashier's shifts, newest first, with their close reports. Force-close a shift left open.",
+                    roles: [Role.Admin],
+                },
             },
 
             {
@@ -118,6 +147,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Suppliers/Index.vue'),
                 meta: {
                     title: 'Suppliers',
+                    description:
+                        'The suppliers you buy from. Archive one instead of deleting it to keep its receipts.',
                     roles: [Role.Restocker, Role.Admin],
                 },
             },
@@ -125,7 +156,12 @@ const routes: RouteRecordRaw[] = [
                 path: 'categories',
                 name: 'Categories',
                 component: () => import('@/views/User/Categories/Index.vue'),
-                meta: { title: 'Categories', roles: [Role.Admin] },
+                meta: {
+                    title: 'Categories',
+                    description:
+                        'Group products for filters and reports. Archiving a category keeps its products on sale.',
+                    roles: [Role.Admin],
+                },
             },
             {
                 path: 'products',
@@ -133,6 +169,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Products/Index.vue'),
                 meta: {
                     title: 'Product list',
+                    description:
+                        'Look up products and their stock. Restockers edit names and categories; only an admin changes prices.',
                     roles: [Role.Restocker, Role.Adjuster, Role.Admin],
                 },
             },
@@ -142,6 +180,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Products/Add.vue'),
                 meta: {
                     title: 'New products',
+                    description:
+                        "Add products with barcode, unit and price. A product's unit can't be changed later.",
                     roles: [Role.Restocker, Role.Admin],
                 },
             },
@@ -152,12 +192,22 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Inventories.vue'),
                 meta: {
                     title: 'Inventory',
+                    description:
+                        'Stock on hand for every product, with batches and expiry dates.',
                     queryTitle: [
-                        { key: 'lowStock', value: 'true', title: 'Low stock' },
+                        {
+                            key: 'lowStock',
+                            value: 'true',
+                            title: 'Low stock',
+                            description:
+                                'Active products at or below their reorder level, biggest shortfall first.',
+                        },
                         {
                             key: 'outOfStock',
                             value: 'true',
                             title: 'Out of stock',
+                            description:
+                                'Active products with no stock left, including negative stock.',
                         },
                     ],
                     roles: [Role.Restocker, Role.Adjuster, Role.Admin],
@@ -170,6 +220,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Restock/Index.vue'),
                 meta: {
                     title: 'Restock history',
+                    description:
+                        'Every delivery received from suppliers, with quantities, costs and invoice numbers.',
                     roles: [Role.Restocker, Role.Admin],
                 },
             },
@@ -179,6 +231,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Restock/Add.vue'),
                 meta: {
                     title: 'New restock',
+                    description:
+                        'Record goods received from a supplier. Stock goes up when you save.',
                     roles: [Role.Restocker, Role.Admin],
                 },
             },
@@ -190,6 +244,8 @@ const routes: RouteRecordRaw[] = [
                     import('@/views/User/PurchaseOrders/Index.vue'),
                 meta: {
                     title: 'Purchase orders',
+                    description:
+                        'Order stock from suppliers and receive it on arrival. Stock changes only when you receive.',
                     roles: [Role.Restocker, Role.Admin],
                 },
             },
@@ -199,6 +255,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/StockCounts/Index.vue'),
                 meta: {
                     title: 'Stock counts',
+                    description:
+                        "Count what's on the shelves. Stock changes only after an admin or supervisor approves the count.",
                     roles: [Role.Adjuster, Role.Admin],
                 },
             },
@@ -208,6 +266,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Adjustments/Index.vue'),
                 meta: {
                     title: 'Adjustment history',
+                    description:
+                        'Every manual stock correction, with its reason and who made it.',
                     roles: [Role.Adjuster, Role.Admin],
                 },
             },
@@ -217,6 +277,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Adjustments/Add.vue'),
                 meta: {
                     title: 'New adjustment',
+                    description:
+                        'Correct stock for damage, loss or miscounts. Each line needs a reason.',
                     roles: [Role.Adjuster, Role.Admin],
                 },
             },
@@ -225,7 +287,12 @@ const routes: RouteRecordRaw[] = [
                 path: 'users',
                 name: 'Users',
                 component: () => import('@/views/User/Users/Index.vue'),
-                meta: { title: 'Users', roles: [Role.UserManager, Role.Admin] },
+                meta: {
+                    title: 'Users',
+                    description:
+                        'Add staff accounts and choose their roles. Only an admin manages admin and user-manager accounts and PINs.',
+                    roles: [Role.UserManager, Role.Admin],
+                },
             },
             {
                 path: 'roles',
@@ -233,6 +300,8 @@ const routes: RouteRecordRaw[] = [
                 component: () => import('@/views/User/Roles/Index.vue'),
                 meta: {
                     title: 'Roles',
+                    description:
+                        'What each role can see and do. Give a user several roles to combine them.',
                     roles: [Role.UserManager, Role.Admin],
                 },
             },

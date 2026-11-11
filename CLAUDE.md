@@ -632,6 +632,12 @@ requestId}`. A 5xx never carries details or internals.
   nothing. Create validates name (trimmed), password and roles like
   `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
+- Page summaries (#262): every admin page shows a one-line summary under
+  its title from the route's `meta.description` (a `queryTitle` may carry
+  its own, e.g. Low stock), via `routeDescription` in PageFrame; at most
+  110 characters, true for every role that opens the page. A
+  `description` prop wins (the dashboards' greeting). Login, Page not
+  found, the register and the dashboards' routes have none.
 
 **Register (Phase 6)** (#22–#26)
 
