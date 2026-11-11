@@ -114,6 +114,14 @@
                     >
                 </p>
                 <p
+                    v-if="linkNotice"
+                    role="status"
+                    data-testid="sale-link-notice"
+                    class="px-5 py-3 text-sm text-muted"
+                >
+                    {{ linkNotice }}
+                </p>
+                <p
                     v-if="searchError"
                     role="alert"
                     class="px-5 py-3 text-sm text-red-700"
@@ -804,8 +812,14 @@ const appliedFilters = ref<Record<string, string>>(
     filters.saleNumber ? { saleNumber: filters.saleNumber } : {},
 );
 const searchError = ref('');
+/**
+ * Says why a dashboard deep link opened no details (#248). Cleared by the
+ * next applied search, filter, date preset or Clear Filters.
+ */
+const linkNotice = ref('');
 function applyFilters() {
     searchError.value = '';
+    linkNotice.value = '';
     if (
         filters.saleNumber &&
         !REPORT_LIMITS.SALE_SEARCH.test(filters.saleNumber.trim())
@@ -935,6 +949,7 @@ const {
         const opening = serverItems.value.find(
             (row) => openOnLoad !== null && row.id.toLowerCase() === openOnLoad,
         );
+        const linkMissing = openOnLoad !== null && !opening;
         if (openOnLoad !== null) {
             openOnLoad = null;
             // Consumed once: a reload or Back must not reopen it (#243).
@@ -943,6 +958,11 @@ const {
             void router.replace({ query });
         }
         if (opening) void showDetails(opening);
+        else if (linkMissing) {
+            linkNotice.value = authStore.isAdmin
+                ? "That sale couldn't be found."
+                : "That sale isn't available here. Sales history shows only your current shift's sales.";
+        }
     },
     'Could not load the sales.',
 );

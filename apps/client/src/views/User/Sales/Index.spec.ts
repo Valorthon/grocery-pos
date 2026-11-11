@@ -459,6 +459,68 @@ describe('sales errors (issue #18)', () => {
         ).toBeNull();
     });
 
+    function serveEmpty() {
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve(
+                url === '/sales' || url === '/users' || url === '/categories'
+                    ? { data: { data: [], totalItems: 0 } }
+                    : { data: [] },
+            ),
+        );
+    }
+    const linkNotice = (host: Element) =>
+        host.querySelector('[data-testid="sale-link-notice"]');
+
+    it('says an admin deep-linked sale could not be found, until Clear Filters (#248)', async () => {
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID, details: '1' };
+        serveEmpty();
+        const host = await mount();
+        expect(linkNotice(host)?.textContent?.trim()).toBe(
+            "That sale couldn't be found.",
+        );
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]'),
+        ).toBeNull();
+        expect(routerQuery.replace).toHaveBeenCalledWith({
+            query: { saleNumber: ID },
+        });
+        const clear = [...host.querySelectorAll('button')].find(
+            (b) => b.textContent?.trim() === 'Clear Filters',
+        );
+        expect(clear).toBeDefined();
+        clear?.click();
+        await flush();
+        expect(linkNotice(host)).toBeNull();
+    });
+
+    it('tells a cashier the deep-linked sale is outside their shift (#248)', async () => {
+        useAuthStore().user = { username: 'ana', roles: [Role.Seller] };
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID, details: '1' };
+        serveEmpty();
+        const host = await mount();
+        expect(linkNotice(host)?.textContent?.trim()).toBe(
+            "That sale isn't available here. Sales history shows only your current shift's sales.",
+        );
+    });
+
+    it('shows no notice when the linked sale opens, or without details=1 (#248)', async () => {
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID, details: '1' };
+        serve({ ...CASH_SALE, _id: ID }, []);
+        const host = await mount();
+        expect(
+            document.querySelector('[data-testid="sale-detail-cashier"]'),
+        ).not.toBeNull();
+        expect(linkNotice(host)).toBeNull();
+        app?.unmount();
+        document.body.innerHTML = '';
+        routerQuery.value = { saleNumber: ID };
+        serveEmpty();
+        expect(linkNotice(await mount())).toBeNull();
+    });
+
     it('shows a failed list in the table, then retries it', async () => {
         api.get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
         await mount();
