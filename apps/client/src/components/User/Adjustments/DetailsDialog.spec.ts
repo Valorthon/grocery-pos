@@ -152,6 +152,31 @@ describe('Adjustment details summary (#260)', () => {
         expect(text('details-line-count')).toBe('4 lines');
     });
 
+    it('recovers the line count after a failed first load', async () => {
+        api.get.mockRejectedValueOnce(new Error('offline'));
+        await mountDialog({ description: 'x', date: 'd' });
+        expect(text('details-line-count')).toBeUndefined();
+        api.get.mockImplementation((_url: string, { params }) =>
+            Promise.resolve({
+                data: {
+                    data: [],
+                    totalItems: (params as { name?: string }).name ? 1 : 5,
+                },
+            }),
+        );
+        await searchFor('rice');
+        expect(text('details-line-count')).toBe('5 lines');
+    });
+
+    it('caps the search box at the product name limit', async () => {
+        await mountDialog({ description: 'x' });
+        expect(
+            document.querySelector<HTMLInputElement>(
+                'input[aria-label="Search name or barcode"]',
+            )!.maxLength,
+        ).toBe(50);
+    });
+
     it('shows a count approval as "Stock count" linked to the count', async () => {
         api.get.mockResolvedValue({
             data: {

@@ -41,6 +41,7 @@
                 v-model:search="searchTerm"
                 compact
                 search-label="Search name or barcode"
+                :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :active="!!searchTerm.trim() || !!applied"
                 @search="applySearch"
                 @clear="resetFilters"
@@ -73,6 +74,7 @@ import { useRouter } from 'vue-router';
 import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import { META_ITEM } from '@/components/User/details-meta';
 import { useAuthStore } from '@/stores/auth';
@@ -164,9 +166,24 @@ const {
 
         totalItems.value = result.data.totalItems;
         if (!applied.value) lineCount.value = result.data.totalItems;
+        else if (lineCount.value === null) void fetchLineCount();
     },
     'Could not load the details.',
 );
+
+// A searched answer can't give the total: when the unsearched load failed,
+// ask for it once (one line is enough, only `totalItems` is read).
+async function fetchLineCount() {
+    try {
+        const result = await api.get<Paginated<AdjustmentLine>>(
+            `/adjustments/details/${props.item.id}`,
+            { params: { page: 1, limit: 1 } },
+        );
+        lineCount.value ??= result.data.totalItems;
+    } catch {
+        // Stays hidden; the next load tries again.
+    }
+}
 
 onMounted(fetchDetails);
 </script>

@@ -56,6 +56,7 @@
                 v-model:search="searchTerm"
                 compact
                 search-label="Search name or barcode"
+                :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :active="!!searchTerm.trim() || !!applied"
                 @search="applySearch"
                 @clear="resetFilters"
@@ -91,6 +92,7 @@ import api from '@/axios';
 import PurchaseOrderLink from './PurchaseOrderLink.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import { META_ITEM } from '@/components/User/details-meta';
 import {
