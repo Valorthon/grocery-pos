@@ -958,7 +958,7 @@ on upstream fixes).
   "About low stock at"), `reorderQuantity` as "Restock amount"; prose says
   "low stock level" (Settings: "Default low stock level for new products").
   API, wire and code names are unchanged. `low-stock-wording.spec.ts`
-  refuses "reorder " and "Restock quantity" in client source text.
+  refuses "reorder" (not part of an identifier) and "Restock quantity" in client source text.
 
 - `reorderLevel` and `reorderQuantity` use safe integer minor units, like stock.
   Legacy missing settings default to ten displayed units (10,000 grams for KG,

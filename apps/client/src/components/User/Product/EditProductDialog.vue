@@ -145,7 +145,7 @@ async function save() {
     const quantity = parseQuantity(reorderQuantity.value, props.product.unit);
     if (level === null || level < 0 || quantity === null || quantity < 1) {
         error.value =
-            'Enter a valid low stock at level and a positive restock amount.';
+            'Enter a valid low stock level and a positive restock amount.';
         return;
     }
     const update = {

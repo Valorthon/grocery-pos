@@ -14,7 +14,7 @@ function withoutComments(text: string): string {
     return text
         .replace(/<!--[\s\S]*?-->/g, '')
         .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/^\s*\/\/.*$/gm, '');
+        .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
 describe('low-stock wording (#274)', () => {
@@ -24,7 +24,7 @@ describe('low-stock wording (#274)', () => {
 
     it.each(Object.entries(sources))('%s has no old wording', (_, text) => {
         const visible = withoutComments(text);
-        expect(visible).not.toMatch(/\breorder\s/i);
+        expect(visible).not.toMatch(/\breorder(?![A-Za-z_])/i);
         expect(visible).not.toMatch(/\brestock quantity\b/i);
     });
 });

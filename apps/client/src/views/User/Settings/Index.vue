@@ -51,7 +51,7 @@
                         requires ADMIN PIN approval.
                     </p>
                     <BaseInput
-                        id="settings-reorder"
+                        id="settings-low-stock"
                         v-model="reorderInput"
                         label="Default low stock level for new products (display units)"
                         inputmode="numeric"
