@@ -47,7 +47,7 @@
                     autocomplete="off"
                     placeholder="0.00"
                     :error="errors.cost"
-                    @update:model-value="clearError('cost')"
+                    @update:model-value="onCostInput"
                 />
             </div>
         </div>
@@ -75,6 +75,7 @@ import {
     NUMERIC_LIMITS,
     STRING_LIMITS,
     quantityScale,
+    UnitOfMeasure,
     unitLabel,
     unitOf,
     type ProductCostView,
@@ -117,6 +118,9 @@ const picked = ref<Picked | null>(null);
 const searchText = ref('');
 const quantity = ref('');
 const cost = ref('');
+/** Set once the user types a cost: the prefill never replaces it. */
+const costTouched = ref(false);
+let lastUnit: PurchaseOrderDraftLine['unit'];
 const errors = ref<Record<string, string>>({});
 const existing = computed(() =>
     picked.value
@@ -142,18 +146,24 @@ onBeforeUnmount(() => {
 function pick(next: Picked | null) {
     const generation = ++costGeneration;
     const wasExisting = !!existing.value;
+    // Typing clears the pick first, so compare with the last picked unit.
+    const previousUnit = lastUnit;
+    if (next) lastUnit = next.unit;
     picked.value = next;
     clearError('product');
     const line = existing.value;
     if (line) {
         quantity.value = line.quantity;
         cost.value = line.cost;
+        costTouched.value = true;
         return;
     }
     if (wasExisting) {
         quantity.value = '';
         cost.value = '';
-    }
+        costTouched.value = false;
+    } else if (previousUnit && next && previousUnit !== next.unit)
+        quantity.value = '';
     if (next) loadCostDefault(next.product, generation);
 }
 
@@ -184,9 +194,8 @@ const selected = computed<ComboboxOption | null>({
     },
 });
 
-/** Prefills the expected cost; a cost typed meanwhile is kept. */
+/** Prefills the expected cost unless the user has typed one. */
 function loadCostDefault(product: string, generation: number) {
-    const before = cost.value;
     api.get<ProductCostView[]>('/suppliers/costs', {
         params: { products: product },
     })
@@ -195,14 +204,14 @@ function loadCostDefault(product: string, generation: number) {
                 generation !== costGeneration ||
                 !props.modelValue ||
                 picked.value?.product !== product ||
-                cost.value !== before
+                costTouched.value
             )
                 return;
             const last = response.data[0]?.lastCost;
             if (last !== undefined) cost.value = centavosToPesoInput(last);
         })
         .catch((cause: unknown) => {
-            if (generation !== costGeneration) return;
+            if (generation !== costGeneration || !props.modelValue) return;
             ui.queueMessage(
                 Color.ERROR,
                 apiErrorText(
@@ -219,6 +228,10 @@ function clearError(field: string) {
     delete next[field];
     errors.value = next;
 }
+function onCostInput() {
+    costTouched.value = true;
+    clearError('cost');
+}
 function onSearch(query: string) {
     clearError('product');
     debouncedSearch(query);
@@ -233,6 +246,8 @@ watch(
         searchText.value = '';
         quantity.value = '';
         cost.value = '';
+        costTouched.value = false;
+        lastUnit = undefined;
         errors.value = {};
         resetMatches();
         const product = props.scanned;
@@ -245,6 +260,9 @@ watch(
                 unit: unitOf(product.unit),
                 tracksExpiry: product.tracksExpiry,
             });
+            // A scanned piece starts at 1, as the fast path did (#214).
+            if (unitOf(product.unit) === UnitOfMeasure.PIECE)
+                quantity.value = '1';
         }
     },
     { immediate: true },

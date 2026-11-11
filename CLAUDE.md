@@ -364,8 +364,8 @@ requestId}`. A 5xx never carries details or internals.
   `barcodeError` passes). The PO applies scans in order: a product not on
   the order opens its Add product dialog with it picked (#284), a repeat
   is +1 piece and a measured unit focuses its line's quantity; a scan
-  while the dialog is open is ignored. Counts focus the first uncounted matching line.
-  Never mounted on the register.
+  while the dialog is open is ignored. Counts focus the first uncounted
+  matching line. Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via
   `common/utils/regex.ts` and `product/product-search.ts`.
 - `Inventory.updatedBy` means the last writer.

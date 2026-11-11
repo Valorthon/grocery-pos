@@ -131,6 +131,42 @@ describe('Purchase order Add product dialog (#284)', () => {
         expect(field('Expected cost').value).toBe('60');
     });
 
+    it('keeps a cost typed before the pick, and across a product switch', async () => {
+        mount();
+        await show();
+        await type('Expected cost', '55');
+        await pickMilk();
+        costs({ data: [{ product: 'p9', lastCost: 7550 }] });
+        await flush();
+        expect(field('Expected cost').value).toBe('55');
+        await type('Ordered', '2');
+        api.get.mockImplementation((url: string) => {
+            if (url === 'products/matches')
+                return Promise.resolve({
+                    data: [
+                        {
+                            product: 'p3',
+                            name: 'eggs',
+                            EAN: '4800000000031',
+                            unit: UnitOfMeasure.PIECE,
+                        },
+                    ],
+                });
+            return new Promise((resolve) => {
+                costs = resolve;
+            });
+        });
+        await type('Product (EAN or name)', 'eggs');
+        await vi.advanceTimersByTimeAsync(SEARCH_DEBOUNCE_MS);
+        await flush();
+        await pickFirstMatch();
+        costs({ data: [{ product: 'p3', lastCost: 900 }] });
+        await flush();
+        expect(field('Expected cost').value).toBe('55');
+        // L to piece: the typed quantity no longer fits and is cleared.
+        expect(field('Ordered (pc)').value).toBe('');
+    });
+
     it('shows invalid fields inline and stays open', async () => {
         mount();
         await show();
@@ -203,8 +239,20 @@ describe('Purchase order Add product dialog (#284)', () => {
                 ?.textContent,
         ).toContain('rice');
         expect(document.activeElement).toBe(field('Ordered (kg)'));
+        expect(field('Ordered (kg)').value).toBe('');
         expect(api.get).toHaveBeenCalledWith('/suppliers/costs', {
             params: { products: 'p2' },
         });
+    });
+
+    it('starts a scanned piece at 1', async () => {
+        mount([], {
+            _id: 'p1',
+            name: 'soap',
+            EAN: '4800000000017',
+            unit: UnitOfMeasure.PIECE,
+        } as ProductView);
+        await show();
+        expect(field('Ordered (pc)').value).toBe('1');
     });
 });

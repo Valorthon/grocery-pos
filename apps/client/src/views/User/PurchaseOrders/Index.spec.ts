@@ -728,6 +728,7 @@ describe('Purchase order scanning (#214)', () => {
         await flush();
         expect(dialogOpen()).toBe(true);
         expect(selectedProduct()).toContain('soap');
+        expect(field('Ordered (pc)').value).toBe('1');
         expect(api.get).toHaveBeenCalledWith('/suppliers/costs', {
             params: { products: 'p1' },
         });
