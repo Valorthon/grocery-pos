@@ -532,11 +532,7 @@
                         @click="receiving = false"
                         >Close</BaseButton
                     >
-                    <BaseButton
-                        class="flex-1"
-                        :disabled="busy"
-                        @click="submitReceive"
-                    >
+                    <BaseButton :disabled="busy" @click="submitReceive">
                         {{ busy ? 'Receiving…' : 'Record receipt' }}
                     </BaseButton>
                 </template>

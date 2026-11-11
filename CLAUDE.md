@@ -568,7 +568,7 @@ requestId}`. A 5xx never carries details or internals.
   style on the wrapper.
 - Dialog footers (#282): `BaseModal`'s footer is right-aligned
   (`justify-end`), Cancel then the primary action, with no `flex-1`
-  buttons, in every dialog using it; only Receipt and Z-read keep
+  buttons, in every dialog using it (Restock Add and the PO receive dialog included); only Receipt and Z-read keep
   full-width `flex-1` buttons and DateRangeFilter its `ml-auto` Done.
 - Edit Product (#282) groups Details, Pricing (ADMIN only, the
   latest-receipt summary beside the price) and Stock planning under a
