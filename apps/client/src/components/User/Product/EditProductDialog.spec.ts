@@ -272,6 +272,13 @@ describe('EditProductDialog errors (#282)', () => {
         expect(useUIStore().toasts).toHaveLength(0);
         expect(document.body.textContent).not.toContain('name: ');
         expect(isOpen.value).toBe(true);
+        // Saving was reset: a second Save goes out and closes.
+        api.patch.mockResolvedValueOnce({ data: null });
+        await type(field('Product name').input, 'rice two');
+        saveButton().click();
+        await flush();
+        expect(api.patch).toHaveBeenCalledTimes(2);
+        expect(isOpen.value).toBe(false);
     });
 
     it('another server error is a toast', async () => {
@@ -306,5 +313,67 @@ describe('EditProductDialog expiry box (#282)', () => {
         await mount({ stock: 0 });
         expect(box().disabled).toBe(false);
         expect(hint()).toBe('Change only at zero stock');
+    });
+});
+
+describe('EditProductDialog stock answers (#282 review)', () => {
+    it("a late answer for product A never sets product B's box", async () => {
+        const pending = new Map<string, (stock: number) => void>();
+        api.get.mockImplementation((url: string) =>
+            url.endsWith('/movements/integrity')
+                ? new Promise((resolve) =>
+                      pending.set(url.split('/')[2]!, (stock) =>
+                          resolve({
+                              data: {
+                                  stock,
+                                  movementTotal: stock,
+                                  matches: true,
+                              },
+                          }),
+                      ),
+                  )
+                : Promise.resolve({ data: { data: [], total: 0 } }),
+        );
+        const base = { EAN: '4006381333931', price: 5000, unit: 'PIECE' };
+        const product = ref({
+            ...base,
+            _id: 'a',
+            name: 'apple',
+        } as unknown as ProductView);
+        const pinia = createPinia();
+        setActivePinia(pinia);
+        useAuthStore().user = {
+            userId: 'u1',
+            username: 'r',
+            roles: [Role.Restocker],
+        };
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        isOpen.value = true;
+        app = createApp({
+            render: () =>
+                h(EditProductDialog, {
+                    modelValue: isOpen.value,
+                    'onUpdate:modelValue': (v: boolean) => (isOpen.value = v),
+                    product: product.value,
+                }),
+        });
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+        product.value = {
+            ...base,
+            _id: 'b',
+            name: 'banana',
+        } as unknown as ProductView;
+        await flush();
+        pending.get('b')!(0);
+        await flush();
+        pending.get('a')!(5);
+        await flush();
+        const box = document.querySelector<HTMLInputElement>(
+            '[role="dialog"] input[type="checkbox"]',
+        )!;
+        expect(box.disabled).toBe(false);
     });
 });
