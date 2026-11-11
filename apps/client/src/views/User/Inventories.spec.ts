@@ -222,10 +222,10 @@ describe('reorder list and restock draft', () => {
         button.click();
         await flush();
         const product = document.querySelector(
-            '[data-testid="stock-history-product"]',
+            '[data-testid="stock-history-tiles"]',
         );
-        expect(product?.textContent).toContain('EAN 4006381333931');
-        expect(product?.textContent).toContain('Reorder level 9');
+        expect(product?.textContent).toContain('EAN4006381333931');
+        expect(product?.textContent).toContain('Reorder level9');
     });
     it('shows the EAN under the name, as typed, at every width (#232)', async () => {
         await mount();

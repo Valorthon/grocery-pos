@@ -109,6 +109,10 @@
                 v-if="history"
                 :key="history._id"
                 :product="history"
+                :ean="history.EAN"
+                :reorder-level="
+                    formatQuantity(reorderLevelOf(history), history.unit)
+                "
                 @close="history = null"
             />
             <EditProductDialog
@@ -131,7 +135,12 @@
 import { useCategories } from '@/composables/useCategories';
 import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import ProductCostSummary from '@/components/User/Product/ProductCostSummary.vue';
-import { Role, unitLabel } from '@grocery-pos/contracts';
+import {
+    Role,
+    unitLabel,
+    formatQuantity,
+    reorderLevelOf,
+} from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';
