@@ -424,8 +424,10 @@ describe('Purchase order drafting (#123)', () => {
             document.querySelector('[aria-label="Remove milk"]'),
         ).not.toBeNull();
         await press('Remove');
-        expect(document.querySelector('tbody tr')).toBeNull();
-        expect(document.body.textContent).toContain('No lines yet');
+        expect(document.querySelector('[aria-label="Remove milk"]')).toBeNull();
+        expect(
+            document.querySelector('[data-testid="po-no-lines"]'),
+        ).not.toBeNull();
         await addMilk();
         await press('Back to list');
         expect(document.body.textContent).toContain('Discard changes?');
@@ -572,8 +574,9 @@ describe('Purchase order references and draft warnings (#123)', () => {
         expect(crumbs()).toBeUndefined();
         await press('New purchase order');
         expect(crumbs()).toBe('Purchase orders › New purchase order');
-        expect(document.querySelector('table')).toBeNull();
-        expect(document.body.textContent).toContain('No lines yet');
+        expect(
+            document.querySelector('[data-testid="po-no-lines"]'),
+        ).not.toBeNull();
         await press('Back to list');
         await press('Open');
         expect(crumbs()).toBe(
@@ -739,5 +742,122 @@ describe('Purchase order scanning (#214)', () => {
         wedgeScan('4800000000017');
         await flush();
         expect(api.get).not.toHaveBeenCalledWith('/products/4800000000017');
+    });
+});
+
+describe('Purchase order editor layout and order view (#275)', () => {
+    const h1 = () => document.querySelector('h1')?.textContent?.trim();
+    const header = () => document.querySelector('header')!;
+    const headerButtons = () =>
+        [...header().querySelectorAll('button')].map((b) =>
+            b.textContent?.trim(),
+        );
+    const byId = (id: string) =>
+        document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    function openWith(po: PurchaseOrderView) {
+        api.get.mockImplementation((url: string) =>
+            Promise.resolve(
+                url === '/purchase-orders'
+                    ? { data: { data: [po], totalItems: 1 } }
+                    : { data: { data: [], totalItems: 0 } },
+            ),
+        );
+    }
+
+    it('titles a new draft, bands Supplier and Note, and shows an empty table with its total', async () => {
+        await mount();
+        await press('New purchase order');
+        expect(h1()).toBe('New purchase order');
+        expect(byId('po-title-status')).toBeNull();
+        expect(headerButtons()).toEqual(['Back to list', 'Save draft']);
+        const band = byId('po-top-band')!;
+        expect(band.textContent).toContain('Supplier');
+        expect(band.textContent).toContain('Note (optional)');
+        expect(byId('po-add-product')!.textContent).toContain('Add product');
+        const heads = [...document.querySelectorAll('thead th')].map((th) =>
+            th.textContent?.trim(),
+        );
+        expect(heads).toEqual([
+            'Product',
+            'Ordered',
+            'Expected cost',
+            'Action',
+        ]);
+        expect(byId('po-no-lines')!.closest('tbody')).not.toBeNull();
+        expect(byId('po-no-lines')!.textContent).toContain('No lines yet');
+        const foot = byId('po-expected-total')!;
+        expect(foot.tagName).toBe('TFOOT');
+        expect(foot.textContent).toContain('Expected total');
+        expect(foot.textContent).toContain('₱0.00');
+    });
+
+    it("puts a saved draft's actions in the header", async () => {
+        openWith(order(PurchaseOrderStatus.DRAFT));
+        await mount();
+        await press('Open');
+        expect(h1()).toBe(purchaseOrderReference('po1'));
+        expect(byId('po-title-status')!.textContent).toContain('Draft');
+        expect(headerButtons()).toEqual([
+            'Back to list',
+            'Save draft',
+            'Mark as sent',
+            'Cancel order',
+        ]);
+        expect(byId('po-expected-total')!.textContent).toContain('₱3.00');
+    });
+
+    it('shows an open order with its heading, meta line, note and receipts link', async () => {
+        openWith({ ...order(), note: 'Weekly run', receipts: ['r1'] });
+        await mount();
+        await press('Open');
+        expect(h1()).toBe(purchaseOrderReference('po1'));
+        expect(byId('po-title-status')!.textContent).toContain('Sent');
+        expect(headerButtons()).toEqual([
+            'Back to list',
+            'Receive',
+            'Cancel order',
+        ]);
+        expect(byId('details-heading')!.textContent).toContain('Farm');
+        expect(byId('details-total')!.textContent).toContain('₱3.00');
+        const meta = [...byId('details-meta')!.querySelectorAll('li')].map(
+            (li) => li.textContent?.trim(),
+        );
+        expect(meta[0]).toMatch(/^Created Nov 6, 2026/);
+        expect(meta.slice(1)).toEqual(['by restocker', 'View receipts']);
+        expect(byId('details-note')!.textContent?.trim()).toBe(
+            'Note: Weekly run',
+        );
+        expect(byId('po-top-band')).toBeNull();
+        expect(byId('po-add-product')).toBeNull();
+        expect(byId('po-expected-total')!.textContent).toContain('₱3.00');
+        await press('View receipts');
+        expect(nav.push).toHaveBeenCalledWith({
+            name: 'Restocks',
+            query: { purchaseOrder: 'po1' },
+        });
+    });
+
+    it('leaves out the note and receipts link when there are none', async () => {
+        openWith(order(PurchaseOrderStatus.RECEIVED));
+        await mount();
+        await press('Open');
+        expect(headerButtons()).toEqual(['Back to list']);
+        expect(byId('details-note')).toBeNull();
+        expect(byId('details-meta')!.textContent).not.toContain(
+            'View receipts',
+        );
+    });
+
+    it('marks a cancelled order closed short, with no actions', async () => {
+        openWith({
+            ...order(PurchaseOrderStatus.CANCELLED),
+            closedShort: true,
+            receipts: ['r1'],
+        });
+        await mount();
+        await press('Open');
+        expect(byId('po-title-status')!.textContent).toContain('Cancelled');
+        expect(headerButtons()).toEqual(['Back to list']);
+        expect(byId('details-meta')!.textContent).toContain('Closed short');
     });
 });
