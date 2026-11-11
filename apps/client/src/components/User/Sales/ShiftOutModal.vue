@@ -89,7 +89,6 @@
                 >Cancel</BaseButton
             >
             <BaseButton
-                class="flex-1"
                 :loading="submitting"
                 data-testid="shift-out-confirm"
                 @click="confirm"

@@ -381,7 +381,6 @@
                 :aria-describedby="changeShown ? changeId : undefined"
                 type="submit"
                 :form="formId"
-                class="flex-1"
                 :loading="processing"
                 :disabled="!canConfirm"
                 aria-keyshortcuts="Enter"

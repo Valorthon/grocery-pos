@@ -131,7 +131,6 @@
                 >Cancel</BaseButton
             >
             <BaseButton
-                class="flex-1"
                 :loading="submitting"
                 data-testid="drawer-confirm"
                 @click="confirm"

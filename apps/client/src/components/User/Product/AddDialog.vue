@@ -65,7 +65,7 @@
             <BaseButton variant="outline" @click="model = false"
                 >Cancel</BaseButton
             >
-            <BaseButton class="flex-1" @click="submitProduct">
+            <BaseButton @click="submitProduct">
                 <Save v-if="isEditMode" class="w-4 h-4" />
                 <Plus v-else class="w-4 h-4" />
                 {{ isEditMode ? 'Update Draft' : 'Add to Draft' }}

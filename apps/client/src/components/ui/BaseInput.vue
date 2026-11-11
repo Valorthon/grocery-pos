@@ -2,14 +2,17 @@
     <div :class="attrs.class" :style="attrs.style">
         <!-- With help, the ⓘ follows the label outside it, so a click on
              it never focuses the input; -my-3 keeps the 44px trigger from
-             making the row taller (#273). -->
+             making the row taller (#273), and -ml-3.5
+             pulls its 16px icon to 4px after the label (#282). -->
         <div v-if="label && help" class="flex items-center gap-1 mb-1.5">
             <label :for="fieldId" :class="[FIELD_LABEL, 'mb-0']">
                 {{ label }}
             </label>
-            <InfoTooltip class="-my-3" :label="helpLabel || `About ${label}`">{{
-                help
-            }}</InfoTooltip>
+            <InfoTooltip
+                class="-my-3 -ml-3.5"
+                :label="helpLabel || `About ${label}`"
+                >{{ help }}</InfoTooltip
+            >
         </div>
         <label v-else-if="label" :for="fieldId" :class="FIELD_LABEL">
             {{ label }}

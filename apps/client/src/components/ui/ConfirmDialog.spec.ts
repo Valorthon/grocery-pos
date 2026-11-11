@@ -140,7 +140,7 @@ describe('ConfirmDialog with useConfirm (issue #19)', () => {
 
         const clear = button('Clear');
         expect(clear.classList).toContain('bg-danger-solid');
-        expect(clear.classList).toContain('flex-1');
+        expect(clear.classList).not.toContain('flex-1');
         expect(clear.className).not.toMatch(/!|bg-leaf-600|red-/);
     });
 
