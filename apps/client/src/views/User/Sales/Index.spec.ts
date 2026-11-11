@@ -521,6 +521,57 @@ describe('sales errors (issue #18)', () => {
         expect(linkNotice(await mount())).toBeNull();
     });
 
+    function failSalesOnce() {
+        let failed = false;
+        api.get.mockImplementation((url: string) => {
+            if (url === '/sales' && !failed) {
+                failed = true;
+                return Promise.reject(httpError(500, 'Internal server error'));
+            }
+            return Promise.resolve(
+                url === '/sales' || url === '/users' || url === '/categories'
+                    ? { data: { data: [], totalItems: 0 } }
+                    : { data: [] },
+            );
+        });
+    }
+
+    it('raises no notice after a failed deep-link load and Clear Filters (#248)', async () => {
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID, details: '1' };
+        failSalesOnce();
+        const host = await mount();
+        expect(
+            host.querySelector('[data-testid="table-error"]'),
+        ).not.toBeNull();
+        [...host.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Clear Filters')!
+            .click();
+        await flush();
+        expect(host.querySelector('[data-testid="table-error"]')).toBeNull();
+        expect(linkNotice(host)).toBeNull();
+        expect(routerQuery.replace).toHaveBeenCalledWith({
+            query: { saleNumber: ID },
+        });
+    });
+
+    it('shows the table error and no notice on a failed deep-link load, then the notice after Retry (#248)', async () => {
+        const ID = 'ab'.repeat(12);
+        routerQuery.value = { saleNumber: ID, details: '1' };
+        failSalesOnce();
+        const host = await mount();
+        const error = host.querySelector('[data-testid="table-error"]');
+        expect(error).not.toBeNull();
+        expect(linkNotice(host)).toBeNull();
+        [...error!.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Retry'))!
+            .click();
+        await flush();
+        expect(linkNotice(host)?.textContent?.trim()).toBe(
+            "That sale couldn't be found.",
+        );
+    });
+
     it('shows a failed list in the table, then retries it', async () => {
         api.get.mockRejectedValueOnce(httpError(500, 'Internal server error'));
         await mount();

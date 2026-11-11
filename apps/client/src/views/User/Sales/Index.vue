@@ -817,7 +817,19 @@ const searchError = ref('');
  * next applied search, filter, date preset or Clear Filters.
  */
 const linkNotice = ref('');
+/**
+ * Consumed once: a reload or Back must not reopen it (#243), and a later
+ * search or filter must not raise the not-found notice (#248).
+ */
+function consumeDeepLink() {
+    if (openOnLoad === null) return;
+    openOnLoad = null;
+    const query = { ...router.currentRoute.value.query };
+    delete query.details;
+    void router.replace({ query });
+}
 function applyFilters() {
+    consumeDeepLink();
     searchError.value = '';
     linkNotice.value = '';
     if (
@@ -950,13 +962,7 @@ const {
             (row) => openOnLoad !== null && row.id.toLowerCase() === openOnLoad,
         );
         const linkMissing = openOnLoad !== null && !opening;
-        if (openOnLoad !== null) {
-            openOnLoad = null;
-            // Consumed once: a reload or Back must not reopen it (#243).
-            const query = { ...router.currentRoute.value.query };
-            delete query.details;
-            void router.replace({ query });
-        }
+        consumeDeepLink();
         if (opening) void showDetails(opening);
         else if (linkMissing) {
             linkNotice.value = authStore.isAdmin
