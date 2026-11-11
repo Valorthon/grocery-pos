@@ -53,7 +53,11 @@
                 row-click
                 @click:row="showDetails"
                 @retry="fetchAdjust"
-            />
+            >
+                <template #cell-adjustedBy="{ item }">{{
+                    item.adjustedBy ?? 'N/A'
+                }}</template>
+            </BaseTable>
         </PageCard>
     </PageFrame>
 
@@ -239,7 +243,7 @@ const {
         serverItems.value = result.data.data.map((adjust) => ({
             id: adjust._id,
             description: adjust.description,
-            adjustedBy: adjust.adjustedBy?.name ?? 'N/A',
+            adjustedBy: adjust.adjustedBy?.name,
             date: formatStoreDateTime(adjust.createdAt),
         }));
 
