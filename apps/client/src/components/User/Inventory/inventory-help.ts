@@ -48,7 +48,7 @@ export const BATCH_HELP = {
         ok: 'Expires later than the alert days.',
         check: 'Dated, but its days left are unknown; check the date.',
         reconciliation:
-            "Undated lot from offline cash reconciliation; can't be sold, needs review.",
+            "Undated lot (offline cash reconciliation or a legacy return); can't be sold, needs review.",
     }),
     daysLeft:
         'Store-calendar days to the expiry date; a lot is usable through its expiry day.',
@@ -78,6 +78,7 @@ export const INVENTORY_HELP = {
         },
         ...stockStatusHelp,
     ],
-    reorderLevel: 'Low stock at or below this level.',
+    reorderLevel:
+        'Listed as low stock at or below this level (out of stock included).',
     status: stockStatusHelp,
 } satisfies Record<string, ColumnHelp>;
