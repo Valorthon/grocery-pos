@@ -11,6 +11,7 @@ import { useAdjustmentPrefillStore } from '@/stores/adjustmentPrefill';
 import { click, field, flush } from '@/testing/form-dom';
 import InventoryBatches from './InventoryBatches.vue';
 import BatchSelect from './BatchSelect.vue';
+import { initialSettings, storePresentation } from '@/settings/presentation';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
@@ -50,6 +51,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     disposePinia(pinia);
+    storePresentation.value = { ...initialSettings };
     document.body.innerHTML = '';
     vi.clearAllMocks();
 });
@@ -232,6 +234,28 @@ it('starts the expiring list at the store expiry alert window (#213)', async () 
     });
     expect(field('Expiring within days (expired included)').value).toBe('30');
     store.setOwner(undefined);
+});
+
+it('notes the live store window behind "Expiring soon" (#247)', async () => {
+    const { useSettingsStore } = await import('@/stores/settings');
+    const store = useSettingsStore();
+    store.settings = { ...store.settings, expiryAlertDays: 14 };
+    await mount();
+    const note = () =>
+        document
+            .querySelector('[data-testid="expiring-soon-note"]')
+            ?.textContent?.replace(/\s+/g, ' ')
+            .trim();
+    expect(note()).toBe('Expiring soon = within 14 days (store setting)');
+    expect(
+        field('Expiring within days (expired included)').getAttribute(
+            'aria-describedby',
+        ),
+    ).toBe('expiring-soon-note');
+    expect(document.getElementById('expiring-soon-note')).not.toBeNull();
+    store.settings = { ...store.settings, expiryAlertDays: 1 };
+    await flush();
+    expect(note()).toBe('Expiring soon = within 1 day (store setting)');
 });
 
 it('says no products track expiry instead of the filters and table (#233)', async () => {
