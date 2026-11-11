@@ -25,7 +25,11 @@
                             : '—'
                     "
                 />
-                <StatTile label="Reorder level" :value="reorderLevel || '—'" />
+                <StatTile
+                    label="Reorder level"
+                    :value="reorderLevel || '—'"
+                    :help="INVENTORY_HELP.reorderLevel"
+                />
                 <StatTile label="EAN" :value="ean || '—'" />
                 <div
                     class="flex flex-col gap-1 rounded-card border border-line bg-surface p-4 shadow-card"
@@ -34,7 +38,10 @@
                 >
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-xs font-semibold text-muted">Ledger</p>
-                        <InfoTooltip label="About stock history balances">
+                        <InfoTooltip
+                            class="-my-3"
+                            label="About stock history balances"
+                        >
                             Balances follow posting order. Offline sale time is
                             shown separately. Historical backfill balances are
                             derived from known records and an explicitly
@@ -184,7 +191,7 @@
     </BaseModal>
 </template>
 <script setup lang="ts">
-import { STOCK_HISTORY_HELP } from './inventory-help';
+import { INVENTORY_HELP, STOCK_HISTORY_HELP } from './inventory-help';
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import {

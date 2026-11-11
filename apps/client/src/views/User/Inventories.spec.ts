@@ -1,3 +1,4 @@
+import { INVENTORY_HELP } from '@/components/User/Inventory/inventory-help';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, reactive, type App } from 'vue';
 import type { RouteMeta, Router } from 'vue-router';
@@ -225,7 +226,9 @@ describe('reorder list and restock draft', () => {
             '[data-testid="stock-history-tiles"]',
         );
         expect(product?.textContent).toContain('EAN4006381333931');
-        expect(product?.textContent).toContain('Reorder level9');
+        expect(product?.textContent).toContain(
+            `Reorder level${INVENTORY_HELP.reorderLevel}9`,
+        );
     });
     it('shows the EAN under the name, as typed, at every width (#232)', async () => {
         await mount();

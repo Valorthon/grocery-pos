@@ -1,3 +1,4 @@
+import { INVENTORY_HELP } from '@/components/User/Inventory/inventory-help';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
@@ -585,7 +586,7 @@ describe('product list scans (#214)', () => {
         )!.textContent!;
         expect(tiles).toContain(`EAN${SCAN}`);
         expect(tiles).toContain(
-            `Reorder level${formatQuantity(reorderLevelOf({ unit: UnitOfMeasure.PIECE }), UnitOfMeasure.PIECE)}`,
+            `Reorder level${INVENTORY_HELP.reorderLevel}${formatQuantity(reorderLevelOf({ unit: UnitOfMeasure.PIECE }), UnitOfMeasure.PIECE)}`,
         );
     });
 

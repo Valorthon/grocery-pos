@@ -19,6 +19,7 @@ import {
     headerText,
 } from '@/testing/form-dom';
 import StockHistory from './StockHistory.vue';
+import { INVENTORY_HELP } from './inventory-help';
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 let app: App | undefined,
@@ -117,8 +118,8 @@ const badge = () =>
 const tile = (label: string) =>
     [...document.querySelectorAll('[data-testid="stock-history-tiles"] > *')]
         .find((el) => el.querySelector('p')?.textContent?.trim() === label)
-        ?.textContent?.replace(label, '')
-        .trim();
+        ?.querySelector('.font-display')
+        ?.textContent?.trim();
 it('applies a date edit at once on page 1, retries applied filters and holds a reversed range', async () => {
     await mount();
     await click('Next');
@@ -233,7 +234,7 @@ it('loads the check once, not on every page change', async () => {
 it('opens the balances note by keyboard focus with aria-describedby', async () => {
     await mount();
     const button = document.querySelector<HTMLButtonElement>(
-        '[data-info-tooltip]',
+        '[aria-label="About stock history balances"]',
     )!;
     const tip = document.getElementById(
         button.getAttribute('aria-describedby')!,
@@ -262,6 +263,35 @@ it('opens the balances note by keyboard focus with aria-describedby', async () =
     await flush();
     expect(tip.className).toContain('hidden');
     expect(closed).not.toHaveBeenCalled();
+});
+it('explains the reorder level tile with the shared Inventory text (#271)', async () => {
+    await mount();
+    const button = document.querySelector<HTMLButtonElement>(
+        '[aria-label="About reorder level"]',
+    )!;
+    const tip = document.getElementById(
+        button.getAttribute('aria-describedby')!,
+    )!;
+    expect(tip.textContent?.trim()).toBe(INVENTORY_HELP.reorderLevel);
+    button.focus();
+    await flush();
+    expect(tip.className).not.toContain('hidden');
+    button.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await flush();
+    expect(tip.className).toContain('hidden');
+    expect(document.body.textContent).toContain('Stock history — Milk');
+    expect(closed).not.toHaveBeenCalled();
+});
+it('keeps every tile label row one text line tall (#271)', async () => {
+    await mount();
+    const triggers = document.querySelectorAll(
+        '[data-testid="stock-history-tiles"] [data-info-tooltip]',
+    );
+    expect(triggers).toHaveLength(2);
+    for (const trigger of triggers)
+        expect(trigger.parentElement!.classList).toContain('-my-3');
 });
 it('shows derived unattributed history and flags ledger mismatch', async () => {
     api.get.mockImplementation(async (url: string) =>
