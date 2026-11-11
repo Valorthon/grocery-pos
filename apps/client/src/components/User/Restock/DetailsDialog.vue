@@ -1,87 +1,65 @@
 <template>
     <div>
-        <div
-            class="grid grid-cols-2 md:grid-cols-5 gap-4 px-5 py-4 border-b border-slate-100"
-        >
-            <div>
-                <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
+        <div class="px-5 py-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4">
+                <h3
+                    v-if="item.supplier"
+                    class="min-w-0 break-words text-base font-bold"
+                    data-testid="details-heading"
                 >
-                    Supplier / Invoice
-                </div>
-                <div class="text-sm">
-                    {{ item.supplier || 'Unknown supplier' }} ·
-                    {{ item.invoiceNumber || 'No invoice recorded' }}
-                </div>
-                <div class="text-sm">{{ item.description || 'N/A' }}</div>
-            </div>
-            <div data-testid="restock-purchase-order">
-                <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    {{ item.supplier }}
+                </h3>
+                <h3
+                    v-else
+                    class="min-w-0 text-base font-medium text-muted"
+                    data-testid="details-heading"
                 >
-                    Purchase order
-                </div>
-                <div class="text-sm">
-                    <PurchaseOrderLink :purchase-order="item.purchaseOrder" />
-                </div>
-            </div>
-            <div>
+                    Unknown supplier
+                </h3>
                 <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    class="shrink-0 text-base font-bold text-leaf-600"
+                    data-testid="details-total"
                 >
-                    Restocked By
-                </div>
-                <div class="text-sm capitalize">
-                    {{ item.restockedBy || 'Unknown' }}
-                </div>
-            </div>
-            <div>
-                <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
-                >
-                    Date
-                </div>
-                <div class="text-sm">{{ item.date || '--' }}</div>
-            </div>
-            <div>
-                <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
-                >
-                    Grand Total
-                </div>
-                <div class="text-sm font-bold text-leaf-600">
                     {{ item.totalCost }}
                 </div>
             </div>
+            <ul
+                class="mt-1 flex flex-wrap items-center text-sm text-muted"
+                data-testid="details-meta"
+            >
+                <li v-if="item.invoiceNumber" :class="META_ITEM">
+                    {{ item.invoiceNumber }}
+                </li>
+                <li
+                    v-if="item.purchaseOrder"
+                    :class="META_ITEM"
+                    data-testid="restock-purchase-order"
+                >
+                    <PurchaseOrderLink :purchase-order="item.purchaseOrder" />
+                </li>
+                <li v-if="item.restockedBy" :class="[META_ITEM, 'capitalize']">
+                    {{ item.restockedBy }}
+                </li>
+                <li v-if="item.date" :class="META_ITEM">{{ item.date }}</li>
+            </ul>
+            <p
+                v-if="showDescription"
+                class="mt-1 text-sm"
+                data-testid="details-description"
+            >
+                {{ item.description }}
+            </p>
         </div>
 
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
-        >
-            <BaseInput
-                v-model="searchEAN"
-                label="EAN / Barcode"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
+        <div class="px-5 py-3 bg-slate-50 border-b border-slate-200">
+            <FilterBar
+                v-model:search="searchTerm"
+                compact
+                search-label="Search name or barcode"
+                :active="!!searchTerm.trim() || !!applied"
+                @search="applySearch"
+                @clear="resetFilters"
             />
-            <BaseInput
-                v-model="searchName"
-                label="Product Name"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
-            />
-            <div class="md:col-span-2 flex items-end gap-2">
-                <BaseButton size="sm" @click="applySearch">
-                    <Search class="w-4 h-4" />
-                    Search
-                </BaseButton>
-                <BaseButton variant="outline" size="sm" @click="resetFilters">
-                    <X class="w-4 h-4" />
-                    Clear Filters
-                </BaseButton>
-            </div>
         </div>
 
         <BaseTable
@@ -103,21 +81,25 @@
 </template>
 
 <script setup lang="ts">
-import { formatQuantity, quantityAmount } from '@grocery-pos/contracts';
-import { onMounted, ref } from 'vue';
-import { Search, X } from '@lucide/vue';
+import {
+    formatQuantity,
+    purchaseOrderReference,
+    quantityAmount,
+} from '@grocery-pos/contracts';
+import { computed, onMounted, ref } from 'vue';
 import api from '@/axios';
 import PurchaseOrderLink from './PurchaseOrderLink.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
-import BaseButton from '@/components/ui/BaseButton.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import { META_ITEM } from '@/components/User/details-meta';
 import {
     useAppliedFilters,
     useListFetch,
     useListPaging,
 } from '@/composables/useListFetch';
 import { formatCurrency } from '@/utils/currency';
+import { productSearchParams } from '@/utils/product-search';
 import type { Paginated, RestockLine } from '@grocery-pos/contracts';
 import type { RestockListRow } from './rows';
 
@@ -127,13 +109,24 @@ const props = defineProps<{
 
 const { page, limit, search } = useListPaging(() => fetchDetails());
 const totalItems = ref(0);
-const searchName = ref('');
-const searchEAN = ref('');
+const searchTerm = ref('');
 // What the list was last searched for: paging and Retry reuse it.
 const { applied, apply: applySearch } = useAppliedFilters(
-    () => ({ name: searchName.value, EAN: searchEAN.value }),
+    () => searchTerm.value.trim(),
     search,
 );
+
+// A receipt against a PO is described as the PO by default (#123); that
+// repeats the meta line, so only a description of its own shows (#260).
+const showDescription = computed(() => {
+    const { description, purchaseOrder } = props.item;
+    if (!description) return false;
+    return (
+        !purchaseOrder ||
+        description !==
+            `Purchase order ${purchaseOrderReference(purchaseOrder)}`
+    );
+});
 
 const headers = [
     { key: 'name', title: 'Product', rowHeader: true },
@@ -155,8 +148,7 @@ interface RestockLineRow {
 const serverItems = ref<RestockLineRow[]>([]);
 
 const resetFilters = () => {
-    searchEAN.value = '';
-    searchName.value = '';
+    searchTerm.value = '';
     applySearch();
 };
 
@@ -170,8 +162,7 @@ const {
             params: {
                 page: page.value,
                 limit: limit.value,
-                name: applied.value.name?.toUpperCase(),
-                EAN: applied.value.EAN,
+                ...productSearchParams(applied.value),
             },
         }),
     (result) => {

@@ -54,9 +54,18 @@
                 @click:row="showDetails"
                 @retry="fetchRestock"
             >
+                <template #cell-supplier="{ item }">{{
+                    item.supplier ?? 'Unknown supplier'
+                }}</template>
+                <template #cell-invoiceNumber="{ item }">{{
+                    item.invoiceNumber ?? '—'
+                }}</template>
                 <template #cell-purchaseOrder="{ item }">
                     <PurchaseOrderLink :purchase-order="item.purchaseOrder" />
                 </template>
+                <template #cell-restockedBy="{ item }">{{
+                    item.restockedBy ?? 'N/A'
+                }}</template>
             </BaseTable>
         </PageCard>
     </PageFrame>
@@ -278,12 +287,12 @@ const {
         serverItems.value = result.data.data.map((restock) => ({
             id: restock._id,
             description: restock.description,
-            supplier: restock.supplier?.name ?? 'Unknown supplier',
-            invoiceNumber: restock.invoiceNumber || '—',
+            supplier: restock.supplier?.name,
+            invoiceNumber: restock.invoiceNumber || undefined,
             ...(restock.purchaseOrder && {
                 purchaseOrder: restock.purchaseOrder,
             }),
-            restockedBy: restock.restockedBy?.name ?? 'N/A',
+            restockedBy: restock.restockedBy?.name,
             totalCost: formatCurrency(restock.totalCost),
             date: formatStoreDateTime(restock.createdAt),
         }));

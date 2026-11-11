@@ -617,6 +617,15 @@ requestId}`. A 5xx never carries details or internals.
   The client shows `dateRangeError` on the To field and keeps the last
   valid range; a user-select change still applies with it.
 - BaseTable hides its pager while `error` is set.
+- Restock and Adjustment Details (#260) open with a heading line (supplier
+    - grand total; description, or "Stock count 1A2B3C4D" linked for
+      ADJUSTER/ADMIN, + line count of the unsearched load) and a muted meta
+      line joined by "·" (invoice · PO link · restocker · date; adjuster ·
+      date). Empty values are left out (rows carry `undefined`; the history
+      tables keep their placeholders); a legacy receipt shows muted "Unknown
+      supplier"; the default `Purchase order PO-…` description is hidden.
+      One compact "Search name or barcode" box (`productSearchParams`: ≤13
+      digits is an `EAN` prefix, else `name`).
 - Sale details clear before loading, and only the latest click's answer is
   shown. The user editor edits a copy of the row's roles, so Cancel changes
   nothing. Create validates name (trimmed), password and roles like
