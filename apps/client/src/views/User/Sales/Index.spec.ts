@@ -9,6 +9,7 @@ import {
     TenderType,
 } from '@grocery-pos/contracts';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
+import { openDates, openMoreFilters } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
 import Index from './Index.vue';
 import type { ApiGet, ApiSend } from '@/testing/api-mock';
@@ -777,6 +778,7 @@ describe('sales-history applied filters and receipt identity', () => {
     it('rejects malformed identity/date filters without replacing the current result', async () => {
         serve(CASH_SALE, []);
         await history();
+        await openDates();
         const count = api.get.mock.calls.filter(
             ([url]) => url === '/sales',
         ).length;
@@ -801,6 +803,7 @@ describe('sales-history applied filters and receipt identity', () => {
     it('keeps unapplied text out of paging, applies dates/payment and clears all filters', async () => {
         serve(CASH_SALE, []);
         await history();
+        await openDates();
         input('sales-number', 'deadbeef');
         await flush();
         expect(salesParams()).not.toHaveProperty('saleNumber');
@@ -831,8 +834,10 @@ describe('sales-history applied filters and receipt identity', () => {
                 : original(url, config),
         );
         await history();
+        await openDates();
         expect(document.querySelector('[data-chip]')).toBeNull();
-        expect(button('Filters')).toBeUndefined();
+        // No count while nothing in the Filters dialog is applied (#254).
+        expect(button('Filters')).toBeDefined();
         expect(button('Clear Filters')?.disabled).toBe(true);
         const count = () =>
             api.get.mock.calls.filter(([url]) => url === '/sales').length;
@@ -887,6 +892,7 @@ describe('sales-history applied filters and receipt identity', () => {
                   : original(url, config),
         );
         await history();
+        await openMoreFilters();
         const category =
             document.querySelector<HTMLSelectElement>('#sales-category')!;
         expect(category.textContent).toContain('Archived (archived)');
@@ -903,6 +909,10 @@ describe('sales-history applied filters and receipt identity', () => {
             cashier: 'user',
             category: 'cat',
         });
+        // The Filters button counts the applied filters in its dialog (#254).
+        expect(
+            document.querySelector('[data-more-filters]')?.textContent?.trim(),
+        ).toBe('Filters · 2');
     });
 });
 

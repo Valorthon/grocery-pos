@@ -10,6 +10,7 @@ import {
     pick,
     selectField,
     type,
+    openDates,
 } from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import { useUIStore } from '@/stores/ui';
@@ -272,6 +273,7 @@ describe('restock history filters and paging (issue #20)', () => {
     it('refuses a reversed date range on the To field and does not send it', async () => {
         serve();
         await mount();
+        await openDates();
         await type('From', '2026-03-02');
         await flush();
         expect(field('To').getAttribute('min')).toBe('2026-03-02');
@@ -310,6 +312,7 @@ describe('restock history filters and paging (issue #20)', () => {
     it('applies a user pick while the range is reversed, with the last valid range', async () => {
         serve();
         await mount();
+        await openDates();
         await type('From', '2026-03-02');
         await flush();
         await type('To', '2026-03-01');
@@ -332,6 +335,7 @@ describe('restock history filters and paging (issue #20)', () => {
     it('clears every filter with one request', async () => {
         serve();
         await mount();
+        await openDates();
         await choose(userFilter(), 'u1');
         await type('From', '2026-03-02');
         await flush();
@@ -360,6 +364,7 @@ describe('restock history filters and paging (issue #20)', () => {
         it('a preset sets both dates from the server today and loads page 1 once', async () => {
             serve();
             await mount();
+            await openDates();
             await click('Next');
             api.get.mockClear();
 
@@ -380,6 +385,7 @@ describe('restock history filters and paging (issue #20)', () => {
         it('a manual date edit switches the preset to Custom', async () => {
             serve();
             await mount();
+            await openDates();
             await pick('Dates', 'Today');
             await type('From', '2026-11-01');
             await flush();
@@ -393,6 +399,7 @@ describe('restock history filters and paging (issue #20)', () => {
         it('Clear Filters is disabled at defaults, enabled by a preset or deep link, and resets the preset', async () => {
             serve();
             await mount();
+            await openDates();
             expect(clearButton().disabled).toBe(true);
             await pick('Dates', 'This month');
             expect(clearButton().disabled).toBe(false);

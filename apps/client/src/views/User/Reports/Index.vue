@@ -18,81 +18,80 @@
                     Store timezone: {{ options.timeZone }} · Maximum
                     {{ options.maxDays }} days. Weeks start Monday.
                 </p>
-                <form
-                    class="flex flex-wrap items-end gap-3 *:min-w-40 *:flex-1 *:basis-40"
-                    @submit.prevent="apply"
+                <FilterBar
+                    :searchable="false"
+                    compact
+                    :active="filtersActive && !!options"
+                    :filters-count="moreFiltersApplied"
+                    @search="apply"
+                    @clear="clearFilters"
                 >
-                    <BaseSelect
-                        id="report-preset"
-                        v-model="preset"
-                        label="Date preset"
-                        :options="DATE_PRESET_OPTIONS"
-                        @update:model-value="pickPreset"
-                    />
-                    <BaseInput
-                        id="report-from"
-                        v-model="filters.from"
-                        type="date"
-                        label="From"
-                        @input="preset = 'Custom'"
-                    />
-                    <BaseInput
-                        id="report-to"
-                        v-model="filters.to"
-                        type="date"
-                        label="To (inclusive)"
-                        @input="preset = 'Custom'"
+                    <DateRangeFilter
+                        v-model:from="filters.from"
+                        v-model:to="filters.to"
+                        id-prefix="report"
+                        to-label="To (inclusive)"
+                        :preset="preset"
+                        :allow-all="false"
+                        :limit-range="false"
+                        @preset="onPreset"
+                        @edit="preset = 'Custom'"
                     />
                     <BaseSelect
                         id="report-group"
                         v-model="filters.groupBy"
-                        label="Group by"
+                        aria-label="Group by"
                         :options="
                             Object.values(SalesReportGroup).map((value) => ({
-                                label: GROUP_LABELS[value],
+                                label: `Group by ${GROUP_LABELS[value].toLowerCase()}`,
                                 value,
                             }))
                         "
                     />
-                    <BaseSelect
-                        id="report-cashier"
-                        v-model="filters.cashier"
-                        label="Cashier"
-                        all-label="All cashiers"
-                        :options="
-                            cashiers.map((row) => ({
-                                label: row.name,
-                                value: row._id,
-                            }))
-                        "
-                    />
-                    <BaseSelect
-                        id="report-payment"
-                        v-model="filters.paymentType"
-                        label="Payment"
-                        all-label="All payments"
-                        :options="
-                            Object.values(PaymentType).map((value) => ({
-                                label: value,
-                                value,
-                            }))
-                        "
-                    />
-                    <BaseSelect
-                        id="report-category"
-                        v-model="filters.category"
-                        label="Category"
-                        all-label="All categories"
-                        :options="
-                            categories.map((row) => ({
-                                label:
-                                    row.name +
-                                    (row.isActive ? '' : ' (archived)'),
-                                value: row._id,
-                            }))
-                        "
-                    />
-                    <div class="flex flex-none! basis-auto! items-end gap-3">
+                    <template #more>
+                        <BaseSelect
+                            id="report-cashier"
+                            v-model="filters.cashier"
+                            label="Cashier"
+                            all-label="All cashiers"
+                            :options="
+                                cashiers.map((row) => ({
+                                    label: row.name,
+                                    value: row._id,
+                                }))
+                            "
+                        />
+                        <BaseSelect
+                            id="report-payment"
+                            v-model="filters.paymentType"
+                            label="Payment"
+                            all-label="All payments"
+                            :options="
+                                Object.values(PaymentType).map((value) => ({
+                                    label: value,
+                                    value,
+                                }))
+                            "
+                        />
+                        <BaseSelect
+                            id="report-category"
+                            v-model="filters.category"
+                            label="Category"
+                            all-label="All categories"
+                            :options="
+                                categories.map((row) => ({
+                                    label:
+                                        row.name +
+                                        (row.isActive ? '' : ' (archived)'),
+                                    value: row._id,
+                                }))
+                            "
+                        />
+                        <p class="text-xs text-muted">
+                            Changes here apply with Run report.
+                        </p>
+                    </template>
+                    <template #actions>
                         <BaseButton
                             type="submit"
                             class="min-h-11"
@@ -101,17 +100,8 @@
                                 loading ? 'Loading…' : 'Run report'
                             }}</BaseButton
                         >
-                        <BaseButton
-                            variant="outline"
-                            class="min-h-11"
-                            :disabled="!filtersActive || !options"
-                            @click="clearFilters"
-                        >
-                            <template #icon><X :size="16" /></template>
-                            Clear Filters
-                        </BaseButton>
-                    </div>
-                </form>
+                    </template>
+                </FilterBar>
                 <p v-if="filterError" role="alert" class="text-sm text-red-700">
                     {{ filterError }}
                     <BaseButton variant="outline" @click="refreshFilters"
@@ -338,18 +328,19 @@ import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import DateRangeFilter from '@/components/ui/DateRangeFilter.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
-import { ChartColumn, X } from '@lucide/vue';
+import { ChartColumn } from '@lucide/vue';
 import { apiErrorText } from '@/utils/api-error';
 import { formatCurrency } from '@/utils/currency';
 import { useSalesLookups } from '@/composables/useSalesLookups';
 import StatTile from '@/components/ui/StatTile.vue';
 import { buttonClass } from '@/components/ui/button-class';
-import { DATE_PRESET_OPTIONS, presetRange, type ReportPreset } from './presets';
+import { presetRange, type ReportPreset } from './presets';
 
 const {
     categories,
@@ -446,6 +437,21 @@ function choosePreset() {
         : null;
     if (range) Object.assign(filters, range);
 }
+/** A pick from the date-range control. */
+function onPreset(value: ReportPreset | null) {
+    if (!value) return;
+    preset.value = value;
+    pickPreset();
+}
+/** Applied report filters in the Filters dialog (#254). */
+const moreFiltersApplied = computed(
+    () =>
+        [
+            applied.value?.cashier,
+            applied.value?.paymentType,
+            applied.value?.category,
+        ].filter(Boolean).length,
+);
 /** A preset applies at once (#215); Custom waits for Run report. */
 function pickPreset() {
     if (preset.value === 'Custom') return;
