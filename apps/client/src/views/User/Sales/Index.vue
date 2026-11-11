@@ -833,7 +833,7 @@ function applyFilters() {
         return;
     }
     if (dateRangeError(filters.dateFrom, filters.dateTo)) {
-        searchError.value = dateRangeError(filters.dateFrom, filters.dateTo);
+        // Shown by the date-range control itself (#254).
         return;
     }
     appliedFilters.value = Object.fromEntries(

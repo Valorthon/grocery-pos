@@ -1,53 +1,68 @@
 <template>
-    <BaseButton
-        variant="outline"
-        class="min-h-11"
-        data-date-range
-        :aria-label="`Dates: ${text}`"
-        aria-haspopup="dialog"
-        :aria-expanded="open"
-        @click="open = true"
-    >
-        <template #icon><CalendarDays :size="16" /></template>
-        <span class="truncate">{{ text }}</span>
-    </BaseButton>
+    <div>
+        <BaseButton
+            variant="outline"
+            :class="[
+                'min-h-11 w-full',
+                error ? 'border-danger-fg! bg-danger-bg! text-danger-fg!' : '',
+            ]"
+            data-date-range
+            :aria-label="`Dates: ${text}`"
+            aria-haspopup="dialog"
+            :aria-expanded="open"
+            :aria-invalid="error ? true : undefined"
+            :aria-describedby="error ? errorId : undefined"
+            @click="open = true"
+        >
+            <template #icon><CalendarDays :size="16" /></template>
+            <span class="truncate">{{ text }}</span>
+        </BaseButton>
+        <p
+            v-if="error"
+            :id="errorId"
+            data-date-range-error
+            class="mt-1 text-xs text-danger-fg"
+        >
+            {{ error }}
+        </p>
 
-    <BaseModal v-model="open" title="Dates" max-width="24rem">
-        <div class="flex flex-col gap-3">
-            <BaseSelect
-                :id="idPrefix ? `${idPrefix}-preset` : undefined"
-                :model-value="preset"
-                label="Dates"
-                :all-label="allowAll ? 'All dates' : ''"
-                :options="DATE_PRESET_OPTIONS"
-                @update:model-value="pickPreset"
-            />
-            <BaseInput
-                :id="idPrefix ? `${idPrefix}-from` : undefined"
-                :model-value="from"
-                label="From"
-                type="date"
-                :max="limitRange ? to || undefined : undefined"
-                @update:model-value="onDate('from', $event)"
-                @change="onChange"
-            />
-            <BaseInput
-                :id="idPrefix ? `${idPrefix}-to` : undefined"
-                :model-value="to"
-                :label="toLabel"
-                type="date"
-                :min="limitRange ? from || undefined : undefined"
-                :error="error"
-                @update:model-value="onDate('to', $event)"
-                @change="onChange"
-            />
-        </div>
-        <template #footer>
-            <BaseButton class="ml-auto min-h-11" @click="open = false">
-                Done
-            </BaseButton>
-        </template>
-    </BaseModal>
+        <BaseModal v-model="open" title="Dates" max-width="24rem">
+            <div class="flex flex-col gap-3">
+                <BaseSelect
+                    :id="idPrefix ? `${idPrefix}-preset` : undefined"
+                    :model-value="preset"
+                    label="Dates"
+                    :all-label="allowAll ? 'All dates' : ''"
+                    :options="DATE_PRESET_OPTIONS"
+                    @update:model-value="pickPreset"
+                />
+                <BaseInput
+                    :id="idPrefix ? `${idPrefix}-from` : undefined"
+                    :model-value="from"
+                    label="From"
+                    type="date"
+                    :max="limitRange ? to || undefined : undefined"
+                    @update:model-value="onDate('from', $event)"
+                    @change="onChange"
+                />
+                <BaseInput
+                    :id="idPrefix ? `${idPrefix}-to` : undefined"
+                    :model-value="to"
+                    :label="toLabel"
+                    type="date"
+                    :min="limitRange ? from || undefined : undefined"
+                    :error="error"
+                    @update:model-value="onDate('to', $event)"
+                    @change="onChange"
+                />
+            </div>
+            <template #footer>
+                <BaseButton class="ml-auto min-h-11" @click="open = false">
+                    Done
+                </BaseButton>
+            </template>
+        </BaseModal>
+    </div>
 </template>
 
 <script setup lang="ts">
@@ -61,7 +76,7 @@
  * rather than on every input. The dialog stays open after a pick, so the
  * filled dates show; Done, Escape or × close it.
  */
-import { computed, ref } from 'vue';
+import { computed, ref, useId } from 'vue';
 import { CalendarDays } from '@lucide/vue';
 import BaseButton from './BaseButton.vue';
 import BaseInput from './BaseInput.vue';
@@ -107,6 +122,7 @@ const emit = defineEmits<{
 }>();
 
 const open = ref(false);
+const errorId = useId();
 const text = computed(() => dateRangeLabel(props.preset, props.from, props.to));
 
 function pickPreset(value: string | null) {

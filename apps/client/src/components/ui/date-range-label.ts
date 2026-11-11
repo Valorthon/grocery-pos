@@ -30,15 +30,18 @@ export function dateRangeLabel(
     preset: DatePreset | null,
     from: string,
     to: string,
+    /** Dates in this year show no year; any other year is shown. */
+    currentYear: number = new Date().getFullYear(),
 ): string {
+    const other = (date: string) => Number(date.slice(0, 4)) !== currentYear;
     if (preset && preset !== 'Custom') return preset;
     if (from && to) {
-        const years = from.slice(0, 4) !== to.slice(0, 4);
+        const years = from.slice(0, 4) !== to.slice(0, 4) || other(from);
         return from === to
-            ? short(from, false)
+            ? short(from, years)
             : `${short(from, years)} – ${short(to, years)}`;
     }
-    if (from) return `From ${short(from, false)}`;
-    if (to) return `Until ${short(to, false)}`;
+    if (from) return `From ${short(from, other(from))}`;
+    if (to) return `Until ${short(to, other(to))}`;
     return preset === 'Custom' ? 'Custom' : 'All dates';
 }

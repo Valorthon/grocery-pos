@@ -111,6 +111,8 @@ describe('DateRangeFilter (#254)', () => {
     });
 
     it('switches to Custom on a hand edit and shows the range', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-11-11T04:00:00Z'));
         const { from } = harness();
         await openDates();
         await pick('Dates', 'Today');
@@ -119,6 +121,23 @@ describe('DateRangeFilter (#254)', () => {
         expect(selectField('Dates').value).toBe('Custom');
         expect(from.value).toBe('2026-11-01');
         expect(trigger().textContent?.trim()).toBe('Nov 1 – Nov 11');
+        vi.useRealTimers();
+    });
+
+    it('keeps a reversed range visible on the closed control as an error', async () => {
+        harness();
+        await openDates();
+        await type('To', '2026-11-01');
+        await type('From', '2026-11-05');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        await flush();
+        expect(trigger().getAttribute('aria-expanded')).toBe('false');
+        const note = document.querySelector('[data-date-range-error]')!;
+        expect(note.textContent?.trim()).toBe(DATE_RANGE_REVERSED);
+        expect(note.classList).toContain('text-xs');
+        expect(trigger().getAttribute('aria-invalid')).toBe('true');
+        expect(trigger().getAttribute('aria-describedby')).toBe(note.id);
+        expect(trigger().classList).toContain('border-danger-fg!');
     });
 
     it('shows dateRangeError under To for a reversed range without loading', async () => {
@@ -158,19 +177,37 @@ describe('DateRangeFilter (#254)', () => {
 
 describe('dateRangeLabel', () => {
     it('names presets, ranges and open ends', () => {
-        expect(dateRangeLabel(null, '', '')).toBe('All dates');
-        expect(dateRangeLabel('Last month', '2026-10-01', '2026-10-31')).toBe(
-            'Last month',
-        );
-        expect(dateRangeLabel('Custom', '2026-11-01', '2026-11-11')).toBe(
+        expect(dateRangeLabel(null, '', '', 2026)).toBe('All dates');
+        expect(
+            dateRangeLabel('Last month', '2026-10-01', '2026-10-31', 2026),
+        ).toBe('Last month');
+        expect(dateRangeLabel('Custom', '2026-11-01', '2026-11-11', 2026)).toBe(
             'Nov 1 – Nov 11',
         );
-        expect(dateRangeLabel('Custom', '2025-12-30', '2026-01-02')).toBe(
+        expect(dateRangeLabel('Custom', '2025-12-30', '2026-01-02', 2026)).toBe(
             'Dec 30, 2025 – Jan 2, 2026',
         );
-        expect(dateRangeLabel(null, '2026-11-03', '2026-11-03')).toBe('Nov 3');
-        expect(dateRangeLabel('Custom', '2026-11-03', '')).toBe('From Nov 3');
-        expect(dateRangeLabel('Custom', '', '2026-11-03')).toBe('Until Nov 3');
-        expect(dateRangeLabel('Custom', '', '')).toBe('Custom');
+        expect(dateRangeLabel(null, '2026-11-03', '2026-11-03', 2026)).toBe(
+            'Nov 3',
+        );
+        expect(dateRangeLabel('Custom', '2026-11-03', '', 2026)).toBe(
+            'From Nov 3',
+        );
+        expect(dateRangeLabel('Custom', '', '2026-11-03', 2026)).toBe(
+            'Until Nov 3',
+        );
+        expect(dateRangeLabel('Custom', '', '', 2026)).toBe('Custom');
+    });
+
+    it('shows the year for a range outside the current year', () => {
+        expect(dateRangeLabel('Custom', '2025-11-01', '2025-11-11', 2026)).toBe(
+            'Nov 1, 2025 – Nov 11, 2025',
+        );
+        expect(dateRangeLabel(null, '2025-11-03', '2025-11-03', 2026)).toBe(
+            'Nov 3, 2025',
+        );
+        expect(dateRangeLabel('Custom', '2025-11-03', '', 2026)).toBe(
+            'From Nov 3, 2025',
+        );
     });
 });
