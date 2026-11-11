@@ -87,6 +87,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { SUPPLIER_HELP } from '../list-help';
 import { computed, reactive, ref } from 'vue';
 import {
     SUPPLIER_LIMITS,
@@ -117,7 +118,7 @@ const headers: TableHeader[] = [
     { key: 'contactPerson', title: 'Contact person' },
     { key: 'phone', title: 'Phone' },
     { key: 'email', title: 'Email' },
-    { key: 'status', title: 'Status' },
+    { key: 'status', title: 'Status', help: SUPPLIER_HELP.status },
     { key: 'actions', title: 'Actions' },
 ];
 const rows = computed(() =>

@@ -81,6 +81,7 @@
 </template>
 
 <script setup lang="ts">
+import { RESTOCK_HELP } from '../list-help';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { Truck } from '@lucide/vue';
@@ -144,8 +145,18 @@ const serverItems = ref<RestockListRow[]>([]);
 const headers = [
     { key: 'description', title: 'Description' },
     { key: 'supplier', title: 'Supplier', hideBelow: 'md' as const },
-    { key: 'invoiceNumber', title: 'Invoice / DR', hideBelow: 'lg' as const },
-    { key: 'purchaseOrder', title: 'Purchase order', hideBelow: 'lg' as const },
+    {
+        key: 'invoiceNumber',
+        title: 'Invoice / DR',
+        hideBelow: 'lg' as const,
+        help: RESTOCK_HELP.invoiceNumber,
+    },
+    {
+        key: 'purchaseOrder',
+        title: 'Purchase order',
+        hideBelow: 'lg' as const,
+        help: RESTOCK_HELP.purchaseOrder,
+    },
     { key: 'totalCost', title: 'Total Cost', align: 'right' as const },
     { key: 'restockedBy', title: 'Restocked By', hideBelow: 'lg' as const },
     { key: 'date', title: 'Date' },

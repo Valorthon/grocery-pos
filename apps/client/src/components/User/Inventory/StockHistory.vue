@@ -184,6 +184,7 @@
     </BaseModal>
 </template>
 <script setup lang="ts">
+import { STOCK_HISTORY_HELP } from './inventory-help';
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import {
@@ -234,11 +235,21 @@ const loading = ref(false),
 const rangeError = computed(() => dateRangeError(from.value, to.value));
 const headers: TableHeader[] = [
     { key: 'posted', title: 'Posted' },
-    { key: 'occurred', title: 'Occurred' },
-    { key: 'type', title: 'Type' },
-    { key: 'change', title: 'Change', align: 'right' },
-    { key: 'balance', title: 'Balance after', align: 'right' },
-    { key: 'source', title: 'Source' },
+    { key: 'occurred', title: 'Occurred', help: STOCK_HISTORY_HELP.occurred },
+    { key: 'type', title: 'Type', help: STOCK_HISTORY_HELP.type },
+    {
+        key: 'change',
+        title: 'Change',
+        align: 'right',
+        help: STOCK_HISTORY_HELP.change,
+    },
+    {
+        key: 'balance',
+        title: 'Balance after',
+        align: 'right',
+        help: STOCK_HISTORY_HELP.balance,
+    },
+    { key: 'source', title: 'Source', help: STOCK_HISTORY_HELP.source },
     { key: 'user', title: 'Recorded user' },
 ];
 let applied: { from?: string; to?: string } = {},

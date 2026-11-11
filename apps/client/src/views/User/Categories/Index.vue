@@ -82,6 +82,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { CATEGORY_HELP } from '../list-help';
 import { computed, ref } from 'vue';
 import {
     CATEGORY_NAME_MAX,
@@ -108,8 +109,13 @@ const { categories, loading, error, refresh } = useCategories();
 const { request, confirm, answer } = useConfirm();
 const headers: TableHeader[] = [
     { key: 'name', title: 'Name' },
-    { key: 'sortOrder', title: 'Order', align: 'right' },
-    { key: 'status', title: 'Status' },
+    {
+        key: 'sortOrder',
+        title: 'Order',
+        align: 'right',
+        help: CATEGORY_HELP.sortOrder,
+    },
+    { key: 'status', title: 'Status', help: CATEGORY_HELP.status },
     { key: 'actions', title: 'Actions' },
 ];
 const rows = computed(() =>

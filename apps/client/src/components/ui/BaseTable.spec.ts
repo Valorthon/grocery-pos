@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { type App, type Component, createApp, h } from 'vue';
 import BaseTable from './BaseTable.vue';
+import BaseModal from './BaseModal.vue';
+import { flush } from '@/testing/form-dom';
 
 let app: App | null = null;
 
@@ -359,5 +361,115 @@ describe('BaseTable opt-in row click (issue #234)', () => {
         row.querySelector('td')!.click();
         key(row, 'Enter');
         expect(clicks).toEqual([]);
+    });
+});
+
+describe('BaseTable column help (#263)', () => {
+    const help = [
+        { term: 'Open', meaning: 'Still going.' },
+        { term: 'Closed', meaning: 'Done.' },
+    ];
+    const headers = [
+        { title: 'Name', key: 'name' },
+        { title: 'Status', key: 'status', help },
+        { title: 'Total', key: 'total', align: 'right', help: 'Sum.' },
+        { title: 'Note', key: 'note', hideBelow: 'md', help: 'Hidden.' },
+    ];
+    const items = [{ id: '1', name: 'a', status: 'Open', total: 1, note: '' }];
+    const buttons = (host: HTMLElement) =>
+        Array.from(
+            host.querySelectorAll<HTMLButtonElement>('th [data-info-tooltip]'),
+        );
+
+    it('adds no ⓘ to a column without help', () => {
+        const host = mountTables({ ...TABLE_PROPS });
+        expect(buttons(host)).toHaveLength(0);
+    });
+
+    it('labels a 44px ⓘ described by its tooltip, listing every term', () => {
+        const host = mountTables({ headers, items });
+        const [status] = buttons(host);
+        expect(status!.getAttribute('aria-label')).toBe('About Status');
+        expect(status!.className).toContain('min-h-11');
+        expect(status!.className).toContain('min-w-11');
+        const tip = document.getElementById(
+            status!.getAttribute('aria-describedby')!,
+        )!;
+        expect(tip.getAttribute('role')).toBe('tooltip');
+        expect(
+            [...tip.querySelectorAll('dl dt')].map((d) => d.textContent),
+        ).toEqual(['Open', 'Closed']);
+        expect(tip.className).toContain('normal-case');
+    });
+
+    it('puts the ⓘ before the title in a right-aligned column', () => {
+        const host = mountTables({ headers, items });
+        const th = host.querySelectorAll('th')[2]!;
+        const wrap = th.querySelector('[data-column-help]')!;
+        expect(
+            wrap.firstElementChild?.querySelector('[data-info-tooltip]'),
+        ).not.toBeNull();
+        expect(wrap.textContent?.trim().endsWith('Total')).toBe(true);
+        const status = host.querySelectorAll('th')[1]!;
+        expect(status.textContent?.trim().startsWith('Status')).toBe(true);
+    });
+
+    it('hides the help with its column under hideBelow', () => {
+        const host = mountTables({ headers, items });
+        const th = host.querySelectorAll('th')[3]!;
+        expect(th.className).toContain('hidden md:table-cell');
+        expect(th.querySelector('[data-info-tooltip]')).not.toBeNull();
+    });
+
+    it('never opens a row when the ⓘ is clicked', async () => {
+        const rows: unknown[] = [];
+        const host = mountTables({
+            headers,
+            items,
+            rowClick: true,
+            'onClick:row': (row: unknown) => rows.push(row),
+        });
+        buttons(host)[0]!.click();
+        await flush();
+        expect(rows).toHaveLength(0);
+    });
+
+    it('Escape closes only the tooltip inside a modal', async () => {
+        let open = true;
+        const onClose = () => (open = false);
+        mountRender(() =>
+            open
+                ? h(
+                      BaseModal as Component,
+                      {
+                          modelValue: true,
+                          title: 'Dialog',
+                          'onUpdate:modelValue': onClose,
+                      },
+                      () => table({ headers, items }),
+                  )
+                : null,
+        );
+        await flush();
+        const button = document.querySelector<HTMLButtonElement>(
+            'th [data-info-tooltip]',
+        )!;
+        const tip = document.getElementById(
+            button.getAttribute('aria-describedby')!,
+        )!;
+        button.focus();
+        await flush();
+        expect(tip.classList.contains('hidden')).toBe(false);
+        button.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Escape',
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+        await flush();
+        expect(tip.classList.contains('hidden')).toBe(true);
+        expect(open).toBe(true);
+        expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     });
 });

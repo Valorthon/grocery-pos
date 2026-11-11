@@ -526,6 +526,7 @@ import {
     toReceiveBody,
     type PurchaseOrderDraftLine,
     type ReceiptFormLine,
+    PURCHASE_ORDER_HELP,
 } from '@/components/User/PurchaseOrder/purchase-order';
 import { useConfirm } from '@/composables/useConfirm';
 import { useUnsavedDraftsGuard } from '@/composables/useDrafts';
@@ -560,9 +561,19 @@ const headers = [
     { key: 'reference', title: 'Order' },
     { key: 'createdAt', title: 'Created' },
     { key: 'supplier', title: 'Supplier' },
-    { key: 'status', title: 'Status' },
-    { key: 'lines', title: 'Lines', align: 'right' as const },
-    { key: 'expectedTotal', title: 'Expected total', align: 'right' as const },
+    { key: 'status', title: 'Status', help: PURCHASE_ORDER_HELP.status },
+    {
+        key: 'lines',
+        title: 'Lines',
+        align: 'right' as const,
+        help: PURCHASE_ORDER_HELP.lines,
+    },
+    {
+        key: 'expectedTotal',
+        title: 'Expected total',
+        align: 'right' as const,
+        help: PURCHASE_ORDER_HELP.expectedTotal,
+    },
     { key: 'action', title: 'Open', align: 'right' as const },
 ];
 const rows = ref<PurchaseOrderView[]>([]);

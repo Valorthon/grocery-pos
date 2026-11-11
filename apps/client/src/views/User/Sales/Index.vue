@@ -677,7 +677,7 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import Badge from '@/components/ui/Badge.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import { SALE_STATUS } from '@/components/User/Sales/sale-status';
+import { SALE_HELP, SALE_STATUS } from '@/components/User/Sales/sale-status';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import { formatCurrency } from '@/utils/currency';
 import { dateRangeError } from '@/utils/rules';
@@ -894,9 +894,19 @@ const serverItems = ref<SaleListRow[]>([]);
 const headers = [
     { key: 'saleNumber', title: 'Sale #' },
     { key: 'cashier', title: 'Cashier', hideBelow: 'md' as const },
-    { key: 'amount', title: 'Amount', align: 'right' as const },
-    { key: 'paymentType', title: 'Payment', hideBelow: 'sm' as const },
-    { key: 'status', title: 'Status' },
+    {
+        key: 'amount',
+        title: 'Amount',
+        align: 'right' as const,
+        help: SALE_HELP.amount,
+    },
+    {
+        key: 'paymentType',
+        title: 'Payment',
+        hideBelow: 'sm' as const,
+        help: SALE_HELP.payment,
+    },
+    { key: 'status', title: 'Status', help: SALE_HELP.status },
     { key: 'date', title: 'Date', hideBelow: 'lg' as const },
 ];
 

@@ -236,6 +236,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { STOCK_COUNT_HELP, STOCK_COUNT_STATUS } from './stock-count-help';
 import { useBarcodeCapture } from '@/composables/useBarcodeCapture';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { onBeforeRouteLeave, useRouter } from 'vue-router';
@@ -259,7 +260,6 @@ import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import RowOpenButton from '@/components/ui/RowOpenButton.vue';
-import type { StatusMap } from '@/components/ui/status-badge';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
 import { ClipboardList } from '@lucide/vue';
@@ -326,8 +326,13 @@ const categoryOptions = computed(() => [
 ]);
 const listHeaders: TableHeader[] = [
     { key: 'createdAt', title: 'Opened' },
-    { key: 'status', title: 'Status' },
-    { key: 'lines', title: 'Lines', align: 'right' },
+    { key: 'status', title: 'Status', help: STOCK_COUNT_HELP.status },
+    {
+        key: 'lines',
+        title: 'Lines',
+        align: 'right',
+        help: STOCK_COUNT_HELP.lines,
+    },
     { key: 'action', title: 'Open', align: 'right' as const },
 ];
 const listRows = computed(() =>
@@ -335,16 +340,32 @@ const listRows = computed(() =>
 );
 const lineHeaders = computed<TableHeader[]>(() => [
     { key: 'name', title: 'Product / batch' },
-    { key: 'expectedQty', title: 'Opening', align: 'right' },
-    { key: 'currentQty', title: 'Current', align: 'right' },
+    {
+        key: 'expectedQty',
+        title: 'Opening',
+        align: 'right',
+        help: STOCK_COUNT_HELP.opening,
+    },
+    {
+        key: 'currentQty',
+        title: 'Current',
+        align: 'right',
+        help: STOCK_COUNT_HELP.current,
+    },
     { key: 'countedQty', title: 'Counted', align: 'right' },
-    { key: 'variance', title: 'Variance', align: 'right' },
+    {
+        key: 'variance',
+        title: 'Variance',
+        align: 'right',
+        help: STOCK_COUNT_HELP.variance,
+    },
     ...(selected.value?.status === StockCountStatus.SUBMITTED
         ? [
               {
                   key: 'projected',
                   title: 'Projected balance',
                   align: 'right' as const,
+                  help: STOCK_COUNT_HELP.projected,
               },
           ]
         : []),
@@ -352,12 +373,6 @@ const lineHeaders = computed<TableHeader[]>(() => [
 const lineRows = computed(() =>
     (selected.value?.lines ?? []).map((line) => ({ ...line, id: line._id })),
 );
-const STOCK_COUNT_STATUS: StatusMap<StockCountStatus> = {
-    [StockCountStatus.OPEN]: { label: 'Open', color: 'info' },
-    [StockCountStatus.SUBMITTED]: { label: 'Submitted', color: 'warning' },
-    [StockCountStatus.APPROVED]: { label: 'Approved', color: 'success' },
-    [StockCountStatus.CANCELLED]: { label: 'Cancelled', color: 'neutral' },
-};
 /** Shortage red, surplus green, exact or uncounted muted (#169). */
 function varianceClass(variance: number | null): string {
     if (variance === null || variance === 0) return 'text-muted';

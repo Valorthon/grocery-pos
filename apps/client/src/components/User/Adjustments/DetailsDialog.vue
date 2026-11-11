@@ -67,6 +67,7 @@
 </template>
 
 <script setup lang="ts">
+import { ADJUSTMENT_HELP } from '@/views/User/list-help';
 import { formatQuantity } from '@grocery-pos/contracts';
 import { Role } from '@grocery-pos/contracts';
 import { computed, onMounted, ref } from 'vue';
@@ -119,7 +120,12 @@ function openCount(id: string) {
 
 const headers = [
     { key: 'name', title: 'Product', rowHeader: true },
-    { key: 'change', title: 'Change', align: 'right' as const },
+    {
+        key: 'change',
+        title: 'Change',
+        align: 'right' as const,
+        help: ADJUSTMENT_HELP.change,
+    },
     { key: 'reason', title: 'Reason' },
 ];
 
