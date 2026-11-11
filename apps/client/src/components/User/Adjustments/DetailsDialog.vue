@@ -1,63 +1,51 @@
 <template>
     <div>
-        <div
-            class="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 py-4 border-b border-slate-100"
-        >
-            <div>
-                <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
+        <div class="px-5 py-4 border-b border-slate-100">
+            <div class="flex items-start justify-between gap-4">
+                <h3
+                    class="min-w-0 break-words text-base font-bold"
+                    data-testid="details-heading"
                 >
-                    Description
-                </div>
-                <div class="text-sm">{{ item.description || 'N/A' }}</div>
-            </div>
-            <div>
+                    <button
+                        v-if="countId && canOpenCounts"
+                        type="button"
+                        class="min-h-11 text-leaf-700 underline"
+                        data-testid="stock-count-link"
+                        @click="openCount(countId)"
+                    >
+                        {{ heading }}
+                    </button>
+                    <template v-else>{{ heading }}</template>
+                </h3>
                 <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
+                    v-if="lineCount !== null"
+                    class="shrink-0 text-base font-bold"
+                    data-testid="details-line-count"
                 >
-                    Adjusted By
-                </div>
-                <div class="text-sm capitalize">
-                    {{ item.adjustedBy || 'Unknown' }}
+                    {{ countOf(lineCount, 'line') }}
                 </div>
             </div>
-            <div>
-                <div
-                    class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1"
-                >
-                    Date
-                </div>
-                <div class="text-sm">{{ item.date || '--' }}</div>
-            </div>
+            <ul
+                class="mt-1 flex flex-wrap items-center text-sm text-muted"
+                data-testid="details-meta"
+            >
+                <li v-if="item.adjustedBy" :class="[META_ITEM, 'capitalize']">
+                    {{ item.adjustedBy }}
+                </li>
+                <li v-if="item.date" :class="META_ITEM">{{ item.date }}</li>
+            </ul>
         </div>
 
-        <div
-            class="px-5 py-4 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-3"
-        >
-            <BaseInput
-                v-model="searchEAN"
-                label="EAN / Barcode"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
+        <div class="px-5 py-3 bg-slate-50 border-b border-slate-200">
+            <FilterBar
+                v-model:search="searchTerm"
+                compact
+                search-label="Search name or barcode"
+                :maxlength="STRING_LIMITS.PRODUCT_NAME"
+                :active="!!searchTerm.trim() || !!applied"
+                @search="applySearch"
+                @clear="resetFilters"
             />
-            <BaseInput
-                v-model="searchName"
-                label="Product Name"
-                clearable
-                @enter="applySearch"
-                @clear="applySearch"
-            />
-            <div class="md:col-span-2 flex items-end gap-2">
-                <BaseButton size="sm" @click="applySearch">
-                    <Search class="w-4 h-4" />
-                    Search
-                </BaseButton>
-                <BaseButton variant="outline" size="sm" @click="resetFilters">
-                    <X class="w-4 h-4" />
-                    Clear Filters
-                </BaseButton>
-            </div>
         </div>
 
         <BaseTable
@@ -79,14 +67,21 @@
 </template>
 
 <script setup lang="ts">
+import { ADJUSTMENT_HELP } from '@/views/User/list-help';
 import { formatQuantity } from '@grocery-pos/contracts';
-import { onMounted, ref } from 'vue';
-import { Search, X } from '@lucide/vue';
+import { Role } from '@grocery-pos/contracts';
+import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import api from '@/axios';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
-import BaseButton from '@/components/ui/BaseButton.vue';
+import { STRING_LIMITS } from '@grocery-pos/contracts';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import { META_ITEM } from '@/components/User/details-meta';
+import { useAuthStore } from '@/stores/auth';
+import { countOf } from '@/utils/plural';
+import { productSearchParams } from '@/utils/product-search';
+import { stockCountId, stockCountLabel } from './stock-count-ref';
 import {
     useAppliedFilters,
     useListFetch,
@@ -101,17 +96,36 @@ const props = defineProps<{
 
 const { page, limit, search } = useListPaging(() => fetchDetails());
 const totalItems = ref(0);
-const searchName = ref('');
-const searchEAN = ref('');
+const searchTerm = ref('');
 // What the list was last searched for: paging and Retry reuse it.
 const { applied, apply: applySearch } = useAppliedFilters(
-    () => ({ name: searchName.value, EAN: searchEAN.value }),
+    () => searchTerm.value.trim(),
     search,
 );
+/** All the adjustment's lines: the total of an unsearched load. */
+const lineCount = ref<number | null>(null);
+
+// A count approval's adjustment (#43) reads "Stock count 1A2B3C4D" and
+// links to the count for those who may open Stock counts (#260).
+const countId = computed(() => stockCountId(props.item.description));
+const heading = computed(() => stockCountLabel(props.item.description));
+const router = useRouter();
+const authStore = useAuthStore();
+const canOpenCounts = computed(
+    () => authStore.hasRole(Role.Admin) || authStore.hasRole(Role.Adjuster),
+);
+function openCount(id: string) {
+    void router.push({ name: 'StockCounts', query: { source: id } });
+}
 
 const headers = [
     { key: 'name', title: 'Product', rowHeader: true },
-    { key: 'change', title: 'Change', align: 'right' as const },
+    {
+        key: 'change',
+        title: 'Change',
+        align: 'right' as const,
+        help: ADJUSTMENT_HELP.change,
+    },
     { key: 'reason', title: 'Reason' },
 ];
 
@@ -127,8 +141,7 @@ interface AdjustmentLineRow {
 const serverItems = ref<AdjustmentLineRow[]>([]);
 
 const resetFilters = () => {
-    searchEAN.value = '';
-    searchName.value = '';
+    searchTerm.value = '';
     applySearch();
 };
 
@@ -144,8 +157,7 @@ const {
                 params: {
                     page: page.value,
                     limit: limit.value,
-                    name: applied.value.name?.toUpperCase(),
-                    EAN: applied.value.EAN,
+                    ...productSearchParams(applied.value),
                 },
             },
         ),
@@ -155,13 +167,29 @@ const {
             name: details.product.name,
             EAN: details.product.EAN,
             change: formatQuantity(details.change, details.product.unit),
-            reason: details.reason,
+            reason: stockCountLabel(details.reason),
         }));
 
         totalItems.value = result.data.totalItems;
+        if (!applied.value) lineCount.value = result.data.totalItems;
+        else if (lineCount.value === null) void fetchLineCount();
     },
     'Could not load the details.',
 );
+
+// A searched answer can't give the total: when the unsearched load failed,
+// ask for it once (one line is enough, only `totalItems` is read).
+async function fetchLineCount() {
+    try {
+        const result = await api.get<Paginated<AdjustmentLine>>(
+            `/adjustments/details/${props.item.id}`,
+            { params: { page: 1, limit: 1 } },
+        );
+        lineCount.value ??= result.data.totalItems;
+    } catch {
+        // Stays hidden; the next load tries again.
+    }
+}
 
 onMounted(fetchDetails);
 </script>

@@ -2,9 +2,8 @@
     <PageFrame>
         <div class="space-y-4">
             <p class="text-sm">
-                Sensitive actions recorded from deployment onward. Entries
-                cannot be edited or deleted through the app. No automatic expiry
-                is configured.
+                Recorded from deployment onward; earlier actions are not
+                backfilled. No automatic expiry is configured.
             </p>
             <FilterBar
                 v-model:search="username"
@@ -140,6 +139,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { AUDIT_HELP } from '../list-help';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     AUDIT_ACTION_LABELS,
@@ -185,8 +185,8 @@ const actionOptions = Object.values(AuditAction).map((value) => ({
 const headers: TableHeader[] = [
     { key: 'when', title: 'When' },
     { key: 'actor', title: 'Actor' },
-    { key: 'action', title: 'Action' },
-    { key: 'target', title: 'Target' },
+    { key: 'action', title: 'Action', help: AUDIT_HELP.action },
+    { key: 'target', title: 'Target', help: AUDIT_HELP.target },
     { key: 'details', title: 'Details' },
 ];
 const tableRows = computed(() =>

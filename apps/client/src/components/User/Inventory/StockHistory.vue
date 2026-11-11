@@ -4,6 +4,7 @@
         :title="`Stock history — ${product.name}`"
         max-width="72rem"
         scrollable
+        initial-focus="dialog"
         @update:model-value="
             (value) => {
                 if (!value) emit('close');
@@ -11,56 +12,108 @@
         "
     >
         <div class="p-5 space-y-4">
-            <p
-                v-if="ean || reorderLevel"
-                class="text-sm"
-                data-testid="stock-history-product"
+            <div
+                class="grid grid-cols-2 gap-3 sm:grid-cols-4"
+                data-testid="stock-history-tiles"
             >
-                <span v-if="ean">EAN {{ ean }}</span>
-                <span v-if="ean && reorderLevel"> · </span>
-                <span v-if="reorderLevel"
-                    >Reorder level {{ reorderLevel }}</span
-                >
-            </p>
-            <p class="text-sm">
-                Balances follow posting order. Offline sale time is shown
-                separately. Historical backfill balances are derived from known
-                records and an explicitly unattributed opening balance, not
-                verified historical counts.
-            </p>
-            <div class="flex flex-wrap items-end gap-3">
-                <BaseInput v-model="from" label="Posted from" type="date" />
-                <BaseInput
-                    v-model="to"
-                    label="Posted to"
-                    type="date"
-                    :error="rangeError"
+                <StatTile
+                    label="Current stock"
+                    :loading="checking"
+                    :value="
+                        integrity
+                            ? formatQuantity(integrity.stock, product.unit)
+                            : '—'
+                    "
                 />
-                <BaseButton :disabled="loading" @click="search"
-                    >Search</BaseButton
+                <StatTile label="Reorder level" :value="reorderLevel || '—'" />
+                <StatTile label="EAN" :value="ean || '—'" />
+                <div
+                    class="flex flex-col gap-1 rounded-card border border-line bg-surface p-4 shadow-card"
+                    data-testid="ledger-status"
+                    :aria-busy="checking ? 'true' : undefined"
                 >
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-xs font-semibold text-muted">Ledger</p>
+                        <InfoTooltip label="About stock history balances">
+                            Balances follow posting order. Offline sale time is
+                            shown separately. Historical backfill balances are
+                            derived from known records and an explicitly
+                            unattributed opening balance, not verified
+                            historical counts.
+                        </InfoTooltip>
+                    </div>
+                    <p
+                        v-if="checking"
+                        class="h-6 w-24 animate-pulse rounded-control bg-line"
+                        data-skeleton
+                    >
+                        <span class="sr-only">Loading</span>
+                    </p>
+                    <template v-else-if="integrity">
+                        <span data-testid="ledger-badge"
+                            ><Badge
+                                :color="integrity.matches ? 'success' : 'error'"
+                                size="md"
+                                >{{
+                                    integrity.matches
+                                        ? 'Reconciled'
+                                        : 'Mismatch'
+                                }}</Badge
+                            ></span
+                        >
+                        <p
+                            v-if="!integrity.matches"
+                            class="text-xs text-danger-fg"
+                            role="alert"
+                        >
+                            Stock
+                            {{ formatQuantity(integrity.stock, product.unit) }}
+                            · Ledger
+                            {{
+                                formatQuantity(
+                                    integrity.movementTotal,
+                                    product.unit,
+                                )
+                            }}. Investigate before posting more stock.
+                        </p>
+                    </template>
+                    <template v-else>
+                        <span data-testid="ledger-badge"
+                            ><Badge color="warning" size="md"
+                                >Unavailable</Badge
+                            ></span
+                        >
+                        <BaseButton
+                            variant="outline"
+                            size="sm"
+                            class="min-h-11 self-start"
+                            @click="loadIntegrity"
+                            >Retry check</BaseButton
+                        >
+                    </template>
+                </div>
             </div>
-            <p
-                v-if="integrity"
-                class="text-sm"
-                :class="integrity.matches ? 'text-emerald-800' : 'text-red-700'"
-                :role="integrity.matches ? undefined : 'alert'"
+            <FilterBar
+                :searchable="false"
+                compact
+                :active="datesActive"
+                @clear="clearDates"
             >
-                {{
-                    integrity.matches
-                        ? 'Ledger reconciles with current stock.'
-                        : 'Ledger does not reconcile; investigate before posting more stock.'
-                }}
-                Stock: {{ formatQuantity(integrity.stock, product.unit) }} ·
-                Ledger:
-                {{ formatQuantity(integrity.movementTotal, product.unit) }}
-            </p>
+                <DateRangeFilter
+                    v-model:from="from"
+                    v-model:to="to"
+                    :preset="datePreset"
+                    :error="rangeError"
+                    @preset="pickPreset"
+                    @edit="editDate"
+                />
+            </FilterBar>
             <BaseTable
                 :headers="headers"
                 :items="rows"
                 :loading="loading"
                 :error="error"
-                @retry="load"
+                @retry="retry"
             >
                 <template #cell-posted="{ item }">{{
                     formatStoreDateTime(item.createdAt)
@@ -131,6 +184,7 @@
     </BaseModal>
 </template>
 <script setup lang="ts">
+import { STOCK_HISTORY_HELP } from './inventory-help';
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import {
@@ -144,7 +198,13 @@ import {
 } from '@grocery-pos/contracts';
 import api from '@/axios';
 import BaseModal from '@/components/ui/BaseModal.vue';
-import BaseInput from '@/components/ui/BaseInput.vue';
+import Badge from '@/components/ui/Badge.vue';
+import StatTile from '@/components/ui/StatTile.vue';
+import InfoTooltip from '@/components/ui/InfoTooltip.vue';
+import FilterBar from '@/components/ui/FilterBar.vue';
+import DateRangeFilter from '@/components/ui/DateRangeFilter.vue';
+import { useDatePreset } from '@/composables/useDatePreset';
+import type { DatePreset } from '@/views/User/Reports/presets';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -166,6 +226,7 @@ const auth = useAuthStore();
 const rows = ref<StockMovementView[]>([]),
     integrity = ref<StockIntegrityView | null>(null);
 const loading = ref(false),
+    checking = ref(false),
     error = ref(''),
     from = ref(''),
     to = ref(''),
@@ -174,15 +235,26 @@ const loading = ref(false),
 const rangeError = computed(() => dateRangeError(from.value, to.value));
 const headers: TableHeader[] = [
     { key: 'posted', title: 'Posted' },
-    { key: 'occurred', title: 'Occurred' },
-    { key: 'type', title: 'Type' },
-    { key: 'change', title: 'Change', align: 'right' },
-    { key: 'balance', title: 'Balance after', align: 'right' },
-    { key: 'source', title: 'Source' },
+    { key: 'occurred', title: 'Occurred', help: STOCK_HISTORY_HELP.occurred },
+    { key: 'type', title: 'Type', help: STOCK_HISTORY_HELP.type },
+    {
+        key: 'change',
+        title: 'Change',
+        align: 'right',
+        help: STOCK_HISTORY_HELP.change,
+    },
+    {
+        key: 'balance',
+        title: 'Balance after',
+        align: 'right',
+        help: STOCK_HISTORY_HELP.balance,
+    },
+    { key: 'source', title: 'Source', help: STOCK_HISTORY_HELP.source },
     { key: 'user', title: 'Recorded user' },
 ];
 let applied: { from?: string; to?: string } = {},
-    generation = 0;
+    generation = 0,
+    checkGeneration = 0;
 function sourceLink(row: StockMovementView): RouteLocationRaw | undefined {
     if (!row.refId) return undefined;
     if (row.refModel === StockMovementSource.SALE && auth.isAdmin)
@@ -203,31 +275,49 @@ function sourceLink(row: StockMovementView): RouteLocationRaw | undefined {
     )
         return { name: 'StockCounts', query: { source: row.refId } };
 }
-function search() {
+/** A pick or hand edit applies at once on page 1; a reversed range is held. */
+function apply() {
     if (rangeError.value) return;
     applied = { from: from.value || undefined, to: to.value || undefined };
     page.value = 1;
     void load();
 }
+const {
+    preset: datePreset,
+    choose: choosePreset,
+    edited: presetEdited,
+    reset: resetPreset,
+} = useDatePreset(from, to, apply);
+function pickPreset(value: string | null) {
+    void choosePreset(value as DatePreset | null);
+}
+function editDate() {
+    presetEdited();
+    apply();
+}
+const datesActive = computed(
+    () => !!(from.value || to.value || datePreset.value),
+);
+function clearDates() {
+    resetPreset();
+    from.value = '';
+    to.value = '';
+    apply();
+}
+/** The movements page; its failure shows in the table only. */
 async function load() {
     const turn = ++generation,
         owner = auth.user?.userId;
     loading.value = true;
     error.value = '';
     try {
-        const [history, check] = await Promise.all([
-            api.get<Paginated<StockMovementView>>(
-                `/products/${props.product._id}/movements`,
-                { params: { ...applied, page: page.value, limit: 20 } },
-            ),
-            api.get<StockIntegrityView>(
-                `/products/${props.product._id}/movements/integrity`,
-            ),
-        ]);
+        const history = await api.get<Paginated<StockMovementView>>(
+            `/products/${props.product._id}/movements`,
+            { params: { ...applied, page: page.value, limit: 20 } },
+        );
         if (turn !== generation || owner !== auth.user?.userId) return;
         rows.value = history.data.data;
         total.value = history.data.totalItems;
-        integrity.value = check.data;
     } catch (cause) {
         if (turn === generation && owner === auth.user?.userId)
             error.value = apiErrorText(cause, 'Could not load stock history.');
@@ -235,10 +325,33 @@ async function load() {
         if (turn === generation) loading.value = false;
     }
 }
+/** The ledger check, loaded once on open and again on Retry (#258). */
+async function loadIntegrity() {
+    const turn = ++checkGeneration,
+        owner = auth.user?.userId;
+    checking.value = true;
+    integrity.value = null;
+    try {
+        const check = await api.get<StockIntegrityView>(
+            `/products/${props.product._id}/movements/integrity`,
+        );
+        if (turn !== checkGeneration || owner !== auth.user?.userId) return;
+        integrity.value = check.data;
+    } catch {
+        // Unavailable: the tile shows "—", never a false "Reconciled".
+    } finally {
+        if (turn === checkGeneration) checking.value = false;
+    }
+}
+function retry() {
+    void load();
+    if (!integrity.value && !checking.value) void loadIntegrity();
+}
 watch(
     () => auth.user?.userId,
     () => {
         generation++;
+        checkGeneration++;
         rows.value = [];
         integrity.value = null;
         emit('close');
@@ -251,8 +364,13 @@ watch(
         integrity.value = null;
         page.value = 1;
         void load();
+        void loadIntegrity();
     },
 );
-onBeforeUnmount(() => generation++);
+onBeforeUnmount(() => {
+    generation++;
+    checkGeneration++;
+});
 void load();
+void loadIntegrity();
 </script>

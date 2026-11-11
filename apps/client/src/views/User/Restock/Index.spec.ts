@@ -11,6 +11,7 @@ import {
     selectField,
     type,
     openDates,
+    headerText,
 } from '@/testing/form-dom';
 import { DATE_RANGE_REVERSED } from '@/utils/rules';
 import { useUIStore } from '@/stores/ui';
@@ -491,11 +492,11 @@ describe('restock history at 375px (issue #208)', () => {
         const ths = Array.from(document.querySelectorAll('thead th'));
         const shown = ths
             .filter((th) => !th.className.split(/\s+/).includes('hidden'))
-            .map((th) => th.textContent?.trim());
+            .map((th) => headerText(th));
         expect(shown).toEqual(['Description', 'Total Cost', 'Date']);
         const breakpoint = (title: string) =>
             ths
-                .find((th) => th.textContent?.trim() === title)!
+                .find((th) => headerText(th) === title)!
                 .className.split(/\s+/)
                 .find((c) => c.endsWith(':table-cell'));
         expect(breakpoint('Supplier')).toBe('md:table-cell');

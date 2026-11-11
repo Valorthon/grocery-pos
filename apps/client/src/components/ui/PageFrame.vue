@@ -6,7 +6,7 @@
     >
         <PageHeader
             :title="shownTitle"
-            :description="description"
+            :description="shownDescription"
             :breadcrumbs="breadcrumbs"
         >
             <template v-if="$slots.actions" #actions>
@@ -25,7 +25,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { routeTitle } from '@/router/page-title';
+import { routeDescription, routeTitle } from '@/router/page-title';
 import PageHeader from './PageHeader.vue';
 import type { Breadcrumb } from './page-primitives';
 
@@ -37,6 +37,7 @@ import type { Breadcrumb } from './page-primitives';
 const props = defineProps<{
     /** Overrides the route title (tests, or a page outside the router). */
     title?: string;
+    /** Overrides the route's summary (#262), e.g. the dashboards' greeting. */
     description?: string;
     breadcrumbs?: Breadcrumb[];
     narrow?: boolean;
@@ -45,5 +46,8 @@ const props = defineProps<{
 const route = useRoute();
 const shownTitle = computed(
     () => props.title ?? (route ? routeTitle(route) : undefined) ?? '',
+);
+const shownDescription = computed(
+    () => props.description ?? (route ? routeDescription(route) : undefined),
 );
 </script>

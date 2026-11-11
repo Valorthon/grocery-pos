@@ -121,3 +121,10 @@ export async function pick(text: string, value: string): Promise<void> {
     el.dispatchEvent(new Event('change'));
     await flush();
 }
+
+/** A table header's title, without its column-help tooltip text (#263). */
+export function headerText(th: Element): string {
+    const copy = th.cloneNode(true) as Element;
+    copy.querySelectorAll('[role="tooltip"]').forEach((tip) => tip.remove());
+    return copy.textContent?.trim() ?? '';
+}

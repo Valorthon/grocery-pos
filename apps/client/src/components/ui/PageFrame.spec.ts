@@ -26,10 +26,12 @@ async function mount(
                 component: page,
                 meta: {
                     title: 'Inventory',
+                    description: 'All stock',
                     queryTitle: {
                         key: 'lowStock',
                         value: 'true',
                         title: 'Low stock',
+                        description: 'Below reorder level',
                     },
                 },
             },
@@ -84,5 +86,25 @@ describe('PageFrame (#159)', () => {
         expect(host.querySelector('header button')?.textContent).toBe('Save');
         expect(host.querySelector('[data-testid="chip"]')).not.toBeNull();
         expect(host.textContent).toContain('body');
+    });
+
+    it('shows the route summary, its query variant, and lets the prop win (#262)', async () => {
+        const { host, router } = await mount('/inv');
+        const text = () => host.querySelector('header p')?.textContent?.trim();
+        expect(text()).toBe('All stock');
+        await router.push('/inv?lowStock=true');
+        await flush();
+        expect(text()).toBe('Below reorder level');
+        app?.unmount();
+        document.body.innerHTML = '';
+        const other = await mount('/inv', { description: 'Welcome back' });
+        expect(other.host.querySelector('header p')?.textContent?.trim()).toBe(
+            'Welcome back',
+        );
+    });
+
+    it('shows no summary when the route has none', async () => {
+        const { host } = await mount('/none');
+        expect(host.querySelector('header p')).toBeNull();
     });
 });

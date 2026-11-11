@@ -134,6 +134,7 @@
     </section>
 </template>
 <script setup lang="ts">
+import { BATCH_HELP, BATCH_STATUS, type BatchStatus } from './inventory-help';
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import {
@@ -152,7 +153,6 @@ import BaseTable from '@/components/ui/BaseTable.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import type { StatusMap } from '@/components/ui/status-badge';
 import type { TableHeader } from '@/components/ui/types';
 import { PackageSearch } from '@lucide/vue';
 import { useAuthStore } from '@/stores/auth';
@@ -181,15 +181,19 @@ const days = ref<number | string>(settings.settings.expiryAlertDays),
     rows = ref<InventoryBatchView[]>([]);
 const headers: TableHeader[] = [
     { key: 'product', title: 'Product' },
-    { key: 'batch', title: 'Batch' },
-    { key: 'expiry', title: 'Expiry' },
-    { key: 'daysLeft', title: 'Days left', align: 'right' },
+    { key: 'batch', title: 'Batch', help: BATCH_HELP.batch },
+    { key: 'expiry', title: 'Expiry', help: BATCH_HELP.expiry },
+    {
+        key: 'daysLeft',
+        title: 'Days left',
+        align: 'right',
+        help: BATCH_HELP.daysLeft,
+    },
     { key: 'remaining', title: 'Remaining', align: 'right' },
     { key: 'action', title: 'Action', align: 'right' },
 ];
 /** Live store alert window behind the "Expiring soon" badge (#247). */
 const alertDays = computed(() => settings.settings.expiryAlertDays);
-type BatchStatus = 'expired' | 'soon' | 'ok' | 'check' | 'reconciliation';
 /** Expiring soon means within the store's alert window, like the dashboard (#213). */
 function batchStatus(batch: InventoryBatchView): BatchStatus {
     if (!batch.expiryDate) return 'reconciliation';
@@ -198,13 +202,6 @@ function batchStatus(batch: InventoryBatchView): BatchStatus {
     if (batch.daysLeft < 0) return 'expired';
     return batch.daysLeft <= settings.settings.expiryAlertDays ? 'soon' : 'ok';
 }
-const BATCH_STATUS: StatusMap<BatchStatus> = {
-    expired: { label: 'Expired', color: 'error' },
-    soon: { label: 'Expiring soon', color: 'warning' },
-    ok: { label: 'OK', color: 'success' },
-    check: { label: 'Check expiry', color: 'warning' },
-    reconciliation: { label: 'Reconciliation', color: 'neutral' },
-};
 let generation = 0;
 onBeforeUnmount(() => generation++);
 async function load() {

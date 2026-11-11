@@ -108,6 +108,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+    INVENTORY_HELP,
+    STOCK_STATUS as STATUS,
+    type StockStatus,
+} from '@/components/User/Inventory/inventory-help';
 import StockHistory from '@/components/User/Inventory/StockHistory.vue';
 import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import type { ProductView, UnitOfMeasure } from '@grocery-pos/contracts';
@@ -120,7 +125,6 @@ import StatusBadge from '@/components/ui/StatusBadge.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
 import RowOpenButton from '@/components/ui/RowOpenButton.vue';
-import type { StatusMap } from '@/components/ui/status-badge';
 import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
@@ -267,30 +271,35 @@ async function onSearch() {
 
 const headers = [
     { key: 'name', title: 'Product', rowHeader: true },
-    { key: 'stock', title: 'Stock', align: 'right' as const },
+    {
+        key: 'stock',
+        title: 'Stock',
+        align: 'right' as const,
+        help: INVENTORY_HELP.stock,
+    },
     {
         key: 'reorderLevel',
         title: 'Reorder at',
         align: 'right' as const,
+        help: INVENTORY_HELP.reorderLevel,
         // Hidden below md (#210); the Stock history dialog shows it.
         hideBelow: 'md' as const,
     },
     // Below sm the badge sits under the stock figure instead.
-    { key: 'status', title: 'Status', hideBelow: 'sm' as const },
+    {
+        key: 'status',
+        title: 'Status',
+        hideBelow: 'sm' as const,
+        help: INVENTORY_HELP.status,
+    },
     { key: 'history', title: 'History' },
 ];
 
 /** The #40 / dashboard predicate: out at ≤ 0, low at ≤ the reorder level. */
-type StockStatus = 'out' | 'low' | 'ok';
 function stockStatus(stock: number, reorderLevel: number): StockStatus {
     if (stock <= 0) return 'out';
     return stock <= reorderLevel ? 'low' : 'ok';
 }
-const STATUS: StatusMap<StockStatus> = {
-    out: { label: 'Out of stock', color: 'error' },
-    low: { label: 'Low stock', color: 'warning' },
-    ok: { label: 'In stock', color: 'success' },
-};
 
 /** A row of the inventory table. */
 interface InventoryListRow {

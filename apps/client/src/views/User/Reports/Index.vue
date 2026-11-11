@@ -312,6 +312,7 @@
 </template>
 <script setup lang="ts">
 import { GROUP_LABELS } from './group-labels';
+import { REPORT_HELP } from './column-help';
 import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue';
 import { isAxiosError } from 'axios';
 import { RouterLink } from 'vue-router';
@@ -352,15 +353,55 @@ const right = 'right' as const;
 /** Every numeric column is right-aligned with tabular figures (#170). */
 const reportHeaders: TableHeader[] = [
     { key: 'label', title: 'Group', rowHeader: true },
-    { key: 'transactions', title: 'Sales / reversals', align: right },
-    { key: 'quantities', title: 'Quantity (net)', align: right },
-    { key: 'grossSales', title: 'Gross', align: right },
+    {
+        key: 'transactions',
+        title: 'Sales / reversals',
+        align: right,
+        help: REPORT_HELP.transactions,
+    },
+    {
+        key: 'quantities',
+        title: 'Quantity (net)',
+        align: right,
+        help: REPORT_HELP.quantities,
+    },
+    {
+        key: 'grossSales',
+        title: 'Gross',
+        align: right,
+        help: REPORT_HELP.grossSales,
+    },
     { key: 'discounts', title: 'Discounts', align: right },
-    { key: 'voids', title: 'Voids', align: right },
-    { key: 'refunds', title: 'Refunds', align: right },
-    { key: 'netSales', title: 'Net', align: right },
-    { key: 'knownCogs', title: 'Known COGS', align: right },
-    { key: 'grossMargin', title: 'Margin estimate', align: right },
+    {
+        key: 'voids',
+        title: 'Voids',
+        align: right,
+        help: REPORT_HELP.voids,
+    },
+    {
+        key: 'refunds',
+        title: 'Refunds',
+        align: right,
+        help: REPORT_HELP.refunds,
+    },
+    {
+        key: 'netSales',
+        title: 'Net',
+        align: right,
+        help: REPORT_HELP.netSales,
+    },
+    {
+        key: 'knownCogs',
+        title: 'Known COGS',
+        align: right,
+        help: REPORT_HELP.knownCogs,
+    },
+    {
+        key: 'grossMargin',
+        title: 'Margin estimate',
+        align: right,
+        help: REPORT_HELP.grossMargin,
+    },
 ];
 const MONEY_KEYS = [
     'grossSales',

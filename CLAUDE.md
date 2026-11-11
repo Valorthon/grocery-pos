@@ -585,7 +585,13 @@ requestId}`. A 5xx never carries details or internals.
   `?outOfStock=` and `?expiring=`), and clears those too. A deep link shows
   a muted line above the table (`data-testid="deep-link-note"`), e.g.
   "Showing receipts for PO-…" (owner-default assumption, reversible).
-  Purchase orders and Users have no Clear button.
+  Purchase orders and Users have no Clear button. In the labelled row each
+  slotted input or select stops at `max-w-64` (16rem) and the search box is
+  uncapped; a `SegmentedFilter` (`data-segmented`) is exempt and wraps
+  (#261). Purchase orders filter status with `SegmentedFilter` chips (All ·
+  Draft · Sent · Partially received · Received · Cancelled, labels from
+  `STATUS_LABELS`, "All" is `''` and sends no status) inside the card,
+  with no FilterBar; a tap applies on page 1 with one load.
 - Compact filter rows (#254, owner decision 2026-11-11; supersedes #215's
   "no Filters toggle, panel or chips" on these screens): Sales, Adjustments,
   Restocks, Audit and Reports use `FilterBar compact`: one aligned row of
@@ -617,11 +623,39 @@ requestId}`. A 5xx never carries details or internals.
   The client shows `dateRangeError` on the To field and keeps the last
   valid range; a user-select change still applies with it.
 - BaseTable hides its pager while `error` is set.
+- Restock and Adjustment Details (#260) open with a heading line. Restock
+  shows the supplier and the grand total; Adjustment shows the description
+  (a count approval as "Stock count 1A2B3C4D", linked for ADJUSTER/ADMIN)
+  and the line count of an unsearched load. A muted meta line joined by
+  "·" follows (invoice · PO link · restocker · date; adjuster · date).
+  Empty values are left out (rows carry `undefined`; the history tables
+  keep their placeholders); a legacy receipt shows muted "Unknown
+  supplier"; the default `Purchase order PO-…` description is hidden. One
+  compact "Search name or barcode" box (`productSearchParams`: up to 13
+  digits is an `EAN` prefix, else `name`).
 - Sale details clear before loading, and only the latest click's answer is
   shown. The user editor edits a copy of the row's roles, so Cancel changes
   nothing. Create validates name (trimmed), password and roles like
   `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
+- Column help (#263): a `TableHeader` may carry `help` (text or
+  `{term, meaning}[]`); BaseTable renders an ⓘ `InfoTooltip` (#258,
+  popover top layer, "About {title}", 44px with `-my-3`) after the title,
+  before it in right-aligned columns. Only non-obvious columns get help;
+  a status, type or role column lists every value. Texts live in `.ts`
+  modules beside the badge maps (`purchase-order.ts`, `sale-status.ts`,
+  `inventory-help.ts`, `stock-count-help.ts`, `Reports/column-help.ts`,
+  `views/User/list-help.ts`), built with `statusHelp`/`enumHelp` so a new
+  value without a meaning fails to compile; `column-help.spec.ts` checks
+  the lists. Help hides with its column; Inventory's Stock also explains
+  the statuses shown under it below `sm`. Specs read header titles with
+  `headerText` (`testing/form-dom.ts`).
+- Page summaries (#262): every admin page shows a one-line summary under
+  its title from the route's `meta.description` (a `queryTitle` may carry
+  its own, e.g. Low stock), via `routeDescription` in PageFrame; at most
+  110 characters, true for every role that opens the page. A
+  `description` prop wins (the dashboards' greeting). Login, Page not
+  found, the register and the dashboards' routes have none.
 
 **Register (Phase 6)** (#22–#26)
 
@@ -962,6 +996,20 @@ on upstream fixes).
 - Inventory roles see quantities and permitted source links, never procurement costs
   or unrestricted sales finances. Integrity compares ledger sum to inventory in one
   snapshot and reports discrepancies without changing either side.
+- Stock history header (#258): tiles for Current stock (the integrity
+  check's server `stock`, never the row's), Reorder level and EAN (Inventory
+  and Products pass the same `ean`/`reorderLevel` props), then a Ledger badge:
+  "Reconciled", "Mismatch" (both figures and "Investigate before posting
+  more stock", `role=alert`) or "Unavailable" with "Retry check" (stock
+  tile "—"). Integrity loads once on open, apart from the movements page, so
+  either can fail alone. The balances note is an ⓘ `InfoTooltip`
+  (`components/ui`, hover/focus/tap, `aria-describedby`): a manual
+  `popover` in the top layer placed by `:style`, so overflow containers
+  never clip it; `items` (`{term, meaning}[]`) renders a `<dl>`; while it
+  shows, Escape from anywhere closes only the tooltip (a prevented capture
+  listener the modal stack ignores). Dates are `DateRangeFilter` + `useDatePreset` in a compact
+  `FilterBar` (apply at once on page 1, Clear Filters resets); the API keeps
+  `from`/`to`.
 
 **Store settings** (#47, owner decision 2026-11-05)
 

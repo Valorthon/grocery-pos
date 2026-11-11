@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { click, field, flush, type } from '@/testing/form-dom';
+import { click, field, flush, type, headerText } from '@/testing/form-dom';
 import Index from './Index.vue';
 import type { ApiGet } from '@/testing/api-mock';
 import type { Router } from 'vue-router';
-import { Role, UnitOfMeasure } from '@grocery-pos/contracts';
+import {
+    Role,
+    UnitOfMeasure,
+    formatQuantity,
+    reorderLevelOf,
+} from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
 import { AxiosError, AxiosHeaders } from 'axios';
 
@@ -455,7 +460,7 @@ describe('columns and row menu (#172)', () => {
     it('puts Name first, then Category and Price', async () => {
         await mount();
         const titles = [...document.querySelectorAll('thead th')].map((th) =>
-            th.textContent?.trim(),
+            headerText(th),
         );
         expect(titles.slice(0, 3)).toEqual(['Name', 'Category', 'Price']);
         expect(titles).not.toContain('History');
@@ -574,6 +579,14 @@ describe('product list scans (#214)', () => {
         await scanInto('Product Name');
         expect(document.body.textContent).toContain('Stock history — milk');
         expect(document.body.textContent).not.toContain('Edit Product');
+        // The same EAN and reorder level tiles as Inventory (#258).
+        const tiles = document.querySelector(
+            '[data-testid="stock-history-tiles"]',
+        )!.textContent!;
+        expect(tiles).toContain(`EAN${SCAN}`);
+        expect(tiles).toContain(
+            `Reorder level${formatQuantity(reorderLevelOf({ unit: UnitOfMeasure.PIECE }), UnitOfMeasure.PIECE)}`,
+        );
     });
 
     it('falls back to the filtered search without one exact match', async () => {
@@ -600,7 +613,7 @@ describe('shared table pieces (#242)', () => {
     it('merges the EAN under the name and drops the EAN column', async () => {
         await mount();
         const titles = [...document.querySelectorAll('thead th')].map((th) =>
-            th.textContent?.trim(),
+            headerText(th),
         );
         expect(titles).not.toContain('EAN');
         expect(titles).toContain('Status');

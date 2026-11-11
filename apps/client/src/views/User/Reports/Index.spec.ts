@@ -13,6 +13,7 @@ import {
     openDates,
     openMoreFilters,
     type,
+    headerText,
 } from '@/testing/form-dom';
 import type { ApiGet } from '@/testing/api-mock';
 import Index from './Index.vue';
@@ -554,7 +555,7 @@ describe('event-date reports UI', () => {
     it('right-aligns every numeric column with tabular figures (#170)', async () => {
         await mount();
         const heads = [...document.querySelectorAll('thead th')];
-        expect(heads.map((th) => th.textContent?.trim())).toEqual([
+        expect(heads.map((th) => headerText(th))).toEqual([
             'Group',
             'Sales / reversals',
             'Quantity (net)',

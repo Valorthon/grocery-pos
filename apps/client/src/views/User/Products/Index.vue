@@ -109,6 +109,10 @@
                 v-if="history"
                 :key="history._id"
                 :product="history"
+                :ean="history.EAN"
+                :reorder-level="
+                    formatQuantity(reorderLevelOf(history), history.unit)
+                "
                 @close="history = null"
             />
             <EditProductDialog
@@ -128,10 +132,16 @@
 </template>
 
 <script setup lang="ts">
+import { PRODUCT_HELP, PRODUCT_STATUS } from '../list-help';
 import { useCategories } from '@/composables/useCategories';
 import { findExactProduct, scannedTerm } from '@/composables/useBarcodeCapture';
 import ProductCostSummary from '@/components/User/Product/ProductCostSummary.vue';
-import { Role, unitLabel } from '@grocery-pos/contracts';
+import {
+    Role,
+    unitLabel,
+    formatQuantity,
+    reorderLevelOf,
+} from '@grocery-pos/contracts';
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Plus } from '@lucide/vue';
@@ -145,7 +155,6 @@ import BaseSelect from '@/components/ui/BaseSelect.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import type { StatusMap } from '@/components/ui/status-badge';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { useConfirm } from '@/composables/useConfirm';
 import { useUIStore, Color } from '@/stores/ui';
@@ -197,10 +206,6 @@ function setStatus(value: StatusFilter) {
     status.value = value;
     applySearch();
 }
-const PRODUCT_STATUS: StatusMap<'active' | 'archived'> = {
-    active: { label: 'Active', color: 'success' },
-    archived: { label: 'Archived', color: 'neutral' },
-};
 const editing = ref<ProductListRow | null>(null);
 const saving = ref(false);
 const { request, confirm, answer } = useConfirm();
@@ -274,10 +279,11 @@ const headers = [
                   key: 'cost',
                   title: 'Latest cost / margin estimate',
                   align: 'right' as const,
+                  help: PRODUCT_HELP.cost,
               },
           ]
         : []),
-    { key: 'status', title: 'Status' },
+    { key: 'status', title: 'Status', help: PRODUCT_HELP.status },
     { key: 'actions', title: 'Actions' },
 ];
 
