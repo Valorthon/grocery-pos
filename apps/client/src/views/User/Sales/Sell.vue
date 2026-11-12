@@ -112,15 +112,12 @@
                 <RegisterScanBox
                     ref="scanBox"
                     v-model="searchQuery"
-                    v-model:multiplier="scanMultiplier"
                     :locked="isTicketLocked"
-                    :qty-options="qtyOptions"
                     :match-count="search.matches.value.length"
                     :matches-settled="search.settled.value"
                     :next-scan-qty="nextScanQty"
                     :scan-feedback="scanFeedback"
                     @submit="onScanSubmit"
-                    @multiplier-change="onMultiplierChange"
                     @search-change="onSearchChange"
                     @enter-matches="matchesList?.focusOption(0)"
                     @clear="clearQuery"
@@ -162,6 +159,7 @@
                 @qty-input="onQtyInput"
                 @qty-commit="commitQuantity"
                 @qty-enter="onQtyEnter"
+                @qty-scan="onQtyScan"
                 @qty-cancel="cancelQuantity"
                 @remove="removeLine"
                 @undo="undoRemove"
@@ -350,6 +348,7 @@ import api from '@/axios';
 import { isAxiosError } from 'axios';
 import { useOfflineStore } from '@/stores/offline';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import { anyModalOpen } from '@/components/ui/modal-stack';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import ParkedTicketsDialog from '@/components/User/Sales/ParkedTicketsDialog.vue';
 import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog.vue';
@@ -458,7 +457,6 @@ const sticky = useStickyFocus(() => scanInput.value, {
 });
 const offline = useOfflineStore();
 const searchQuery = ref('');
-const scanMultiplier = ref(1);
 const search = useProductSearch(
     async (name, signal) => {
         if (offline.offline || !navigator.onLine) return offline.matches(name);
@@ -480,13 +478,9 @@ const search = useProductSearch(
     () => searchTerm.value,
 );
 /** What the live search looks for: the input minus any `<qty>*` prefix. */
-const searchTerm = computed(
-    () => parseScan(searchQuery.value, scanMultiplier.value).query,
-);
-/** The quantity the next scan adds: a typed `12*` wins over the picker. */
-const nextScanQty = computed(
-    () => parseScan(searchQuery.value, scanMultiplier.value).qty,
-);
+const searchTerm = computed(() => parseScan(searchQuery.value, 1).query);
+/** The quantity the next scan adds: a typed `12*`, else 1. */
+const nextScanQty = computed(() => parseScan(searchQuery.value, 1).qty);
 const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
     null,
 );
@@ -500,7 +494,6 @@ const receipt = ref<Receipt | null>(null);
 /** Shown on the receipt when the sale had already been recorded earlier. */
 const receiptNotice = ref<string | null>(null);
 
-const qtyOptions = [1, 2, 3, 4, 5, 6, 8, 10, 12, 24];
 const discountOptions = [0, 5, 10, 15, 20];
 
 // ---- Discount: kept with the cart, so it survives leaving the page and a
@@ -681,6 +674,17 @@ function onQtyEnter(product: string) {
     if (commitQuantity(product)) scanInput.value?.focus();
 }
 
+/**
+ * A scanner burst while a quantity had the focus (#323): the typed
+ * quantity is committed (a refused one keeps its error and the line its
+ * last quantity), then the code goes through the scan box's own flow.
+ */
+function onQtyScan(product: string, code: string) {
+    commitQuantity(product);
+    searchQuery.value = code;
+    void onScanSubmit();
+}
+
 /** Escape: back to the line's quantity, and the focus to the line. */
 function cancelQuantity(product: string) {
     delete qtyDrafts[product];
@@ -698,6 +702,8 @@ function focusLineQuantity() {
         ? selectedLine.value!
         : items[items.length - 1].product;
     selectedLine.value = product;
+    // F4 on the field being typed in commits it first (#323 review).
+    commitQuantity(product);
     const qty = qtyEls.get(product);
     qty?.focus();
     qty?.select();
@@ -883,12 +889,10 @@ function cancelPendingSearch() {
 /**
  * Clears the input after an item is added, but only if it still holds the
  * text that was submitted: a scanner can start the next barcode while this
- * lookup is in flight, and those digits must survive. The multiplier was
- * for this scan only (decision 2026-09-25, #23): back to 1.
+ * lookup is in flight, and those digits must survive. A `12*` prefix
+ * goes with the text, so it was for this scan only (#23).
  */
 function resetQuery(submitted: string) {
-    scanMultiplier.value = 1;
-    scanInput.value?.focus();
     if (searchQuery.value !== submitted) return;
     cancelPendingSearch();
     search.reset();
@@ -896,20 +900,8 @@ function resetQuery(submitted: string) {
 }
 
 /**
- * A multiplier was picked: back to the scan box, always (issue #22). A
- * select keeps its focus otherwise, and a scan's digits would then act as
- * type-ahead on it (changing the multiplier) instead of being scanned.
- * Arrowing through a closed select therefore moves one step per visit;
- * Alt+↓ or Space opens the list, which commits one pick with Enter, and
- * typing a number on it (e.g. "6") picks that entry directly.
- */
-function onMultiplierChange() {
-    scanInput.value?.focus();
-}
-
-/**
- * A match clicked, or Enter/Space on the focused one (#322): it is added
- * and the focus goes back to the scan box, as after a scan.
+ * A match clicked, or Enter/Space on the focused one (#322): the focus
+ * waits in the scan box, and the added line's quantity takes it (#323).
  */
 function onMatchPicked(match: Match) {
     scanInput.value?.focus();
@@ -976,7 +968,7 @@ watch(
 async function onScanSubmit() {
     if (cartStore.locked) return;
     const submitted = searchQuery.value;
-    const { qty, query } = parseScan(submitted, scanMultiplier.value);
+    const { qty, query } = parseScan(submitted, 1);
     if (!query) return;
     clearFeedback();
 
@@ -1111,7 +1103,7 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
         quantity * quantityScale(product.unit),
     );
     if (!added) {
-        // Nothing was added: the multiplier and the text stay for a retry.
+        // Nothing was added: the text (and any `12*`) stays for a retry.
         showFeedback(
             'error',
             `Can't add ${quantity}x ${product.name}: a sale can't exceed ${formatCurrency(TICKET_AMOUNT_MAX)}`,
@@ -1126,6 +1118,23 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,
     );
     resetQuery(submitted);
+    void focusAddedLine(product._id);
+}
+
+/**
+ * After an add (#323): the line's quantity takes the focus with its value
+ * selected, as F4 does, so typing replaces it and Enter goes back to the
+ * scan box. Not while a modal is open or the ticket is locked.
+ */
+async function focusAddedLine(product: string) {
+    await nextTick();
+    if (anyModalOpen.value || isTicketLocked.value) return;
+    if (selectedLine.value !== product) return;
+    // The next scan already started in the box: its digits keep the focus.
+    if (searchQuery.value !== '') return;
+    const qty = qtyEls.get(product);
+    qty?.focus();
+    qty?.select();
 }
 
 // ---- Discount actions
@@ -1183,7 +1192,6 @@ function openPark() {
 function resetTicketUi() {
     cancelPendingSearch();
     clearFeedback();
-    scanMultiplier.value = 1;
     dismissUndo();
     selectedLine.value = null;
     resetDiscountUi();

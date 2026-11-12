@@ -185,6 +185,7 @@
                                                 : undefined
                                         "
                                         data-testid="line-quantity"
+                                        :data-product="item.product"
                                         class="num w-14 h-11 text-center font-bold text-ink text-sm rounded border focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
                                         :class="
                                             qtyErrors[item.product]
@@ -192,6 +193,11 @@
                                                 : 'border-transparent'
                                         "
                                         @focus="emit('select', item.product)"
+                                        @keydown="burst.onKeydown"
+                                        @blur="
+                                            burst.flush();
+                                            emit('qty-commit', item.product);
+                                        "
                                         @input="
                                             emit(
                                                 'qty-input',
@@ -310,6 +316,7 @@ import {
     unitLabel,
 } from '@grocery-pos/contracts';
 import type { CartItem } from '@/stores/cart';
+import { createQtyBurst } from './qty-burst';
 import { REGISTER_KEYS } from '@/composables/useRegisterShortcuts';
 import { formatCurrency as currency } from '@/utils/currency';
 
@@ -334,8 +341,14 @@ const emit = defineEmits<{
     'qty-input': [product: string, event: Event];
     'qty-commit': [product: string];
     'qty-enter': [product: string];
+    /** A scanner burst while this line's quantity had the focus (#323). */
+    'qty-scan': [product: string, code: string];
     'qty-cancel': [product: string];
     remove: [product: string];
     undo: [];
 }>();
+const burst = createQtyBurst((input, code) => {
+    const product = input.dataset.product;
+    if (product) emit('qty-scan', product, code);
+});
 </script>

@@ -7,12 +7,9 @@ import { isBarcode } from '@/components/User/Sales/product-search';
 import { apiErrorCode } from '@/utils/api-error';
 import { isTextEntry } from './useRegisterShortcuts';
 
-/**
- * The longest gap between two keystrokes of one scan (issue #214). Hand
- * typing is far slower; Bluetooth wedges can be slow or bursty, so this is
- * generous.
- */
-export const SCAN_KEY_INTERVAL_MS = 200;
+import { SCAN_KEY_INTERVAL_MS } from './scan-timing';
+
+export { SCAN_KEY_INTERVAL_MS };
 
 export interface BarcodeCaptureOptions {
     /** Scans are ignored while this is false (e.g. a locked PO). */

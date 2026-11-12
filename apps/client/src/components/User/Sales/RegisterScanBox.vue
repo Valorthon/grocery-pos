@@ -1,27 +1,5 @@
 <template>
-    <form
-        class="mt-3 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center"
-        @submit.prevent="emit('submit')"
-    >
-        <div
-            class="flex items-center bg-surface border border-line-strong rounded-card pl-3 pr-1 py-1 shrink-0"
-        >
-            <span
-                class="text-xs font-bold text-muted uppercase tracking-wider mr-2"
-                >Qty:</span
-            >
-            <select
-                v-model.number="multiplier"
-                aria-label="Quantity per scan"
-                class="num min-h-11 min-w-11 px-1 bg-transparent text-ink font-bold text-sm cursor-pointer rounded focus-ring"
-                @change="emit('multiplier-change')"
-            >
-                <option v-for="q in qtyOptions" :key="q" :value="q">
-                    {{ q }}x
-                </option>
-            </select>
-        </div>
-
+    <form class="mt-3" @submit.prevent="emit('submit')">
         <div class="relative flex-1">
             <div
                 class="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-leaf-600 pointer-events-none"
@@ -81,9 +59,8 @@
     </form>
 
     <!--
-        The multiplier applies to the next scan only (decision
-        2026-09-25, #23), whether set with the Qty picker or
-        typed as "12*".
+        A typed "12*" multiplies the next scan or pick only (#23);
+        the Qty picker is gone (#323).
     -->
     <div role="status" aria-live="polite">
         <p
@@ -123,7 +100,7 @@
 
 <script setup lang="ts">
 /**
- * The register's scan box (#163): the Qty picker, the scan/search input,
+ * The register's scan box (#163): the scan/search input,
  * the next-scan badge and the scan result regions. State lives in Sell.vue.
  */
 import { useTemplateRef } from 'vue';
@@ -133,7 +110,6 @@ import { REGISTER_KEYS } from '@/composables/useRegisterShortcuts';
 
 const props = defineProps<{
     locked: boolean;
-    qtyOptions: readonly number[];
     matchCount: number;
     /** The matches answer the current text (`settled`), #322 review. */
     matchesSettled: boolean;
@@ -141,10 +117,8 @@ const props = defineProps<{
     scanFeedback: { type: 'success' | 'error'; message: string } | null;
 }>();
 const query = defineModel<string>({ required: true });
-const multiplier = defineModel<number>('multiplier', { required: true });
 const emit = defineEmits<{
     submit: [];
-    'multiplier-change': [];
     'search-change': [];
     /** ↓ with matches listed: the focus goes to the first one (#322). */
     'enter-matches': [];
