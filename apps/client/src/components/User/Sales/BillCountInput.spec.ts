@@ -199,6 +199,9 @@ describe('BillCountInput (issue #25)', () => {
         expect(row.nextElementSibling?.textContent).toContain('Bills');
         expect(clear.classList).toContain('min-h-11');
         expect(clear.classList).toContain('min-w-11');
+        expect(clear.classList).toContain('focus-ring');
+        expect(clear.classList).not.toContain('px-2');
+        expect(row.classList).toContain('mb-1');
     });
 
     it('clears every count and every refused field at once', async () => {
