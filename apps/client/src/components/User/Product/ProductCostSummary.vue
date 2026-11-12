@@ -11,14 +11,15 @@
              labels share a line, boxes are input-high (#294). -->
         <div
             v-else-if="tiles"
-            class="grid min-w-0 grid-cols-2 gap-3 items-start"
+            class="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]"
             data-testid="cost-tiles"
         >
-            <div class="min-w-0" data-testid="tile-cost">
+            <div class="flex min-w-0 flex-col" data-testid="tile-cost">
                 <p :id="`${uid}-cost`" :class="FIELD_LABEL">Latest cost</p>
                 <output
                     :aria-labelledby="`${uid}-cost`"
-                    :class="['block', FIELD_READONLY]"
+                    :class="['block flex-1', FIELD_READONLY]"
+                    aria-live="off"
                     data-readonly-box
                     >{{
                         cost?.lastCost === undefined
@@ -29,7 +30,7 @@
             </div>
             <!-- Red on a negative profit: selling below the latest cost is
                  a real loss per unit (#290), named for screen readers. -->
-            <div class="min-w-0" data-testid="tile-margin">
+            <div class="flex min-w-0 flex-col" data-testid="tile-margin">
                 <div class="flex items-center gap-1 mb-1.5">
                     <p :id="`${uid}-margin`" :class="[FIELD_LABEL, 'mb-0']">
                         Margin<span v-if="negative" class="sr-only"
@@ -42,8 +43,9 @@
                 </div>
                 <output
                     :aria-labelledby="`${uid}-margin`"
+                    aria-live="off"
                     :class="[
-                        'block',
+                        'block flex-1',
                         FIELD_READONLY,
                         negative ? 'text-danger-fg' : '',
                     ]"

@@ -459,12 +459,20 @@ describe('EditProductDialog pricing tiles (#290)', () => {
         expect(tile('tile-margin').textContent).toContain('—');
     });
 
-    it('keeps the price input a minimum width, wrapping the pair below sm', async () => {
+    it('keeps the price input a minimum width and gives Margin the wider column', async () => {
         await mount({ roles: [Role.Admin], lastCost: 100 });
         const row = document.querySelector('[data-testid="pricing-row"]')!;
-        expect(row.className).toContain('minmax(10rem,1fr)');
-        expect(row.classList).toContain('grid-cols-2');
-        expect(row.classList).toContain('items-start');
+        // Price ≥8rem, the pair gets 2.6fr split 1:1.6, so the Margin
+        // box fits "-50.00% · -₱20.00/pc" on one line at 32rem (#294).
+        expect(row.className).toContain('minmax(8rem,1fr)_minmax(0,2.6fr)');
+        const pair = document.querySelector('[data-testid="cost-tiles"]')!;
+        expect(pair.classList).toContain('grid-cols-2');
+        expect(pair.className).toContain('minmax(0,1.6fr)');
+        expect(pair.classList).not.toContain('items-start');
+        for (const box of pair.querySelectorAll('[data-readonly-box]')) {
+            expect(box.classList).toContain('flex-1');
+            expect(box.getAttribute('aria-live')).toBe('off');
+        }
     });
 
     it('non-ADMIN users see no tiles', async () => {
