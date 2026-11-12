@@ -237,7 +237,19 @@
                                     Product
                                 </th>
                                 <th scope="col" :class="draftTable.thNum">
-                                    Ordered
+                                    <span
+                                        class="inline-flex items-center gap-0.5"
+                                        data-column-help
+                                    >
+                                        Ordered
+                                        <InfoTooltip
+                                            class="-my-3 -ml-3"
+                                            label="About Ordered"
+                                            >{{
+                                                PURCHASE_ORDER_HELP.ordered
+                                            }}</InfoTooltip
+                                        >
+                                    </span>
                                 </th>
                                 <th
                                     v-if="!isDraft"
@@ -254,7 +266,19 @@
                                     Outstanding
                                 </th>
                                 <th scope="col" :class="draftTable.thNum">
-                                    Expected cost
+                                    <span
+                                        class="inline-flex items-center gap-0.5"
+                                        data-column-help
+                                    >
+                                        Expected cost
+                                        <InfoTooltip
+                                            class="-my-3 -ml-3"
+                                            label="About Expected cost"
+                                            >{{
+                                                PURCHASE_ORDER_HELP.expectedCost
+                                            }}</InfoTooltip
+                                        >
+                                    </span>
                                 </th>
                                 <th
                                     v-if="isDraft"
@@ -577,6 +601,7 @@ import StatusBadge from '@/components/ui/StatusBadge.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
+import InfoTooltip from '@/components/ui/InfoTooltip.vue';
 import {
     useAppliedFilters,
     useListFetch,
