@@ -192,4 +192,16 @@ describe('BaseInput help (#273)', () => {
         mount({ label: 'Name' });
         expect(document.querySelector('[data-info-tooltip]')).toBeNull();
     });
+
+    it('keeps the 6px label gap with help: the row has it, not the label (#301)', () => {
+        mount({ label: 'Level (kg)', help: 'N' });
+        const label = document.querySelector('label')!;
+        expect(label.classList).not.toContain('mb-1.5');
+        expect(label.classList).not.toContain('mb-0');
+        expect(label.parentElement!.classList).toContain('mb-1.5');
+        app?.unmount();
+        document.body.innerHTML = '';
+        mount({ label: 'Name' });
+        expect(document.querySelector('label')!.classList).toContain('mb-1.5');
+    });
 });

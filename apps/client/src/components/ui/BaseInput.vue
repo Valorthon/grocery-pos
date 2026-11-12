@@ -5,7 +5,7 @@
              making the row taller (#273), and -ml-3.5
              pulls its 16px icon to 4px after the label (#282). -->
         <div v-if="label && help" class="flex items-center gap-1 mb-1.5">
-            <label :for="fieldId" :class="[FIELD_LABEL, 'mb-0']">
+            <label :for="fieldId" :class="FIELD_LABEL_TEXT">
                 {{ label }}
             </label>
             <InfoTooltip
@@ -70,6 +70,7 @@ import {
     FIELD_ERROR_TEXT,
     FIELD_ICON,
     FIELD_LABEL,
+    FIELD_LABEL_TEXT,
     FIELD_OK,
 } from './field-style';
 import { computed, useAttrs, useId } from 'vue';
