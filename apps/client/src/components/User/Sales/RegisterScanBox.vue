@@ -41,11 +41,6 @@
                 aria-autocomplete="list"
                 aria-controls="product-matches"
                 :aria-expanded="matchCount > 0"
-                :aria-activedescendant="
-                    highlighted === -1
-                        ? undefined
-                        : `product-match-${highlighted}`
-                "
                 :class="
                     /*
                      * Room for the buttons on the right (#89):
@@ -56,9 +51,7 @@
                 "
                 class="w-full min-h-14 pl-12 py-3 bg-surface text-ink placeholder:text-muted text-base font-mono font-bold rounded-card border-2 border-line-strong shadow-card focus:border-leaf-600 focus:outline-3 focus:outline-offset-0 focus:outline-leaf-500 disabled:opacity-60 transition-colors"
                 @input="emit('search-change')"
-                @keydown.down.prevent="emit('move', 1)"
-                @keydown.up.prevent="emit('move', -1)"
-                @keydown.esc="emit('unhighlight')"
+                @keydown.down="onDown"
             />
             <div
                 class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1"
@@ -138,11 +131,10 @@ import { AlertCircle, Barcode, CheckCircle2, X } from '@lucide/vue';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import { REGISTER_KEYS } from '@/composables/useRegisterShortcuts';
 
-defineProps<{
+const props = defineProps<{
     locked: boolean;
     qtyOptions: readonly number[];
     matchCount: number;
-    highlighted: number;
     nextScanQty: number;
     scanFeedback: { type: 'success' | 'error'; message: string } | null;
 }>();
@@ -152,10 +144,19 @@ const emit = defineEmits<{
     submit: [];
     'multiplier-change': [];
     'search-change': [];
-    move: [delta: number];
-    unhighlight: [];
+    /** ↓ with matches listed: the focus goes to the first one (#322). */
+    'enter-matches': [];
     clear: [];
 }>();
+
+function onDown(event: KeyboardEvent) {
+    if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+        return;
+    }
+    if (event.isComposing || props.matchCount === 0) return;
+    event.preventDefault();
+    emit('enter-matches');
+}
 
 const input = useTemplateRef<HTMLInputElement>('input');
 defineExpose({ input });

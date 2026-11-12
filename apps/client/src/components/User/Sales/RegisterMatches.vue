@@ -10,7 +10,8 @@
                 <span>Matching Items ({{ matches.length }})</span>
             </div>
             <span class="text-xs text-muted"
-                >Click an item, or pick with ↑/↓ and press Enter</span
+                >Click an item, or press ↓, move with the arrow keys and press
+                Enter</span
             >
         </div>
 
@@ -37,11 +38,17 @@
         <div
             v-else
             id="product-matches"
+            ref="listbox"
             role="listbox"
+            aria-label="Matching items"
+            aria-orientation="vertical"
             data-testid="search-matches"
             class="grid grid-cols-1 sm:grid-cols-2 gap-2 transition-opacity"
             :class="{ 'opacity-50': !settled }"
             :aria-busy="!settled"
+            @keydown="onKeydown"
+            @focusin="onFocusin"
+            @focusout="onFocusout"
         >
             <button
                 v-for="(m, i) in matches"
@@ -51,6 +58,8 @@
                 role="option"
                 data-testid="search-match"
                 :aria-selected="i === highlighted"
+                :tabindex="i === Math.max(highlighted, 0) ? 0 : -1"
+                :data-index="i"
                 :disabled="locked"
                 class="min-h-11 p-3 border rounded-card hover:border-leaf-600 transition-all flex items-center justify-between text-left group focus-ring"
                 :class="
@@ -82,10 +91,11 @@
 
 <script setup lang="ts">
 /** The register's live product matches under the scan box (#163). */
+import { useTemplateRef } from 'vue';
 import { AlertCircle, Search } from '@lucide/vue';
 import type { Match } from '@/components/User/Sales/product-search';
 
-defineProps<{
+const props = defineProps<{
     matches: readonly Match[];
     highlighted: number;
     settled: boolean;
@@ -93,5 +103,113 @@ defineProps<{
     term: string;
     locked: boolean;
 }>();
-const emit = defineEmits<{ select: [match: Match] }>();
+const emit = defineEmits<{
+    select: [match: Match];
+    /** The focused option's index, or -1 when the focus left the list. */
+    highlight: [index: number];
+    /** Back to the scan box: Escape, or ↑ from the top row. */
+    exit: [];
+}>();
+
+const listbox = useTemplateRef<HTMLElement>('listbox');
+
+function options(): HTMLButtonElement[] {
+    return [
+        ...(listbox.value?.querySelectorAll<HTMLButtonElement>(
+            '[role="option"]',
+        ) ?? []),
+    ];
+}
+
+/**
+ * How many columns the grid renders now (2 from sm, 1 below), read from
+ * the layout, so a changed breakpoint needs no change here.
+ */
+function columnCount(): number {
+    const el = listbox.value;
+    if (!el) return 1;
+    const tracks = getComputedStyle(el)
+        .gridTemplateColumns.trim()
+        .split(/\s+/)
+        .filter((t) => t && t !== 'none');
+    return Math.max(tracks.length, 1);
+}
+
+/** Moves the real focus to option `index` (roving tabindex, #322). */
+function focusOption(index: number) {
+    const target = options()[index];
+    if (!target) return;
+    target.focus();
+    target.scrollIntoView?.({ block: 'nearest' });
+}
+
+function indexOf(el: EventTarget | null): number {
+    if (!(el instanceof HTMLElement)) return -1;
+    const option = el.closest<HTMLElement>('[role="option"]');
+    return option ? Number(option.dataset.index) : -1;
+}
+
+/**
+ * The arrow keys move in their visual direction through the rendered
+ * grid, never wrapping; ↑ from the top row and Escape go back to the scan
+ * box (#322). Enter and Space add the focused match, like a click.
+ */
+function onKeydown(event: KeyboardEvent) {
+    if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+        return;
+    }
+    const from = indexOf(event.target);
+    if (from < 0) return;
+    const count = props.matches.length;
+    const cols = columnCount();
+    const col = from % cols;
+    let to = from;
+    switch (event.key) {
+        case 'ArrowRight':
+            if (col < cols - 1 && from + 1 < count) to = from + 1;
+            break;
+        case 'ArrowLeft':
+            if (col > 0) to = from - 1;
+            break;
+        case 'ArrowDown':
+            if (from + cols < count) to = from + cols;
+            break;
+        case 'ArrowUp':
+            if (from - cols < 0) {
+                event.preventDefault();
+                emit('exit');
+                return;
+            }
+            to = from - cols;
+            break;
+        case 'Escape':
+            event.preventDefault();
+            emit('exit');
+            return;
+        case 'Enter':
+        case ' ':
+            // Exactly a click; handled here so a held key adds once.
+            event.preventDefault();
+            if (event.repeat || props.locked) return;
+            if (props.matches[from]) emit('select', props.matches[from]);
+            return;
+        default:
+            return;
+    }
+    event.preventDefault();
+    if (to !== from) focusOption(to);
+}
+
+function onFocusin(event: FocusEvent) {
+    const index = indexOf(event.target);
+    if (index >= 0) emit('highlight', index);
+}
+
+function onFocusout(event: FocusEvent) {
+    const next = event.relatedTarget;
+    if (next instanceof Node && listbox.value?.contains(next)) return;
+    emit('highlight', -1);
+}
+
+defineExpose({ focusOption });
 </script>

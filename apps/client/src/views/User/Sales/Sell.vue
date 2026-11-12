@@ -116,14 +116,12 @@
                     :locked="isTicketLocked"
                     :qty-options="qtyOptions"
                     :match-count="search.matches.value.length"
-                    :highlighted="search.highlighted.value"
                     :next-scan-qty="nextScanQty"
                     :scan-feedback="scanFeedback"
                     @submit="onScanSubmit"
                     @multiplier-change="onMultiplierChange"
                     @search-change="onSearchChange"
-                    @move="search.move"
-                    @unhighlight="search.highlighted.value = -1"
+                    @enter-matches="matchesList?.focusOption(0)"
                     @clear="clearQuery"
                 />
             </div>
@@ -131,13 +129,16 @@
             <!-- Live matches -->
             <RegisterMatches
                 v-if="searchQuery.trim().length > 0"
+                ref="matchesList"
                 :matches="search.matches.value"
                 :highlighted="search.highlighted.value"
                 :settled="search.settled.value"
                 :error="search.error.value"
                 :term="searchTerm"
                 :locked="isTicketLocked"
-                @select="(m) => selectMatch(m, nextScanQty)"
+                @select="onMatchPicked"
+                @highlight="(i) => (search.highlighted.value = i)"
+                @exit="backToScanBox"
             />
 
             <!-- Ticket table -->
@@ -428,6 +429,9 @@ const shiftStore = useShiftStore();
 
 const scanBox = useTemplateRef<{ input: HTMLInputElement | null }>('scanBox');
 const scanInput = computed(() => scanBox.value?.input ?? null);
+const matchesList = useTemplateRef<{ focusOption: (index: number) => void }>(
+    'matchesList',
+);
 /** Side by side from lg up; below lg the tender panel is a sheet (#26). */
 const isLarge = useIsLarge();
 const tender = useTenderSheet(
@@ -899,6 +903,21 @@ function resetQuery(submitted: string) {
  * typing a number on it (e.g. "6") picks that entry directly.
  */
 function onMultiplierChange() {
+    scanInput.value?.focus();
+}
+
+/**
+ * A match clicked, or Enter/Space on the focused one (#322): it is added
+ * and the focus goes back to the scan box, as after a scan.
+ */
+function onMatchPicked(match: Match) {
+    scanInput.value?.focus();
+    void selectMatch(match, nextScanQty.value);
+}
+
+/** Escape, or ↑ from the top row of the matches: the text stays (#322). */
+function backToScanBox() {
+    search.highlighted.value = -1;
     scanInput.value?.focus();
 }
 

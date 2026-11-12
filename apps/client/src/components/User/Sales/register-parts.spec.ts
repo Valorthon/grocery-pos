@@ -34,8 +34,7 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
     const on = {
         submit: vi.fn(),
         searchChange: vi.fn(() => query.value),
-        move: vi.fn(),
-        unhighlight: vi.fn(),
+        enterMatches: vi.fn(),
         clear: vi.fn(),
         multiplierChange: vi.fn(),
     };
@@ -49,20 +48,19 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
             locked: false,
             qtyOptions: [1, 2, 3],
             matchCount: 2,
-            highlighted: 1,
             nextScanQty: 3,
             scanFeedback: { type: 'error', message: 'Nope' },
             onSubmit: on.submit,
             onSearchChange: on.searchChange,
-            onMove: on.move,
-            onUnhighlight: on.unhighlight,
+            onEnterMatches: on.enterMatches,
             onClear: on.clear,
             onMultiplierChange: on.multiplierChange,
         }),
     );
     const input = q<HTMLInputElement>('[data-testid="scan-input"]');
     expect(box.value?.input).toBe(input);
-    expect(input.getAttribute('aria-activedescendant')).toBe('product-match-1');
+    // Real focus moves into the matches (#322): no active descendant.
+    expect(input.hasAttribute('aria-activedescendant')).toBe(false);
     expect(input.getAttribute('aria-expanded')).toBe('true');
     expect(q('[data-testid="multiplier-badge"]').textContent).toContain('×3');
     expect(q('[data-testid="scan-alert"]').textContent).toContain('Nope');
@@ -74,11 +72,19 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
     await nextTick();
     expect(input.className).toContain('pr-43');
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(on.move.mock.calls).toEqual([[1], [-1]]);
-    expect(on.unhighlight).toHaveBeenCalledOnce();
+    const down = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        cancelable: true,
+    });
+    input.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    // ↑, ←, → stay the text cursor's.
+    for (const key of ['ArrowUp', 'ArrowLeft', 'ArrowRight']) {
+        const event = new KeyboardEvent('keydown', { key, cancelable: true });
+        input.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+    }
+    expect(on.enterMatches).toHaveBeenCalledOnce();
 
     q<HTMLButtonElement>('[aria-label="Clear search"]').click();
     expect(on.clear).toHaveBeenCalledOnce();

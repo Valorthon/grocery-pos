@@ -122,6 +122,18 @@ async function key(name: string) {
     await flush();
 }
 
+/** A key on whatever has the focus (a match, after ↓ from the box). */
+async function keyOnFocus(name: string) {
+    (document.activeElement ?? document.body).dispatchEvent(
+        new KeyboardEvent('keydown', {
+            key: name,
+            bubbles: true,
+            cancelable: true,
+        }),
+    );
+    await flush();
+}
+
 async function pressEnter() {
     input().form!.dispatchEvent(new Event('submit', { cancelable: true }));
     await flush();
@@ -148,8 +160,8 @@ describe('Sell register search', () => {
         ).toHaveLength(2);
 
         await key('ArrowDown');
-        await key('ArrowDown');
-        await pressEnter();
+        await keyOnFocus('ArrowDown');
+        await keyOnFocus('Enter');
 
         expect(cartNames()).toEqual(['1x mints']);
         expect(get).not.toHaveBeenCalledWith('/products/mi');
@@ -1395,7 +1407,7 @@ describe('Sell match list (#22 follow-up)', () => {
             mount();
             await type('mi');
             await key('ArrowDown');
-            await key('ArrowDown');
+            await keyOnFocus('ArrowDown');
             expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
             expect(scroll.mock.contexts[scroll.mock.contexts.length - 1]).toBe(
                 document.getElementById('product-match-1'),
@@ -1403,6 +1415,127 @@ describe('Sell match list (#22 follow-up)', () => {
         } finally {
             delete (Element.prototype as Partial<Element>).scrollIntoView;
         }
+    });
+});
+
+describe('Sell match grid keys (#322)', () => {
+    const GRID = [
+        MILK,
+        MINTS,
+        { product: 'p3', EAN: '2000000000039', name: 'mixed nuts' },
+        { product: 'p4', EAN: '2000000000046', name: 'mild salsa' },
+        { product: 'p5', EAN: '2000000000053', name: 'mirin' },
+    ];
+
+    const options = () => [
+        ...document.querySelectorAll<HTMLButtonElement>(
+            '[data-testid="search-match"]',
+        ),
+    ];
+    const focused = () => options().indexOf(document.activeElement as never);
+
+    /** Lists five matches, laid out in `columns` columns. */
+    async function listed(columns: 1 | 2) {
+        serve(() => Promise.resolve(GRID));
+        mount();
+        await type('mi');
+        // jsdom has no stylesheet: give the grid its rendered tracks.
+        document.querySelector<HTMLElement>(
+            '[data-testid="search-matches"]',
+        )!.style.gridTemplateColumns = columns === 2 ? '1fr 1fr' : '1fr';
+        await key('ArrowDown');
+    }
+
+    it('↓ from the box puts the real focus on the first match', async () => {
+        await listed(2);
+        expect(focused()).toBe(0);
+        expect(options()[0].getAttribute('aria-selected')).toBe('true');
+        expect(options().map((o) => o.tabIndex)).toEqual([0, -1, -1, -1, -1]);
+    });
+
+    it('moves by visual direction in two columns, and ↑ from the top row returns to the box', async () => {
+        await listed(2);
+        await keyOnFocus('ArrowRight');
+        expect(focused()).toBe(1);
+        expect(options()[1].getAttribute('aria-selected')).toBe('true');
+        expect(options()[0].getAttribute('aria-selected')).toBe('false');
+        await keyOnFocus('ArrowLeft');
+        expect(focused()).toBe(0);
+        await keyOnFocus('ArrowDown');
+        expect(focused()).toBe(2);
+        await keyOnFocus('ArrowUp');
+        expect(focused()).toBe(0);
+        await keyOnFocus('ArrowUp');
+        expect(document.activeElement).toBe(input());
+        expect(input().value).toBe('mi');
+        expect(options().every((o) => o.ariaSelected !== 'true')).toBe(true);
+    });
+
+    it('does not wrap at the edges', async () => {
+        await listed(2);
+        await keyOnFocus('ArrowLeft');
+        expect(focused()).toBe(0);
+        await keyOnFocus('ArrowRight');
+        await keyOnFocus('ArrowRight');
+        expect(focused()).toBe(1);
+        await keyOnFocus('ArrowDown');
+        await keyOnFocus('ArrowDown');
+        expect(focused()).toBe(3);
+        await keyOnFocus('ArrowLeft');
+        await keyOnFocus('ArrowDown');
+        expect(focused()).toBe(4);
+        await keyOnFocus('ArrowRight');
+        await keyOnFocus('ArrowDown');
+        expect(focused()).toBe(4);
+    });
+
+    it('steps by one in one column, where ← and → do nothing', async () => {
+        await listed(1);
+        await keyOnFocus('ArrowDown');
+        expect(focused()).toBe(1);
+        await keyOnFocus('ArrowRight');
+        await keyOnFocus('ArrowLeft');
+        expect(focused()).toBe(1);
+        await keyOnFocus('ArrowUp');
+        await keyOnFocus('ArrowUp');
+        expect(document.activeElement).toBe(input());
+    });
+
+    it('Enter adds the focused match and the focus returns to the box', async () => {
+        await listed(2);
+        await keyOnFocus('ArrowRight');
+        await keyOnFocus('Enter');
+        expect(cartNames()).toEqual(['1x mints']);
+        expect(document.activeElement).toBe(input());
+        expect(input().value).toBe('');
+    });
+
+    it('Escape returns to the box and keeps the text', async () => {
+        await listed(2);
+        await keyOnFocus('ArrowDown');
+        await keyOnFocus('Escape');
+        expect(document.activeElement).toBe(input());
+        expect(input().value).toBe('mi');
+        // Nothing stays highlighted for the box's Enter.
+        await pressEnter();
+        expect(cartNames()).toEqual([]);
+    });
+
+    it('Delete on a match removes no line; F2 and a typed key go back to the box', async () => {
+        await listed(2);
+        await keyOnFocus('Enter');
+        expect(cartNames()).toEqual(['1x milk']);
+        await type('mi');
+        await key('ArrowDown');
+        expect(focused()).toBe(0);
+        await keyOnFocus('Delete');
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(focused()).toBe(0);
+        await keyOnFocus('F2');
+        expect(document.activeElement).toBe(input());
+        await key('ArrowDown');
+        await keyOnFocus('2');
+        expect(document.activeElement).toBe(input());
     });
 });
 

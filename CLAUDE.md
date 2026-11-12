@@ -740,6 +740,15 @@ requestId}`. A 5xx never carries details or internals.
 - Keys (`useRegisterShortcuts`): F2 scan box, F4 selected line's quantity,
   F8 discount, F9 Tender & Charge. F5 is never bound. Keys are off while a
   modal is open (except the tender sheet).
+- Product matches (#322): ↓ in the scan box moves the real focus to the
+  first match (←/→/↑ stay the text cursor's). In the matches the arrows
+  move by visual direction over the rendered column count (read from the
+  grid's `gridTemplateColumns`: 2 from `sm`, 1 below, where ←/→ do
+  nothing), never wrapping; ↑ from the top row and Escape go back to the
+  box with the text kept. Enter/Space add the focused match, then the box
+  has the focus. Listbox with roving `tabindex` and `aria-selected`
+  following focus; the box has no `aria-activedescendant`. Delete never
+  removes a line from a match; a typed key/scan goes to the box.
 - Delete (#85) removes the focused ticket line, or, from the scan box
   while it is empty, the highlighted line (the one just scanned or
   selected; else the last line). With text in the box (or mid-IME
