@@ -2,8 +2,9 @@
     <BaseDropdown
         ref="dropdown"
         v-model="open"
-        align="right"
+        :align="variant === 'bar' ? 'right' : 'left'"
         width-class="w-64"
+        floating
     >
         <template #trigger="{ trigger }">
             <button

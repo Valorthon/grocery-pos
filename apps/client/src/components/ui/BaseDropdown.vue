@@ -31,7 +31,8 @@
                     ref="menuRef"
                     role="menu"
                     :class="[
-                        'z-50 rounded-card bg-surface shadow-overlay border border-line p-1.5',
+                        'rounded-card bg-surface shadow-overlay border border-line p-1.5',
+                        floating && inModal ? 'z-[60]' : 'z-50',
                         floating
                             ? 'fixed'
                             : [
@@ -42,6 +43,7 @@
                     ]"
                     :style="floating ? floatingStyle : undefined"
                     :data-placement="floating ? placement : undefined"
+                    :data-inert-exempt="floating && inModal ? '' : undefined"
                     @click="onMenuClick"
                     @keydown="floating ? onKeydown($event) : undefined"
                     @focusout="floating ? onFocusOut($event) : undefined"
@@ -76,6 +78,12 @@ import {
  * - A click on an item (a button, link or `role="menuitem"`) closes it; a
  *   click elsewhere inside the panel does not. A click outside, or Tab
  *   out of it, closes it too.
+ * - `floating`: Tab in the teleported panel closes it and puts the focus
+ *   on the trigger without preventing the key, so the focus moves on
+ *   from it; Shift+Tab closes it onto the trigger. The panel is aligned to the
+ *   trigger and kept 8px inside the viewport. Opened from inside an open
+ *   modal (checked at open), it is exempt from the modal stack's inert
+ *   background and focus trap and stacks above the modal (#298).
  */
 const props = withDefaults(
     defineProps<{
@@ -85,7 +93,9 @@ const props = withDefaults(
         /**
          * Teleport the panel to the body with fixed positioning, flipped
          * above the trigger when there is no room below (#172): for menus
-         * inside a scrolling/clipping box such as a table.
+         * inside a scrolling/clipping box such as a table. Needs a fixed
+         * `widthClass` (e.g. `w-56`): the panel is placed and clamped from
+         * its width. A scroll or resize that hides the trigger closes it.
          */
         floating?: boolean;
     }>(),
@@ -109,6 +119,44 @@ const FOCUSABLE_ITEM = ':is([role="menuitem"], button, a[href]):not(:disabled)';
 const placement = ref<'below' | 'above'>('below');
 const floatingStyle = ref<Record<string, string>>({});
 const GAP = 8;
+/** The floating panel's least distance from the viewport's sides (#298). */
+const MARGIN = 8;
+/**
+ * Checked when the menu opens: the trigger sits in an open modal (a drawer
+ * below lg, #298). The teleported panel is then a sibling of that modal
+ * under <body>, so it is exempt from the modal stack's inert background
+ * and focus trap, and stacks above it (z-[60], as the toasts).
+ */
+const inModal = ref(false);
+
+/**
+ * On scroll/resize: closes the menu, without moving the focus, once the
+ * trigger is gone (inert, hidden or entirely off-screen); else re-places it.
+ */
+function reposition() {
+    const trigger = triggerEl();
+    if (!trigger || !triggerVisible(trigger)) {
+        close();
+        return;
+    }
+    place();
+}
+
+function triggerVisible(trigger: HTMLElement): boolean {
+    if (trigger.closest('[inert]')) return false;
+    if (
+        typeof trigger.checkVisibility === 'function' &&
+        !trigger.checkVisibility()
+    )
+        return false;
+    const box = trigger.getBoundingClientRect();
+    return (
+        box.bottom > 0 &&
+        box.right > 0 &&
+        box.top < window.innerHeight &&
+        box.left < document.documentElement.clientWidth
+    );
+}
 
 /** Places the floating panel from the trigger's box; flips up if needed. */
 function place() {
@@ -123,9 +171,12 @@ function place() {
     const style: Record<string, string> = up
         ? { bottom: `${window.innerHeight - box.top + GAP}px` }
         : { top: `${box.bottom + GAP}px` };
-    if (props.align === 'right')
-        style.right = `${document.documentElement.clientWidth - box.right}px`;
-    else style.left = `${box.left}px`;
+    // Aligned to the trigger's edge, then kept MARGIN inside the viewport.
+    const width = menu.offsetWidth;
+    const viewport = document.documentElement.clientWidth;
+    const wanted = props.align === 'right' ? box.right - width : box.left;
+    const left = Math.max(MARGIN, Math.min(wanted, viewport - width - MARGIN));
+    style.left = `${left}px`;
     floatingStyle.value = style;
 }
 
@@ -138,13 +189,14 @@ watch(
     async (open) => {
         if (!props.floating) return;
         if (open) {
+            inModal.value = !!triggerEl()?.closest('[aria-modal="true"]');
             await nextTick();
             place();
-            window.addEventListener('scroll', place, true);
-            window.addEventListener('resize', place);
+            window.addEventListener('scroll', reposition, true);
+            window.addEventListener('resize', reposition);
         } else {
-            window.removeEventListener('scroll', place, true);
-            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
         }
     },
 );
@@ -214,6 +266,19 @@ function move(delta: number) {
 function onKeydown(event: KeyboardEvent) {
     const onTrigger = event.target === triggerEl();
     switch (event.key) {
+        case 'Tab':
+            if (
+                props.floating &&
+                props.modelValue &&
+                event.target instanceof Node &&
+                !!menuRef.value?.contains(event.target)
+            ) {
+                close();
+                // Shift+Tab lands on the trigger itself; Tab moves on from it.
+                if (event.shiftKey) event.preventDefault();
+                triggerEl()?.focus();
+            }
+            return;
         case 'Escape':
             if (!props.modelValue) return;
             event.preventDefault();
@@ -264,7 +329,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     document.removeEventListener('mousedown', onClickOutside);
-    window.removeEventListener('scroll', place, true);
-    window.removeEventListener('resize', place);
+    window.removeEventListener('scroll', reposition, true);
+    window.removeEventListener('resize', reposition);
 });
 </script>
