@@ -9,6 +9,13 @@ import {
 import { COUNTS_INVALID } from '@/components/User/Sales/shift';
 import ShiftsIndex from './Index.vue';
 
+function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}
+
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 
@@ -99,6 +106,7 @@ describe('Shifts admin force-close (issue #25)', () => {
 
         expect(api.post).not.toHaveBeenCalled();
         expect(errorText()).toContain(COUNTS_INVALID);
+        expect(inFooter('force-close-error')).toBe(true);
         expect(
             document
                 .querySelector('[data-testid="force-close-error"]')

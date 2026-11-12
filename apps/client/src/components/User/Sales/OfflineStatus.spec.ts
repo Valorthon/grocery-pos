@@ -2,6 +2,14 @@ import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
 import OfflineStatus from './OfflineStatus.vue';
+
+function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}
+
 const mock = vi.hoisted(() => ({
     status: null as unknown,
     auth: { user: { userId: 'seller', roles: ['SELLER'] } },
@@ -157,6 +165,7 @@ it.each([new Error('Server unavailable'), 'unexpected error'])(
         expect(document.body.textContent).toContain(
             failure instanceof Error ? failure.message : 'sale is kept',
         );
+        expect(inFooter('offline-pending-error')).toBe(true);
         expect(status.pending).toHaveLength(1);
     },
 );

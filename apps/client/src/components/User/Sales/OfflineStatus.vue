@@ -46,6 +46,8 @@
     </div>
     <BaseModal
         v-model="status.pendingOpen"
+        :error="failure"
+        error-testid="offline-pending-error"
         title="Pending offline cash sales"
         max-width="40rem"
         scrollable
@@ -94,9 +96,14 @@
                 </button>
             </template>
         </div>
-        <p v-if="failure" role="alert" class="text-sm text-red-800">
-            {{ failure }}
-        </p>
+        <template #footer>
+            <BaseButton
+                variant="outline"
+                data-testid="offline-pending-close"
+                @click="status.pendingOpen = false"
+                >Close</BaseButton
+            >
+        </template>
     </BaseModal>
 </template>
 <script setup lang="ts">
@@ -110,6 +117,7 @@ import {
     type OfflinePendingSale,
 } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
 const status = useOfflineStore();
 const auth = useAuthStore();

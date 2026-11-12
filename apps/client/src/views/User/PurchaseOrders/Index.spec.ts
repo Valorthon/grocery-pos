@@ -28,6 +28,13 @@ import { anyModalOpen } from '@/components/ui/modal-stack';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { ErrorCode } from '@grocery-pos/contracts';
 
+function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}
+
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 const nav = vi.hoisted(() => ({
@@ -570,6 +577,7 @@ describe('Purchase order list and receipts (#123)', () => {
         expect(document.body.textContent).toContain(
             'Enter a received quantity on at least one line.',
         );
+        expect(inFooter('receive-error')).toBe(true);
         await type('Received (pc)', '1');
         await type('Actual unit cost', '1.50');
         expect(document.body.textContent).toContain('variance +₱0.50');

@@ -453,6 +453,8 @@
             />
             <BaseModal
                 v-model="receiving"
+                :error="receiveError"
+                error-testid="receive-error"
                 title="Receive purchase order"
                 :closable="!busy"
                 max-width="48rem"
@@ -531,13 +533,6 @@
                         :maxlength="STRING_LIMITS.DESCRIPTION"
                         :disabled="busy"
                     />
-                    <p
-                        v-if="receiveError"
-                        role="alert"
-                        class="text-sm text-danger-fg"
-                    >
-                        {{ receiveError }}
-                    </p>
                 </div>
                 <template #footer>
                     <BaseButton

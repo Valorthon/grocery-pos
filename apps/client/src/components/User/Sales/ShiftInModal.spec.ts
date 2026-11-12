@@ -6,6 +6,13 @@ import { useShiftStore } from '@/stores/shift';
 import ShiftInModal from './ShiftInModal.vue';
 import { COUNTED_TOO_MUCH, COUNTS_INVALID, FLOAT_REQUIRED } from './shift';
 
+function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}
+
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 const router = vi.hoisted(() => ({ push: vi.fn() }));
@@ -77,6 +84,7 @@ describe('ShiftInModal (issue #25)', () => {
         await submit();
 
         expect(errorText()).toContain(FLOAT_REQUIRED);
+        expect(inFooter('shift-in-error')).toBe(true);
         expect(api.post).not.toHaveBeenCalled();
         expect(shift.shiftInOpen).toBe(true);
     });

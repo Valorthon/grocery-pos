@@ -3,6 +3,13 @@ import { type App, createApp, h, nextTick, ref } from 'vue';
 import { type PaymentRequest, PaymentType } from '@grocery-pos/contracts';
 import CheckoutModal from './CheckoutModal.vue';
 
+function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}
+
 const TOTAL = 45000;
 
 let app: App | null = null;
@@ -244,6 +251,7 @@ describe('CheckoutModal', () => {
             await flush();
 
             expect(errorText()).toContain('Could not record the sale');
+            expect(inFooter('checkout-error')).toBe(true);
             expect(document.activeElement).toBe(amountInput());
         });
     });

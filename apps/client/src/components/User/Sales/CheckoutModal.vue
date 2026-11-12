@@ -1,6 +1,8 @@
 <template>
     <BaseModal
         v-model="model"
+        :error="error"
+        error-testid="checkout-error"
         title="Complete Payment"
         subtitle="Select tender method or split payment across Cash & GCash"
         max-width="34rem"
@@ -359,16 +361,6 @@
             </div>
         </fieldset>
 
-        <div
-            v-if="error"
-            role="alert"
-            class="mt-4 p-3 rounded-control border border-danger-border bg-danger-bg text-xs font-semibold text-danger-fg flex items-start gap-2"
-            data-testid="checkout-error"
-        >
-            <AlertCircle class="w-4 h-4 shrink-0 mt-px" />
-            <span>{{ error }}</span>
-        </div>
-
         <template #footer>
             <BaseButton
                 variant="outline"
@@ -411,7 +403,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
-import { AlertCircle, Banknote, QrCode, Split } from '@lucide/vue';
+import { Banknote, QrCode, Split } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import KeyHint from '@/components/ui/KeyHint.vue';

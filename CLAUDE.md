@@ -589,6 +589,11 @@ requestId}`. A 5xx never carries details or internals.
   (`justify-end`), Cancel then the primary action, with no `flex-1`
   buttons, in every dialog using it (Restock Add and the PO receive dialog included); only Receipt and Z-read keep
   full-width `flex-1` buttons and DateRangeFilter its `ml-auto` Done.
+  A submit or server error goes in `BaseModal`'s `error` prop (with
+  `errorTestid`), a full-width `role=alert` danger row pinned in the
+  footer above the buttons, height-capped so the body still scrolls
+  (#321): Shift In/Out, Checkout, force-close, PO Receive and Pending
+  offline cash sales use it. Field errors stay inline; toasts stay toasts.
 - Edit Product (#282) groups Details, Pricing (ADMIN only, the
   latest-receipt summary beside the price) and Stock planning under a
   header of barcode, unit badge (unit can't change) and status (display

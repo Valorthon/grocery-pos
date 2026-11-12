@@ -19,6 +19,13 @@ import {
     offlinePendingText,
 } from './shift';
 
+function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}
+
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
 
@@ -141,6 +148,7 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
             document.querySelector('[data-testid="shift-out-error"]')
                 ?.textContent,
         ).toContain('Choose');
+        expect(inFooter('shift-out-error')).toBe(true);
         const carry = document.querySelector<HTMLInputElement>(
             'input[value="carry"]',
         )!;
