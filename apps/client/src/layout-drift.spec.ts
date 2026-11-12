@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { draftTable } from '@/components/ui/draft-table';
 
 /**
  * Source checks for issue #26, like the other drift specs: they fail the
@@ -333,6 +334,44 @@ describe('row actions drift (#311)', () => {
         expect(
             arrays.filter(({ keys }) => keys[keys.length - 1] !== 'actions'),
         ).toEqual([]);
+    });
+
+    /** #317: the ⋯ or icon sits flush right under the right-aligned header. */
+    it('right-aligns every row-actions control in its cell (#317)', () => {
+        const file = (end: string) =>
+            Object.entries(sources).find(([f]) => f.endsWith(end))?.[1] ?? '';
+        // RowActions: the dropdown root is a flex row pushed right.
+        expect(file('/components/ui/RowActions.vue')).toMatch(
+            /<BaseDropdown[^>]*class="flex justify-end"/,
+        );
+        // DraftRowActions: its root row is pushed right too.
+        expect(file('/components/ui/DraftRowActions.vue')).toMatch(
+            /^<template>\s*<div class="flex justify-end/,
+        );
+        expect(draftTable.tdActions).toMatch(/\btext-right\b/);
+        expect(draftTable.thNum).toMatch(/\btext-right\b/);
+        // Every draft table: the actions cell is tdActions, the header thNum.
+        const users = Object.entries(sources).filter(
+            ([f, text]) =>
+                f.endsWith('.vue') && /<DraftRowActions\b/.test(text),
+        );
+        expect(users.length).toBeGreaterThanOrEqual(4);
+        for (const [f, text] of users) {
+            const cells = [
+                ...text.matchAll(/<td([^>]*)>\s*<DraftRowActions\b/g),
+            ].map((m) => m[1]);
+            const all = text.match(/<DraftRowActions\b/g)?.length ?? 0;
+            expect({ f, cells: cells.length }).toEqual({ f, cells: all });
+            for (const attrs of cells)
+                expect({ f, attrs }).toEqual({
+                    f,
+                    attrs: ' :class="draftTable.tdActions"',
+                });
+            expect({
+                f,
+                th: /:class="draftTable\.thNum"\s*>\s*Actions\s*</.test(text),
+            }).toEqual({ f, th: true });
+        }
     });
 
     it('has no RowOpenButton left', () => {
