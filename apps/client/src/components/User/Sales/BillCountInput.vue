@@ -1,9 +1,9 @@
 <template>
     <div class="space-y-5">
-        <div class="flex justify-end -mb-3">
+        <div class="flex justify-end" data-testid="count-clear-all-row">
             <button
                 type="button"
-                class="text-xs font-bold text-muted hover:text-ink hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
+                class="inline-flex items-center min-h-11 min-w-11 px-2 text-xs font-bold text-muted hover:text-ink hover:underline underline-offset-2 disabled:opacity-40 disabled:no-underline"
                 data-testid="count-clear-all"
                 :disabled="!hasAnything"
                 @click="clearAll"
