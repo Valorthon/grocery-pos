@@ -60,6 +60,7 @@ export class AppError extends Error {
             case ErrorCode.USER_LAST_ADMIN:
             case ErrorCode.USER_WRONG_PASSWORD:
             case ErrorCode.USER_SELF_DEACTIVATE:
+            case ErrorCode.USER_REAUTH_REQUIRED:
             case ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN:
                 return HttpStatus.FORBIDDEN;
             case ErrorCode.VALIDATION_INVALID_INPUT:

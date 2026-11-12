@@ -233,6 +233,11 @@
     </BaseModal>
 
     <SetManagerPinDialog :user="pinUser" @close="pinUser = null" />
+    <ReauthDialog
+        :model-value="isReauthOpen"
+        @confirmed="completeReauth"
+        @cancel="cancelReauth"
+    />
     <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
 </template>
 
@@ -254,6 +259,8 @@ import RoleCards from './RoleCards.vue';
 import { roleLabel } from '../role-look';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import SetManagerPinDialog from '@/components/User/SetManagerPinDialog.vue';
+import ReauthDialog from '@/components/User/Account/ReauthDialog.vue';
+import { isReauthCancelled, useReauth } from '@/composables/useReauth';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     fieldErrors,
@@ -294,6 +301,8 @@ const pinUser = ref<UserView | null>(null);
 
 const uiStore = useUIStore();
 const saving = ref(false);
+// Step-up (#310): a guarded save asks for the own password, then retries.
+const { isReauthOpen, withReauth, completeReauth, cancelReauth } = useReauth();
 
 const authStore = useAuthStore();
 const myRoles = computed(() => authStore.user?.roles ?? []);
@@ -474,7 +483,7 @@ async function createUser() {
     if (Object.keys(createErrors.value).length) return;
     saving.value = true;
     try {
-        await api.post('/users', {
+        const body = {
             users: [
                 {
                     name: createForm.value.name,
@@ -482,12 +491,15 @@ async function createUser() {
                     roles: createForm.value.roles,
                 },
             ],
-        } satisfies CreateUsersRequest);
+        } satisfies CreateUsersRequest;
+        await withReauth(() => api.post('/users', body));
         uiStore.queueMessage(Color.SUCCESS, 'User created');
         isCreateOpen.value = false;
         createForm.value = { name: '', password: '', roles: [] };
         void fetchUsers();
     } catch (error) {
+        // Cancelled "Confirm it's you": nothing saved, the form stays.
+        if (isReauthCancelled(error)) return;
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(error, 'Could not create the user.'),
@@ -558,9 +570,10 @@ async function updateUser() {
             update.password = editForm.value.password;
         }
 
-        await api.patch('/users', {
+        const body = {
             updates: [{ user: editForm.value._id, update }],
-        } satisfies UpdateUsersRequest);
+        } satisfies UpdateUsersRequest;
+        await withReauth(() => api.patch('/users', body));
         // A rename keeps the session; the app bar shows the new name now,
         // and the refreshed token carries it to the server's copies.
         if (renaming && self) void authStore.renameSelf(name);
@@ -568,6 +581,7 @@ async function updateUser() {
         isEditOpen.value = false;
         void fetchUsers();
     } catch (error) {
+        if (isReauthCancelled(error)) return;
         // The new name is taken: the duplicate key names `name`.
         if (renaming && isDuplicateName(error)) {
             editErrors.value = { name: 'This username is already taken' };

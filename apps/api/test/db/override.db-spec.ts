@@ -29,6 +29,7 @@ import {
     cashSale,
     openShift,
     read,
+    grantStepUp,
     seedProduct,
     stockOf,
     type DbApp,
@@ -68,6 +69,7 @@ beforeEach(async () => {
     await ensureApprovalFixtures(db, seller);
     await openShift(db, seller);
     product = await seedProduct(db, 1000, 10);
+    await grantStepUp(db, admin);
 });
 async function issueDiscount(body = discounted()) {
     const headers = await discountApprovalHeaders(db, seller, body);

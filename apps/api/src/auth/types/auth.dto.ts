@@ -1,6 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
-import type { LoginRequest } from '@grocery-pos/contracts';
+import type { LoginRequest, ReauthRequest } from '@grocery-pos/contracts';
 import { STRING_LIMITS } from '../../constants';
 
 export class LoginDto implements LoginRequest {
@@ -14,6 +14,14 @@ export class LoginDto implements LoginRequest {
     )
     username!: string;
 
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(STRING_LIMITS.PASSWORD)
+    password!: string;
+}
+
+/** `POST /auth/reauth` (#310). A password field: no trim transform. */
+export class ReauthDto implements ReauthRequest {
     @IsString()
     @IsNotEmpty()
     @MaxLength(STRING_LIMITS.PASSWORD)

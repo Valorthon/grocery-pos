@@ -1,4 +1,4 @@
-import { seedSupplier } from './db-app';
+import { grantStepUp, seedSupplier } from './db-app';
 import { approvalHeaders, discountApprovalHeaders } from './approval-fixtures';
 import {
     OverrideAction,
@@ -448,6 +448,7 @@ beforeAll(async () => {
     // An account with a real password, to log in with.
     const name = `cashier-${randomUUID().slice(0, 8)}`;
     const password = 'a-long-password';
+    await grantStepUp(db, admin);
     await post(admin, '/users', {
         users: [{ name, password, roles: [Role.Seller] }],
     });

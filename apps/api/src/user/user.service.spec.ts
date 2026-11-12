@@ -15,16 +15,20 @@ jest.mock('argon2', () =>
         .cheapArgon2(),
 );
 import { UserService } from './user.service';
+import { StepUpService } from '../auth/step-up/step-up.service';
 import { User, UserSchema } from './user.schema';
 import { Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
-import { AppError, ErrorCode } from '../common/errors';
+import { AppError, ErrorCode, ForbiddenError } from '../common/errors';
 import { UpdateBulkDto } from './types';
 import {
     FakeUserModel,
     FakeUserRow,
     fakeConnection,
 } from './testing/fake-user-model';
+
+const stepUp = { assertLive: jest.fn().mockResolvedValue(undefined) };
+beforeEach(() => stepUp.assertLive.mockClear());
 
 const as = (row: FakeUserRow, roles = row.roles): AuthUser => ({
     userId: row._id.toString(),
@@ -64,6 +68,7 @@ describe('UserService', () => {
                     },
                 },
                 UserService,
+                { provide: StepUpService, useValue: stepUp },
                 {
                     provide: getConnectionToken(),
                     useValue: fakeConnection(model),
@@ -77,6 +82,96 @@ describe('UserService', () => {
 
     const update = (actor: AuthUser, updates: UpdateBulkDto['updates']) =>
         service.update(actor, { updates });
+
+    describe('step-up (#310)', () => {
+        const refuse = () =>
+            stepUp.assertLive.mockRejectedValueOnce(
+                new ForbiddenError(ErrorCode.USER_REAUTH_REQUIRED, 'x'),
+            );
+
+        it.each([
+            ['a rename', { name: 'till1' }],
+            ['unchanged roles', { roles: [Role.Seller] }],
+            ['isActive: true on an active user', { isActive: true }],
+        ])('%s needs no step-up', async (_, change) => {
+            await update(as(admin), [
+                { user: cashier._id.toString(), update: change },
+            ]);
+            expect(stepUp.assertLive).not.toHaveBeenCalled();
+        });
+
+        it('reactivation needs no step-up', async () => {
+            model.byId(cashier._id)!.isActive = false;
+            await update(as(admin), [
+                { user: cashier._id.toString(), update: { isActive: true } },
+            ]);
+            expect(stepUp.assertLive).not.toHaveBeenCalled();
+        });
+
+        it.each([
+            ['a password reset', { password: 'new-secret' }],
+            ['a role change', { roles: [Role.Seller, Role.Adjuster] }],
+            ['a deactivation', { isActive: false }],
+        ])(
+            '%s is refused without a step-up and changes nothing',
+            async (_, change) => {
+                refuse();
+                const before = JSON.stringify(model.byId(cashier._id));
+                const err = await rejection(
+                    update(as(admin), [
+                        {
+                            user: manager._id.toString(),
+                            update: { name: 'm2' },
+                        },
+                        { user: cashier._id.toString(), update: change },
+                    ]),
+                );
+                expect(err).toEqual({
+                    status: 403,
+                    code: ErrorCode.USER_REAUTH_REQUIRED,
+                });
+                expect(JSON.stringify(model.byId(cashier._id))).toBe(before);
+                expect(model.byId(manager._id)?.name).toBe('manager');
+            },
+        );
+
+        it('creating a user always needs a step-up', async () => {
+            refuse();
+            const err = await rejection(
+                service.create(as(admin), {
+                    users: [
+                        {
+                            name: 'new',
+                            password: 'password1',
+                            roles: [Role.Seller],
+                        },
+                    ],
+                }),
+            );
+            expect(err.code).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+        });
+    });
+
+    describe('verifyOwnPassword', () => {
+        it('returns the name on the right password, null otherwise', async () => {
+            const id = cashier._id.toString();
+            const hash = await argon.hash('right-pass');
+            model.byId(cashier._id)!.passwordHash = hash;
+            await expect(
+                service.verifyOwnPassword(id, 'right-pass'),
+            ).resolves.toEqual({ name: 'cashier' });
+            await expect(
+                service.verifyOwnPassword(id, 'wrong-pass'),
+            ).resolves.toBeNull();
+            model.byId(cashier._id)!.isActive = false;
+            await expect(
+                service.verifyOwnPassword(id, 'right-pass'),
+            ).resolves.toBeNull();
+            await expect(
+                service.verifyOwnPassword('nope', 'right-pass'),
+            ).resolves.toBeNull();
+        });
+    });
 
     describe('update', () => {
         it('applies each entry with updateOne + runValidators, never bulkWrite', async () => {
@@ -471,6 +566,7 @@ describe('UserService.checkCredentials (no enumeration, #12)', () => {
                     },
                 },
                 UserService,
+                { provide: StepUpService, useValue: stepUp },
                 {
                     provide: getConnectionToken(),
                     useValue: fakeConnection(model),
@@ -537,6 +633,7 @@ describe('UserService argon2 parameters (#109)', () => {
                     },
                 },
                 UserService,
+                { provide: StepUpService, useValue: stepUp },
                 {
                     provide: getConnectionToken(),
                     useValue: fakeConnection(model),
@@ -612,6 +709,7 @@ describe('UserService.getAll count (issue #16)', () => {
                     },
                 },
                 UserService,
+                { provide: StepUpService, useValue: stepUp },
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(User.name), useValue: model },
             ],

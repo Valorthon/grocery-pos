@@ -25,6 +25,11 @@
                 {{ error }}
             </p>
             <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
+            <ReauthDialog
+                :model-value="isReauthOpen"
+                @confirmed="completeReauth"
+                @cancel="cancelReauth"
+            />
         </div>
         <template #footer>
             <BaseButton
@@ -45,6 +50,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import ReauthDialog from '@/components/User/Account/ReauthDialog.vue';
+import { isReauthCancelled, useReauth } from '@/composables/useReauth';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     OVERRIDE_PIN_LENGTH,
@@ -68,6 +75,8 @@ const pin = ref('');
 const saving = ref(false);
 const error = ref('');
 const ui = useUIStore();
+// Setting, resetting or removing a PIN needs a step-up (#310).
+const { isReauthOpen, withReauth, completeReauth, cancelReauth } = useReauth();
 const valid = computed(() => !saving.value && /^[0-9]{6}$/.test(pin.value));
 watch(
     () => props.user,
@@ -95,9 +104,9 @@ async function save(value: string | null) {
         return;
     saving.value = true;
     try {
-        await api.patch(`/users/${props.user._id}/override-pin`, {
-            pin: value,
-        } satisfies SetOverridePinRequest);
+        const url = `/users/${props.user._id}/override-pin`;
+        const body = { pin: value } satisfies SetOverridePinRequest;
+        await withReauth(() => api.patch(url, body));
         pin.value = '';
         ui.queueMessage(
             Color.SUCCESS,
@@ -105,6 +114,7 @@ async function save(value: string | null) {
         );
         emit('close');
     } catch (err) {
+        if (isReauthCancelled(err)) return;
         error.value = apiErrorText(err, 'Could not update manager PIN');
     } finally {
         saving.value = false;

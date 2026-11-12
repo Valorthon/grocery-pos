@@ -10,6 +10,8 @@ import { AppError, ErrorCode } from '../../common/errors';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { Model } from 'mongoose';
 import { RefreshToken } from './refresh-token.schema';
+import type { StepUp } from '../step-up/step-up.schema';
+import { FakeStepUpModel } from '../step-up/testing/fake-step-up-model';
 
 const config = {
     get: (key: string) => (key === 'REFRESH_EXPIRY_S' ? 86_400 : undefined),
@@ -26,14 +28,17 @@ async function rejection(promise: Promise<unknown>) {
 
 describe('RefreshTokenService', () => {
     let model: FakeRefreshTokenModel;
+    let stepUps: FakeStepUpModel;
     let service: RefreshTokenService;
     let cashier: TokenOwner;
 
     beforeEach(() => {
         model = new FakeRefreshTokenModel();
+        stepUps = new FakeStepUpModel();
         service = new RefreshTokenService(
             model as unknown as Model<RefreshToken>,
             config,
+            stepUps as unknown as Model<StepUp>,
         );
         cashier = model.addUser({
             _id: new Types.ObjectId(),
@@ -272,6 +277,45 @@ describe('RefreshTokenService', () => {
             await service.revokeAllForUsers([]);
 
             expect(model.deleteMany).not.toHaveBeenCalled();
+        });
+
+        it('logout drops the step-up of that session only (#310)', async () => {
+            const mine = new Types.ObjectId();
+            const other = new Types.ObjectId();
+            const token = model.seed(cashier, { family: mine });
+            const later = new Date(Date.now() + 60_000);
+            stepUps.seed(cashier._id, mine.toString(), later);
+            stepUps.seed(cashier._id, other.toString(), later);
+
+            await service.invalidate(token);
+
+            expect(stepUps.rows.map((r) => r.sid)).toEqual([other.toString()]);
+        });
+
+        it('revokeAllForUser drops every step-up of the user, the kept session too (#310)', async () => {
+            const mine = new Types.ObjectId();
+            model.seed(cashier, { family: mine });
+            const later = new Date(Date.now() + 60_000);
+            stepUps.seed(cashier._id, mine.toString(), later);
+            const someone = new Types.ObjectId();
+            stepUps.seed(someone, 'x', later);
+
+            await service.revokeAllForUser(cashier._id.toString(), {
+                keepSid: mine.toString(),
+            });
+
+            expect(stepUps.rows.map((r) => r.user.toString())).toEqual([
+                someone.toString(),
+            ]);
+        });
+
+        it('revokeAllForUsers drops those users’ step-ups (#310)', async () => {
+            const later = new Date(Date.now() + 60_000);
+            stepUps.seed(cashier._id, 's', later);
+
+            await service.revokeAllForUsers([cashier._id.toString()]);
+
+            expect(stepUps.rows).toEqual([]);
         });
     });
 });
