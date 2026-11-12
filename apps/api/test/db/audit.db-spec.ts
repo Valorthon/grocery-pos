@@ -182,6 +182,28 @@ it('records one discount on replay and one reversal with manager identity', asyn
     expect(reversed).toHaveLength(1);
     expect(reversed[0].actorName).toBe(admin.username);
     expect(reversed[0].approvedBy).toBeTruthy();
+    // The list resolves current names on read (#306).
+    const listed = await read<Paginated<AuditLogView>>(
+        await db.call(
+            admin,
+            'GET',
+            `/audit?action=${AuditAction.SALE_VOIDED}&limit=100`,
+        ),
+    );
+    const entry = listed.body.data.find(
+        (row) => row.target.id === sale.body._id,
+    );
+    expect(wireShapeDiff(entry, AUDIT_LOG_SHAPE)).toEqual({
+        missing: [],
+        unexpected: [],
+    });
+    expect(entry?.target.label).toBe(sale.body._id.slice(-8).toUpperCase());
+    const approver = await db
+        .model<{ name: string }>('User')
+        .findById(reversed[0].approvedBy)
+        .lean();
+    expect(entry?.approvedByName).toBe(approver?.name);
+    expect(entry?.approvedByName).toBeTruthy();
 });
 it('audits shift drawer and close operations once in their transactions', async () => {
     const who = caller('audit-drawer', Role.Seller);

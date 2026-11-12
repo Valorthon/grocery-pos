@@ -4,10 +4,11 @@ import {
     Optional as OptionalSettings,
 } from '@nestjs/common';
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
     AuditAction,
+    purchaseOrderReference,
     type AuditLogView,
     type AuthUser,
     type Paginated,
@@ -38,6 +39,9 @@ export class AuditService implements OnModuleInit {
         @OptionalSettings()
         @InjectSettings(SettingsService)
         private settings?: SettingsService,
+        @OptionalSettings()
+        @InjectConnection()
+        private connection?: Connection,
     ) {}
     async onModuleInit(): Promise<void> {
         await this.model.init();
@@ -83,13 +87,10 @@ export class AuditService implements OnModuleInit {
             filter.$or = user ? [{ actor: user._id }, failed] : [failed];
         }
         if (dto.action) filter.action = dto.action;
-        const range = dateRangeFilter(
-            dto.from,
-            dto.to,
-            this.settings
-                ? await this.settings.timezone()
-                : this.config.get('STORE_TIMEZONE'),
-        );
+        const timeZone = this.settings
+            ? await this.settings.timezone()
+            : this.config.get('STORE_TIMEZONE');
+        const range = dateRangeFilter(dto.from, dto.to, timeZone);
         if (range) filter.createdAt = range;
         const [rows, totalItems] = await Promise.all([
             this.model
@@ -100,6 +101,7 @@ export class AuditService implements OnModuleInit {
                 .lean(),
             this.model.countDocuments(filter),
         ]);
+        const labels = await this.labels(rows, timeZone);
         return {
             totalItems,
             data: rows.map((row) => ({
@@ -111,14 +113,130 @@ export class AuditService implements OnModuleInit {
                 target: {
                     model: row.targetModel,
                     id: row.targetId ? String(row.targetId) : null,
+                    ...optional(
+                        'label',
+                        row.targetId
+                            ? labels.get(
+                                  `${row.targetModel}:${String(row.targetId)}`,
+                              )
+                            : row.targetModel === 'Settings'
+                              ? 'Store settings'
+                              : undefined,
+                    ),
                 },
                 before: auditFields(row.action, row.before ?? {}),
                 after: auditFields(row.action, row.after ?? {}),
                 approvedBy: row.approvedBy ? String(row.approvedBy) : null,
+                ...optional(
+                    'approvedByName',
+                    row.approvedBy
+                        ? labels.get(`User:${String(row.approvedBy)}`)
+                        : undefined,
+                ),
                 ip: row.ip,
                 userAgent: row.userAgent,
                 createdAt: new Date(row.createdAt).toISOString(),
             })),
         };
     }
+
+    /**
+     * Current names of the page's targets and approvers (#306), keyed
+     * `Model:id`: one `$in` query per model, none per row. Stored entries
+     * are never touched; a missing reference has no label.
+     */
+    private async labels(
+        rows: {
+            targetModel: string;
+            targetId?: Types.ObjectId | null;
+            approvedBy?: Types.ObjectId | null;
+        }[],
+        timeZone: string,
+    ): Promise<Map<string, string>> {
+        const ids = new Map<string, Set<string>>();
+        const add = (model: string, id?: Types.ObjectId | null) => {
+            if (!id) return;
+            const set = ids.get(model) ?? new Set<string>();
+            set.add(String(id));
+            ids.set(model, set);
+        };
+        for (const row of rows) {
+            add(row.targetModel, row.targetId);
+            add('User', row.approvedBy);
+        }
+        const labels = new Map<string, string>();
+        const date = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            dateStyle: 'medium',
+        });
+        const lookups: Record<
+            string,
+            { fields: string; label: (doc: Record<string, unknown>) => string }
+        > = {
+            User: { fields: 'name', label: (doc) => String(doc.name) },
+            Product: { fields: 'name', label: (doc) => String(doc.name) },
+            PurchaseOrder: {
+                fields: '_id',
+                label: (doc) => purchaseOrderReference(String(doc._id)),
+            },
+            Sales: {
+                fields: '_id',
+                label: (doc) => String(doc._id).slice(-8).toUpperCase(),
+            },
+            Shift: {
+                fields: 'cashier cashierName openedAt',
+                // The cashier's current name, else the name at open.
+                label: (doc) =>
+                    `${labels.get(`User:${String(doc.cashier)}`) ?? String(doc.cashierName)} · ${date.format(new Date(doc.openedAt as Date))}`,
+            },
+        };
+        const find = async (name: string, set: Set<string>) => {
+            const model: Model<unknown> | undefined =
+                name === 'User'
+                    ? (this.users as unknown as Model<unknown>)
+                    : this.connection?.models[name];
+            if (!lookups[name] || !model) return [];
+            return (await model
+                .find(
+                    {
+                        _id: {
+                            $in: [...set].map((id) => new Types.ObjectId(id)),
+                        },
+                    },
+                    lookups[name].fields,
+                )
+                .lean()) as unknown as Record<string, unknown>[];
+        };
+        // Shifts first: their cashiers join the one batched User query.
+        const shifts = ids.has('Shift')
+            ? await find('Shift', ids.get('Shift')!)
+            : [];
+        for (const shift of shifts)
+            add('User', shift.cashier as Types.ObjectId | undefined);
+        const found = await Promise.all(
+            [...ids]
+                .filter(([name]) => name !== 'Shift')
+                .map(async ([name, set]) => ({
+                    name,
+                    docs: await find(name, set),
+                })),
+        );
+        for (const { name, docs } of found)
+            for (const doc of docs)
+                labels.set(
+                    `${name}:${String(doc._id)}`,
+                    lookups[name].label(doc),
+                );
+        for (const doc of shifts)
+            labels.set(`Shift:${String(doc._id)}`, lookups.Shift.label(doc));
+        return labels;
+    }
+}
+
+/** `{ [key]: value }` when the value is set, else nothing. */
+function optional<K extends string>(
+    key: K,
+    value: string | undefined,
+): Partial<Record<K, string>> {
+    return value === undefined ? {} : ({ [key]: value } as Record<K, string>);
 }

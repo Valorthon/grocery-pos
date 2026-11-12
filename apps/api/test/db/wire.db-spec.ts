@@ -34,6 +34,9 @@ import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import {
     ADJUSTMENT_LINE_SHAPE,
+    type AuditLogView,
+    AUDIT_LOG_SHAPE,
+    AUDIT_TARGET_SHAPE,
     ADJUSTMENT_ROW_SHAPE,
     APP_ERROR_RESPONSE_SHAPE,
     COUNTED_AMOUNT_SHAPE,
@@ -474,6 +477,24 @@ describe('settings', () => {
             expectShape('GET /settings/today', body, STORE_TODAY_SHAPE);
             expect(body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         }
+    });
+});
+
+describe('audit', () => {
+    it('GET /audit rows and their targets match their shapes (#306)', async () => {
+        const rows = (await page(
+            admin,
+            '/audit?limit=100',
+            AUDIT_LOG_SHAPE,
+        )) as unknown as AuditLogView[];
+        rows.forEach((row, i) =>
+            expectShape(
+                `GET /audit data[${i}].target`,
+                row.target,
+                AUDIT_TARGET_SHAPE,
+            ),
+        );
+        expect(rows.some((row) => row.target.label)).toBe(true);
     });
 });
 

@@ -62,14 +62,25 @@ export interface AuditLogView {
     _id: string;
     actor: { _id: string; name: string } | null;
     action: AuditAction;
-    target: { model: string; id: string | null };
+    /**
+     * `label` is the target's current name, looked up on read (#306):
+     * absent when there is none or the reference is gone.
+     */
+    target: { model: string; id: string | null; label?: string };
     before: Record<string, AuditValue>;
     after: Record<string, AuditValue>;
     approvedBy: string | null;
+    /** The approver's current name, looked up on read (#306). */
+    approvedByName?: string;
     ip: string | null;
     userAgent: string | null;
     createdAt: string;
 }
+export const AUDIT_TARGET_SHAPE: WireShape<AuditLogView['target']> = {
+    model: 'required',
+    id: 'required',
+    label: 'optional',
+};
 export const AUDIT_LOG_SHAPE: WireShape<AuditLogView> = {
     _id: 'required',
     actor: 'required',
@@ -78,6 +89,7 @@ export const AUDIT_LOG_SHAPE: WireShape<AuditLogView> = {
     before: 'required',
     after: 'required',
     approvedBy: 'required',
+    approvedByName: 'optional',
     ip: 'required',
     userAgent: 'required',
     createdAt: 'required',
