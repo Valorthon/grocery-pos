@@ -135,6 +135,8 @@ const props = defineProps<{
     locked: boolean;
     qtyOptions: readonly number[];
     matchCount: number;
+    /** The matches answer the current text (`settled`), #322 review. */
+    matchesSettled: boolean;
     nextScanQty: number;
     scanFeedback: { type: 'success' | 'error'; message: string } | null;
 }>();
@@ -154,7 +156,9 @@ function onDown(event: KeyboardEvent) {
         return;
     }
     if (event.isComposing || props.matchCount === 0) return;
+    // A list for older text can't be entered; ↓ does nothing until it is.
     event.preventDefault();
+    if (!props.matchesSettled) return;
     emit('enter-matches');
 }
 

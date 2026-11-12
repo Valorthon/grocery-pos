@@ -116,6 +116,7 @@
                     :locked="isTicketLocked"
                     :qty-options="qtyOptions"
                     :match-count="search.matches.value.length"
+                    :matches-settled="search.settled.value"
                     :next-scan-qty="nextScanQty"
                     :scan-feedback="scanFeedback"
                     @submit="onScanSubmit"

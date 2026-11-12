@@ -41,7 +41,6 @@
             ref="listbox"
             role="listbox"
             aria-label="Matching items"
-            aria-orientation="vertical"
             data-testid="search-matches"
             class="grid grid-cols-1 sm:grid-cols-2 gap-2 transition-opacity"
             :class="{ 'opacity-50': !settled }"
@@ -60,6 +59,7 @@
                 :aria-selected="i === highlighted"
                 :tabindex="i === Math.max(highlighted, 0) ? 0 : -1"
                 :data-index="i"
+                :data-product="m.product"
                 :disabled="locked"
                 class="min-h-11 p-3 border rounded-card hover:border-leaf-600 transition-all flex items-center justify-between text-left group focus-ring"
                 :class="
@@ -91,7 +91,7 @@
 
 <script setup lang="ts">
 /** The register's live product matches under the scan box (#163). */
-import { useTemplateRef } from 'vue';
+import { useTemplateRef, watch } from 'vue';
 import { AlertCircle, Search } from '@lucide/vue';
 import type { Match } from '@/components/User/Sales/product-search';
 
@@ -137,6 +137,7 @@ function columnCount(): number {
 
 /** Moves the real focus to option `index` (roving tabindex, #322). */
 function focusOption(index: number) {
+    if (!props.settled) return;
     const target = options()[index];
     if (!target) return;
     target.focus();
@@ -160,6 +161,16 @@ function onKeydown(event: KeyboardEvent) {
     }
     const from = indexOf(event.target);
     if (from < 0) return;
+    // A list for older text: no moving or picking in it (#322 review).
+    if (!props.settled) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            emit('exit');
+        } else if (/^(Arrow|Enter$| $)/.test(event.key)) {
+            event.preventDefault();
+        }
+        return;
+    }
     const count = props.matches.length;
     const cols = columnCount();
     const col = from % cols;
@@ -210,6 +221,45 @@ function onFocusout(event: FocusEvent) {
     if (next instanceof Node && listbox.value?.contains(next)) return;
     emit('highlight', -1);
 }
+
+/**
+ * The list re-rendered (new matches, or settled/unsettled) while the
+ * focus was in it: keep the highlight on the option that has the focus,
+ * or, when that option went away, put the focus back on the box rather
+ * than letting it drop to the page (#322 review).
+ */
+let focusedProduct: string | null = null;
+watch(
+    () => [props.matches, props.settled] as const,
+    () => {
+        const active = document.activeElement;
+        focusedProduct =
+            active instanceof HTMLElement && listbox.value?.contains(active)
+                ? (active.closest<HTMLElement>('[role="option"]')?.dataset
+                      .product ?? null)
+                : null;
+    },
+    { flush: 'pre' },
+);
+watch(
+    () => [props.matches, props.settled] as const,
+    () => {
+        const product = focusedProduct;
+        if (product === null) return;
+        focusedProduct = null;
+        // A moved node loses the focus in the browser: put it back.
+        const index = props.settled
+            ? props.matches.findIndex((m) => m.product === product)
+            : -1;
+        if (index < 0) {
+            emit('exit');
+            return;
+        }
+        focusOption(index);
+        emit('highlight', index);
+    },
+    { flush: 'post' },
+);
 
 defineExpose({ focusOption });
 </script>

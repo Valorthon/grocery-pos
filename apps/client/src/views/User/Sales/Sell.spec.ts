@@ -1510,6 +1510,21 @@ describe('Sell match grid keys (#322)', () => {
         expect(input().value).toBe('');
     });
 
+    it('↓ does nothing while the search for the current text is pending', async () => {
+        await listed(2);
+        await keyOnFocus('Escape');
+        let resolve!: (m: unknown) => void;
+        serve(() => new Promise((r) => (resolve = r)));
+        await type('mil');
+        await key('ArrowDown');
+        expect(document.activeElement).toBe(input());
+        expect(focused()).toBe(-1);
+        resolve([MILK]);
+        await flush();
+        await key('ArrowDown');
+        expect(focused()).toBe(0);
+    });
+
     it('Escape returns to the box and keeps the text', async () => {
         await listed(2);
         await keyOnFocus('ArrowDown');
