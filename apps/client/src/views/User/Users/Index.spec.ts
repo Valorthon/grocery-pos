@@ -164,7 +164,7 @@ describe('users save errors (issue #18)', () => {
         );
         await mount();
         document
-            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .querySelector<HTMLElement>('tbody tr[data-row-click] td')!
             .click();
         await flush();
 
@@ -233,7 +233,7 @@ describe('user editor (issue #20)', () => {
         api.get.mockResolvedValue({ data: USERS });
         await mount();
         document
-            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .querySelector<HTMLElement>('tbody tr[data-row-click] td')!
             .click();
         await flush();
 
@@ -249,7 +249,7 @@ describe('user editor (issue #20)', () => {
 
         // Reopened, the editor starts again from the row.
         document
-            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .querySelector<HTMLElement>('tbody tr[data-row-click] td')!
             .click();
         await flush();
         const seller = roleBox(Role.Seller);
@@ -404,7 +404,7 @@ describe('own account (issue #61)', () => {
         const row = [...document.querySelectorAll('tbody tr')].find(
             (tr) => tr.querySelector('td')?.textContent?.trim() === name,
         )!;
-        row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
+        row.querySelector<HTMLElement>('td')!.click();
         await flush();
     }
 
@@ -531,7 +531,7 @@ describe('renaming users (issue #106)', () => {
         const row = [...document.querySelectorAll('tbody tr')].find(
             (tr) => tr.querySelector('td')?.textContent?.trim() === name,
         )!;
-        row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
+        row.querySelector<HTMLElement>('td')!.click();
         await flush();
     }
 
@@ -851,11 +851,36 @@ describe('renaming users (issue #106)', () => {
         await editRow('ana');
         expect(field('Username').disabled).toBe(false);
 
-        // An admin's row does not open for a user manager at all.
-        const rootEdit = [...document.querySelectorAll('tbody tr')]
-            .find((tr) => tr.textContent?.includes('root'))!
-            .querySelector<HTMLButtonElement>('button[aria-label^="Edit"]')!;
-        expect(rootEdit.disabled).toBe(true);
+        // An admin's row does not open for a user manager at all (#311):
+        // it isn't clickable, and its ⋯ menu says why.
+        await click('Cancel');
+        await vi.waitFor(() =>
+            expect(document.querySelector('[role=dialog]')).toBeNull(),
+        );
+        const rootRow = [...document.querySelectorAll('tbody tr')].find((tr) =>
+            tr.textContent?.includes('root'),
+        )!;
+        expect(rootRow.hasAttribute('data-row-click')).toBe(false);
+        expect(rootRow.getAttribute('tabindex')).toBeNull();
+        rootRow.querySelector<HTMLElement>('td')!.click();
+        await flush();
+        expect(document.querySelector('[role=dialog]')).toBeNull();
+        rootRow
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Actions for root"]',
+            )!
+            .click();
+        await flush();
+        const edit = [
+            ...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'),
+        ].find((b) => b.textContent?.includes('Edit'))!;
+        expect(edit.getAttribute('aria-disabled')).toBe('true');
+        expect(edit.textContent).toContain('Only an admin can edit this user');
+        expect(
+            [...document.querySelectorAll('[role=menuitem]')].map((b) =>
+                b.firstChild?.textContent?.trim(),
+            ),
+        ).toEqual(['Edit']);
     });
 
     it('closes the confirmation with the page', async () => {
@@ -889,17 +914,29 @@ describe('manager PIN entry point (#34)', () => {
     it('lets an admin open PIN management for a supervisor and close without a write', async () => {
         api.get.mockResolvedValue({ data: managerRows });
         await mount();
-        const button = document.querySelector<HTMLButtonElement>(
-            '[aria-label="Manage PIN for supervisor"]',
-        )!;
-        expect(button).not.toBeNull();
-        button.click();
+        expect(await menuItems('supervisor')).toEqual(['Edit', 'Manager PIN']);
+        [...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]')]
+            .find((b) => b.textContent?.trim() === 'Manager PIN')!
+            .click();
         await flush();
         expect(document.body.textContent).toContain(
             'Set a new manager PIN for supervisor',
         );
         await click('Cancel');
         expect(api.patch).not.toHaveBeenCalled();
+    });
+    it('opens Edit user from the row on Enter, with Actions right-aligned (#311)', async () => {
+        api.get.mockResolvedValue({ data: managerRows });
+        await mount();
+        const th = Array.from(document.querySelectorAll('thead th')).pop()!;
+        expect(th.className).toContain('text-right');
+        const row = document.querySelector<HTMLElement>('tbody tr')!;
+        expect(row.tabIndex).toBe(0);
+        row.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+        );
+        await flush();
+        expect(document.body.textContent).toContain('Edit User');
     });
     it('does not offer manager PIN management to a user manager', async () => {
         useAuthStore().user = {
@@ -908,11 +945,22 @@ describe('manager PIN entry point (#34)', () => {
         };
         api.get.mockResolvedValue({ data: managerRows });
         await mount();
-        expect(
-            document.querySelector('[aria-label="Manage PIN for supervisor"]'),
-        ).toBeNull();
+        expect(await menuItems('supervisor')).not.toContain('Manager PIN');
     });
 });
+
+/** Opens a user's ⋯ menu (#311) and lists its item labels. */
+async function menuItems(name: string): Promise<string[]> {
+    document
+        .querySelector<HTMLButtonElement>(
+            `button[aria-label="Actions for ${name}"]`,
+        )!
+        .click();
+    await flush();
+    return [...document.querySelectorAll('[role=menuitem]')].map(
+        (b) => b.firstChild?.textContent?.trim() ?? '',
+    );
+}
 
 /** Header texts visible below `sm` (no `hidden` class), issue #208. */
 function narrowHeaders(): string[] {
@@ -960,7 +1008,7 @@ describe('role cards (#297)', () => {
             ?.textContent;
     async function openEditor() {
         document
-            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .querySelector<HTMLElement>('tbody tr[data-row-click] td')!
             .click();
         await flush();
     }
@@ -1097,5 +1145,134 @@ describe('role cards (#297)', () => {
         expect(cell.textContent).toContain('User manager');
         expect(cell.textContent).toContain('Seller');
         expect(cell.textContent).not.toContain(Role.UserManager);
+    });
+});
+
+describe('step-up re-auth (#310)', () => {
+    const reauthRequired = () =>
+        httpError(403, {
+            error: ErrorCode.USER_REAUTH_REQUIRED,
+            message: 'Confirm your password to make this change',
+        });
+    const reauthOpen = () =>
+        document.body.textContent?.includes("Confirm it's you") ?? false;
+
+    async function editAna() {
+        const row = [...document.querySelectorAll('tbody tr')].find(
+            (tr) => tr.querySelector('td')?.textContent?.trim() === 'ana',
+        )!;
+        row.querySelector<HTMLElement>('td')!.click();
+        await flush();
+    }
+
+    async function confirmPassword() {
+        await type('Your password', 'my-own-password');
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes("Confirm it's you"),
+        )!;
+        [...dialog.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Confirm')!
+            .click();
+        await flush();
+    }
+
+    it('Add User prompts, then retries the same request once', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.post
+            .mockRejectedValueOnce(reauthRequired())
+            .mockResolvedValue({ data: undefined });
+        await mount();
+        await click('Add User');
+        await type('Username', 'bea');
+        await type('Password', 'long-enough-1');
+        await checkRole(Role.Seller, true);
+        await click('Save');
+
+        expect(reauthOpen()).toBe(true);
+        await confirmPassword();
+
+        const body = {
+            users: [
+                {
+                    name: 'bea',
+                    password: 'long-enough-1',
+                    roles: [Role.Seller],
+                },
+            ],
+        };
+        expect(api.post.mock.calls).toEqual([
+            ['/users', body],
+            ['/auth/reauth', { password: 'my-own-password' }],
+            ['/users', body],
+        ]);
+        await new Promise((r) => setTimeout(r, 300));
+        expect(reauthOpen()).toBe(false);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User created'],
+        ]);
+    });
+
+    it('Edit User with a guarded change prompts, then succeeds', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.patch
+            .mockRejectedValueOnce(reauthRequired())
+            .mockResolvedValue({ data: {} });
+        api.post.mockResolvedValue({ data: undefined });
+        await mount();
+        await editAna();
+        await checkRole(Role.Adjuster, true);
+        await click('Save');
+
+        expect(reauthOpen()).toBe(true);
+        await confirmPassword();
+
+        expect(api.patch).toHaveBeenCalledTimes(2);
+        expect(api.patch.mock.calls[0]).toEqual(api.patch.mock.calls[1]);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User updated'],
+        ]);
+    });
+
+    it('Cancel saves nothing and keeps the edit dialog with its values', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.patch.mockRejectedValueOnce(reauthRequired());
+        await mount();
+        await editAna();
+        await checkRole(Role.Adjuster, true);
+        await click('Save');
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes("Confirm it's you"),
+        )!;
+        [...dialog.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Cancel')!
+            .click();
+        await flush();
+
+        expect(api.patch).toHaveBeenCalledOnce();
+        expect(api.post).not.toHaveBeenCalled();
+        await new Promise((r) => setTimeout(r, 300));
+        expect(reauthOpen()).toBe(false);
+        expect(roleBox(Role.Adjuster).checked).toBe(true);
+        expect(useUIStore().toasts).toEqual([]);
+    });
+
+    it('a rename that the server accepts does not prompt', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.patch.mockResolvedValue({ data: {} });
+        await mount();
+        await editAna();
+        await type('Username', 'bea');
+        await click('Save');
+        const confirm = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes('will log in as'),
+        )!;
+        [...confirm.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Rename')!
+            .click();
+        await flush();
+
+        expect(reauthOpen()).toBe(false);
+        expect(api.patch).toHaveBeenCalledOnce();
+        expect(api.post).not.toHaveBeenCalled();
     });
 });

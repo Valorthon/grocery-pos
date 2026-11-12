@@ -8,10 +8,12 @@ import {
     type AuditLogView,
 } from '@grocery-pos/contracts';
 import { useAuthStore } from '@/stores/auth';
+import { useUIStore } from '@/stores/ui';
 import {
     click,
     field,
     flush,
+    headerText,
     openDates,
     pick,
     selectField,
@@ -60,6 +62,27 @@ async function mount() {
     app.mount(host);
     await flush();
 }
+const toasts = () => useUIStore().toasts.flatMap((t) => t.lines);
+async function press(label: string) {
+    document
+        .querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!
+        .click();
+    await flush();
+}
+async function openRow(index = 0) {
+    const tr = document.querySelectorAll('tr[data-row-click]')[index];
+    tr.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+}
+/** The details list value for a term. */
+function dd(term: string): string {
+    const dt = [...document.querySelectorAll('dl dt')].find(
+        (el) => el.textContent?.trim() === term,
+    );
+    return (
+        dt?.nextElementSibling?.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+    );
+}
 function input(label: string, value: string) {
     const el = field(label);
     el.value = value;
@@ -69,10 +92,10 @@ it('shows safe actor/action/detail diff text without treating stored strings as 
     await mount();
     expect(document.body.textContent).toContain('Admin <script>');
     expect(document.querySelector('script')).toBeNull();
-    await click('View');
+    await openRow();
     expect(document.body.textContent).toContain('<img src=x onerror=alert(1)>');
     expect(document.querySelector('img')).toBeNull();
-    expect(document.body.textContent).toContain('Not applicable');
+    expect(dd('Approved by')).toBe('—');
 });
 it('pages and retries applied filters rather than unsearched edits', async () => {
     await mount();
@@ -262,4 +285,150 @@ it('labels purchase-order actions and filters by them', async () => {
     expect(
         api.get.mock.calls[api.get.mock.calls.length - 1]?.[1]?.params,
     ).toMatchObject({ action: AuditAction.PURCHASE_ORDER_CANCELLED });
+});
+
+it('opens a row by click or Enter, with no Details column, and shows the target label or its fallback (#306)', async () => {
+    api.get.mockResolvedValue({
+        data: {
+            data: [
+                {
+                    ...row(),
+                    target: {
+                        model: 'User',
+                        id: '507f1f77bcf86cd799439012',
+                        label: 'admin',
+                    },
+                },
+                {
+                    ...row(),
+                    _id: 'id3',
+                    target: { model: 'Settings', id: null },
+                },
+                {
+                    ...row(),
+                    _id: 'id2',
+                    target: {
+                        model: 'PurchaseOrder',
+                        id: '507f1f77bcf86cd7994abcde',
+                    },
+                },
+            ],
+            totalItems: 3,
+        },
+    });
+    await mount();
+    const titles = [...document.querySelectorAll('thead th')].map(headerText);
+    expect(titles).not.toContain('Details');
+    expect(
+        [...document.querySelectorAll('button')].some(
+            (b) => b.textContent?.trim() === 'View',
+        ),
+    ).toBe(false);
+    const rows = document.querySelectorAll('tbody tr[data-row-click]');
+    expect(rows[0].textContent).toContain('User · admin');
+    expect(rows[1].textContent).toContain('Store settings');
+    expect(rows[1].textContent).not.toContain('Settings ·');
+    expect(rows[2].textContent).toContain('Purchase order · 994abcde');
+    await openRow();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    document
+        .querySelector(
+            '[role="dialog"] button[aria-label^="Close"], [role="dialog"] button[aria-label="Close"]',
+        )
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    rows[2].dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    );
+    await flush();
+    expect(dd('Target')).toContain('Purchase order · 994abcde');
+});
+it('shows the heading, details, device summary, copy and a changes table (#306)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+    });
+    api.get.mockResolvedValue({
+        data: {
+            data: [
+                {
+                    ...row(),
+                    action: AuditAction.AUTH_LOGIN,
+                    target: {
+                        model: 'User',
+                        id: '507f1f77bcf86cd799439012',
+                        label: 'admin',
+                    },
+                    approvedBy: '507f1f77bcf86cd799439099',
+                    approvedByName: 'boss',
+                    userAgent:
+                        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36',
+                    before: { isActive: true, roles: ['SELLER'], note: null },
+                    after: {
+                        isActive: false,
+                        roles: ['SELLER', 'ADMIN'],
+                        passwordChanged: true,
+                    },
+                },
+                {
+                    ...row(),
+                    _id: 'id2',
+                    before: {},
+                    after: {},
+                    userAgent: null,
+                },
+            ],
+            totalItems: 2,
+        },
+    });
+    await mount();
+    await openRow();
+    const heading = document.querySelector('[data-testid="audit-heading"]')!;
+    expect(heading.textContent).toContain('Logged in');
+    expect(heading.textContent).toMatch(/2026/);
+    expect(dd('Actor')).toContain('Admin <script>');
+    expect(dd('Actor')).toContain('507f1f77…39011');
+    expect(dd('Target')).toContain('User · admin');
+    expect(dd('Approved by')).toBe('boss');
+    expect(dd('IP')).toBe('127.0.0.1');
+    expect(dd('Device')).toContain('Chrome 157 on Linux');
+    const details = document.querySelector('dl details')!;
+    expect(details.querySelector('summary')?.textContent).toContain(
+        'Full user agent',
+    );
+    expect(details.textContent).toContain('Chrome/157.0.0.0');
+    await press('Copy actor ID');
+    await flush();
+    expect(writeText).toHaveBeenCalledWith('507f1f77bcf86cd799439011');
+    expect(toasts()).toContain('Actor ID copied');
+    writeText.mockRejectedValueOnce(new Error('denied'));
+    await press('Copy target ID');
+    await flush();
+    expect(toasts()).toContain('Could not copy the target ID');
+    const rows = [
+        ...document.querySelectorAll('[data-testid="audit-changes"] tbody tr'),
+    ].map((tr) => [...tr.children].map((cell) => cell.textContent?.trim()));
+    expect(rows).toEqual([
+        ['Active', 'Yes', 'No (changed)'],
+        ['Roles', 'Seller', 'Seller, Admin (changed)'],
+        ['Note', 'empty', '— (changed)'],
+        ['Password changed', '—', 'Yes (changed)'],
+    ]);
+    expect(
+        document.querySelectorAll(
+            '[data-testid="audit-changes"] tr[data-changed]',
+        ),
+    ).toHaveLength(4);
+    document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    await flush();
+    await openRow(1);
+    expect(document.body.textContent).toContain('No field changes recorded');
+    expect(dd('Device')).toBe('Unavailable');
 });

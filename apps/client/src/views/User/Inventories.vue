@@ -84,14 +84,6 @@
                         :map="STATUS"
                         data-testid="stock-status"
                 /></template>
-                <template #cell-history="{ item }"
-                    ><RowOpenButton
-                        :label="`Stock history for ${item.name}`"
-                        data-testid="stock-history-button"
-                        @open="openHistory(item)"
-                        ><History class="w-5 h-5" aria-hidden="true"
-                    /></RowOpenButton>
-                </template>
             </BaseTable>
         </PageCard>
     </PageFrame>
@@ -120,11 +112,10 @@ import InventoryBatches from '@/components/User/Inventory/InventoryBatches.vue';
 import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { History, Pencil } from '@lucide/vue';
+import { Pencil } from '@lucide/vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
-import RowOpenButton from '@/components/ui/RowOpenButton.vue';
 import { useSettingsStore } from '@/stores/settings';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
@@ -292,7 +283,6 @@ const headers = [
         hideBelow: 'sm' as const,
         help: INVENTORY_HELP.status,
     },
-    { key: 'history', title: 'History' },
 ];
 
 /** The #40 / dashboard predicate: out at ≤ 0, low at ≤ the low stock level. */

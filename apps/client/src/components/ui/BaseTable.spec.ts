@@ -485,3 +485,39 @@ describe('BaseTable column help (#263)', () => {
         expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     });
 });
+
+describe('BaseTable rowClickable (#311)', () => {
+    it('leaves a row the viewer cannot open inert', async () => {
+        const opened: unknown[] = [];
+        mountRender(() =>
+            table({
+                headers: [{ title: 'Name', key: 'name' }],
+                items: [
+                    { id: '1', name: 'open' },
+                    { id: '2', name: 'locked' },
+                ],
+                rowClick: true,
+                rowClickable: (row: { name: string }) => row.name !== 'locked',
+                'onClick:row': (row: unknown) => opened.push(row),
+            }),
+        );
+        await flush();
+        const [open, locked] = [
+            ...document.querySelectorAll<HTMLTableRowElement>('tbody tr'),
+        ];
+        expect(open.getAttribute('tabindex')).toBe('0');
+        expect(open.hasAttribute('data-row-click')).toBe(true);
+        expect(locked.hasAttribute('tabindex')).toBe(false);
+        expect(locked.hasAttribute('aria-describedby')).toBe(false);
+        expect(locked.hasAttribute('data-row-click')).toBe(false);
+        expect(locked.className).not.toContain('cursor-pointer');
+        locked.querySelector('td')!.click();
+        locked.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+        );
+        await flush();
+        expect(opened).toEqual([]);
+        open.querySelector('td')!.click();
+        expect(opened).toEqual([{ id: '1', name: 'open' }]);
+    });
+});

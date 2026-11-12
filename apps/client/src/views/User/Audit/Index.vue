@@ -41,6 +41,8 @@
                 :items="tableRows"
                 :loading="loading"
                 :error="error"
+                row-click
+                @click:row="selected = $event"
                 @retry="load"
             >
                 <template #cell-when="{ item }">
@@ -53,15 +55,7 @@
                     {{ AUDIT_ACTION_LABELS[item.action] ?? item.action }}
                 </template>
                 <template #cell-target="{ item }">
-                    {{ item.target.model }} {{ item.target.id }}
-                </template>
-                <template #cell-details="{ item }">
-                    <BaseButton
-                        size="sm"
-                        variant="outline"
-                        @click="selected = item"
-                        >View</BaseButton
-                    >
+                    {{ targetText(item.target) }}
                 </template>
                 <template #empty>
                     <EmptyState
@@ -104,36 +98,157 @@
                 }
             "
         >
-            <div class="p-5 space-y-3 text-sm">
-                <p>
-                    {{
+            <div class="p-5 space-y-5 text-sm">
+                <div
+                    data-testid="audit-heading"
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1"
+                >
+                    <Badge color="primary" size="md">{{
                         AUDIT_ACTION_LABELS[selected.action] ?? selected.action
-                    }}
-                    ·
-                    {{ formatStoreDateTime(selected.createdAt) }}
-                </p>
-                <p>
-                    Actor: {{ selected.actor?.name ?? 'Unauthenticated' }}
-                    {{ selected.actor?._id }}
-                </p>
-                <p>
-                    Target: {{ selected.target.model }}
-                    {{ selected.target.id }}
-                </p>
-                <p>
-                    Approved by:
-                    {{ selected.approvedBy ?? 'Not applicable' }}
-                </p>
-                <p>IP: {{ selected.ip ?? 'Unavailable' }}</p>
-                <p>User agent: {{ selected.userAgent ?? 'Unavailable' }}</p>
-                <h3 class="font-semibold">Before</h3>
-                <pre class="whitespace-pre-wrap break-words">{{
-                    JSON.stringify(selected.before, null, 2)
-                }}</pre>
-                <h3 class="font-semibold">After</h3>
-                <pre class="whitespace-pre-wrap break-words">{{
-                    JSON.stringify(selected.after, null, 2)
-                }}</pre>
+                    }}</Badge>
+                    <span class="text-muted">{{
+                        formatStoreDateTime(selected.createdAt)
+                    }}</span>
+                </div>
+                <dl
+                    data-testid="audit-details"
+                    class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2"
+                >
+                    <dt class="font-semibold">Actor</dt>
+                    <dd>
+                        <span class="block">{{
+                            selected.actor?.name ?? 'Unauthenticated'
+                        }}</span>
+                        <span
+                            v-if="selected.actor"
+                            class="flex items-center gap-1 text-xs text-muted font-mono"
+                            >{{ elidedId(selected.actor._id) }}
+                            <button
+                                type="button"
+                                class="inline-flex items-center justify-center min-h-11 min-w-11 -my-3 rounded focus-ring hover:text-ink"
+                                aria-label="Copy actor ID"
+                                @click="
+                                    copyText(selected.actor._id, 'Actor ID')
+                                "
+                            >
+                                <Copy :size="14" aria-hidden="true" /></button
+                        ></span>
+                    </dd>
+                    <dt class="font-semibold">Target</dt>
+                    <dd>
+                        <span class="block">{{
+                            targetText(selected.target)
+                        }}</span>
+                        <span
+                            v-if="selected.target.id"
+                            class="flex items-center gap-1 text-xs text-muted font-mono"
+                            >{{ elidedId(selected.target.id) }}
+                            <button
+                                type="button"
+                                class="inline-flex items-center justify-center min-h-11 min-w-11 -my-3 rounded focus-ring hover:text-ink"
+                                aria-label="Copy target ID"
+                                @click="
+                                    copyText(selected.target.id, 'Target ID')
+                                "
+                            >
+                                <Copy :size="14" aria-hidden="true" /></button
+                        ></span>
+                    </dd>
+                    <dt class="font-semibold">Approved by</dt>
+                    <dd>
+                        {{
+                            selected.approvedBy
+                                ? (selected.approvedByName ??
+                                  shortId(selected.approvedBy))
+                                : '—'
+                        }}
+                    </dd>
+                    <dt class="font-semibold">IP</dt>
+                    <dd>{{ selected.ip ?? 'Unavailable' }}</dd>
+                    <dt class="font-semibold">Device</dt>
+                    <dd>
+                        <template v-if="selected.userAgent">
+                            <span class="block">{{
+                                deviceSummary(selected.userAgent)
+                            }}</span>
+                            <details class="text-xs text-muted">
+                                <summary class="cursor-pointer">
+                                    Full user agent
+                                </summary>
+                                <p class="mt-1 break-words font-mono">
+                                    {{ selected.userAgent }}
+                                </p>
+                            </details>
+                        </template>
+                        <template v-else>Unavailable</template>
+                    </dd>
+                </dl>
+                <section aria-labelledby="audit-changes-title">
+                    <h3
+                        id="audit-changes-title"
+                        class="text-xs font-semibold uppercase tracking-wide text-muted mb-2"
+                    >
+                        Changes
+                    </h3>
+                    <p v-if="!changes.length" class="text-muted">
+                        No field changes recorded
+                    </p>
+                    <table
+                        v-else
+                        data-testid="audit-changes"
+                        class="w-full text-left border-collapse"
+                    >
+                        <thead>
+                            <tr class="border-b border-line text-muted">
+                                <th
+                                    scope="col"
+                                    class="py-1.5 pr-3 font-semibold"
+                                >
+                                    Field
+                                </th>
+                                <th
+                                    scope="col"
+                                    class="py-1.5 pr-3 font-semibold"
+                                >
+                                    Before
+                                </th>
+                                <th scope="col" class="py-1.5 font-semibold">
+                                    After
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="change in changes"
+                                :key="change.key"
+                                class="border-b border-line last:border-0 align-top"
+                                :data-changed="change.changed ? '' : undefined"
+                            >
+                                <th scope="row" class="py-1.5 pr-3 font-normal">
+                                    {{ change.field }}
+                                </th>
+                                <td class="py-1.5 pr-3 break-words">
+                                    {{ change.before }}
+                                </td>
+                                <td
+                                    :class="[
+                                        'py-1.5 break-words',
+                                        change.changed &&
+                                            'font-semibold text-leaf-700',
+                                    ]"
+                                >
+                                    {{ change.after
+                                    }}<span
+                                        v-if="change.changed"
+                                        class="sr-only"
+                                    >
+                                        (changed)</span
+                                    >
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </section>
             </div>
         </BaseModal>
     </PageFrame>
@@ -161,6 +276,11 @@ import DateRangeFilter from '@/components/ui/DateRangeFilter.vue';
 import { useDatePreset } from '@/composables/useDatePreset';
 import { type DatePreset } from '@/views/User/Reports/presets';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import Badge from '@/components/ui/Badge.vue';
+import { Copy } from '@lucide/vue';
+import { copyText } from '@/utils/clipboard';
+import { deviceSummary } from '@/utils/user-agent';
+import { changeRows, elidedId, shortId, targetText } from './audit-view';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import { apiErrorText } from '@/utils/api-error';
 import { dateRangeError } from '@/utils/rules';
@@ -178,6 +298,11 @@ const username = ref(''),
     loading = ref(false);
 const rows = ref<AuditLogView[]>([]),
     selected = ref<AuditLogView | null>(null);
+const changes = computed(() =>
+    selected.value
+        ? changeRows(selected.value.before, selected.value.after)
+        : [],
+);
 const actionOptions = Object.values(AuditAction).map((value) => ({
     value,
     label: AUDIT_ACTION_LABELS[value],
@@ -187,7 +312,6 @@ const headers: TableHeader[] = [
     { key: 'actor', title: 'Actor' },
     { key: 'action', title: 'Action', help: AUDIT_HELP.action },
     { key: 'target', title: 'Target', help: AUDIT_HELP.target },
-    { key: 'details', title: 'Details' },
 ];
 const tableRows = computed(() =>
     rows.value.map((row) => ({ ...row, id: row._id })),

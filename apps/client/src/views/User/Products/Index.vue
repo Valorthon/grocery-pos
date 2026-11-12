@@ -284,7 +284,7 @@ const headers = [
           ]
         : []),
     { key: 'status', title: 'Status', help: PRODUCT_HELP.status },
-    { key: 'actions', title: 'Actions' },
+    { key: 'actions', title: 'Actions', align: 'right' as const },
 ];
 
 /** A row opens Edit for product editors, else Stock history (#242, as #214). */

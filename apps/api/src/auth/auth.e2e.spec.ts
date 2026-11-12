@@ -34,6 +34,9 @@ import { RoleGuard } from './guards/role.guard';
 import { JWTStrategy } from './jwt.strategy';
 import { RefreshToken } from './refresh-token/refresh-token.schema';
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
+import { StepUpService } from './step-up/step-up.service';
+import { StepUp } from './step-up/step-up.schema';
+import { FakeStepUpModel } from './step-up/testing/fake-step-up-model';
 import {
     FakeRefreshTokenModel,
     TokenOwner,
@@ -48,6 +51,7 @@ import { TypedConfigService } from '../common/typed-config/typed-config.service'
 import { GlobalFilter } from '../common/global/global.filter';
 import { createValidationPipe } from '../common/pipes/validation.pipe';
 import { ErrorCode } from '../common/errors';
+import { AuditAction } from '@grocery-pos/contracts';
 import { UserService } from '../user/user.service';
 
 const COOKIE_SECRET = 'cookie-secret';
@@ -183,6 +187,9 @@ describe('Auth session flow (e2e)', () => {
     let jwt: JwtService;
     let throttles: ThrottlerStorageService;
     const checkCredentials = jest.fn();
+    const verifyOwnPassword = jest.fn();
+    let stepUps: FakeStepUpModel;
+    let audit: { record: jest.Mock };
 
     function accessToken(expiresInS: number): string {
         const nowS = Math.floor(Date.now() / 1000);
@@ -235,7 +242,15 @@ describe('Auth session flow (e2e)', () => {
                     provide: getModelToken(RefreshToken.name),
                     useClass: FakeRefreshTokenModel,
                 },
-                { provide: UserService, useValue: { checkCredentials } },
+                StepUpService,
+                {
+                    provide: getModelToken(StepUp.name),
+                    useClass: FakeStepUpModel,
+                },
+                {
+                    provide: UserService,
+                    useValue: { checkCredentials, verifyOwnPassword },
+                },
                 {
                     provide: TypedConfigService,
                     useValue: { get: (key: string) => CONFIG[key] },
@@ -257,6 +272,8 @@ describe('Auth session flow (e2e)', () => {
         const { port } = app.getHttpServer().address() as AddressInfo;
         base = `http://127.0.0.1:${port}/v1`;
         model = app.get(getModelToken(RefreshToken.name));
+        stepUps = app.get(getModelToken(StepUp.name));
+        audit = app.get(AuditService);
         jwt = app.get(JwtService);
         throttles = app.get(getStorageToken());
     });
@@ -272,6 +289,9 @@ describe('Auth session flow (e2e)', () => {
         SELLER.isActive = true;
         model.failNext = null;
         checkCredentials.mockReset();
+        verifyOwnPassword.mockReset();
+        stepUps.rows = [];
+        audit.record.mockClear();
         // Every test starts with a full rate-limit budget.
         throttles.storage.clear();
     });
@@ -810,6 +830,118 @@ describe('Auth session flow (e2e)', () => {
             for (let i = 0; i < RATE_LIMITS.refresh.ip.limit + 1; i++) {
                 expect((await call('POST', '/auth/logout')).status).toBe(201);
             }
+        });
+    });
+
+    describe('step-up re-auth (#310)', () => {
+        function sessionToken(sid?: Types.ObjectId): string {
+            return `jwt=${signCookie(
+                jwt.sign(
+                    {
+                        userId: SELLER._id.toString(),
+                        username: SELLER.name,
+                        roles: SELLER.roles,
+                        ...(sid && { sid: sid.toString() }),
+                    },
+                    { secret: JWT_SECRET, expiresIn: 600 },
+                ),
+            )}`;
+        }
+        const reauth = (cookies: string[], password = 'my-password') =>
+            call('POST', '/auth/reauth', cookies, { password });
+
+        it('records a 5-minute step-up for this session and audits it', async () => {
+            const sid = new Types.ObjectId();
+            model.seed(SELLER, { family: sid });
+            verifyOwnPassword.mockResolvedValue({ name: SELLER.name });
+            const before = Date.now();
+
+            const res = await reauth([sessionToken(sid)]);
+
+            expect(res.status).toBe(204);
+            expect(verifyOwnPassword).toHaveBeenCalledWith(
+                SELLER._id.toString(),
+                'my-password',
+            );
+            expect(stepUps.rows).toHaveLength(1);
+            const [row] = stepUps.rows;
+            expect(row.sid).toBe(sid.toString());
+            expect(row.user.toString()).toBe(SELLER._id.toString());
+            const ttl = row.expiresAt.getTime() - before;
+            expect(ttl).toBeGreaterThanOrEqual(300_000);
+            expect(ttl).toBeLessThan(305_000);
+            expect(audit.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    action: AuditAction.AUTH_REAUTH,
+                    targetId: SELLER._id.toString(),
+                }),
+            );
+        });
+
+        it('a wrong password is 403 USER_WRONG_PASSWORD, audited without the credential', async () => {
+            const sid = new Types.ObjectId();
+            model.seed(SELLER, { family: sid });
+            verifyOwnPassword.mockResolvedValue(null);
+
+            const res = await reauth([sessionToken(sid)], 'guess-1234');
+
+            expect(res.status).toBe(403);
+            expect(await res.json()).toMatchObject({
+                error: ErrorCode.USER_WRONG_PASSWORD,
+            });
+            expect(stepUps.rows).toEqual([]);
+            expect(audit.record).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    action: AuditAction.AUTH_REAUTH_FAILED,
+                    actor: expect.objectContaining({
+                        userId: SELLER._id.toString(),
+                    }),
+                }),
+            );
+            expect(JSON.stringify(audit.record.mock.calls)).not.toContain(
+                'guess-1234',
+            );
+        });
+
+        it('a legacy token without sid cannot step up', async () => {
+            model.seed(SELLER);
+            const res = await reauth([sessionToken()]);
+            expect(res.status).toBe(403);
+            expect(await res.json()).toMatchObject({
+                error: ErrorCode.FORBIDDEN,
+            });
+            expect(verifyOwnPassword).not.toHaveBeenCalled();
+        });
+
+        it('an ended session cannot step up', async () => {
+            const res = await reauth([sessionToken(new Types.ObjectId())]);
+            expect(res.status).toBe(403);
+            expect(stepUps.rows).toEqual([]);
+        });
+
+        it(`is rate limited: ${RATE_LIMITS.password.account.limit} per user, then 429`, async () => {
+            const sid = new Types.ObjectId();
+            model.seed(SELLER, { family: sid });
+            verifyOwnPassword.mockResolvedValue(null);
+            for (let i = 0; i < RATE_LIMITS.password.account.limit; i++)
+                expect((await reauth([sessionToken(sid)])).status).toBe(403);
+
+            const blocked = await reauth([sessionToken(sid)]);
+            expect(blocked.status).toBe(429);
+            expect(await blocked.json()).toMatchObject({
+                error: ErrorCode.RATE_LIMITED,
+            });
+        });
+
+        it('logout drops the session’s step-up', async () => {
+            const sid = new Types.ObjectId();
+            const refreshId = model.seed(SELLER, { family: sid });
+            verifyOwnPassword.mockResolvedValue({ name: SELLER.name });
+            expect((await reauth([sessionToken(sid)])).status).toBe(204);
+
+            await call('POST', '/auth/logout', [refreshCookie(refreshId)]);
+
+            expect(stepUps.rows).toEqual([]);
         });
     });
 });

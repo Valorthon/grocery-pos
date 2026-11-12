@@ -40,6 +40,7 @@ import {
     ValidationError,
 } from '../../common/errors';
 import { runInTransaction } from '../../common/utils/db';
+import { StepUpService } from '../step-up/step-up.service';
 import { saleRequestHash } from '../../sales/idempotency';
 import {
     discountApprovalContext,
@@ -76,6 +77,7 @@ export class ManagerOverrideService implements OnModuleInit {
         @InjectModel(StockCount.name)
         private stockCounts: Model<StockCount> | undefined = undefined,
         private audit: AuditService,
+        private stepUp: StepUpService,
     ) {}
 
     onModuleInit(): void {
@@ -112,6 +114,8 @@ export class ManagerOverrideService implements OnModuleInit {
                     ErrorCode.FORBIDDEN,
                     'Only an active admin can manage manager PINs',
                 );
+            // Setting, resetting or removing a PIN needs a step-up (#310).
+            await this.stepUp.assertLive(actor, session);
             const target = await this.users
                 .findById(targetId)
                 .session(session)

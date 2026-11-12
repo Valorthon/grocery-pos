@@ -7,7 +7,9 @@ import { JwtService } from '@nestjs/jwt';
 import { JWTPayload } from './types/auth.types';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
-import { AuthError, ErrorCode } from '../common/errors';
+import { AuthError, ErrorCode, ForbiddenError } from '../common/errors';
+import { StepUpService } from './step-up/step-up.service';
+import type { AuthUser } from './types';
 import { MS_PER_SECOND } from '../constants';
 
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid username or password';
@@ -20,7 +22,50 @@ export class AuthService {
         private jwtService: JwtService,
         private refreshTokenService: RefreshTokenService,
         private audit: AuditService,
+        private stepUp: StepUpService,
     ) {}
+
+    /**
+     * `POST /auth/reauth` (#310): the caller re-enters their own password
+     * and gets a step-up for this session, `STEP_UP_TTL_S` long. A wrong
+     * password is 403 `USER_WRONG_PASSWORD` (never a 401, which the client
+     * would refresh and replay). A token without `sid`, or a session that
+     * has ended, cannot step up: log in again.
+     */
+    async reauth(actor: AuthUser, password: string): Promise<void> {
+        const sid = actor.sid;
+        if (!sid || !(await this.stepUp.sessionExists(actor.userId, sid)))
+            throw new ForbiddenError(
+                ErrorCode.FORBIDDEN,
+                'Log in again to confirm it is you',
+            );
+        const user = await this.userService.verifyOwnPassword(
+            actor.userId,
+            password,
+        );
+        const auditActor = { userId: actor.userId, username: actor.username };
+        if (!user) {
+            await this.audit.record({
+                actor: auditActor,
+                action: AuditAction.AUTH_REAUTH_FAILED,
+                targetModel: 'User',
+                targetId: actor.userId,
+                after: { name: actor.username },
+            });
+            throw new ForbiddenError(
+                ErrorCode.USER_WRONG_PASSWORD,
+                'That password isn’t right',
+            );
+        }
+        await this.stepUp.grant(actor.userId, sid);
+        await this.audit.record({
+            actor: auditActor,
+            action: AuditAction.AUTH_REAUTH,
+            targetModel: 'User',
+            targetId: actor.userId,
+            after: { name: user.name },
+        });
+    }
 
     async login(dto: LoginDto): Promise<{
         refreshPayload: string;

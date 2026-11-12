@@ -15,6 +15,7 @@ import {
     UpdateBulkDto,
 } from './types';
 import { holdsRole } from '@grocery-pos/contracts';
+import { StepUpService } from '../auth/step-up/step-up.service';
 import { runInTransaction } from '../common/utils/db';
 import { prefixRegex } from '../common/utils/regex';
 import type { AuthUser } from '../auth/types';
@@ -56,6 +57,19 @@ function makeDummyHash(): Promise<string> {
     return argon.hash(randomBytes(32).toString('base64'));
 }
 
+/** Whether an update entry is a step-up-guarded change (#310). */
+function isGuarded(
+    target: PolicyUser,
+    update: { password?: string; roles?: Role[]; isActive?: boolean },
+): boolean {
+    return (
+        update.password !== undefined ||
+        (update.roles !== undefined &&
+            !sameRoles(update.roles, target.roles)) ||
+        (update.isActive === false && target.isActive)
+    );
+}
+
 class UserInfo {
     name!: string;
     roles!: Role[];
@@ -71,6 +85,7 @@ export class UserService implements OnModuleInit {
         @InjectConnection() private connection: Connection,
         @InjectModel(User.name) private model: Model<User>,
         private audit: AuditService,
+        private stepUp: StepUpService,
     ) {}
 
     /** Hashes the dummy up front, so the first unknown-user login is not slower. */
@@ -160,6 +175,15 @@ export class UserService implements OnModuleInit {
                 for (const { target, update } of planned) {
                     assertCanUpdate(actorInfo, target, update);
                 }
+
+                // Step-up (#310): a password reset, an actual role change or
+                // an actual deactivation needs a live re-auth of this session.
+                if (
+                    planned.some(({ target, update }) =>
+                        isGuarded(target, update),
+                    )
+                )
+                    await this.stepUp.assertLive(actor, session);
 
                 const demotesAdmin = planned.some(({ target, update }) =>
                     removesActiveAdmin(target, update),
@@ -333,6 +357,8 @@ export class UserService implements OnModuleInit {
                 for (const user of dto.users) {
                     assertCanGrant(actorInfo.roles, user.roles);
                 }
+                // Creating any user always needs a step-up (#310).
+                await this.stepUp.assertLive(actor, session);
 
                 const inserts = await Promise.all(
                     dto.users.map(async (user) => ({
@@ -422,6 +448,28 @@ export class UserService implements OnModuleInit {
                 session,
             );
         }, this.connection);
+    }
+
+    /**
+     * `POST /auth/reauth`: the signed-in user's name when `password` is
+     * their own and the account is active, else `null`. Always one argon2
+     * verify, like `checkCredentials`.
+     */
+    async verifyOwnPassword(
+        userId: string,
+        password: string,
+    ): Promise<{ name: string } | null> {
+        const user = Types.ObjectId.isValid(userId)
+            ? await this.model
+                  .findById(userId)
+                  .select('name passwordHash isActive')
+                  .lean()
+            : null;
+        const matches = await verifyPassword(
+            user?.passwordHash ?? (await this.getDummyHash()),
+            password,
+        );
+        return user && user.isActive && matches ? { name: user.name } : null;
     }
 
     /**

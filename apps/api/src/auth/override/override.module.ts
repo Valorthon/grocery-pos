@@ -9,6 +9,7 @@ import { User, UserSchema } from '../../user/user.schema';
 import { Sales, SalesSchema } from '../../sales/sales.schema';
 import { Shift, ShiftSchema } from '../../shift/shift.schema';
 import { ProductModule } from '../../product/product.module';
+import { RefreshTokenModule } from '../refresh-token/refresh-token.module';
 import { RateLimitModule } from '../rate-limit/rate-limit';
 import { OverrideGrant, OverrideGrantSchema } from './override-grant.schema';
 import {
@@ -21,6 +22,7 @@ import { ManagerOverrideService } from './override.service';
     imports: [
         JwtModule.register({}),
         RateLimitModule,
+        RefreshTokenModule,
         ProductModule,
         MongooseModule.forFeature([
             { name: StockCount.name, schema: StockCountSchema },

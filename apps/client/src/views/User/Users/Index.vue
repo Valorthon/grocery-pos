@@ -25,6 +25,10 @@
                 :error="loadError"
                 empty-text="No users found"
                 :items-length="totalItems"
+                row-click
+                :row-clickable="canEdit"
+                row-hint="Press Enter to edit the user"
+                @click:row="openEdit"
                 @retry="fetchUsers"
             >
                 <template #cell-roles="{ item }">
@@ -43,42 +47,10 @@
                     }}</Badge>
                 </template>
                 <template #cell-actions="{ item }">
-                    <div class="flex justify-end gap-2">
-                        <button
-                            v-if="
-                                authStore.isAdmin &&
-                                item.roles.some(
-                                    (r) =>
-                                        r === Role.Admin ||
-                                        r === Role.Supervisor,
-                                )
-                            "
-                            type="button"
-                            class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-leaf-600 focus-ring"
-                            :aria-label="`Manage PIN for ${item.name}`"
-                            @click="pinUser = item"
-                        >
-                            Manager PIN
-                        </button>
-                        <button
-                            type="button"
-                            class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
-                            :disabled="!canEdit(item)"
-                            :title="
-                                canEdit(item)
-                                    ? 'Edit'
-                                    : 'Only an admin can edit this user'
-                            "
-                            :aria-label="
-                                canEdit(item)
-                                    ? `Edit ${item.name}`
-                                    : `Edit ${item.name} (only an admin can edit this user)`
-                            "
-                            @click="openEdit(item)"
-                        >
-                            <Pencil class="w-4 h-4" aria-hidden="true" />
-                        </button>
-                    </div>
+                    <RowActions
+                        :label="item.name"
+                        :actions="rowActions(item)"
+                    />
                 </template>
             </BaseTable>
         </PageCard>
@@ -233,18 +205,25 @@
     </BaseModal>
 
     <SetManagerPinDialog :user="pinUser" @close="pinUser = null" />
+    <ReauthDialog
+        :model-value="isReauthOpen"
+        @confirmed="completeReauth"
+        @cancel="cancelReauth"
+    />
     <ConfirmDialog :request="confirmRequest" @answer="answerConfirm" />
 </template>
 
 <script setup lang="ts">
 import { USER_HELP } from '../list-help';
 import { computed, ref } from 'vue';
-import { Pencil, Plus } from '@lucide/vue';
+import { Plus } from '@lucide/vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
+import RowActions from '@/components/ui/RowActions.vue';
+import type { RowAction } from '@/components/ui/row-actions';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -254,6 +233,8 @@ import RoleCards from './RoleCards.vue';
 import { roleLabel } from '../role-look';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import SetManagerPinDialog from '@/components/User/SetManagerPinDialog.vue';
+import ReauthDialog from '@/components/User/Account/ReauthDialog.vue';
+import { isReauthCancelled, useReauth } from '@/composables/useReauth';
 import { useConfirm } from '@/composables/useConfirm';
 import {
     fieldErrors,
@@ -294,6 +275,8 @@ const pinUser = ref<UserView | null>(null);
 
 const uiStore = useUIStore();
 const saving = ref(false);
+// Step-up (#310): a guarded save asks for the own password, then retries.
+const { isReauthOpen, withReauth, completeReauth, cancelReauth } = useReauth();
 
 const authStore = useAuthStore();
 const myRoles = computed(() => authStore.user?.roles ?? []);
@@ -310,6 +293,26 @@ const grantableRoles = computed(() =>
 
 function canEdit(item: UserView): boolean {
     return isSelf(item) || canManageUser(myRoles.value, item.roles);
+}
+
+/**
+ * Edit (the row's own target, or disabled with the reason) and, for an
+ * ADMIN viewer on an Admin/Supervisor row, Manager PIN (#311).
+ */
+function rowActions(item: UserView): RowAction[] {
+    const editable = canEdit(item);
+    return [
+        {
+            label: 'Edit',
+            disabled: !editable,
+            reason: editable ? undefined : 'Only an admin can edit this user',
+            onSelect: () => openEdit(item),
+        },
+        ...(authStore.isAdmin &&
+        item.roles.some((r) => r === Role.Admin || r === Role.Supervisor)
+            ? [{ label: 'Manager PIN', onSelect: () => (pinUser.value = item) }]
+            : []),
+    ];
 }
 
 const headers = [
@@ -474,7 +477,7 @@ async function createUser() {
     if (Object.keys(createErrors.value).length) return;
     saving.value = true;
     try {
-        await api.post('/users', {
+        const body = {
             users: [
                 {
                     name: createForm.value.name,
@@ -482,12 +485,15 @@ async function createUser() {
                     roles: createForm.value.roles,
                 },
             ],
-        } satisfies CreateUsersRequest);
+        } satisfies CreateUsersRequest;
+        await withReauth(() => api.post('/users', body));
         uiStore.queueMessage(Color.SUCCESS, 'User created');
         isCreateOpen.value = false;
         createForm.value = { name: '', password: '', roles: [] };
         void fetchUsers();
     } catch (error) {
+        // Cancelled "Confirm it's you": nothing saved, the form stays.
+        if (isReauthCancelled(error)) return;
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(error, 'Could not create the user.'),
@@ -558,9 +564,10 @@ async function updateUser() {
             update.password = editForm.value.password;
         }
 
-        await api.patch('/users', {
+        const body = {
             updates: [{ user: editForm.value._id, update }],
-        } satisfies UpdateUsersRequest);
+        } satisfies UpdateUsersRequest;
+        await withReauth(() => api.patch('/users', body));
         // A rename keeps the session; the app bar shows the new name now,
         // and the refreshed token carries it to the server's copies.
         if (renaming && self) void authStore.renameSelf(name);
@@ -568,6 +575,7 @@ async function updateUser() {
         isEditOpen.value = false;
         void fetchUsers();
     } catch (error) {
+        if (isReauthCancelled(error)) return;
         // The new name is taken: the duplicate key names `name`.
         if (renaming && isDuplicateName(error)) {
             editErrors.value = { name: 'This username is already taken' };

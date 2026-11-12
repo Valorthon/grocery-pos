@@ -1,3 +1,4 @@
+import type { StepUpService } from '../auth/step-up/step-up.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtService } from '@nestjs/jwt';
 import { Connection, Model, Types, type ClientSession } from 'mongoose';
@@ -102,6 +103,7 @@ beforeEach(() => {
         {
             record: jest.fn().mockResolvedValue(undefined),
         } as unknown as AuditService,
+        {} as StepUpService,
     );
 });
 it.each([Role.Adjuster, Role.Admin])(

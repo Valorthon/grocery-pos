@@ -236,3 +236,9 @@ export const PasswordChangeRateLimit = () =>
         }),
         UseGuards(RateLimitGuard),
     );
+
+/**
+ * `POST /auth/reauth` (#310): the password change's budgets, per IP and per
+ * signed-in user, counted on this route.
+ */
+export const ReauthRateLimit = PasswordChangeRateLimit;

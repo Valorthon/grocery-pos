@@ -464,6 +464,23 @@ requestId}`. A 5xx never carries details or internals.
 - Only RESTOCKER (and ADMIN) add or edit products (`POST /products/bulk`,
   `GET /products/ensureValid`, `PATCH /products`); ADJUSTER keeps stock
   adjustments and product lookup (#83).
+- Step-up re-auth (#310, owner decision 2026-11-12): creating any user,
+  resetting another user's password, an actual role change (compared with
+  the stored roles), an actual deactivation and setting/resetting/removing a
+  manager PIN need the actor's own password re-entered via
+  `POST /auth/reauth` (any signed-in role, the password-change rate
+  limits, 204). It records a `StepUp` `{user, sid, expiresAt}` (TTL index)
+  valid `STEP_UP_TTL_S` (5 min) from the re-auth, never extended. Guarded
+  writes call `StepUpService.assertLive` inside their transaction, which
+  also requires the session's refresh-token family to exist; otherwise
+  403 `USER_REAUTH_REQUIRED` (never a 401). Renames, unchanged roles,
+  `isActive: true` and reactivation are unguarded; a bulk PATCH is guarded
+  if any entry is. A token without `sid` can't step up (403 FORBIDDEN, log
+  in again). Logout and every `revokeAllForUser(s)` delete the step-ups. A
+  wrong password is 403 `USER_WRONG_PASSWORD`. Client: `useReauth()`
+  (`withReauth(run)`) + `ReauthDialog` ("Confirm it's you", "Your
+  password") retry the save once after success; Cancel saves nothing and
+  keeps the edit dialog. Used by Add/Edit User and `SetManagerPinDialog`.
 - Deactivating a user, changing their roles, or resetting or changing a password
   revokes that user's sessions. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.
@@ -498,8 +515,10 @@ requestId}`. A 5xx never carries details or internals.
   work requires an owner decision; this feature adds no archive/export/delete action.
 - Explicit service calls record user creation/name/roles/activation/password/PIN
   changes, product price changes, discounts, voids/refunds, shift open/close/force-close,
-  cash in/drop, purchase-order create/edit/send/cancel/receive (#123), and
-  handled successful/failed credential logins. Replays do not
+  cash in/drop, purchase-order create/edit/send/cancel/receive (#123),
+  handled successful/failed credential logins, and step-up re-auths
+  (`AUTH_REAUTH`/`AUTH_REAUTH_FAILED`, actor and target the user, `name`
+  only, never the password, #310). Replays do not
   duplicate completed-sale events. Existing history is not backfilled or invented.
 - Where state is transactional, the audit entry shares that transaction; opening
   shifts, drawer movements and own-password writes also use a transaction so an
@@ -670,6 +689,22 @@ requestId}`. A 5xx never carries details or internals.
   nothing. Create validates name (trimmed), password and roles like
   `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
+- Row actions (#311, owner decision 2026-11-12): a row with a destination
+  opens by BaseTable `row-click` / `@click:row` (Inventory → Stock history,
+  PO/Stock counts → the order/count, Suppliers/Categories/Users → Edit,
+  Products → Edit for editors else Stock history, Audit → the event); no
+  open-only column or button (`RowOpenButton` is gone). A row the viewer
+  can't open isn't clickable (`rowClickable`), and its ⋯ menu shows the
+  item disabled with a `reason`. Everything else is one ⋯ `RowActions`
+  menu (even for one item) in a right-aligned last column titled
+  "Actions" (key `actions`), with only the viewer's items; a row with
+  none shows no ⋯, and the column is dropped when no row has any (e.g. a
+  RESTOCKER on Batches). Danger items keep their confirmations. Draft
+  tables use `DraftRowActions` (pencil + trash) under a right-aligned
+  "Actions" (PO draft lines: trash only, "Remove <product>"). The register
+  ticket is separate. `layout-drift.spec.ts` refuses "Open"/"Details"/
+  "History"/"Action" headers (Audit's `action` data column excepted) and a
+  non-right-aligned `actions` column.
 - Column help (#263): a `TableHeader` may carry `help` (text or
   `{term, meaning}[]`); BaseTable renders an ⓘ `InfoTooltip` (#258,
   popover top layer, "About {title}", 44px with `-my-3`) after the title

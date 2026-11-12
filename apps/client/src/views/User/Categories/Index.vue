@@ -8,6 +8,10 @@
             :items="rows"
             :loading="loading && !rows.length"
             :error="error"
+            row-click
+            :row-clickable="() => !saving"
+            row-hint="Press Enter to edit the category"
+            @click:row="begin"
             @retry="refresh"
         >
             <template #cell-status="{ item }">
@@ -16,26 +20,7 @@
                 }}</Badge>
             </template>
             <template #cell-actions="{ item }">
-                <div class="flex gap-2">
-                    <BaseButton
-                        size="sm"
-                        :disabled="saving"
-                        @click="begin(item)"
-                        >Edit</BaseButton
-                    ><BaseButton
-                        size="sm"
-                        variant="outline"
-                        :disabled="saving"
-                        @click="toggle(item)"
-                        >{{ item.isActive ? 'Archive' : 'Restore' }}</BaseButton
-                    ><BaseButton
-                        size="sm"
-                        variant="outline"
-                        :disabled="saving"
-                        @click="remove(item)"
-                        >Delete</BaseButton
-                    >
-                </div>
+                <RowActions :label="item.name" :actions="rowActions(item)" />
             </template>
             <template #empty>
                 <EmptyState
@@ -98,6 +83,8 @@ import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
 import { Tags } from '@lucide/vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import RowActions from '@/components/ui/RowActions.vue';
+import type { RowAction } from '@/components/ui/row-actions';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
@@ -116,7 +103,7 @@ const headers: TableHeader[] = [
         help: CATEGORY_HELP.sortOrder,
     },
     { key: 'status', title: 'Status', help: CATEGORY_HELP.status },
-    { key: 'actions', title: 'Actions' },
+    { key: 'actions', title: 'Actions', align: 'right' },
 ];
 const rows = computed(() =>
     categories.value.map((row) => ({ ...row, id: row._id })),
@@ -211,5 +198,23 @@ async function remove(row: CategoryDto) {
     } finally {
         saving.value = false;
     }
+}
+/** Edit, Archive/Restore and Delete in one menu (#311). */
+function rowActions(row: CategoryDto): RowAction[] {
+    return [
+        { label: 'Edit', disabled: saving.value, onSelect: () => begin(row) },
+        {
+            label: row.isActive ? 'Archive' : 'Restore',
+            disabled: saving.value,
+            danger: row.isActive,
+            onSelect: () => void toggle(row),
+        },
+        {
+            label: 'Delete',
+            disabled: saving.value,
+            danger: true,
+            onSelect: () => void remove(row),
+        },
+    ];
 }
 </script>

@@ -13,6 +13,7 @@ import {
     type,
 } from '@/testing/form-dom';
 import AddDialog from './AddDialog.vue';
+import { RESTOCK_HELP } from './restock-help';
 import type { AddForm } from './dto';
 import type { ScannedLine } from '@/composables/useBarcodeCapture';
 
@@ -81,6 +82,20 @@ describe('Restock AddDialog (#17)', () => {
         await open();
         expect(field('Quantity').value).toBe('');
         expect(field('Unit Cost').value).toBe('');
+    });
+
+    it('explains Unit Cost with the shared help (#309)', async () => {
+        await open();
+        const button = document.querySelector(
+            '[data-info-tooltip][aria-label="About Unit Cost"]',
+        );
+        expect(button).not.toBeNull();
+        expect(
+            document
+                .getElementById(button!.getAttribute('aria-describedby')!)
+                ?.textContent?.trim(),
+        ).toBe(RESTOCK_HELP.unitCost);
+        expect(field('Unit Cost')).not.toBeNull();
     });
 
     it('marks the fields for a touch keypad and the API limits', async () => {
