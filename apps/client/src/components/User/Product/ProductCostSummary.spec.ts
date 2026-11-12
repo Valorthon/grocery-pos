@@ -109,4 +109,20 @@ describe('live margin tiles (#290)', () => {
             document.querySelector('[data-testid="tile-cost"]')!.textContent,
         ).toContain('60.00/kg');
     });
+    it('shows Loading cost… until the answer arrives', async () => {
+        let resolve!: (value: unknown) => void;
+        api.get.mockReturnValueOnce(
+            new Promise((yes) => {
+                resolve = yes;
+            }),
+        );
+        await mount({ tiles: true, price: 9000 });
+        expect(document.body.textContent).toContain('Loading cost…');
+        resolve({ data: [{ product: 'one', lastCost: 6000 }] });
+        await flush();
+        expect(document.body.textContent).not.toContain('Loading cost…');
+        expect(
+            document.querySelector('[data-testid="tile-cost"]')!.textContent,
+        ).toContain('60.00/kg');
+    });
 });

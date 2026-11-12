@@ -123,3 +123,28 @@ describe('StatTile (#157)', () => {
         expect(el.querySelector('[data-info-tooltip]')).toBeNull();
     });
 });
+
+describe('StatTile compact (#290)', () => {
+    it('default keeps the card shadow, padding and ink value', async () => {
+        const el = await mount({ label: 'A', value: 1 });
+        expect(el.classList).toContain('shadow-card');
+        expect(el.classList).toContain('p-4');
+        const value = el.querySelector('.font-display')!;
+        expect(value.classList).toContain('text-2xl');
+        expect(value.classList).toContain('text-ink');
+    });
+    it('compact drops the shadow and lets a long value wrap', async () => {
+        const el = await mount({
+            label: 'Latest cost',
+            value: '₱1,234.56/kg',
+            compact: true,
+            valueClass: 'text-danger-fg',
+        });
+        expect(el.classList).not.toContain('shadow-card');
+        expect(el.classList).toContain('min-w-0');
+        const value = el.querySelector('.font-display')!;
+        expect(value.classList).toContain('break-words');
+        expect(value.classList).toContain('text-danger-fg');
+        expect(value.classList).not.toContain('text-ink');
+    });
+});

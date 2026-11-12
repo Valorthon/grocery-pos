@@ -49,7 +49,10 @@
                 class="space-y-4"
             >
                 <h3 id="edit-product-pricing" :class="SECTION">Pricing</h3>
-                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                <div
+                    class="grid gap-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(0,1.4fr)]"
+                    data-testid="pricing-row"
+                >
                     <BaseInput
                         v-model="price"
                         label="Selling price (₱)"
@@ -235,7 +238,7 @@ watch(
 async function save() {
     if (saving.value) return;
     const normalized = name.value.trim().toLowerCase();
-    const amount = parsePesos(price.value);
+    const amount = typedPrice.value;
     const level = parseQuantity(reorderLevel.value, props.product.unit);
     const quantity = parseQuantity(reorderQuantity.value, props.product.unit);
     errors.name =
@@ -243,12 +246,7 @@ async function save() {
             ? 'Enter a valid product name.'
             : '';
     errors.price =
-        admin &&
-        (amount === null ||
-            amount < NUMERIC_LIMITS.PRICE_MIN ||
-            amount > NUMERIC_LIMITS.AMOUNT_MAX)
-            ? 'Enter a valid selling price.'
-            : '';
+        admin && amount === null ? 'Enter a valid selling price.' : '';
     errors.reorderLevel =
         level === null || level < 0 ? 'Enter a valid low stock level.' : '';
     errors.reorderQuantity =

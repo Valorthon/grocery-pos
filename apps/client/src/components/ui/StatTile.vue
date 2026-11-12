@@ -4,7 +4,7 @@
         :to="to"
         :aria-busy="loading ? 'true' : undefined"
         :class="[
-            'relative flex flex-col gap-1 overflow-hidden rounded-card border border-line bg-surface',
+            'relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-card border border-line bg-surface',
             compact ? 'px-3 py-2' : 'p-4 shadow-card',
             to
                 ? 'group transition-colors hover:border-leaf-600 hover:bg-paper focus-ring'
@@ -51,7 +51,7 @@
             v-else
             :class="[
                 'font-display num font-extrabold leading-tight',
-                compact ? 'text-xl' : 'text-2xl',
+                compact ? 'text-lg break-words min-w-0' : 'text-2xl',
                 valueClass ?? 'text-ink',
             ]"
         >

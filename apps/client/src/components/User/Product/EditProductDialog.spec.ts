@@ -419,6 +419,12 @@ describe('EditProductDialog pricing tiles (#290)', () => {
         expect(tile('tile-margin').textContent).toContain('—');
     });
 
+    it('keeps the price input a minimum width beside the tiles', async () => {
+        await mount({ roles: [Role.Admin], lastCost: 100 });
+        const row = document.querySelector('[data-testid="pricing-row"]')!;
+        expect(row.className).toContain('minmax(10rem,1fr)');
+    });
+
     it('non-ADMIN users see no tiles', async () => {
         await mount({ roles: [Role.Restocker], lastCost: 100 });
         expect(document.querySelector('[data-testid="cost-tiles"]')).toBeNull();

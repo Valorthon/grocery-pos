@@ -9,7 +9,7 @@
         >
         <div
             v-else-if="tiles"
-            class="grid grid-cols-2 gap-3"
+            class="grid min-w-0 grid-cols-2 gap-3"
             data-testid="cost-tiles"
         >
             <StatTile
@@ -22,6 +22,8 @@
                 "
                 data-testid="tile-cost"
             />
+            <!-- Red keys on a negative profit: selling below the latest
+                 cost is a real loss per unit (#290). -->
             <StatTile
                 compact
                 label="Margin"
