@@ -1,5 +1,12 @@
 <template>
-    <BaseDropdown v-model="open" align="right" width-class="w-48" floating>
+    <BaseDropdown
+        v-model="open"
+        align="right"
+        width-class="w-48"
+        floating
+        class="flex justify-end"
+        data-row-actions-root
+    >
         <template #trigger="{ trigger }">
             <button
                 ref="triggerRef"
