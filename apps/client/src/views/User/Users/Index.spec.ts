@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { ErrorCode, Role, STRING_LIMITS } from '@grocery-pos/contracts';
 import {
-    check,
+    ASSIGNABLE_ROLES,
+    ErrorCode,
+    Role,
+    STRING_LIMITS,
+} from '@grocery-pos/contracts';
+import { type AssignableRole, ROLE_LOOK } from '../role-look';
+import {
     click,
     field,
     fieldError,
@@ -71,6 +76,22 @@ async function mount() {
     return host;
 }
 
+/** The checkbox on a role's card in the open dialog (#297). */
+function roleBox(role: Role): HTMLInputElement {
+    const box = document.querySelector<HTMLInputElement>(
+        `[data-testid="role-card-${role}"] input`,
+    );
+    if (!box) throw new Error(`No card for ${role}`);
+    return box;
+}
+
+async function checkRole(role: Role, checked: boolean): Promise<void> {
+    const box = roleBox(role);
+    box.checked = checked;
+    box.dispatchEvent(new Event('change'));
+    await flush();
+}
+
 const tableError = () =>
     document.querySelector<HTMLElement>('[data-testid="table-error"]');
 
@@ -114,7 +135,7 @@ describe('users save errors (issue #18)', () => {
         await click('Add User');
         await type('Username', 'bea');
         await type('Password', 'long-enough-1');
-        await check(Role.Seller, true);
+        await checkRole(Role.Seller, true);
         await click('Save');
     }
 
@@ -216,25 +237,22 @@ describe('user editor (issue #20)', () => {
             .click();
         await flush();
 
-        await check(Role.Restocker, true);
-        await check(Role.Seller, false);
+        await checkRole(Role.Restocker, true);
+        await checkRole(Role.Seller, false);
         await flush();
-        expect(rowRoles()).toContain(Role.Seller);
-        expect(rowRoles()).not.toContain(Role.Restocker);
+        expect(rowRoles()).toContain('Seller');
+        expect(rowRoles()).not.toContain('Restocker');
 
         await click('Cancel');
-        expect(rowRoles()).toContain(Role.Seller);
-        expect(rowRoles()).not.toContain(Role.Restocker);
+        expect(rowRoles()).toContain('Seller');
+        expect(rowRoles()).not.toContain('Restocker');
 
         // Reopened, the editor starts again from the row.
         document
             .querySelector<HTMLButtonElement>('button[title="Edit"]')!
             .click();
         await flush();
-        const seller = [...document.querySelectorAll('label')]
-            .filter((l) => l.textContent?.trim() === String(Role.Seller))
-            .slice(-1)[0]!
-            .querySelector('input')!;
+        const seller = roleBox(Role.Seller);
         expect(seller.checked).toBe(true);
         expect(api.patch).not.toHaveBeenCalled();
     });
@@ -262,7 +280,7 @@ describe('user editor (issue #20)', () => {
         await click('Add User');
         await type('Username', 'bea');
         await type('Password', 'short');
-        await check(Role.Seller, true);
+        await checkRole(Role.Seller, true);
 
         await click('Save');
 
@@ -347,7 +365,7 @@ describe('users search and create errors (issue #20 review)', () => {
         await type('Password', 'long-enough-1');
         expect(fieldError('Password')).toBe('');
 
-        await check(Role.Seller, true);
+        await checkRole(Role.Seller, true);
         expect(rolesError()).toBeNull();
     });
 
@@ -359,7 +377,7 @@ describe('users search and create errors (issue #20 review)', () => {
         // The limit inside spaces: the API trims, so this is accepted.
         await type('Username', `  ${'a'.repeat(STRING_LIMITS.USERNAME)}  `);
         await type('Password', 'long-enough-1');
-        await check(Role.Seller, true);
+        await checkRole(Role.Seller, true);
 
         await click('Save');
 
@@ -383,8 +401,8 @@ describe('own account (issue #61)', () => {
     };
 
     async function editRow(name: string) {
-        const row = [...document.querySelectorAll('tbody tr')].find((tr) =>
-            tr.textContent?.includes(name),
+        const row = [...document.querySelectorAll('tbody tr')].find(
+            (tr) => tr.querySelector('td')?.textContent?.trim() === name,
         )!;
         row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
         await flush();
@@ -510,8 +528,8 @@ describe('renaming users (issue #106)', () => {
     };
 
     async function editRow(name: string) {
-        const row = [...document.querySelectorAll('tbody tr')].find((tr) =>
-            tr.textContent?.includes(name),
+        const row = [...document.querySelectorAll('tbody tr')].find(
+            (tr) => tr.querySelector('td')?.textContent?.trim() === name,
         )!;
         row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
         await flush();
@@ -814,7 +832,7 @@ describe('renaming users (issue #106)', () => {
         await type('Username', 'chief');
         await flush();
 
-        const seller = field(String(Role.Seller));
+        const seller = roleBox(Role.Seller);
         expect(seller.disabled).toBe(true);
         expect(
             document.querySelector('[data-testid="self-active-hint"]'),
@@ -929,5 +947,155 @@ describe('column help (#263)', () => {
         )!;
         expect(tip.querySelectorAll('dt')).toHaveLength(6);
         expect(about('Name')).toBeNull();
+    });
+});
+
+describe('role cards (#297)', () => {
+    const cards = () =>
+        [...document.querySelectorAll('[data-testid^="role-card-"]')].map((c) =>
+            c.getAttribute('data-testid')!.replace('role-card-', ''),
+        );
+    const lockedHint = () =>
+        document.querySelector('[data-testid="roles-locked-hint"]')
+            ?.textContent;
+    async function openEditor() {
+        document
+            .querySelector<HTMLButtonElement>('button[title="Edit"]')!
+            .click();
+        await flush();
+    }
+
+    it('shows one card per role with its name and description', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.post.mockResolvedValueOnce({ data: {} });
+        await mount();
+        await click('Add User');
+
+        expect(cards()).toEqual([...ASSIGNABLE_ROLES]);
+        for (const role of ASSIGNABLE_ROLES) {
+            const look = ROLE_LOOK[role as AssignableRole];
+            const box = roleBox(role);
+            const name = document.getElementById(
+                box.getAttribute('aria-labelledby')!,
+            );
+            const desc = document.getElementById(
+                box.getAttribute('aria-describedby')!,
+            );
+            expect(name?.textContent?.trim()).toBe(look.label);
+            expect(desc?.textContent?.trim()).toBe(look.description);
+            // The whole card is the checkbox's label.
+            expect(box.closest('label')?.dataset.testid).toBe(
+                `role-card-${role}`,
+            );
+        }
+
+        await type('Username', 'bea');
+        await type('Password', 'long-enough-1');
+        await checkRole(Role.Restocker, true);
+        expect(
+            document.querySelector(
+                `[data-testid="role-card-${Role.Restocker}"]`,
+            )!.className,
+        ).toContain('border-leaf-600');
+        await checkRole(Role.Adjuster, true);
+        await checkRole(Role.Restocker, false);
+        await click('Save');
+
+        expect(api.post).toHaveBeenCalledWith('/users', {
+            users: [
+                {
+                    name: 'bea',
+                    password: 'long-enough-1',
+                    roles: [Role.Adjuster],
+                },
+            ],
+        });
+    });
+
+    it('lists only grantable roles on create for a user manager', async () => {
+        useAuthStore().user = { username: 'boss', roles: [Role.UserManager] };
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await click('Add User');
+
+        expect(cards()).toEqual([Role.Seller, Role.Adjuster, Role.Restocker]);
+    });
+
+    it('disables roles a user manager cannot grant, saying why', async () => {
+        useAuthStore().user = { username: 'boss', roles: [Role.UserManager] };
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await openEditor();
+
+        expect(cards()).toEqual([...ASSIGNABLE_ROLES]);
+        expect(roleBox(Role.Seller).disabled).toBe(false);
+        expect(roleBox(Role.Admin).disabled).toBe(true);
+        expect(roleBox(Role.UserManager).disabled).toBe(true);
+        expect(roleBox(Role.Supervisor).disabled).toBe(true);
+        // A disabled card's checkbox is also described by the reason.
+        expect(roleBox(Role.Admin).getAttribute('aria-describedby')).toContain(
+            'roles-locked-hint',
+        );
+        expect(
+            roleBox(Role.Seller).getAttribute('aria-describedby'),
+        ).not.toContain('roles-locked-hint');
+        expect(
+            document
+                .querySelector('[role="group"]')
+                ?.getAttribute('aria-labelledby'),
+        ).toBe('edit-roles-heading');
+        expect(lockedHint()).toContain(
+            'Only an admin can grant User manager, Admin, Supervisor.',
+        );
+    });
+
+    it('shows no reason when an admin edits another user', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await openEditor();
+
+        for (const role of ASSIGNABLE_ROLES) {
+            expect(roleBox(role).disabled).toBe(false);
+        }
+        expect(lockedHint()).toBeUndefined();
+    });
+
+    it('disables every role on the own row', async () => {
+        useAuthStore().user = {
+            userId: 'u1',
+            username: 'ana',
+            roles: [Role.Admin],
+        };
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await openEditor();
+
+        for (const role of ASSIGNABLE_ROLES) {
+            expect(roleBox(role).disabled).toBe(true);
+        }
+        expect(lockedHint()).toContain("You can't change your own roles.");
+    });
+
+    it('shows friendly role names in the list', async () => {
+        api.get.mockResolvedValue({
+            data: {
+                data: [
+                    {
+                        _id: 'm1',
+                        name: 'boss',
+                        roles: [Role.UserManager, Role.Seller],
+                        isActive: true,
+                    },
+                ],
+                totalItems: 1,
+            },
+        });
+        await mount();
+        const cell = document
+            .querySelector('tbody tr')!
+            .querySelectorAll('td')[1]!;
+        expect(cell.textContent).toContain('User manager');
+        expect(cell.textContent).toContain('Seller');
+        expect(cell.textContent).not.toContain(Role.UserManager);
     });
 });
