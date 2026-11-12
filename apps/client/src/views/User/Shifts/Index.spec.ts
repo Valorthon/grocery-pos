@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import {
@@ -99,6 +100,7 @@ describe('Shifts admin force-close (issue #25)', () => {
 
         expect(api.post).not.toHaveBeenCalled();
         expect(errorText()).toContain(COUNTS_INVALID);
+        expect(inFooter('force-close-error')).toBe(true);
         expect(
             document
                 .querySelector('[data-testid="force-close-error"]')

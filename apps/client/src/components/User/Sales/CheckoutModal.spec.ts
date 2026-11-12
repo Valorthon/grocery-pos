@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { type App, createApp, h, nextTick, ref } from 'vue';
 import { type PaymentRequest, PaymentType } from '@grocery-pos/contracts';
 import CheckoutModal from './CheckoutModal.vue';
@@ -244,6 +245,7 @@ describe('CheckoutModal', () => {
             await flush();
 
             expect(errorText()).toContain('Could not record the sale');
+            expect(inFooter('checkout-error')).toBe(true);
             expect(document.activeElement).toBe(amountInput());
         });
     });

@@ -46,6 +46,8 @@
     </div>
     <BaseModal
         v-model="status.pendingOpen"
+        :error="failure"
+        error-testid="offline-pending-error"
         title="Pending offline cash sales"
         max-width="40rem"
         scrollable
@@ -94,13 +96,18 @@
                 </button>
             </template>
         </div>
-        <p v-if="failure" role="alert" class="text-sm text-red-800">
-            {{ failure }}
-        </p>
+        <template #footer>
+            <BaseButton
+                variant="outline"
+                data-testid="offline-pending-close"
+                @click="status.pendingOpen = false"
+                >Close</BaseButton
+            >
+        </template>
     </BaseModal>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useOfflineStore } from '@/stores/offline';
 import { useAuthStore } from '@/stores/auth';
 import { useShiftStore } from '@/stores/shift';
@@ -110,6 +117,7 @@ import {
     type OfflinePendingSale,
 } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
 const status = useOfflineStore();
 const auth = useAuthStore();
@@ -117,6 +125,13 @@ const shifts = useShiftStore();
 const reasons = reactive<Record<string, string>>({});
 const working = ref(false);
 const failure = ref('');
+// A closed dialog forgets its last failure, so reopening starts clean.
+watch(
+    () => status.pendingOpen,
+    (open) => {
+        if (!open) failure.value = '';
+    },
+);
 async function retry() {
     status.setConnection(navigator.onLine);
     if (shifts.activeShift && auth.user?.roles.includes(Role.Seller))

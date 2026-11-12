@@ -1,7 +1,9 @@
 import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
 import OfflineStatus from './OfflineStatus.vue';
+
 const mock = vi.hoisted(() => ({
     status: null as unknown,
     auth: { user: { userId: 'seller', roles: ['SELLER'] } },
@@ -157,6 +159,14 @@ it.each([new Error('Server unavailable'), 'unexpected error'])(
         expect(document.body.textContent).toContain(
             failure instanceof Error ? failure.message : 'sale is kept',
         );
+        expect(inFooter('offline-pending-error')).toBe(true);
+        status.pendingOpen = false;
+        await flush();
+        status.pendingOpen = true;
+        await flush();
+        expect(
+            document.querySelector('[data-testid="offline-pending-error"]'),
+        ).toBeNull();
         expect(status.pending).toHaveLength(1);
     },
 );

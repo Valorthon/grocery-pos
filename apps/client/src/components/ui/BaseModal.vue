@@ -98,10 +98,34 @@
                         </div>
 
                         <div
-                            v-if="$slots.footer"
-                            class="shrink-0 px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex justify-end gap-2.5 items-center"
+                            v-if="$slots.footer || error"
+                            data-modal-footer
+                            class="shrink-0 px-4 sm:px-5 py-3.5 border-t border-line bg-paper flex flex-col gap-3"
                         >
-                            <slot name="footer" />
+                            <!--
+                                A submit or server error, pinned above the
+                                buttons so it shows without scrolling (#321).
+                                Capped so a phone's body still scrolls.
+                            -->
+                            <div
+                                v-if="error"
+                                role="alert"
+                                data-modal-error
+                                :data-testid="errorTestid || undefined"
+                                class="max-h-24 overflow-y-auto p-3 rounded-control border border-danger-border bg-danger-bg text-xs font-semibold text-danger-fg flex items-start gap-2 break-words"
+                            >
+                                <AlertCircle
+                                    class="w-4 h-4 shrink-0 mt-px"
+                                    aria-hidden="true"
+                                />
+                                <span class="min-w-0">{{ error }}</span>
+                            </div>
+                            <div
+                                v-if="$slots.footer"
+                                class="flex justify-end gap-2.5 items-center"
+                            >
+                                <slot name="footer" />
+                            </div>
                         </div>
                     </div>
                 </Transition>
@@ -120,7 +144,7 @@ import {
     useTemplateRef,
     watch,
 } from 'vue';
-import { X } from '@lucide/vue';
+import { AlertCircle, X } from '@lucide/vue';
 import {
     focusables,
     type ModalEntry,
@@ -155,6 +179,13 @@ const props = withDefaults(
         ariaLabel?: string;
         /** `dialog`: focus the dialog itself on open, not a control. */
         initialFocus?: 'auto' | 'dialog';
+        /**
+         * A submit or server error, shown in the footer above the buttons
+         * (`role="alert"`, #321). Field errors stay under their fields.
+         */
+        error?: string | null;
+        /** The error row's `data-testid`. */
+        errorTestid?: string;
     }>(),
     {
         title: '',
@@ -164,6 +195,8 @@ const props = withDefaults(
         scrollable: false,
         ariaLabel: '',
         initialFocus: 'auto',
+        error: null,
+        errorTestid: '',
     },
 );
 

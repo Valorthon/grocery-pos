@@ -20,6 +20,7 @@ import {
     headerText,
     pickFirstMatch,
     type,
+    inFooter,
 } from '@/testing/form-dom';
 import { PURCHASE_ORDER_HELP } from '@/components/User/PurchaseOrder/purchase-order';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
@@ -570,6 +571,7 @@ describe('Purchase order list and receipts (#123)', () => {
         expect(document.body.textContent).toContain(
             'Enter a received quantity on at least one line.',
         );
+        expect(inFooter('receive-error')).toBe(true);
         await type('Received (pc)', '1');
         await type('Actual unit cost', '1.50');
         expect(document.body.textContent).toContain('variance +₱0.50');
