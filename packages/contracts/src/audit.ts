@@ -76,6 +76,11 @@ export interface AuditLogView {
     userAgent: string | null;
     createdAt: string;
 }
+export const AUDIT_TARGET_SHAPE: WireShape<AuditLogView['target']> = {
+    model: 'required',
+    id: 'required',
+    label: 'optional',
+};
 export const AUDIT_LOG_SHAPE: WireShape<AuditLogView> = {
     _id: 'required',
     actor: 'required',

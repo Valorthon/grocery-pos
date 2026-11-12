@@ -301,6 +301,11 @@ it('opens a row by click or Enter, with no Details column, and shows the target 
                 },
                 {
                     ...row(),
+                    _id: 'id3',
+                    target: { model: 'Settings', id: null },
+                },
+                {
+                    ...row(),
                     _id: 'id2',
                     target: {
                         model: 'PurchaseOrder',
@@ -308,7 +313,7 @@ it('opens a row by click or Enter, with no Details column, and shows the target 
                     },
                 },
             ],
-            totalItems: 2,
+            totalItems: 3,
         },
     });
     await mount();
@@ -321,7 +326,9 @@ it('opens a row by click or Enter, with no Details column, and shows the target 
     ).toBe(false);
     const rows = document.querySelectorAll('tbody tr[data-row-click]');
     expect(rows[0].textContent).toContain('User · admin');
-    expect(rows[1].textContent).toContain('Purchase order · 994abcde');
+    expect(rows[1].textContent).toContain('Store settings');
+    expect(rows[1].textContent).not.toContain('Settings ·');
+    expect(rows[2].textContent).toContain('Purchase order · 994abcde');
     await openRow();
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     document
@@ -334,7 +341,7 @@ it('opens a row by click or Enter, with no Details column, and shows the target 
     );
     await flush();
     expect(document.querySelector('[role="dialog"]')).toBeNull();
-    rows[1].dispatchEvent(
+    rows[2].dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
     );
     await flush();
@@ -402,15 +409,15 @@ it('shows the heading, details, device summary, copy and a changes table (#306)'
     writeText.mockRejectedValueOnce(new Error('denied'));
     await press('Copy target ID');
     await flush();
-    expect(toasts()).toContain('Could not copy the target id');
+    expect(toasts()).toContain('Could not copy the target ID');
     const rows = [
         ...document.querySelectorAll('[data-testid="audit-changes"] tbody tr'),
     ].map((tr) => [...tr.children].map((cell) => cell.textContent?.trim()));
     expect(rows).toEqual([
-        ['Active', 'Yes', 'No'],
-        ['Roles', 'Seller', 'Seller, Admin'],
-        ['Note', 'empty', '—'],
-        ['Password changed', '—', 'Yes'],
+        ['Active', 'Yes', 'No (changed)'],
+        ['Roles', 'Seller', 'Seller, Admin (changed)'],
+        ['Note', 'empty', '— (changed)'],
+        ['Password changed', '—', 'Yes (changed)'],
     ]);
     expect(
         document.querySelectorAll(

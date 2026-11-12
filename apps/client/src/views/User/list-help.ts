@@ -53,7 +53,7 @@ export const USER_HELP = {
 
 export const AUDIT_HELP = {
     action: 'The sensitive change recorded; View (Details) shows its before and after.',
-    target: 'The type and id of the record affected.',
+    target: 'The type and current name of the record affected, or the last 8 characters of its id when it has no name.',
 } satisfies Record<string, ColumnHelp>;
 
 export const RESTOCK_HELP = {

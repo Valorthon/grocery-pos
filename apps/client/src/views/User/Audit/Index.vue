@@ -237,7 +237,13 @@
                                             'font-semibold text-leaf-700',
                                     ]"
                                 >
-                                    {{ change.after }}
+                                    {{ change.after
+                                    }}<span
+                                        v-if="change.changed"
+                                        class="sr-only"
+                                    >
+                                        (changed)</span
+                                    >
                                 </td>
                             </tr>
                         </tbody>

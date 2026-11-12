@@ -184,35 +184,51 @@ export class AuditService implements OnModuleInit {
                 label: (doc) => String(doc._id).slice(-8).toUpperCase(),
             },
             Shift: {
-                fields: 'cashierName openedAt',
+                fields: 'cashier cashierName openedAt',
+                // The cashier's current name, else the name at open.
                 label: (doc) =>
-                    `${String(doc.cashierName)} · ${date.format(new Date(doc.openedAt as Date))}`,
+                    `${labels.get(`User:${String(doc.cashier)}`) ?? String(doc.cashierName)} · ${date.format(new Date(doc.openedAt as Date))}`,
             },
         };
-        await Promise.all(
-            [...ids].map(async ([name, set]) => {
-                const lookup = lookups[name];
-                const model: Model<unknown> | undefined =
-                    name === 'User'
-                        ? (this.users as unknown as Model<unknown>)
-                        : this.connection?.models[name];
-                if (!lookup || !model) return;
-                const docs = (await model
-                    .find(
-                        {
-                            _id: {
-                                $in: [...set].map(
-                                    (id) => new Types.ObjectId(id),
-                                ),
-                            },
+        const find = async (name: string, set: Set<string>) => {
+            const model: Model<unknown> | undefined =
+                name === 'User'
+                    ? (this.users as unknown as Model<unknown>)
+                    : this.connection?.models[name];
+            if (!lookups[name] || !model) return [];
+            return (await model
+                .find(
+                    {
+                        _id: {
+                            $in: [...set].map((id) => new Types.ObjectId(id)),
                         },
-                        lookup.fields,
-                    )
-                    .lean()) as unknown as Record<string, unknown>[];
-                for (const doc of docs)
-                    labels.set(`${name}:${String(doc._id)}`, lookup.label(doc));
-            }),
+                    },
+                    lookups[name].fields,
+                )
+                .lean()) as unknown as Record<string, unknown>[];
+        };
+        // Shifts first: their cashiers join the one batched User query.
+        const shifts = ids.has('Shift')
+            ? await find('Shift', ids.get('Shift')!)
+            : [];
+        for (const shift of shifts)
+            add('User', shift.cashier as Types.ObjectId | undefined);
+        const found = await Promise.all(
+            [...ids]
+                .filter(([name]) => name !== 'Shift')
+                .map(async ([name, set]) => ({
+                    name,
+                    docs: await find(name, set),
+                })),
         );
+        for (const { name, docs } of found)
+            for (const doc of docs)
+                labels.set(
+                    `${name}:${String(doc._id)}`,
+                    lookups[name].label(doc),
+                );
+        for (const doc of shifts)
+            labels.set(`Shift:${String(doc._id)}`, lookups.Shift.label(doc));
         return labels;
     }
 }

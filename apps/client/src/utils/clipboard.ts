@@ -9,7 +9,7 @@ export async function copyText(text: string, what: string): Promise<void> {
     } catch {
         ui.queueMessage(
             Color.ERROR,
-            `Could not copy the ${what.toLowerCase()}`,
+            `Could not copy the ${what.charAt(0).toLowerCase()}${what.slice(1)}`,
         );
     }
 }

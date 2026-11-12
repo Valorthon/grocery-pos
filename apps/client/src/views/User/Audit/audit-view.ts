@@ -18,6 +18,7 @@ export function shortId(id: string): string {
 
 /** "User · admin", else the model and short id, else the model alone. */
 export function targetText(target: AuditLogView['target']): string {
+    if (target.model === 'Settings') return target.label ?? 'Store settings';
     const model = MODEL_LABELS[target.model] ?? target.model;
     if (target.label) return `${model} · ${target.label}`;
     return target.id ? `${model} · ${shortId(target.id)}` : model;

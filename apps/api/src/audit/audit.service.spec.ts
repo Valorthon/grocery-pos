@@ -364,7 +364,8 @@ it('resolves current target and approver names with one $in query per model (#30
         Shift: finder([
             {
                 _id: shift,
-                cashierName: 'ana',
+                cashier: user,
+                cashierName: 'ana-at-open',
                 openedAt: new Date('2026-11-11T20:00:00Z'),
             },
         ]),
