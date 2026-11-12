@@ -855,6 +855,9 @@ describe('Purchase order Lines help (#288)', () => {
         expect(titles).toContain('Expected cost');
         await press('Back to list');
         await press('Open');
+        expect(
+            [...document.querySelectorAll('thead th')].map(headerText),
+        ).toContain('Received');
         expect(columnHelp('Ordered')).toBe(PURCHASE_ORDER_HELP.ordered);
         expect(columnHelp('Expected cost')).toBe(
             PURCHASE_ORDER_HELP.expectedCost,

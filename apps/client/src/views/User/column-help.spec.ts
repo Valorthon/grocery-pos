@@ -94,11 +94,11 @@ describe('column help lists every value (#263)', () => {
     });
 
     it('purchase order Ordered and Expected cost (#288)', () => {
-        expect(PURCHASE_ORDER_HELP.ordered).toContain(
-            "Stock doesn't change until you receive it.",
+        expect(PURCHASE_ORDER_HELP.ordered).toBe(
+            "How much you're ordering from the supplier, in the product's unit. Stock doesn't change until you receive it.",
         );
-        expect(PURCHASE_ORDER_HELP.expectedCost).toContain(
-            'Prefilled from the latest receipt',
+        expect(PURCHASE_ORDER_HELP.expectedCost).toBe(
+            'What you expect to pay per unit. Prefilled from the latest receipt; you confirm the real cost when receiving.',
         );
     });
 
