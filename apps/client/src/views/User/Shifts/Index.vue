@@ -40,6 +40,8 @@
 
         <BaseModal
             v-model="isDialogOpen"
+            :error="closeError"
+            error-testid="force-close-error"
             :title="selected?.report ? '' : 'Open Shift'"
             max-width="56rem"
             scrollable
@@ -92,15 +94,6 @@
                         {{ formatCurrency(countedCash) }}
                     </span>
                 </div>
-
-                <p
-                    v-if="closeError"
-                    role="alert"
-                    class="text-xs font-semibold text-red-600"
-                    data-testid="force-close-error"
-                >
-                    {{ closeError }}
-                </p>
             </div>
 
             <template #footer>

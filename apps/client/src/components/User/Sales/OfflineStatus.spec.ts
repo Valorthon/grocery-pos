@@ -1,7 +1,9 @@
 import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
 import OfflineStatus from './OfflineStatus.vue';
+
 const mock = vi.hoisted(() => ({
     status: null as unknown,
     auth: { user: { userId: 'seller', roles: ['SELLER'] } },
@@ -87,6 +89,8 @@ it('opens pending collected cash without offering destructive discard', async ()
         'Do not charge the customer again',
     );
     expect(document.body.textContent).toContain('log in on this terminal');
+    // #328: the key is labelled as a key, never as a sale number.
+    expect(document.body.textContent).toContain('Pending sale key key');
     expect(
         Array.from(document.body.querySelectorAll('button')).some((b) =>
             b.textContent?.includes('Discard'),
@@ -157,6 +161,14 @@ it.each([new Error('Server unavailable'), 'unexpected error'])(
         expect(document.body.textContent).toContain(
             failure instanceof Error ? failure.message : 'sale is kept',
         );
+        expect(inFooter('offline-pending-error')).toBe(true);
+        status.pendingOpen = false;
+        await flush();
+        status.pendingOpen = true;
+        await flush();
+        expect(
+            document.querySelector('[data-testid="offline-pending-error"]'),
+        ).toBeNull();
         expect(status.pending).toHaveLength(1);
     },
 );

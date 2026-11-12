@@ -3,8 +3,8 @@
         <PageCard heading="Store identity">
             <div class="p-5 space-y-4">
                 <p class="text-sm text-slate-600">
-                    Store identity appears on new on-screen receipts and closing
-                    reports. Existing saved identities remain unchanged.
+                    Store identity appears on new on-screen sale summaries and
+                    closing reports. Existing saved identities remain unchanged.
                 </p>
                 <p
                     v-if="settings.error"
@@ -179,7 +179,7 @@ const identityFields: {
     { key: 'tin', label: 'TIN (optional)', max: SETTINGS_LIMITS.TIN },
     {
         key: 'receiptFooter',
-        label: 'Receipt footer',
+        label: 'Sale summary footer',
         max: SETTINGS_LIMITS.FOOTER,
     },
 ];

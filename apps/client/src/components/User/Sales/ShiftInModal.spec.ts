@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { DEFAULT_TERMINAL, ShiftStatus } from '@grocery-pos/contracts';
@@ -77,6 +78,7 @@ describe('ShiftInModal (issue #25)', () => {
         await submit();
 
         expect(errorText()).toContain(FLOAT_REQUIRED);
+        expect(inFooter('shift-in-error')).toBe(true);
         expect(api.post).not.toHaveBeenCalled();
         expect(shift.shiftInOpen).toBe(true);
     });

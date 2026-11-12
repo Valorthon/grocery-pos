@@ -1,27 +1,5 @@
 <template>
-    <form
-        class="mt-3 flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center"
-        @submit.prevent="emit('submit')"
-    >
-        <div
-            class="flex items-center bg-surface border border-line-strong rounded-card pl-3 pr-1 py-1 shrink-0"
-        >
-            <span
-                class="text-xs font-bold text-muted uppercase tracking-wider mr-2"
-                >Qty:</span
-            >
-            <select
-                v-model.number="multiplier"
-                aria-label="Quantity per scan"
-                class="num min-h-11 min-w-11 px-1 bg-transparent text-ink font-bold text-sm cursor-pointer rounded focus-ring"
-                @change="emit('multiplier-change')"
-            >
-                <option v-for="q in qtyOptions" :key="q" :value="q">
-                    {{ q }}x
-                </option>
-            </select>
-        </div>
-
+    <form class="mt-3" @submit.prevent="emit('submit')">
         <div class="relative flex-1">
             <div
                 class="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-leaf-600 pointer-events-none"
@@ -41,11 +19,6 @@
                 aria-autocomplete="list"
                 aria-controls="product-matches"
                 :aria-expanded="matchCount > 0"
-                :aria-activedescendant="
-                    highlighted === -1
-                        ? undefined
-                        : `product-match-${highlighted}`
-                "
                 :class="
                     /*
                      * Room for the buttons on the right (#89):
@@ -56,9 +29,7 @@
                 "
                 class="w-full min-h-14 pl-12 py-3 bg-surface text-ink placeholder:text-muted text-base font-mono font-bold rounded-card border-2 border-line-strong shadow-card focus:border-leaf-600 focus:outline-3 focus:outline-offset-0 focus:outline-leaf-500 disabled:opacity-60 transition-colors"
                 @input="emit('search-change')"
-                @keydown.down.prevent="emit('move', 1)"
-                @keydown.up.prevent="emit('move', -1)"
-                @keydown.esc="emit('unhighlight')"
+                @keydown.down="onDown"
             />
             <div
                 class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1"
@@ -88,9 +59,8 @@
     </form>
 
     <!--
-        The multiplier applies to the next scan only (decision
-        2026-09-25, #23), whether set with the Qty picker or
-        typed as "12*".
+        A typed "12*" multiplies the next scan or pick only (#23);
+        the Qty picker is gone (#323).
     -->
     <div role="status" aria-live="polite">
         <p
@@ -130,7 +100,7 @@
 
 <script setup lang="ts">
 /**
- * The register's scan box (#163): the Qty picker, the scan/search input,
+ * The register's scan box (#163): the scan/search input,
  * the next-scan badge and the scan result regions. State lives in Sell.vue.
  */
 import { useTemplateRef } from 'vue';
@@ -138,24 +108,33 @@ import { AlertCircle, Barcode, CheckCircle2, X } from '@lucide/vue';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import { REGISTER_KEYS } from '@/composables/useRegisterShortcuts';
 
-defineProps<{
+const props = defineProps<{
     locked: boolean;
-    qtyOptions: readonly number[];
     matchCount: number;
-    highlighted: number;
+    /** The matches answer the current text (`settled`), #322 review. */
+    matchesSettled: boolean;
     nextScanQty: number;
     scanFeedback: { type: 'success' | 'error'; message: string } | null;
 }>();
 const query = defineModel<string>({ required: true });
-const multiplier = defineModel<number>('multiplier', { required: true });
 const emit = defineEmits<{
     submit: [];
-    'multiplier-change': [];
     'search-change': [];
-    move: [delta: number];
-    unhighlight: [];
+    /** ↓ with matches listed: the focus goes to the first one (#322). */
+    'enter-matches': [];
     clear: [];
 }>();
+
+function onDown(event: KeyboardEvent) {
+    if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) {
+        return;
+    }
+    if (event.isComposing || props.matchCount === 0) return;
+    // A list for older text can't be entered; ↓ does nothing until it is.
+    event.preventDefault();
+    if (!props.matchesSettled) return;
+    emit('enter-matches');
+}
 
 const input = useTemplateRef<HTMLInputElement>('input');
 defineExpose({ input });

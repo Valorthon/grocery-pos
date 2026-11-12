@@ -1,6 +1,8 @@
 <template>
     <BaseModal
         v-model="open"
+        :error="error"
+        error-testid="shift-in-error"
         title="Shift In · Opening Float"
         :subtitle="`Log starting cash in drawer for ${terminal} (${cashierName})`"
         max-width="56rem"
@@ -24,15 +26,6 @@
             </div>
             <ShieldCheck class="w-5 h-5 text-leaf-300" />
         </div>
-
-        <p
-            v-if="error"
-            role="alert"
-            class="mt-3 text-xs font-semibold text-danger-fg"
-            data-testid="shift-in-error"
-        >
-            {{ error }}
-        </p>
 
         <template #footer>
             <BaseButton

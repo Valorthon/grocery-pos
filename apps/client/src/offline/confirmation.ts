@@ -24,7 +24,7 @@ export function requireOfflineConfirmation(
         receipt.changeGiven !== entry.receipt.changeGiven
     )
         throw new Error(
-            'The server did not confirm this exact cash receipt. It remains pending; retry or ask an admin.',
+            'The server did not confirm this exact cash sale. It remains pending; retry or ask an admin.',
         );
     return receipt as Receipt;
 }

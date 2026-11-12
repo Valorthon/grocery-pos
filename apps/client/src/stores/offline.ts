@@ -283,7 +283,7 @@ export const useOfflineStore = defineStore('offline', () => {
         if (existing) {
             if (gen !== generation)
                 throw new Error(
-                    'The cashier changed; the original pending receipt is kept.',
+                    'The cashier changed; the original pending sale is kept.',
                 );
             return existing.receipt;
         }

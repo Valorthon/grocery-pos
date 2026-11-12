@@ -157,7 +157,7 @@ export async function queueOffline(
         if (prior) {
             if (JSON.stringify(prior.request) !== JSON.stringify(entry.request))
                 throw new Error(
-                    'This receipt key already has a different pending payment. Review pending sales.',
+                    'This sale key already has a different pending payment. Review pending sales.',
                 );
             await completed;
             return prior;

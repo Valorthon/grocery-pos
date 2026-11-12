@@ -589,6 +589,11 @@ requestId}`. A 5xx never carries details or internals.
   (`justify-end`), Cancel then the primary action, with no `flex-1`
   buttons, in every dialog using it (Restock Add and the PO receive dialog included); only Receipt and Z-read keep
   full-width `flex-1` buttons and DateRangeFilter its `ml-auto` Done.
+  A submit or server error goes in `BaseModal`'s `error` prop (with
+  `errorTestid`), a full-width `role=alert` danger row pinned in the
+  footer above the buttons, height-capped so the body still scrolls
+  (#321): Shift In/Out, Checkout, force-close, PO Receive and Pending
+  offline cash sales use it. Field errors stay inline; toasts stay toasts.
 - Edit Product (#282) groups Details, Pricing (ADMIN only, the
   latest-receipt summary beside the price) and Stock planning under a
   header of barcode, unit badge (unit can't change) and status (display
@@ -734,14 +739,29 @@ requestId}`. A 5xx never carries details or internals.
 
 - Keys (`useRegisterShortcuts`): F2 scan box, F4 selected line's quantity,
   F8 discount, F9 Tender & Charge. F5 is never bound. Keys are off while a
-  modal is open (except the tender sheet).
+  modal is open (except the tender sheet). In Complete Payment (#324) the
+  methods are a `radiogroup` (roving tabindex, ←/→ move and select, no
+  wrap) and F1 Cash, F3 GCash, F6 Split work anywhere in the dialog
+  (default prevented, `KeyHint` from `sm`, `aria-keyshortcuts`), focusing
+  that method's field; ↓/↑ in the Cash or Split cash field step through
+  its quick amounts from the field's value (no wrap, value selected) and
+  the matching quick button is `aria-pressed`, so exact cash is ↓ Enter.
+- Product matches (#322): ↓ in the scan box moves the real focus to the
+  first match (←/→/↑ stay the text cursor's). In the matches the arrows
+  move by visual direction over the rendered column count (read from the
+  grid's `gridTemplateColumns`: 2 from `sm`, 1 below, where ←/→ do
+  nothing), never wrapping; ↑ from the top row and Escape go back to the
+  box with the text kept. Enter/Space add the focused match, then the box
+  has the focus. Listbox with roving `tabindex` and `aria-selected`
+  following focus; the box has no `aria-activedescendant`. Delete never
+  removes a line from a match; a typed key/scan goes to the box.
 - Delete (#85) removes the focused ticket line, or, from the scan box
   while it is empty, the highlighted line (the one just scanned or
   selected; else the last line). With text in the box (or mid-IME
   composition) Delete edits the text. Both have the 5s Undo. Only the
   first press counts (a held key's repeats are ignored). Never while the
-  tender sheet or a modal is on top, or from the discount, the Qty picker
-  or a quantity field.
+  tender sheet or a modal is on top, or from the discount or a quantity
+  field.
 - `BaseModal` is a labelled `role=dialog`; `modal-stack.ts` owns Escape
   (topmost only), the focus trap, `inert` background, scroll lock and focus
   return. The scan box takes the focus back after clicks and modals.
@@ -749,8 +769,17 @@ requestId}`. A 5xx never carries details or internals.
   next sale with that item.
 - Void Ticket asks first, with lines and units ("Void this ticket (2
   lines, 5 items)?", singular for 1). A removed line has a 5s Undo. Quantities are
-  editable. The Qty multiplier (or `12*`) applies to the next scan only and
-  shows a badge.
+  editable. A typed `12*` prefix multiplies the next scan or pick only and
+  shows a badge; there is no Qty select (#323).
+- Every successful add (scan or match pick) focuses that line's quantity
+  with its value selected and selects the line (as F4); Enter commits and
+  returns to the scan box, Escape cancels; a failed add moves no focus
+  (#323). In a quantity field every digit is held back (`qty-burst.ts`)
+  and typed after 200 ms without another; a held run of a valid
+  EAN-13/UPC-A/EAN-8 (check digit) at most 200 ms apart, then Enter, is
+  a scan: the typed quantity is committed (a refused one keeps its error)
+  and the code goes through the scan box's normal flow, never showing in
+  the field. Same code again is +1.
 - Basket, discount and checkout attempt (`idempotencyKey`) are kept per
   cashier in localStorage `grocery_pos_cart_v1:<userId>`, so a reload
   retries the same key and can't double-charge. Cleared on sale, void and
@@ -758,10 +787,16 @@ requestId}`. A 5xx never carries details or internals.
 - Quick cash is Exact plus up to 4 next round amounts (₱20/50/100/500/1000
   steps). SPLIT: GCash pays what the cash doesn't; cash covering the total
   is sent as CASH (`splitTender`).
-- Receipt: the sale's server time in the store timezone, sale number (last 8
-  of the id) plus the full id, a Change line for any cash tender (₱0 too),
-  one "Discount" label. No print buttons or fake store details (store
-  settings are #47).
+- Sale summary (#328): the app issues no official receipts; BIR receipts
+  are the store's responsibility (#48). The on-screen view (post-sale modal,
+  Sale Details) is a "sale summary" whose paper always says "This is not an
+  official receipt." (not configurable; `official-receipt-wording.spec.ts`
+  refuses other "official receipt" text). It shows the sale's server time
+  in the store timezone, sale number (last 8 of the id) plus the full id, a
+  Change line for any cash tender (₱0 too), one "Discount" label. No print
+  buttons or fake store details (store settings are #47; the settings field
+  is "Sale summary footer"). Code/wire names (`Receipt`, `receiptFooter`)
+  and restock/PO receipts are unchanged.
 - The Roles page is built from contracts `PERMISSIONS`; `role-permissions`
   (API) and `role-pages` (client) specs keep it in step.
 - Denominations are unchanged. Shift In refuses a ₱0/empty float with an
@@ -800,14 +835,16 @@ requestId}`. A 5xx never carries details or internals.
   unmount while open (e.g. Back swapping the layout) leaves nothing on the
   stack and puts the focus on the new `<main>`, never `<body>`.
 - Every register button and field is at least 44px (`min-h-11 min-w-11` or
-  `w-11 h-11`), including the scan box's Clear, Enter / Scan, the Qty
-  select and `BaseModal`'s header close (×) in every dialog (#89); so
+  `w-11 h-11`), including the scan box's Clear, Enter / Scan
+  and `BaseModal`'s header close (×) in every dialog (#89); so
   are the admin app bar's Add Product/Restock/Adjust, the `UserProfileMenu`
   bar and rail (`icon`) triggers, the seller sidebar links, and the Cash
   In/Drop quick amounts (two columns below `sm`, four from `sm`) (#107).
   Below `sm` the admin bar tightens its padding and gaps to fit at 320px. The
   scan box hides its F2 hint below `sm`, and its right padding fits its
-  buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear. No text
+  buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear (rechecked
+  after the Qty select went, #323: the buttons are unchanged, the box now
+  takes the full row). No text
   below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for classes
   and CSS `font-size`.
 - No third-party runtime assets: Instrument Sans (UI) and Bricolage
@@ -960,8 +997,9 @@ requestId}`. A 5xx never carries details or internals.
 
 **Scope**
 
-- Receipts are shown on screen only, with no printing. BIR compliance (VAT,
-  official receipts, SC/PWD) is deferred to #48.
+- The app issues no official receipts: the on-screen sale summary is marked
+  "This is not an official receipt.", with no printing, and BIR receipts are
+  the store's responsibility (#48; VAT and SC/PWD stay there too).
 - Product editing and archival are implemented in #38; unit remains immutable.
 - Open decisions and follow-ups are listed in #31.
 

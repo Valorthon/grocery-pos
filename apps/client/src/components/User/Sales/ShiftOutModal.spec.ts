@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, type AxiosResponse } from 'axios';
@@ -141,6 +142,7 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
             document.querySelector('[data-testid="shift-out-error"]')
                 ?.textContent,
         ).toContain('Choose');
+        expect(inFooter('shift-out-error')).toBe(true);
         const carry = document.querySelector<HTMLInputElement>(
             'input[value="carry"]',
         )!;

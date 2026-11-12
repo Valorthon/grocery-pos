@@ -1,6 +1,8 @@
 <template>
     <BaseModal
         v-model="open"
+        :error="error"
+        error-testid="shift-out-error"
         title="Shift Out · Count Drawer"
         subtitle="Count all physical cash and coins currently inside the cash drawer"
         max-width="56rem"
@@ -71,15 +73,6 @@
                 </div>
             </div>
         </div>
-
-        <p
-            v-if="error"
-            role="alert"
-            class="mt-3 text-xs font-semibold text-danger-fg"
-            data-testid="shift-out-error"
-        >
-            {{ error }}
-        </p>
 
         <template #footer>
             <BaseButton
