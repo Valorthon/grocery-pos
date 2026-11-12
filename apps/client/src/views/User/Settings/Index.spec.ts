@@ -173,6 +173,11 @@ it('loads the server version when the owner is set after mount (fresh page load,
         expect.objectContaining({ version: 4, storeName: 'Edited' }),
     );
 });
+it('labels the footer "Sale summary footer" (#328)', async () => {
+    await mount();
+    expect(field('Sale summary footer')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('Receipt footer');
+});
 it('edits the expiry alert window with the API bounds (#213)', async () => {
     await mount();
     const label = 'Expiry alert window (days)';

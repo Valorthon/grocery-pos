@@ -379,6 +379,19 @@ describe('sales errors (issue #18)', () => {
         ).toContain('ana');
     });
 
+    it('marks Sale Details as not an official receipt (#328)', async () => {
+        serve(CASH_SALE, []);
+        await mount();
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await flush();
+        const line = document.querySelector(
+            '[data-testid="sale-receipt"] [data-testid="not-official-receipt"]',
+        );
+        expect(line?.textContent?.trim()).toBe(
+            'This is not an official receipt.',
+        );
+    });
+
     it('badges each status: completed green, voided red, refunded amber (#243)', async () => {
         api.get.mockImplementation((url: string) =>
             Promise.resolve({

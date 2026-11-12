@@ -1775,7 +1775,7 @@ describe('Sell price change notice (#23)', () => {
             document.querySelector('[data-testid="receipt-notice"]')
                 ?.textContent,
         ).toContain(
-            'Prices changed since scanning; the receipt shows the charged amounts.',
+            'Prices changed since scanning; the sale summary shows the charged amounts.',
         );
     });
 

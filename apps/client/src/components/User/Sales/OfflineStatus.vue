@@ -68,7 +68,7 @@
                 {{ entry.request.soldAt }}
             </p>
             <p class="text-xs break-all">
-                Receipt {{ entry.request.idempotencyKey }}
+                Pending sale key {{ entry.request.idempotencyKey }}
             </p>
             <p v-if="entry.blocked" class="text-sm text-red-800">
                 {{ entry.blocked }} Ask an admin to log in on this terminal and

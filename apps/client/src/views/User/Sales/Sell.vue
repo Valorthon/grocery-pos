@@ -421,7 +421,7 @@ const UNDO_MS = 5000;
 const SUCCESS_MS = 2500;
 
 const PRICES_CHANGED_NOTICE =
-    'Prices changed since scanning; the receipt shows the charged amounts.';
+    'Prices changed since scanning; the sale summary shows the charged amounts.';
 
 const cartStore = useCartStore();
 const uiStore = useUIStore();
@@ -1343,9 +1343,9 @@ async function submitSale(payment: PaymentRequest) {
     receipt.value = outcome.receipt;
     receiptNotice.value =
         offline.offline || !navigator.onLine
-            ? 'Offline cash receipt — pending server sync. Keep this terminal and its browser data until all pending sales are confirmed.'
+            ? 'Offline cash sale — pending server sync. Keep this terminal and its browser data until all pending sales are confirmed.'
             : outcome.alreadyRecorded
-              ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this receipt, not the amount just entered.`
+              ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this sale summary, not the amount just entered.`
               : outcome.receipt.totalAmount !== previewTotal
                 ? PRICES_CHANGED_NOTICE
                 : null;

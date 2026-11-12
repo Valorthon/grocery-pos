@@ -200,6 +200,12 @@
                     <p class="text-xs text-muted">
                         {{ identity.receiptFooter }}
                     </p>
+                    <p
+                        class="text-xs font-bold text-ink"
+                        data-testid="not-official-receipt"
+                    >
+                        This is not an official receipt.
+                    </p>
                 </div>
             </div>
         </div>

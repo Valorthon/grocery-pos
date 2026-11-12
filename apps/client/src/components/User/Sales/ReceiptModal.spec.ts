@@ -90,6 +90,16 @@ describe('ReceiptModal (issue #24)', () => {
         );
     });
 
+    it('says on the paper that it is not an official receipt (#328)', async () => {
+        await mount(RECEIPT);
+        const line = document.querySelector(
+            '[data-testid="receipt-paper"] [data-testid="not-official-receipt"]',
+        );
+        expect(line?.textContent?.trim()).toBe(
+            'This is not an official receipt.',
+        );
+    });
+
     it('shows the sale number and the full id', async () => {
         await mount(RECEIPT);
         expect(byTestId('receipt-sale-number')?.textContent).toBe(

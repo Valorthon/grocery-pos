@@ -89,6 +89,8 @@ it('opens pending collected cash without offering destructive discard', async ()
         'Do not charge the customer again',
     );
     expect(document.body.textContent).toContain('log in on this terminal');
+    // #328: the key is labelled as a key, never as a sale number.
+    expect(document.body.textContent).toContain('Pending sale key key');
     expect(
         Array.from(document.body.querySelectorAll('button')).some((b) =>
             b.textContent?.includes('Discard'),
