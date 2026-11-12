@@ -57,6 +57,17 @@ const key = async (name: string) => {
 };
 
 describe('RowActions (#172)', () => {
+    it('pushes the trigger to the right of its cell (#317)', async () => {
+        mount(['Rice'], () => [{ label: 'Edit', onSelect: () => {} }]);
+        await flush();
+        const trigger = document.querySelector('[data-row-actions]')!;
+        const root = trigger.parentElement!;
+        expect(root.hasAttribute('data-row-actions-root')).toBe(true);
+        expect(root.classList.contains('flex')).toBe(true);
+        expect(root.classList.contains('justify-end')).toBe(true);
+        expect(root.classList.contains('relative')).toBe(true);
+    });
+
     it('renders the menu outside the table box, below the trigger', async () => {
         mount(['milk'], () => [{ label: 'Edit', onSelect: vi.fn() }]);
         trigger('milk').click();
