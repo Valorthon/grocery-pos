@@ -211,3 +211,14 @@ describe('wording drift (#85)', () => {
         }
     });
 });
+
+describe('field label margins (#301)', () => {
+    it('never overrides FIELD_LABEL margin by class order', () => {
+        // `mb-1.5` comes after `mb-0` etc. in the stylesheet, so an added
+        // margin loses; use FIELD_LABEL_TEXT instead.
+        expect(offending(/FIELD_LABEL\s*,\s*['"`][^'"`]*\bm[bt]?-/)).toEqual(
+            [],
+        );
+        expect(offending(/FIELD_LABEL\.replace\(/)).toEqual([]);
+    });
+});
