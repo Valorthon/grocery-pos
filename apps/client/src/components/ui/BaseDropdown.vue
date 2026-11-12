@@ -78,9 +78,9 @@ import {
  * - A click on an item (a button, link or `role="menuitem"`) closes it; a
  *   click elsewhere inside the panel does not. A click outside, or Tab
  *   out of it, closes it too.
- * - `floating`: Tab or Shift+Tab in the teleported panel closes it and
- *   puts the focus on the trigger without preventing the key, so the focus
- *   moves on from the trigger as in the page. The panel is aligned to the
+ * - `floating`: Tab in the teleported panel closes it and puts the focus
+ *   on the trigger without preventing the key, so the focus moves on
+ *   from it; Shift+Tab closes it onto the trigger. The panel is aligned to the
  *   trigger and kept 8px inside the viewport. Opened from inside an open
  *   modal (checked at open), it is exempt from the modal stack's inert
  *   background and focus trap and stacks above the modal (#298).
@@ -93,7 +93,9 @@ const props = withDefaults(
         /**
          * Teleport the panel to the body with fixed positioning, flipped
          * above the trigger when there is no room below (#172): for menus
-         * inside a scrolling/clipping box such as a table.
+         * inside a scrolling/clipping box such as a table. Needs a fixed
+         * `widthClass` (e.g. `w-56`): the panel is placed and clamped from
+         * its width. A scroll or resize that hides the trigger closes it.
          */
         floating?: boolean;
     }>(),
@@ -126,6 +128,35 @@ const MARGIN = 8;
  * and focus trap, and stacks above it (z-[60], as the toasts).
  */
 const inModal = ref(false);
+
+/**
+ * On scroll/resize: closes the menu, without moving the focus, once the
+ * trigger is gone (inert, hidden or entirely off-screen); else re-places it.
+ */
+function reposition() {
+    const trigger = triggerEl();
+    if (!trigger || !triggerVisible(trigger)) {
+        close();
+        return;
+    }
+    place();
+}
+
+function triggerVisible(trigger: HTMLElement): boolean {
+    if (trigger.closest('[inert]')) return false;
+    if (
+        typeof trigger.checkVisibility === 'function' &&
+        !trigger.checkVisibility()
+    )
+        return false;
+    const box = trigger.getBoundingClientRect();
+    return (
+        box.bottom > 0 &&
+        box.right > 0 &&
+        box.top < window.innerHeight &&
+        box.left < document.documentElement.clientWidth
+    );
+}
 
 /** Places the floating panel from the trigger's box; flips up if needed. */
 function place() {
@@ -161,11 +192,11 @@ watch(
             inModal.value = !!triggerEl()?.closest('[aria-modal="true"]');
             await nextTick();
             place();
-            window.addEventListener('scroll', place, true);
-            window.addEventListener('resize', place);
+            window.addEventListener('scroll', reposition, true);
+            window.addEventListener('resize', reposition);
         } else {
-            window.removeEventListener('scroll', place, true);
-            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', reposition, true);
+            window.removeEventListener('resize', reposition);
         }
     },
 );
@@ -243,6 +274,8 @@ function onKeydown(event: KeyboardEvent) {
                 !!menuRef.value?.contains(event.target)
             ) {
                 close();
+                // Shift+Tab lands on the trigger itself; Tab moves on from it.
+                if (event.shiftKey) event.preventDefault();
                 triggerEl()?.focus();
             }
             return;
@@ -296,7 +329,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     document.removeEventListener('mousedown', onClickOutside);
-    window.removeEventListener('scroll', place, true);
-    window.removeEventListener('resize', place);
+    window.removeEventListener('scroll', reposition, true);
+    window.removeEventListener('resize', reposition);
 });
 </script>

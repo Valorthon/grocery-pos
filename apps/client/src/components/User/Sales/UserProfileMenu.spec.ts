@@ -247,9 +247,46 @@ describe('UserProfileMenu (#298)', () => {
             item('Change password').focus();
             const event = key(item('Change password'), 'Tab', shift);
             await flush();
-            expect(event.defaultPrevented).toBe(false);
+            expect(event.defaultPrevented).toBe(shift);
             expect(trigger().getAttribute('aria-expanded')).toBe('false');
             expect(document.activeElement).toBe(trigger());
         },
     );
+
+    it('re-places on scroll while the trigger stays on screen', async () => {
+        await mount();
+        at(window.innerHeight - 60, 12);
+        trigger().click();
+        await flush();
+        window.dispatchEvent(new Event('scroll'));
+        await flush();
+        expect(trigger().getAttribute('aria-expanded')).toBe('true');
+        expect(menu()!.style.left).toBe('12px');
+    });
+
+    it('closes without taking the focus when a scroll moves the trigger off screen', async () => {
+        await mount();
+        at(window.innerHeight - 60);
+        trigger().click();
+        await flush();
+        item('Log out').focus();
+        vi.mocked(trigger().getBoundingClientRect).mockReturnValue(
+            DOMRect.fromRect({ x: 10, y: -200, width: 230, height: 52 }),
+        );
+        window.dispatchEvent(new Event('scroll'));
+        await flush();
+        expect(trigger().getAttribute('aria-expanded')).toBe('false');
+        expect(document.activeElement).not.toBe(trigger());
+    });
+
+    it('closes on resize when the trigger turns inert', async () => {
+        await mount();
+        at(window.innerHeight - 60);
+        trigger().click();
+        await flush();
+        document.getElementById('sidebar')!.setAttribute('inert', '');
+        window.dispatchEvent(new Event('resize'));
+        await flush();
+        expect(trigger().getAttribute('aria-expanded')).toBe('false');
+    });
 });
