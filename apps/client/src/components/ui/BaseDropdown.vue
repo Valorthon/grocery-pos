@@ -31,7 +31,8 @@
                     ref="menuRef"
                     role="menu"
                     :class="[
-                        'z-50 rounded-card bg-surface shadow-overlay border border-line p-1.5',
+                        'rounded-card bg-surface shadow-overlay border border-line p-1.5',
+                        floating && inModal ? 'z-[60]' : 'z-50',
                         floating
                             ? 'fixed'
                             : [
@@ -77,6 +78,12 @@ import {
  * - A click on an item (a button, link or `role="menuitem"`) closes it; a
  *   click elsewhere inside the panel does not. A click outside, or Tab
  *   out of it, closes it too.
+ * - `floating`: Tab or Shift+Tab in the teleported panel closes it and
+ *   puts the focus on the trigger without preventing the key, so the focus
+ *   moves on from the trigger as in the page. The panel is aligned to the
+ *   trigger and kept 8px inside the viewport. Opened from inside an open
+ *   modal (checked at open), it is exempt from the modal stack's inert
+ *   background and focus trap and stacks above the modal (#298).
  */
 const props = withDefaults(
     defineProps<{
@@ -110,10 +117,13 @@ const FOCUSABLE_ITEM = ':is([role="menuitem"], button, a[href]):not(:disabled)';
 const placement = ref<'below' | 'above'>('below');
 const floatingStyle = ref<Record<string, string>>({});
 const GAP = 8;
+/** The floating panel's least distance from the viewport's sides (#298). */
+const MARGIN = 8;
 /**
- * The trigger sits in an open modal (a drawer below lg, #298). The
- * teleported panel is then a sibling of that modal under <body>, so it is
- * exempt from the modal stack's inert background and focus trap.
+ * Checked when the menu opens: the trigger sits in an open modal (a drawer
+ * below lg, #298). The teleported panel is then a sibling of that modal
+ * under <body>, so it is exempt from the modal stack's inert background
+ * and focus trap, and stacks above it (z-[60], as the toasts).
  */
 const inModal = ref(false);
 
@@ -130,9 +140,12 @@ function place() {
     const style: Record<string, string> = up
         ? { bottom: `${window.innerHeight - box.top + GAP}px` }
         : { top: `${box.bottom + GAP}px` };
-    if (props.align === 'right')
-        style.right = `${document.documentElement.clientWidth - box.right}px`;
-    else style.left = `${box.left}px`;
+    // Aligned to the trigger's edge, then kept MARGIN inside the viewport.
+    const width = menu.offsetWidth;
+    const viewport = document.documentElement.clientWidth;
+    const wanted = props.align === 'right' ? box.right - width : box.left;
+    const left = Math.max(MARGIN, Math.min(wanted, viewport - width - MARGIN));
+    style.left = `${left}px`;
     floatingStyle.value = style;
 }
 
@@ -222,6 +235,17 @@ function move(delta: number) {
 function onKeydown(event: KeyboardEvent) {
     const onTrigger = event.target === triggerEl();
     switch (event.key) {
+        case 'Tab':
+            if (
+                props.floating &&
+                props.modelValue &&
+                event.target instanceof Node &&
+                !!menuRef.value?.contains(event.target)
+            ) {
+                close();
+                triggerEl()?.focus();
+            }
+            return;
         case 'Escape':
             if (!props.modelValue) return;
             event.preventDefault();

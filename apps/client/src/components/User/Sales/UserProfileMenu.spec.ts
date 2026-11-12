@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { type App, createApp, h } from 'vue';
+import { type App, Teleport, createApp, h, ref } from 'vue';
 import { createPinia } from 'pinia';
 import { flush } from '@/testing/form-dom';
 import {
@@ -26,36 +26,59 @@ afterEach(() => {
     document.body.innerHTML = '';
     vi.restoreAllMocks();
     auth.requestLogout.mockClear();
+    drawerClose.mockClear();
 });
 
 /**
  * The menu at the bottom of a sidebar, in a clipping box (#298); with
  * `drawer`, the sidebar is an open modal drawer on the modal stack.
  */
-async function mount(drawer = false) {
+const large = ref(true);
+const drawerClose = vi.fn();
+
+/**
+ * Like UserSidebar: from lg the sidebar is in the page; below lg it is
+ * teleported under <body> (after anything already there) as a modal drawer
+ * on the modal stack.
+ */
+async function mount(drawer = false, variant: 'box' | 'icon' | 'bar' = 'box') {
+    large.value = true;
     const host = document.createElement('div');
     document.body.appendChild(host);
     app = createApp({
         render: () =>
-            h(
-                'aside',
-                {
-                    id: 'sidebar',
-                    class: 'overflow-hidden',
-                    role: drawer ? 'dialog' : undefined,
-                    'aria-modal': drawer ? 'true' : undefined,
-                },
-                [h(UserProfileMenu, { variant: 'box', tone: 'dark' })],
-            ),
+            h(Teleport, { to: 'body', disabled: large.value }, [
+                h(
+                    'div',
+                    { id: 'drawer-root' },
+                    h(
+                        'aside',
+                        {
+                            id: 'sidebar',
+                            class: 'overflow-hidden',
+                            role: large.value ? undefined : 'dialog',
+                            'aria-modal': large.value ? undefined : 'true',
+                        },
+                        [
+                            h('a', { href: '#' }, 'Dashboard'),
+                            h(UserProfileMenu, { variant, tone: 'dark' }),
+                            h('button', { type: 'button' }, 'Collapse'),
+                        ],
+                    ),
+                ),
+            ]),
     });
     app.use(createPinia());
     app.mount(host);
+    await flush();
     if (drawer) {
+        large.value = false;
+        await flush();
         entry = {
-            root: () => host,
+            root: () => document.getElementById('drawer-root'),
             panel: () => document.getElementById('sidebar'),
             closable: () => true,
-            close: () => undefined,
+            close: drawerClose,
             opener: null,
         };
         pushModal(entry);
@@ -69,12 +92,27 @@ const item = (text: string) =>
     [...menu()!.querySelectorAll<HTMLButtonElement>('[role=menuitem]')].find(
         (b) => b.textContent?.trim() === text,
     )!;
-function at(y: number) {
+/** The trigger's box; a 256 x 160 panel in a 1024px wide viewport. */
+function at(y: number, x = 10, width = 230) {
     vi.spyOn(trigger(), 'getBoundingClientRect').mockReturnValue(
-        DOMRect.fromRect({ x: 10, y, width: 230, height: 52 }),
+        DOMRect.fromRect({ x, y, width, height: 52 }),
     );
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(160);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(256);
+    vi.spyOn(document.documentElement, 'clientWidth', 'get').mockReturnValue(
+        1024,
+    );
 }
+const key = (target: Element, name: string, shiftKey = false) => {
+    const event = new KeyboardEvent('keydown', {
+        key: name,
+        shiftKey,
+        bubbles: true,
+        cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
+};
 
 describe('UserProfileMenu (#298)', () => {
     it('floats outside the sidebar and opens above a trigger at the bottom', async () => {
@@ -138,5 +176,80 @@ describe('UserProfileMenu (#298)', () => {
         trigger().click();
         await flush();
         expect(menu()!.hasAttribute('data-inert-exempt')).toBe(false);
+        expect(menu()!.className).toContain('z-50');
     });
+
+    it('lines the box panel up with the trigger left edge', async () => {
+        await mount(false, 'box');
+        at(window.innerHeight - 60, 12, 230);
+        trigger().click();
+        await flush();
+        expect(menu()!.style.left).toBe('12px');
+        expect(menu()!.style.right).toBe('');
+    });
+
+    it('opens the rail panel rightwards from the narrow rail', async () => {
+        await mount(false, 'icon');
+        at(window.innerHeight - 60, 18, 44);
+        trigger().click();
+        await flush();
+        expect(menu()!.style.left).toBe('18px');
+    });
+
+    it('keeps the panel 8px inside the viewport', async () => {
+        await mount(false, 'icon');
+        at(window.innerHeight - 60, 900, 44);
+        trigger().click();
+        await flush();
+        expect(menu()!.style.left).toBe(`${1024 - 256 - 8}px`);
+    });
+
+    it('aligns the app bar panel to the trigger right edge', async () => {
+        await mount(false, 'bar');
+        at(8, 900, 100);
+        trigger().click();
+        await flush();
+        expect(menu()!.style.left).toBe(`${1000 - 256}px`);
+    });
+
+    it('stacks above a drawer teleported after it opened (lg, then shrunk)', async () => {
+        await mount(true);
+        at(window.innerHeight - 60);
+        trigger().click();
+        await flush();
+        // The drawer root follows the panel's place under <body> or not:
+        // its z-index, not DOM order, keeps the panel on top.
+        expect(menu()!.className).toContain('z-[60]');
+        expect(menu()!.className).not.toContain('z-50');
+        expect(menu()!.closest('[inert]')).toBeNull();
+    });
+
+    it('Escape in the drawer closes the menu only', async () => {
+        await mount(true);
+        at(window.innerHeight - 60);
+        trigger().click();
+        await flush();
+        item('Log out').focus();
+        key(item('Log out'), 'Escape');
+        await flush();
+        expect(trigger().getAttribute('aria-expanded')).toBe('false');
+        expect(document.activeElement).toBe(trigger());
+        expect(drawerClose).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+        'Tab (shift %s) from the panel closes it onto the trigger',
+        async (shift) => {
+            await mount(true);
+            at(window.innerHeight - 60);
+            trigger().click();
+            await flush();
+            item('Change password').focus();
+            const event = key(item('Change password'), 'Tab', shift);
+            await flush();
+            expect(event.defaultPrevented).toBe(false);
+            expect(trigger().getAttribute('aria-expanded')).toBe('false');
+            expect(document.activeElement).toBe(trigger());
+        },
+    );
 });
