@@ -25,7 +25,10 @@ function setup(
         countDocuments: jest.fn().mockResolvedValue(rows.length),
     };
     const userQuery = { lean: jest.fn().mockResolvedValue(found) };
-    const users = { findOne: jest.fn(() => userQuery) };
+    const users = {
+        findOne: jest.fn(() => userQuery),
+        find: jest.fn(() => ({ lean: jest.fn().mockResolvedValue([]) })),
+    };
     return {
         service: new AuditService(
             model as unknown as Model<AuditLog>,
@@ -310,4 +313,92 @@ it('uses the current database store timezone for audit date filters', async () =
         },
     });
     expect(timezone).toHaveBeenCalledTimes(1);
+});
+it('resolves current target and approver names with one $in query per model (#306)', async () => {
+    const ids = Array.from({ length: 8 }, () => new Types.ObjectId());
+    const [user, approver, product, po, sale, shift, gone, settings] = ids;
+    const base = {
+        actor: null,
+        actorName: null,
+        before: {},
+        after: {},
+        ip: null,
+        userAgent: null,
+        createdAt: new Date('2026-11-12T00:00:00Z'),
+        action: AuditAction.AUTH_LOGIN,
+    };
+    const rows = [
+        {
+            ...base,
+            _id: ids[0],
+            targetModel: 'User',
+            targetId: user,
+            approvedBy: approver,
+        },
+        {
+            ...base,
+            _id: ids[1],
+            targetModel: 'User',
+            targetId: approver,
+            approvedBy: null,
+        },
+        { ...base, _id: ids[2], targetModel: 'Product', targetId: product },
+        { ...base, _id: ids[3], targetModel: 'PurchaseOrder', targetId: po },
+        { ...base, _id: ids[4], targetModel: 'Sales', targetId: sale },
+        { ...base, _id: ids[5], targetModel: 'Shift', targetId: shift },
+        { ...base, _id: ids[6], targetModel: 'Product', targetId: gone },
+        { ...base, _id: settings, targetModel: 'Settings', targetId: null },
+    ];
+    const finder = (docs: Record<string, unknown>[]) => ({
+        find: jest.fn(() => ({ lean: jest.fn().mockResolvedValue(docs) })),
+    });
+    const { model } = setup(rows);
+    const users = finder([
+        { _id: user, name: 'ana' },
+        { _id: approver, name: 'boss' },
+    ]);
+    const models = {
+        Product: finder([{ _id: product, name: 'Rice 1kg' }]),
+        PurchaseOrder: finder([{ _id: po }]),
+        Sales: finder([{ _id: sale }]),
+        Shift: finder([
+            {
+                _id: shift,
+                cashierName: 'ana',
+                openedAt: new Date('2026-11-11T20:00:00Z'),
+            },
+        ]),
+    };
+    const service = new AuditService(
+        model as unknown as Model<AuditLog>,
+        { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
+        users as unknown as Model<User>,
+        undefined,
+        { models } as never,
+    );
+    const { data } = await service.list({ page: 1, limit: 20 } as never);
+    expect(data.map((row) => row.target.label)).toEqual([
+        'ana',
+        'boss',
+        'Rice 1kg',
+        `PO-${String(po).slice(-8).toUpperCase()}`,
+        String(sale).slice(-8).toUpperCase(),
+        'ana · Nov 12, 2026',
+        undefined,
+        'Store settings',
+    ]);
+    expect(data[0].approvedByName).toBe('boss');
+    expect('approvedByName' in data[1]).toBe(false);
+    expect('label' in data[6].target).toBe(false);
+    expect(users.find).toHaveBeenCalledTimes(1);
+    expect(users.find).toHaveBeenCalledWith(
+        { _id: { $in: [user, approver] } },
+        'name',
+    );
+    for (const m of Object.values(models))
+        expect(m.find).toHaveBeenCalledTimes(1);
+    expect(models.Product.find).toHaveBeenCalledWith(
+        { _id: { $in: [product, gone] } },
+        'name',
+    );
 });
