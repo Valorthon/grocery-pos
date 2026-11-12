@@ -14,7 +14,8 @@ import {
 } from 'vue-router';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
-import { flush, type, field } from '@/testing/form-dom';
+import { flush, type, field, headerText } from '@/testing/form-dom';
+import { RESTOCK_HELP } from '@/components/User/Restock/restock-help';
 import { nextDraft } from '@/testing/stub-add-dialog';
 import { wedgeScan } from '@/testing/scanner';
 import { Color, useUIStore } from '@/stores/ui';
@@ -912,6 +913,24 @@ describe('restock at a ₱0 unit cost (#85)', () => {
         [...document.body.querySelectorAll('p')]
             .map((p) => p.textContent?.trim())
             .find((t) => t?.includes('₱0 unit cost'));
+
+    it('explains Unit Cost in the draft table header (#309)', async () => {
+        await mountPage(restockCase.page);
+        await addRestockLine('Paid', 500);
+        const th = [...document.querySelectorAll('thead th')].find(
+            (el) => headerText(el) === 'Unit Cost',
+        );
+        expect(th).toBeDefined();
+        const button = th!.querySelector(
+            '[data-info-tooltip][aria-label="About Unit Cost"]',
+        );
+        expect(button).not.toBeNull();
+        expect(
+            document
+                .getElementById(button!.getAttribute('aria-describedby')!)
+                ?.textContent?.trim(),
+        ).toBe(RESTOCK_HELP.unitCost);
+    });
 
     it('asks first, naming the ₱0 lines; Go back keeps the drafts and sends nothing', async () => {
         await mountPage(restockCase.page);
