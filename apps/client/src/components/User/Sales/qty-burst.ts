@@ -1,5 +1,5 @@
 import { hasValidCheckDigit } from '@grocery-pos/contracts';
-import { SCAN_KEY_INTERVAL_MS } from '@/composables/useBarcodeCapture';
+import { SCAN_KEY_INTERVAL_MS } from '@/composables/scan-timing';
 import { isBarcode } from './product-search';
 
 /** A scanner burst: a barcode length with a valid check digit (#323). */
