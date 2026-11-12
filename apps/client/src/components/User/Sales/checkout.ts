@@ -84,6 +84,31 @@ export const QUICK_CASH_MAX = 4;
  * win: for ₱35 a ₱1,000 note is likelier than exactly ₱40. E.g. ₱1,180
  * gives ₱1,200, ₱1,500 and ₱2,000.
  */
+/**
+ * The checkout's payment-method keys (#324, owner decision 2026-11-12).
+ * They work anywhere in Complete Payment; F5 stays unbound.
+ */
+export const METHOD_KEYS = {
+    [PaymentType.CASH]: 'F1',
+    [PaymentType.GCASH]: 'F3',
+    [PaymentType.SPLIT]: 'F6',
+} as const satisfies Record<PaymentType, string>;
+
+/**
+ * ↓/↑ in a cash field (#324): the next quick amount above `current`
+ * (`down`), or the last one below it (`up`), from the ascending
+ * `amounts`; null at the ends (no wrap). An empty field is 0, so ↓ fills
+ * the first amount.
+ */
+export function stepQuickCash(
+    amounts: readonly number[],
+    current: number,
+    direction: 'up' | 'down',
+): number | null {
+    if (direction === 'down') return amounts.find((a) => a > current) ?? null;
+    return [...amounts].reverse().find((a) => a < current) ?? null;
+}
+
 export function quickCashAmounts(total: number): number[] {
     if (!Number.isSafeInteger(total) || total <= 0) return [];
     const amounts = new Set<number>();

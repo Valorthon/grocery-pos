@@ -34,54 +34,52 @@
             </div>
 
             <div class="mt-4">
-                <label
+                <span
                     class="block text-xs font-bold uppercase tracking-wider text-muted mb-2"
                 >
                     Select Payment Method
-                </label>
-                <div class="grid grid-cols-3 gap-2">
+                </span>
+                <!--
+                    A radio group (#324): one Tab stop, ←/→ move and
+                    select without wrapping; F1/F3/F6 pick a method from
+                    anywhere in the dialog.
+                -->
+                <div
+                    role="radiogroup"
+                    aria-label="Payment method"
+                    class="grid grid-cols-3 gap-2"
+                    data-testid="payment-methods"
+                    @keydown="onMethodKeydown"
+                >
                     <button
+                        v-for="option in methodOptions"
+                        :key="option.type"
                         type="button"
+                        role="radio"
+                        :aria-checked="method === option.type"
+                        :tabindex="method === option.type ? 0 : -1"
+                        :aria-keyshortcuts="METHOD_KEYS[option.type]"
+                        :data-method="option.type"
                         class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98] focus-ring"
                         :class="
-                            method === PaymentType.CASH
+                            method === option.type
                                 ? 'bg-leaf-800 text-white border-ink shadow-2xs'
                                 : 'bg-surface text-muted border-line hover:bg-leaf-50'
                         "
-                        @click="selectMethod(PaymentType.CASH)"
+                        :disabled="isMethodDisabled(option.type)"
+                        @click="selectMethod(option.type)"
                     >
-                        <Banknote class="w-5 h-5" />
-                        <span>Cash</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98] focus-ring"
-                        :class="
-                            method === PaymentType.GCASH
-                                ? 'bg-leaf-800 text-white border-ink shadow-2xs'
-                                : 'bg-surface text-muted border-line hover:bg-leaf-50'
-                        "
-                        :disabled="cashOnly"
-                        @click="selectMethod(PaymentType.GCASH)"
-                    >
-                        <QrCode class="w-5 h-5" />
-                        <span>GCash</span>
-                    </button>
-
-                    <button
-                        type="button"
-                        class="min-h-11 py-3 px-2 rounded-control border text-xs font-bold flex flex-col items-center gap-1.5 transition-all active:scale-[0.98] focus-ring"
-                        :class="
-                            method === PaymentType.SPLIT
-                                ? 'bg-leaf-800 text-white border-ink shadow-2xs'
-                                : 'bg-surface text-muted border-line hover:bg-leaf-50'
-                        "
-                        :disabled="cashOnly"
-                        @click="selectMethod(PaymentType.SPLIT)"
-                    >
-                        <Split class="w-5 h-5" />
-                        <span>Split</span>
+                        <component :is="option.icon" class="w-5 h-5" />
+                        <span>{{ option.label }}</span>
+                        <!-- Hidden on phones, like the scan box's F2 (#89). -->
+                        <span class="hidden sm:inline-flex">
+                            <KeyHint
+                                :tone="
+                                    method === option.type ? 'dark' : 'light'
+                                "
+                                >{{ METHOD_KEYS[option.type] }}</KeyHint
+                            >
+                        </span>
                     </button>
                 </div>
             </div>
@@ -116,6 +114,7 @@
                     <button
                         type="button"
                         class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
+                        :aria-pressed="isPicked(amountTendered, total)"
                         @click="pickQuickCash(total, 'cash')"
                     >
                         Exact
@@ -125,6 +124,7 @@
                         :key="amount"
                         type="button"
                         class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
+                        :aria-pressed="isPicked(amountTendered, amount)"
                         @click="pickQuickCash(amount, 'cash')"
                     >
                         {{ currency(amount) }}
@@ -146,6 +146,7 @@
                         min="0"
                         placeholder="0.00"
                         class="w-full min-h-11 pl-8 pr-4 py-2 rounded-control border border-line-strong bg-surface text-sm font-bold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
+                        @keydown="onCashKeydown($event, 'cash')"
                     />
                 </div>
 
@@ -232,6 +233,7 @@
                             :key="bill"
                             type="button"
                             class="min-h-11 min-w-11 px-3 py-1.5 rounded-control bg-surface border border-line text-sm font-bold text-muted hover:bg-leaf-50 active:scale-[0.98] focus-ring"
+                            :aria-pressed="isPicked(splitCashGiven, bill)"
                             @click="pickQuickCash(bill, 'split')"
                         >
                             {{ currency(bill) }}
@@ -253,6 +255,7 @@
                             min="0"
                             placeholder="Enter cash handed by customer"
                             class="w-full min-h-11 pl-8 pr-4 py-2 rounded-control border border-line-strong bg-surface text-sm font-bold focus:outline-2 focus:outline-offset-0 focus:outline-leaf-500"
+                            @keydown="onCashKeydown($event, 'split')"
                         />
                     </div>
                 </div>
@@ -402,7 +405,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, useId, useTemplateRef, watch } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    useId,
+    useTemplateRef,
+    watch,
+} from 'vue';
 import { Banknote, QrCode, Split } from '@lucide/vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
@@ -412,13 +424,16 @@ import {
     CENTAVOS_PER_PESO,
     centavosToPesoInput,
     formatCurrency,
+    pesosToCentavos,
 } from '@/utils/currency';
 import {
     buildPayment,
     cashTender,
+    METHOD_KEYS,
     quickCashAmounts,
     referenceNumberError,
     splitTender,
+    stepQuickCash,
 } from './checkout';
 
 const props = defineProps<{
@@ -535,15 +550,109 @@ function currency(value: number): string {
     return formatCurrency(value);
 }
 
-async function selectMethod(next: PaymentType) {
-    if (props.cashOnly && next !== PaymentType.CASH) return;
+const methodOptions = [
+    { type: PaymentType.CASH, label: 'Cash', icon: Banknote },
+    { type: PaymentType.GCASH, label: 'GCash', icon: QrCode },
+    { type: PaymentType.SPLIT, label: 'Split', icon: Split },
+] as const;
+
+function isMethodDisabled(type: PaymentType): boolean {
+    return !!props.cashOnly && type !== PaymentType.CASH;
+}
+
+/**
+ * Picks a method. A click or F1/F3/F6 goes on to its amount or reference
+ * field; ←/→ (`focus: 'radio'`) keep the focus on the radio, as native
+ * radios do.
+ */
+async function selectMethod(
+    next: PaymentType,
+    focus: 'field' | 'radio' = 'field',
+) {
+    if (isMethodDisabled(next)) return;
     method.value = next;
     if (next === PaymentType.CASH && !amountTendered.value) {
         amountTendered.value = centavosToPesoInput(total.value);
     }
-    // On to the new method's amount or reference field.
     await nextTick();
-    fields.value?.querySelector<HTMLElement>('[data-autofocus]')?.focus();
+    const target =
+        focus === 'radio' ? `[data-method="${next}"]` : '[data-autofocus]';
+    fields.value?.querySelector<HTMLElement>(target)?.focus();
+}
+
+const hasModifier = (e: KeyboardEvent) =>
+    e.altKey || e.ctrlKey || e.metaKey || e.shiftKey;
+
+/** ←/→ in the radio group: the neighbouring enabled method, no wrap. */
+function onMethodKeydown(event: KeyboardEvent) {
+    if (hasModifier(event)) return;
+    const step =
+        event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const order = methodOptions.map((o) => o.type);
+    for (
+        let i = order.indexOf(method.value) + step;
+        i >= 0 && i < order.length;
+        i += step
+    ) {
+        if (!isMethodDisabled(order[i])) {
+            void selectMethod(order[i], 'radio');
+            return;
+        }
+    }
+}
+
+/**
+ * F1/F3/F6 anywhere in this dialog (#324). The default is always
+ * prevented there, so the browser's Help, Find and address-bar keys never
+ * fire; mid-sale or for a disabled method the key does nothing else.
+ */
+function onDialogKeydown(event: KeyboardEvent) {
+    if (!props.modelValue || hasModifier(event)) return;
+    const type = methodOptions.find(
+        (o) => METHOD_KEYS[o.type] === event.key,
+    )?.type;
+    if (!type) return;
+    const dialog = fields.value?.closest('[role="dialog"]');
+    if (!dialog?.contains(document.activeElement)) return;
+    event.preventDefault();
+    if (processing.value) return;
+    void selectMethod(type);
+}
+
+onMounted(() => window.addEventListener('keydown', onDialogKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onDialogKeydown));
+
+/** The quick-cash button showing the field's value is pressed (#324). */
+function isPicked(input: string | number, amount: number): boolean {
+    return String(input).trim() !== '' && pesosToCentavos(input) === amount;
+}
+
+/**
+ * ↓/↑ in the Cash or Split cash field step through its quick amounts
+ * (#324) instead of spinning the number by a centavo: from the field's
+ * value, stopping at the ends. The value is selected so typing replaces
+ * it, and the focus stays, so Enter then confirms.
+ */
+function onCashKeydown(event: KeyboardEvent, field: 'cash' | 'split') {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    if (hasModifier(event)) return;
+    event.preventDefault();
+    const input = field === 'cash' ? amountTendered : splitCashGiven;
+    const amounts =
+        field === 'cash' ? [total.value, ...quickCash.value] : splitBills;
+    const next = stepQuickCash(
+        amounts,
+        pesosToCentavos(input.value),
+        event.key === 'ArrowDown' ? 'down' : 'up',
+    );
+    if (next === null) return;
+    input.value = centavosToPesoInput(next);
+    const el = event.currentTarget;
+    void nextTick(() => {
+        if (el instanceof HTMLInputElement) el.select();
+    });
 }
 
 function reset() {
