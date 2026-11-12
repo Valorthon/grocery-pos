@@ -3,6 +3,8 @@ import { inFooter } from '@/testing/form-dom';
 import { type App, createApp, h, nextTick, ref } from 'vue';
 import { type PaymentRequest, PaymentType } from '@grocery-pos/contracts';
 import CheckoutModal from './CheckoutModal.vue';
+import { quickCashAmounts } from './checkout';
+import { centavosToPesoInput, formatCurrency } from '@/utils/currency';
 
 const TOTAL = 45000;
 
@@ -211,8 +213,8 @@ describe('CheckoutModal', () => {
         it('moves the focus to the field of a newly picked method', async () => {
             mount(vi.fn());
             await flush();
-            const gcash = [...document.querySelectorAll('button')].find(
-                (b) => b.textContent?.trim() === 'GCash',
+            const gcash = document.querySelector<HTMLButtonElement>(
+                `[role="radio"][data-method="${PaymentType.GCASH}"]`,
             )!;
             gcash.click();
             await flush();
@@ -252,7 +254,7 @@ describe('CheckoutModal', () => {
     describe('tendering (#23)', () => {
         function methodButton(name: string) {
             return [...document.querySelectorAll('button')].find(
-                (b) => b.textContent?.trim() === name,
+                (b) => b.textContent?.replace(/F\d+\s*$/, '').trim() === name,
             )!;
         }
 
@@ -463,6 +465,229 @@ describe('CheckoutModal', () => {
                 ],
                 referenceNumber: '1234567890123',
             });
+        });
+    });
+
+    describe('method and quick-cash keys (#324)', () => {
+        function radio(type: PaymentType) {
+            return document.querySelector<HTMLButtonElement>(
+                `[role="radio"][data-method="${type}"]`,
+            )!;
+        }
+
+        function key(target: Element, k: string, init: KeyboardEventInit = {}) {
+            const event = new KeyboardEvent('keydown', {
+                key: k,
+                bubbles: true,
+                cancelable: true,
+                ...init,
+            });
+            target.dispatchEvent(event);
+            return event;
+        }
+
+        function splitInput() {
+            return document.querySelector<HTMLInputElement>(
+                'input[aria-label="Customer cash given"]',
+            )!;
+        }
+
+        function pressed() {
+            return [
+                ...document.querySelectorAll('button[aria-pressed="true"]'),
+            ].map((b) => b.textContent?.trim());
+        }
+
+        it('is a labelled radio group with one tab stop and shortcut hints', async () => {
+            mount(vi.fn());
+            await flush();
+            const group = document.querySelector('[role="radiogroup"]')!;
+            expect(group.getAttribute('aria-label')).toBe('Payment method');
+            expect(radio(PaymentType.CASH).getAttribute('aria-checked')).toBe(
+                'true',
+            );
+            expect(radio(PaymentType.CASH).tabIndex).toBe(0);
+            expect(radio(PaymentType.GCASH).tabIndex).toBe(-1);
+            expect(
+                [PaymentType.CASH, PaymentType.GCASH, PaymentType.SPLIT].map(
+                    (t) => radio(t).getAttribute('aria-keyshortcuts'),
+                ),
+            ).toEqual(['F1', 'F3', 'F6']);
+            expect(
+                radio(PaymentType.SPLIT).querySelector('[data-key-hint]')
+                    ?.textContent,
+            ).toBe('F6');
+        });
+
+        it('moves and selects with ←/→, without wrapping', async () => {
+            mount(vi.fn());
+            await flush();
+            radio(PaymentType.CASH).focus();
+
+            expect(
+                key(radio(PaymentType.CASH), 'ArrowLeft').defaultPrevented,
+            ).toBe(true);
+            await flush();
+            expect(document.activeElement).toBe(radio(PaymentType.CASH));
+
+            key(radio(PaymentType.CASH), 'ArrowRight');
+            await flush();
+            expect(radio(PaymentType.GCASH).getAttribute('aria-checked')).toBe(
+                'true',
+            );
+            expect(document.activeElement).toBe(radio(PaymentType.GCASH));
+            expect(radio(PaymentType.GCASH).tabIndex).toBe(0);
+
+            key(radio(PaymentType.GCASH), 'ArrowRight');
+            await flush();
+            key(radio(PaymentType.SPLIT), 'ArrowRight');
+            await flush();
+            expect(document.activeElement).toBe(radio(PaymentType.SPLIT));
+
+            key(radio(PaymentType.SPLIT), 'ArrowLeft');
+            await flush();
+            expect(document.activeElement).toBe(radio(PaymentType.GCASH));
+        });
+
+        it('skips disabled methods when cash only', async () => {
+            mount(vi.fn(), { cashOnly: true });
+            await flush();
+            radio(PaymentType.CASH).focus();
+            key(radio(PaymentType.CASH), 'ArrowRight');
+            await flush();
+            expect(radio(PaymentType.CASH).getAttribute('aria-checked')).toBe(
+                'true',
+            );
+            amountInput().focus();
+            const event = key(amountInput(), 'F3');
+            await flush();
+            expect(event.defaultPrevented).toBe(true);
+            expect(radio(PaymentType.CASH).getAttribute('aria-checked')).toBe(
+                'true',
+            );
+        });
+
+        it('switches with F1/F3/F6 from the amount field and focuses the field', async () => {
+            mount(vi.fn());
+            await flush();
+            expect(document.activeElement).toBe(amountInput());
+
+            const f3 = key(amountInput(), 'F3');
+            await flush();
+            expect(f3.defaultPrevented).toBe(true);
+            expect(document.activeElement?.getAttribute('aria-label')).toBe(
+                'GCash reference number',
+            );
+
+            const f6 = key(document.activeElement!, 'F6');
+            await flush();
+            expect(f6.defaultPrevented).toBe(true);
+            expect(document.activeElement).toBe(splitInput());
+
+            const f1 = key(splitInput(), 'F1');
+            await flush();
+            expect(f1.defaultPrevented).toBe(true);
+            expect(document.activeElement).toBe(amountInput());
+            expect(radio(PaymentType.CASH).getAttribute('aria-checked')).toBe(
+                'true',
+            );
+        });
+
+        it('leaves F5 and modified F-keys alone', async () => {
+            mount(vi.fn());
+            await flush();
+            expect(key(amountInput(), 'F5').defaultPrevented).toBe(false);
+            expect(
+                key(amountInput(), 'F3', { shiftKey: true }).defaultPrevented,
+            ).toBe(false);
+        });
+
+        it('steps Cash through Exact and the next rounds with ↓/↑, no wrap', async () => {
+            mount(vi.fn(), { initialCash: null });
+            await flush();
+            const rounds = quickCashAmounts(TOTAL);
+            const input = amountInput();
+
+            expect(key(input, 'ArrowUp').defaultPrevented).toBe(true);
+            await flush();
+            expect(input.value).toBe('');
+
+            key(input, 'ArrowDown');
+            await flush();
+            expect(input.value).toBe(centavosToPesoInput(TOTAL));
+            expect(pressed()).toEqual(['Exact']);
+
+            key(input, 'ArrowDown');
+            await flush();
+            expect(input.value).toBe(centavosToPesoInput(rounds[0]));
+            expect(pressed()).toEqual([formatCurrency(rounds[0])]);
+
+            for (let i = 0; i < rounds.length + 2; i++) {
+                key(input, 'ArrowDown');
+                await flush();
+            }
+            expect(input.value).toBe(
+                centavosToPesoInput(rounds[rounds.length - 1]),
+            );
+
+            for (let i = 0; i < rounds.length + 2; i++) {
+                key(input, 'ArrowUp');
+                await flush();
+            }
+            expect(input.value).toBe(centavosToPesoInput(TOTAL));
+            expect(document.activeElement).toBe(input);
+        });
+
+        it('steps from a typed amount to the next quick amount above it', async () => {
+            mount(vi.fn(), { initialCash: null });
+            await flush();
+            const input = amountInput();
+            input.value = '470';
+            input.dispatchEvent(new Event('input'));
+            await flush();
+            expect(pressed()).toEqual([]);
+            key(input, 'ArrowDown');
+            await flush();
+            const above = quickCashAmounts(TOTAL).find((a) => a > 47000)!;
+            expect(input.value).toBe(centavosToPesoInput(above));
+        });
+
+        it('completes with the exact amount on ↓ then Enter', async () => {
+            const submit = vi.fn().mockResolvedValue(undefined);
+            mount(submit, { initialCash: null });
+            await flush();
+            key(amountInput(), 'ArrowDown');
+            await flush();
+            await pressEnter();
+            expect(submit).toHaveBeenCalledWith({
+                paymentType: PaymentType.CASH,
+                tenders: [{ type: 'CASH', amount: TOTAL }],
+            });
+        });
+
+        it('steps the Split cash field through the split bills', async () => {
+            mount(vi.fn(), { initialMethod: PaymentType.SPLIT });
+            await flush();
+            const input = splitInput();
+            key(input, 'ArrowDown');
+            await flush();
+            expect(input.value).toBe('5.00');
+            expect(pressed()).toEqual(['₱5.00']);
+            key(input, 'ArrowDown');
+            await flush();
+            expect(input.value).toBe('10.00');
+            key(input, 'ArrowUp');
+            await flush();
+            expect(input.value).toBe('5.00');
+        });
+
+        it('leaves ↑/↓ alone in the GCash reference', async () => {
+            mount(vi.fn(), { initialMethod: PaymentType.GCASH });
+            await flush();
+            const ref = document.querySelector<HTMLInputElement>(
+                'input[aria-label="GCash reference number"]',
+            )!;
+            expect(key(ref, 'ArrowDown').defaultPrevented).toBe(false);
         });
     });
 });

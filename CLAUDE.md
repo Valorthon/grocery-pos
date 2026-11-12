@@ -739,7 +739,13 @@ requestId}`. A 5xx never carries details or internals.
 
 - Keys (`useRegisterShortcuts`): F2 scan box, F4 selected line's quantity,
   F8 discount, F9 Tender & Charge. F5 is never bound. Keys are off while a
-  modal is open (except the tender sheet).
+  modal is open (except the tender sheet). In Complete Payment (#324) the
+  methods are a `radiogroup` (roving tabindex, ←/→ move and select, no
+  wrap) and F1 Cash, F3 GCash, F6 Split work anywhere in the dialog
+  (default prevented, `KeyHint` from `sm`, `aria-keyshortcuts`), focusing
+  that method's field; ↓/↑ in the Cash or Split cash field step through
+  its quick amounts from the field's value (no wrap, value selected) and
+  the matching quick button is `aria-pressed`, so exact cash is ↓ Enter.
 - Product matches (#322): ↓ in the scan box moves the real focus to the
   first match (←/→/↑ stay the text cursor's). In the matches the arrows
   move by visual direction over the rendered column count (read from the
