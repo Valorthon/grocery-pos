@@ -32,7 +32,7 @@
                  a real loss per unit (#290), named for screen readers. -->
             <div class="flex min-w-0 flex-col" data-testid="tile-margin">
                 <div class="flex items-center gap-1 mb-1.5">
-                    <p :id="`${uid}-margin`" :class="[FIELD_LABEL, 'mb-0']">
+                    <p :id="`${uid}-margin`" :class="LABEL_INLINE">
                         Margin<span v-if="negative" class="sr-only"
                             >, negative margin</span
                         >
@@ -103,6 +103,9 @@ const live = computed(() => {
         ? undefined
         : { basisPoints, profit: price - basis };
 });
+/* FIELD_LABEL without its bottom margin: an added `mb-0` loses to
+   `mb-1.5` in the stylesheet, pushing the Margin box 6px down (#294). */
+const LABEL_INLINE = FIELD_LABEL.replace(' mb-1.5', '');
 const uid = useId();
 const negative = computed(
     () => live.value !== undefined && live.value.profit < 0,

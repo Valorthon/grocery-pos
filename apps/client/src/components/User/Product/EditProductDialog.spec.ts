@@ -423,6 +423,10 @@ describe('EditProductDialog pricing tiles (#290)', () => {
             }
             expect(box.classList).toContain('break-words');
         }
+        // The ⓘ row supplies the gap; a leftover mb-1.5 pushed the box 6px down.
+        expect(tile('tile-margin').querySelector('p')!.classList).not.toContain(
+            'mb-1.5',
+        );
         expect(
             tile('tile-margin').querySelector('[data-readonly-box]')!
                 .textContent,
