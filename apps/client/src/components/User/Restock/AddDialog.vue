@@ -105,6 +105,8 @@
                     inputmode="decimal"
                     autocomplete="off"
                     placeholder="0.00"
+                    :help="RESTOCK_HELP.unitCost"
+                    help-label="About Unit Cost"
                     :error="errors.unitCost"
                 />
             </div>
@@ -147,6 +149,7 @@
 </template>
 
 <script setup lang="ts">
+import { RESTOCK_HELP } from './restock-help';
 import {
     EXPIRY_LIMITS,
     isExpiryDate,

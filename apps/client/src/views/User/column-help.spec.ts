@@ -15,6 +15,7 @@ import {
     PURCHASE_ORDER_STATUS,
 } from '@/components/User/PurchaseOrder/purchase-order';
 import { SALE_HELP, SALE_STATUS } from '@/components/User/Sales/sale-status';
+import { RESTOCK_HELP } from '@/components/User/Restock/restock-help';
 import {
     BATCH_HELP,
     BATCH_STATUS,
@@ -91,6 +92,12 @@ describe('column help lists every value (#263)', () => {
             ...labels(STOCK_STATUS),
         ]);
         expect(terms(PRODUCT_HELP.status)).toEqual(labels(PRODUCT_STATUS));
+    });
+
+    it('restock Unit Cost (#309)', () => {
+        expect(RESTOCK_HELP.unitCost).toBe(
+            "What you paid the supplier for one unit on this delivery. It becomes the product's latest cost, used for margin estimates. ₱0 is allowed for free stock; you'll be asked to confirm it.",
+        );
     });
 
     it('purchase order Ordered and Expected cost (#288)', () => {

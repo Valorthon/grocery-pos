@@ -61,7 +61,19 @@
                                 Quantity
                             </th>
                             <th scope="col" :class="draftTable.thNum">
-                                Unit Cost
+                                <span
+                                    class="inline-flex items-center gap-0.5"
+                                    data-column-help
+                                >
+                                    Unit Cost
+                                    <InfoTooltip
+                                        class="-my-3 -ml-3"
+                                        label="About Unit Cost"
+                                        >{{
+                                            RESTOCK_HELP.unitCost
+                                        }}</InfoTooltip
+                                    >
+                                </span>
                             </th>
                             <th scope="col" :class="draftTable.thNum">
                                 Total Cost
@@ -136,6 +148,8 @@ import { useRouter } from 'vue-router';
 import { PackagePlus, Plus, Save, Trash2 } from '@lucide/vue';
 import DraftRowActions from '@/components/ui/DraftRowActions.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
+import InfoTooltip from '@/components/ui/InfoTooltip.vue';
+import { RESTOCK_HELP } from '@/components/User/Restock/restock-help';
 import { draftTable } from '@/components/ui/draft-table';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
