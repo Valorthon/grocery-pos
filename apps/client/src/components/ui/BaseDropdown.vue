@@ -42,6 +42,7 @@
                     ]"
                     :style="floating ? floatingStyle : undefined"
                     :data-placement="floating ? placement : undefined"
+                    :data-inert-exempt="floating && inModal ? '' : undefined"
                     @click="onMenuClick"
                     @keydown="floating ? onKeydown($event) : undefined"
                     @focusout="floating ? onFocusOut($event) : undefined"
@@ -109,6 +110,12 @@ const FOCUSABLE_ITEM = ':is([role="menuitem"], button, a[href]):not(:disabled)';
 const placement = ref<'below' | 'above'>('below');
 const floatingStyle = ref<Record<string, string>>({});
 const GAP = 8;
+/**
+ * The trigger sits in an open modal (a drawer below lg, #298). The
+ * teleported panel is then a sibling of that modal under <body>, so it is
+ * exempt from the modal stack's inert background and focus trap.
+ */
+const inModal = ref(false);
 
 /** Places the floating panel from the trigger's box; flips up if needed. */
 function place() {
@@ -138,6 +145,7 @@ watch(
     async (open) => {
         if (!props.floating) return;
         if (open) {
+            inModal.value = !!triggerEl()?.closest('[aria-modal="true"]');
             await nextTick();
             place();
             window.addEventListener('scroll', place, true);

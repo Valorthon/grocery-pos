@@ -4,6 +4,7 @@
         v-model="open"
         align="right"
         width-class="w-64"
+        floating
     >
         <template #trigger="{ trigger }">
             <button
