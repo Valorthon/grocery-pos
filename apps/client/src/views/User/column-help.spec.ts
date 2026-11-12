@@ -93,6 +93,15 @@ describe('column help lists every value (#263)', () => {
         expect(terms(PRODUCT_HELP.status)).toEqual(labels(PRODUCT_STATUS));
     });
 
+    it('purchase order Ordered and Expected cost (#288)', () => {
+        expect(PURCHASE_ORDER_HELP.ordered).toContain(
+            "Stock doesn't change until you receive it.",
+        );
+        expect(PURCHASE_ORDER_HELP.expectedCost).toContain(
+            'Prefilled from the latest receipt',
+        );
+    });
+
     it('every assignable role, as shown raw', () => {
         expect(terms(USER_HELP.roles).sort()).toEqual(
             [...ASSIGNABLE_ROLES].sort(),

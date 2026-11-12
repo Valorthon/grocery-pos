@@ -28,6 +28,8 @@
                 <BaseInput
                     v-model="quantity"
                     :label="`Ordered (${unitLabel(picked?.unit)})`"
+                    :help="PURCHASE_ORDER_HELP.ordered"
+                    help-label="About Ordered"
                     numeric
                     :inputmode="
                         quantityScale(picked?.unit) === 1000
@@ -42,6 +44,8 @@
                 <BaseInput
                     v-model="cost"
                     :label="`Expected cost (₱/${unitLabel(picked?.unit)})`"
+                    :help="PURCHASE_ORDER_HELP.expectedCost"
+                    help-label="About Expected cost"
                     numeric
                     inputmode="decimal"
                     autocomplete="off"
@@ -94,7 +98,10 @@ import { Color, useUIStore } from '@/stores/ui';
 import { centavosToPesoInput } from '@/utils/currency';
 import { apiErrorText } from '@/utils/api-error';
 import { fieldErrors, moneyError, quantityError } from '@/utils/rules';
-import type { PurchaseOrderDraftLine } from './purchase-order';
+import {
+    PURCHASE_ORDER_HELP,
+    type PurchaseOrderDraftLine,
+} from './purchase-order';
 
 const props = defineProps<{
     modelValue: boolean;

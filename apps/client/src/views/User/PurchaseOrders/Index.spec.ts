@@ -17,9 +17,11 @@ import {
     field,
     fieldError,
     flush,
+    headerText,
     pickFirstMatch,
     type,
 } from '@/testing/form-dom';
+import { PURCHASE_ORDER_HELP } from '@/components/User/PurchaseOrder/purchase-order';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
 import { wedgeScan } from '@/testing/scanner';
 import { anyModalOpen } from '@/components/ui/modal-stack';
@@ -624,7 +626,7 @@ describe('Purchase order references and draft warnings (#123)', () => {
             'Outstanding',
             'Expected cost',
         ]) {
-            const i = heads.findIndex((th) => th.textContent?.trim() === title);
+            const i = heads.findIndex((th) => headerText(th) === title);
             expect(heads[i].className).toContain('text-right');
             expect(cells[i].classList.contains('num')).toBe(true);
             expect(cells[i].classList.contains('text-right')).toBe(true);
@@ -828,6 +830,38 @@ describe('Purchase order scanning (#214)', () => {
     });
 });
 
+function columnHelp(title: string): string | undefined {
+    const button = document.querySelector(
+        `thead [data-info-tooltip][aria-label="About ${title}"]`,
+    );
+    if (!button) return undefined;
+    return document
+        .getElementById(button.getAttribute('aria-describedby')!)
+        ?.textContent?.trim();
+}
+
+describe('Purchase order Lines help (#288)', () => {
+    it('explains Ordered and Expected cost in the draft and the order view', async () => {
+        await mount();
+        await press('New purchase order');
+        expect(columnHelp('Ordered')).toBe(PURCHASE_ORDER_HELP.ordered);
+        expect(columnHelp('Expected cost')).toBe(
+            PURCHASE_ORDER_HELP.expectedCost,
+        );
+        const titles = [...document.querySelectorAll('thead th')].map(
+            headerText,
+        );
+        expect(titles).toContain('Ordered');
+        expect(titles).toContain('Expected cost');
+        await press('Back to list');
+        await press('Open');
+        expect(columnHelp('Ordered')).toBe(PURCHASE_ORDER_HELP.ordered);
+        expect(columnHelp('Expected cost')).toBe(
+            PURCHASE_ORDER_HELP.expectedCost,
+        );
+    });
+});
+
 describe('Purchase order editor layout and order view (#275)', () => {
     beforeEach(() => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -865,8 +899,8 @@ describe('Purchase order editor layout and order view (#275)', () => {
         expect(byId('po-lines-header')!.textContent).toContain('Lines');
         expect(byId('po-add-product')!.textContent).toContain('Add product');
         expect(byId('po-add-product')!.className).toContain('min-h-11');
-        const heads = [...document.querySelectorAll('thead th')].map((th) =>
-            th.textContent?.trim(),
+        const heads = [...document.querySelectorAll('thead th')].map(
+            headerText,
         );
         expect(heads).toEqual([
             'Product',
