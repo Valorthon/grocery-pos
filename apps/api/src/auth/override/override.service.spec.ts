@@ -1,3 +1,5 @@
+import { StepUpService } from '../step-up/step-up.service';
+import { ForbiddenError } from '../../common/errors';
 import { AuditService } from '../../audit/audit.service';
 import { JwtService } from '@nestjs/jwt';
 import { Connection, Model, Types, type ClientSession } from 'mongoose';
@@ -77,6 +79,7 @@ const sale = {
 } as SaleDoc;
 
 describe('manager approvals (#34)', () => {
+    let stepUp: { assertLive: jest.Mock };
     let service: ManagerOverrideService;
     let users: {
         findOne: jest.Mock;
@@ -132,6 +135,7 @@ describe('manager approvals (#34)', () => {
             ),
             endSession: jest.fn(),
         };
+        stepUp = { assertLive: jest.fn().mockResolvedValue(undefined) };
         service = new ManagerOverrideService(
             { startSession: async () => transaction } as unknown as Connection,
             grants as unknown as Model<OverrideGrant>,
@@ -145,6 +149,7 @@ describe('manager approvals (#34)', () => {
             {
                 record: jest.fn().mockResolvedValue(undefined),
             } as unknown as AuditService,
+            stepUp as unknown as StepUpService,
         );
     });
     function token(
@@ -491,4 +496,21 @@ describe('manager approvals (#34)', () => {
             service.setPin(admin, MANAGER, { pin: '012345' }),
         ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_INVALID_INPUT });
     });
+    it.each([['012345'], [null]])(
+        'refuses setting or removing a PIN (%s) without a step-up (#310)',
+        async (pin) => {
+            stepUp.assertLive.mockRejectedValueOnce(
+                new ForbiddenError(ErrorCode.USER_REAUTH_REQUIRED, 'x'),
+            );
+            await expect(
+                service.setPin(admin, MANAGER, { pin }),
+            ).rejects.toMatchObject({ code: ErrorCode.USER_REAUTH_REQUIRED });
+            expect(users.updateOne).not.toHaveBeenCalledWith(
+                { _id: MANAGER },
+                expect.anything(),
+                expect.anything(),
+            );
+            expect(stepUp.assertLive).toHaveBeenCalledWith(admin, session);
+        },
+    );
 });

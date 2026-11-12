@@ -59,6 +59,8 @@ const FIELDS: Record<AuditAction, readonly string[]> = {
     [AuditAction.SHIFT_CASH_DROPPED]: ['amount', 'reason'],
     [AuditAction.AUTH_LOGIN]: ['name'],
     [AuditAction.AUTH_LOGIN_FAILED]: ['name'],
+    [AuditAction.AUTH_REAUTH]: ['name'],
+    [AuditAction.AUTH_REAUTH_FAILED]: ['name'],
     [AuditAction.PURCHASE_ORDER_CREATED]: PO_DRAFT,
     [AuditAction.PURCHASE_ORDER_UPDATED]: PO_DRAFT,
     [AuditAction.PURCHASE_ORDER_SENT]: [

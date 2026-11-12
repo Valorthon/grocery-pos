@@ -91,6 +91,7 @@ import type {
     DiscountInput,
     DrawerMovementRequest,
     LoginRequest,
+    ReauthRequest,
     NewProductRequest,
     NewProductsRequest,
     OpenShiftRequest,
@@ -104,7 +105,7 @@ import type {
     UserUpdate,
     UserUpdateRequest,
 } from '@grocery-pos/contracts';
-import type { LoginDto } from '../auth/types';
+import type { LoginDto, ReauthDto } from '../auth/types';
 import type { AdjustDto } from '../inventory-man/adjustment/types/adjustment.dto';
 import type { RestockDto } from '../inventory-man/restock/types/restock.dto';
 import type { NewProductsDto } from '../product/types/product.dto';
@@ -193,6 +194,7 @@ const checks = {
         true,
     ),
     LoginDto: keysMatch<LoginDto, LoginRequest>(true),
+    ReauthDto: keysMatch<ReauthDto, ReauthRequest>(true),
     CreateBulkDto: keysMatch<CreateBulkDto, CreateUsersRequest>(true),
     CreateFields: keysMatch<Line<CreateBulkDto['users']>, CreateUserRequest>(
         true,

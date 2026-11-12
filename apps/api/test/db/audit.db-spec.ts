@@ -17,6 +17,7 @@ import {
     openShift,
     seedProduct,
     read,
+    grantStepUp,
     type DbApp,
 } from './db-app';
 import { discountApprovalHeaders, approvalHeaders } from './approval-fixtures';
@@ -51,6 +52,7 @@ const events = (action: AuditAction, targetId?: string) =>
         .sort({ createdAt: 1, _id: 1 })
         .lean();
 it('records bounded request metadata, exact user actions and secret-free business fields', async () => {
+    await grantStepUp(db, admin);
     const response = await db.call(
         admin,
         'POST',
@@ -396,6 +398,7 @@ it('blocks application update/delete/save/bulk mutations and defines no TTL inde
 });
 
 it('records safe PIN setup/removal and self-password change without secret material', async () => {
+    await grantStepUp(db, admin);
     expect(
         (
             await db.call(

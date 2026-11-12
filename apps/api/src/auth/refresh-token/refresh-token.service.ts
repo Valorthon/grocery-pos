@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { RefreshToken } from './refresh-token.schema';
+import { StepUp } from '../step-up/step-up.schema';
 import { Model, Types } from 'mongoose';
 import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { JWTPayload, Role } from '../types';
@@ -40,6 +41,7 @@ export class RefreshTokenService {
     constructor(
         @InjectModel(RefreshToken.name) private model: Model<RefreshToken>,
         private config: TypedConfigService,
+        @InjectModel(StepUp.name) private stepUps: Model<StepUp>,
     ) {}
 
     /**
@@ -144,9 +146,16 @@ export class RefreshTokenService {
         };
     }
 
-    /** Logout: revokes one refresh token. */
+    /** Logout: revokes one refresh token and its session's step-up (#310). */
     async invalidate(_id: string): Promise<void> {
-        await this.model.deleteOne({ _id });
+        const found = await this.model
+            .findOneAndDelete({ _id })
+            .lean<{ user: Types.ObjectId; family?: Types.ObjectId }>();
+        if (found?.family)
+            await this.stepUps.deleteMany({
+                user: found.user,
+                sid: found.family.toString(),
+            });
     }
 
     /**
@@ -163,12 +172,17 @@ export class RefreshTokenService {
                 ? { family: { $ne: new Types.ObjectId(opts.keepSid) } }
                 : {};
         await this.model.deleteMany({ user: userId, ...keep });
+        // Every step-up of the user, the kept session's too (#310).
+        await this.stepUps.deleteMany({ user: new Types.ObjectId(userId) });
     }
 
     /** Ends every session of each of `userIds`. */
     async revokeAllForUsers(userIds: readonly string[]): Promise<void> {
         if (userIds.length === 0) return;
         await this.model.deleteMany({ user: { $in: [...userIds] } });
+        await this.stepUps.deleteMany({
+            user: { $in: userIds.map((id) => new Types.ObjectId(id)) },
+        });
     }
 
     private checkValid(refreshToken: FoundRefresh): boolean {

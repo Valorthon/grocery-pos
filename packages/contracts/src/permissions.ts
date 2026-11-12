@@ -177,7 +177,13 @@ export const PERMISSIONS: Permission[] = [
     {
         label: 'Change own password',
         roles: ASSIGNABLE_ROLES,
-        routes: ['GET /users/profile', 'PATCH /users/me/password'],
+        // `POST /auth/reauth` re-enters the own password for a step-up
+        // before sensitive account changes (#310).
+        routes: [
+            'GET /users/profile',
+            'PATCH /users/me/password',
+            'POST /auth/reauth',
+        ],
         // The profile menu's "Change password" dialog (#88), in both
         // layouts, so on every signed-in page: listed here as each role's
         // home page (the admin dashboard, or the seller dashboard).

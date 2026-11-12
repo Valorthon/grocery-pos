@@ -15,6 +15,8 @@ import axios, {
     type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { ErrorCode } from '@grocery-pos/contracts';
+import { apiErrorCode } from './utils/api-error';
 vi.mock('@/config/env', () => ({
     env: {
         VITE_API_URL: 'http://api.test/v1',
@@ -187,6 +189,21 @@ describe('api 401 handling', () => {
         expect(
             (err as AxiosError<{ error: string }>).response?.data.error,
         ).toBe('AUTH_001');
+    });
+
+    it('a 403 USER_REAUTH_REQUIRED is not a session expiry: no refresh, no replay, no logout (#310)', async () => {
+        let calls = 0;
+        api.defaults.adapter = ((config) => {
+            calls += 1;
+            return fail(config, 403, { error: ErrorCode.USER_REAUTH_REQUIRED });
+        }) as AxiosAdapter;
+
+        const err = await api.post('/users', {}).catch((e: unknown) => e);
+
+        expect(calls).toBe(1);
+        expect(refresh).not.toHaveBeenCalled();
+        expect(logout).not.toHaveBeenCalled();
+        expect(apiErrorCode(err)).toBe(ErrorCode.USER_REAUTH_REQUIRED);
     });
 
     it('does not start a refresh on a 401 from /auth/logout', async () => {

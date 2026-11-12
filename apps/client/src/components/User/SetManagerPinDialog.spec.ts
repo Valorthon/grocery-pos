@@ -1,10 +1,15 @@
 import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Role, type UserView } from '@grocery-pos/contracts';
+import { ErrorCode, Role, type UserView } from '@grocery-pos/contracts';
+import { AxiosError, type AxiosResponse } from 'axios';
+import { type } from '@/testing/form-dom';
 import SetManagerPinDialog from './SetManagerPinDialog.vue';
 import type { ApiSend } from '@/testing/api-mock';
-const api = vi.hoisted(() => ({ patch: vi.fn<ApiSend>() }));
+const api = vi.hoisted(() => ({
+    patch: vi.fn<ApiSend>(),
+    post: vi.fn<ApiSend>(),
+}));
 vi.mock('@/axios', () => ({ default: api }));
 let app: App | undefined;
 const close = vi.fn();
@@ -50,6 +55,7 @@ function pin(value: string) {
 }
 beforeEach(() => {
     api.patch.mockReset().mockResolvedValue({ data: undefined });
+    api.post.mockReset().mockResolvedValue({ data: undefined });
     close.mockReset();
 });
 afterEach(() => {
@@ -165,5 +171,66 @@ describe('admin manager PIN management', () => {
         expect(api.patch).toHaveBeenCalledOnce();
         finish({ data: undefined });
         await flush();
+    });
+    it.each([
+        ['Set PIN', '012345'],
+        ['Remove PIN', null],
+    ])(
+        '%s asks "Confirm it\'s you" when the server needs a step-up, then retries (#310)',
+        async (label, value) => {
+            api.patch.mockRejectedValueOnce(
+                new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, null, {
+                    status: 403,
+                    data: {
+                        statusCode: 403,
+                        error: ErrorCode.USER_REAUTH_REQUIRED,
+                        message: 'x',
+                    },
+                } as AxiosResponse),
+            );
+            await mount();
+            if (value) pin(value);
+            await flush();
+            button(label).click();
+            await flush();
+            button(label).click();
+            await flush();
+            expect(document.body.textContent).toContain("Confirm it's you");
+            expect(close).not.toHaveBeenCalled();
+            await type('Your password', 'admin-password');
+            button('Confirm').click();
+            await flush();
+            expect(api.post).toHaveBeenCalledWith('/auth/reauth', {
+                password: 'admin-password',
+            });
+            expect(api.patch).toHaveBeenCalledTimes(2);
+            expect(api.patch).toHaveBeenLastCalledWith(
+                '/users/manager-id/override-pin',
+                { pin: value },
+            );
+            expect(close).toHaveBeenCalledOnce();
+        },
+    );
+    it('a cancelled step-up saves nothing and keeps the dialog (#310)', async () => {
+        api.patch.mockRejectedValueOnce(
+            new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, null, {
+                status: 403,
+                data: {
+                    statusCode: 403,
+                    error: ErrorCode.USER_REAUTH_REQUIRED,
+                    message: 'x',
+                },
+            } as AxiosResponse),
+        );
+        await mount();
+        button('Remove PIN').click();
+        await flush();
+        button('Remove PIN').click();
+        await flush();
+        button('Cancel').click();
+        await flush();
+        expect(api.patch).toHaveBeenCalledOnce();
+        expect(close).not.toHaveBeenCalled();
+        expect(document.querySelector('[role=alert]')).toBeNull();
     });
 });

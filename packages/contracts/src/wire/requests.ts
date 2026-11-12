@@ -21,6 +21,11 @@ export interface LoginRequest {
     password: string;
 }
 
+/** `POST /auth/reauth`: the caller's own password (step-up, #310). */
+export interface ReauthRequest {
+    password: string;
+}
+
 /** One new account in `POST /users`. */
 export interface CreateUserRequest {
     name: string;

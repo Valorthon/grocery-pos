@@ -46,6 +46,9 @@ import {
 import { RefreshToken } from '../auth/refresh-token/refresh-token.schema';
 import { RefreshTokenService } from '../auth/refresh-token/refresh-token.service';
 import { FakeRefreshTokenModel } from '../auth/refresh-token/testing/fake-refresh-token-model';
+import { StepUpService } from '../auth/step-up/step-up.service';
+import { StepUp } from '../auth/step-up/step-up.schema';
+import { FakeStepUpModel } from '../auth/step-up/testing/fake-step-up-model';
 import { RATE_LIMITS, RateLimitModule } from '../auth/rate-limit/rate-limit';
 import { getStorageToken, ThrottlerStorageService } from '@nestjs/throttler';
 import { STRING_LIMITS } from '../constants';
@@ -75,7 +78,22 @@ describe('Users (e2e)', () => {
     let manager: FakeUserRow;
     let cashier: FakeUserRow;
 
-    function sessionOf(row: FakeUserRow, sid?: string): string {
+    const stepUps = new FakeStepUpModel();
+    /** Each seeded user's default session: live, with a live step-up (#310). */
+    const defaultSid = new Map<string, string>();
+
+    /** A live session for `row`, optionally stepped up until `until`. */
+    function openSession(row: FakeUserRow, until?: Date): string {
+        const sid = new Types.ObjectId();
+        tokens.seed(row._id, { family: sid });
+        if (until) stepUps.seed(row._id, sid.toString(), until);
+        return sid.toString();
+    }
+
+    function sessionOf(
+        row: FakeUserRow,
+        sid: string | undefined = defaultSid.get(row._id.toString()),
+    ): string {
         return `jwt=${signCookie(
             jwt.sign(
                 {
@@ -137,6 +155,8 @@ describe('Users (e2e)', () => {
                 UserService,
                 RefreshTokenService,
                 { provide: getModelToken(RefreshToken.name), useValue: tokens },
+                StepUpService,
+                { provide: getModelToken(StepUp.name), useValue: stepUps },
                 JWTStrategy,
                 { provide: getModelToken(User.name), useValue: model },
                 {
@@ -194,6 +214,11 @@ describe('Users (e2e)', () => {
             roles: [Role.Seller],
             passwordHash: seedHash,
         });
+        stepUps.rows = [];
+        defaultSid.clear();
+        const later = new Date(Date.now() + 60_000);
+        for (const row of [admin, manager, cashier])
+            defaultSid.set(row._id.toString(), openSession(row, later));
     });
 
     describe('Verification from the issue', () => {
@@ -634,7 +659,10 @@ describe('Users (e2e)', () => {
     });
 
     describe('sessions end when access changes (#12)', () => {
-        /** Two signed-in sessions (refresh tokens) for each of `rows`. */
+        /**
+         * Two more signed-in sessions (refresh tokens) for each of `rows`,
+         * on top of the default one every seeded user has (#310).
+         */
         function signIn(...rows: FakeUserRow[]) {
             for (const row of rows) {
                 tokens.seed(row._id);
@@ -651,7 +679,7 @@ describe('Users (e2e)', () => {
 
             expect(res.status).toBe(200);
             expect(tokens.tokensOf(cashier._id)).toEqual([]);
-            expect(tokens.tokensOf(manager._id)).toHaveLength(2);
+            expect(tokens.tokensOf(manager._id)).toHaveLength(3);
         });
 
         it('changing a user’s roles revokes their refresh tokens', async () => {
@@ -687,7 +715,7 @@ describe('Users (e2e)', () => {
             ]);
 
             expect(res.status).toBe(200);
-            expect(tokens.tokensOf(cashier._id)).toHaveLength(2);
+            expect(tokens.tokensOf(cashier._id)).toHaveLength(3);
         });
 
         it('a refused update revokes nothing', async () => {
@@ -698,7 +726,7 @@ describe('Users (e2e)', () => {
             ]);
 
             expect(res.status).toBe(403);
-            expect(tokens.tokensOf(admin._id)).toHaveLength(2);
+            expect(tokens.tokensOf(admin._id)).toHaveLength(3);
         });
 
         it('changing your own password ends your other sessions but keeps this one', async () => {
@@ -718,17 +746,20 @@ describe('Users (e2e)', () => {
             expect(
                 tokens.tokensOf(cashier._id).map((t) => t._id.toString()),
             ).toEqual([keep]);
-            expect(tokens.tokensOf(manager._id)).toHaveLength(2);
+            expect(tokens.tokensOf(manager._id)).toHaveLength(3);
         });
 
         it('without a session id in the token, a password change ends every session', async () => {
             tokens.seed(cashier._id);
             signIn(cashier);
 
-            const res = await call(cashier, 'PATCH', '/users/me/password', {
-                currentPassword: 'secret',
-                newPassword: 'fresh-secret',
-            });
+            const res = await call(
+                cashier,
+                'PATCH',
+                '/users/me/password',
+                { currentPassword: 'secret', newPassword: 'fresh-secret' },
+                '',
+            );
 
             expect(res.status).toBe(200);
             expect(tokens.tokensOf(cashier._id)).toEqual([]);
@@ -743,7 +774,235 @@ describe('Users (e2e)', () => {
             });
 
             expect(res.status).toBe(403);
-            expect(tokens.tokensOf(cashier._id)).toHaveLength(2);
+            expect(tokens.tokensOf(cashier._id)).toHaveLength(3);
+        });
+    });
+
+    describe('step-up re-auth (#310)', () => {
+        const later = () => new Date(Date.now() + 60_000);
+        let audit: { record: jest.Mock };
+        beforeEach(() => {
+            audit = app.get(AuditService);
+            audit.record.mockClear();
+        });
+
+        /** `as` acting from a live session with no step-up. */
+        const bare = (as: FakeUserRow) => openSession(as);
+
+        const guarded: [string, () => Record<string, unknown>][] = [
+            ['a password reset', () => ({ password: 'reset-password' })],
+            ['a role change', () => ({ roles: [Role.Restocker] })],
+            ['a deactivation', () => ({ isActive: false })],
+        ];
+
+        it.each(guarded)(
+            '%s without a step-up -> 403 USER_REAUTH_REQUIRED, nothing changed or audited',
+            async (_, change) => {
+                const before = JSON.stringify(model.byId(cashier._id));
+                const res = await call(
+                    admin,
+                    'PATCH',
+                    '/users',
+                    { updates: [{ user: id(cashier), update: change() }] },
+                    bare(admin),
+                );
+                expect(res.status).toBe(403);
+                expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+                expect(JSON.stringify(model.byId(cashier._id))).toBe(before);
+                expect(audit.record).not.toHaveBeenCalled();
+            },
+        );
+
+        it.each(guarded)('%s with a step-up succeeds', async (_, change) => {
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                { updates: [{ user: id(cashier), update: change() }] },
+                openSession(admin, later()),
+            );
+            expect(res.status).toBe(200);
+        });
+
+        it.each([
+            ['a rename', { name: 'till1' }],
+            [
+                'unchanged roles and isActive: true',
+                {
+                    roles: [Role.Seller],
+                    isActive: true,
+                },
+            ],
+        ])('%s needs no step-up', async (_, change) => {
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                { updates: [{ user: id(cashier), update: change }] },
+                bare(admin),
+            );
+            expect(res.status).toBe(200);
+        });
+
+        it('reactivation needs no step-up', async () => {
+            model.byId(cashier._id)!.isActive = false;
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(cashier), update: { isActive: true } },
+                    ],
+                },
+                bare(admin),
+            );
+            expect(res.status).toBe(200);
+            expect(model.byId(cashier._id)?.isActive).toBe(true);
+        });
+
+        it('a bulk PATCH with one guarded entry needs one; the rename is rolled back', async () => {
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(manager), update: { name: 'boss' } },
+                        { user: id(cashier), update: { isActive: false } },
+                    ],
+                },
+                bare(admin),
+            );
+            expect(res.status).toBe(403);
+            expect(model.byId(manager._id)?.name).toBe('manager');
+        });
+
+        it('POST /users always needs one', async () => {
+            const body = {
+                users: [
+                    {
+                        name: 'till7',
+                        password: 'password1',
+                        roles: [Role.Seller],
+                    },
+                ],
+            };
+            const refused = await call(
+                admin,
+                'POST',
+                '/users',
+                body,
+                bare(admin),
+            );
+            expect(refused.status).toBe(403);
+            expect(refused.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+            expect(model.rows.some((r) => r.name === 'till7')).toBe(false);
+
+            const ok = await call(
+                admin,
+                'POST',
+                '/users',
+                body,
+                openSession(admin, later()),
+            );
+            expect(ok.status).toBe(201);
+        });
+
+        it('an expired step-up (past 5 minutes) is refused', async () => {
+            const sid = openSession(admin, new Date(Date.now() - 1));
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(cashier), update: { isActive: false } },
+                    ],
+                },
+                sid,
+            );
+            expect(res.status).toBe(403);
+            expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+        });
+
+        it('a step-up of another session or another user does not count', async () => {
+            const mine = bare(admin);
+            const theirs = openSession(manager);
+            stepUps.seed(manager._id, mine, later());
+            stepUps.seed(admin._id, theirs, later());
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(cashier), update: { isActive: false } },
+                    ],
+                },
+                mine,
+            );
+            expect(res.status).toBe(403);
+            expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+        });
+
+        it('a step-up whose session has ended does not count', async () => {
+            const sid = openSession(admin, later());
+            tokens.rows.clear();
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(cashier), update: { isActive: false } },
+                    ],
+                },
+                sid,
+            );
+            expect(res.status).toBe(403);
+            expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+        });
+
+        it('a legacy token without sid is refused', async () => {
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(cashier), update: { isActive: false } },
+                    ],
+                },
+                '',
+            );
+            expect(res.status).toBe(403);
+            expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+        });
+
+        it('the own password change revokes the step-up', async () => {
+            const sid = openSession(admin, later());
+            const changed = await call(
+                admin,
+                'PATCH',
+                '/users/me/password',
+                { currentPassword: 'secret', newPassword: 'fresh-secret' },
+                sid,
+            );
+            expect(changed.status).toBe(200);
+            const res = await call(
+                admin,
+                'PATCH',
+                '/users',
+                {
+                    updates: [
+                        { user: id(cashier), update: { isActive: false } },
+                    ],
+                },
+                sid,
+            );
+            expect(res.status).toBe(403);
+            expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
         });
     });
 

@@ -28,7 +28,13 @@ export interface TokenOwner {
     isActive: boolean;
 }
 
-type Method = 'create' | 'findById' | 'deleteOne' | 'deleteMany';
+type Method =
+    | 'create'
+    | 'findById'
+    | 'deleteOne'
+    | 'deleteMany'
+    | 'exists'
+    | 'findOneAndDelete';
 type Filter = Record<string, unknown>;
 
 const HOUR_MS = 3_600_000;
@@ -41,13 +47,18 @@ function eq(a: unknown, b: unknown): boolean {
     return a !== undefined && b !== undefined && str(a) === str(b);
 }
 
-function matches(row: StoredToken, filter: Filter): boolean {
+export function matches(row: object, filter: Filter): boolean {
     return Object.entries(filter).every(([key, expected]) => {
         const actual = (row as unknown as Record<string, unknown>)[key];
         if (expected !== null && typeof expected === 'object') {
             if ('$in' in expected)
                 return (expected.$in as unknown[]).some((v) => eq(v, actual));
             if ('$ne' in expected) return !eq(actual, expected.$ne);
+            if ('$gt' in expected)
+                return (
+                    actual instanceof Date &&
+                    actual.getTime() > (expected.$gt as Date).getTime()
+                );
         }
         return eq(actual, expected);
     });
@@ -145,4 +156,26 @@ export class FakeRefreshTokenModel {
             return { deletedCount: hits.length };
         });
     });
+
+    exists = jest.fn((filter: Filter) => {
+        const run = () => {
+            const hit = [...this.rows.values()].find((row) =>
+                matches(row, filter),
+            );
+            return hit ? { _id: hit._id } : null;
+        };
+        const query = this.settle('exists', run);
+        return Object.assign(query, { session: () => query });
+    });
+
+    findOneAndDelete = jest.fn((filter: Filter) => ({
+        lean: () =>
+            this.settle('findOneAndDelete', () => {
+                const hit = [...this.rows.values()].find((row) =>
+                    matches(row, filter),
+                );
+                if (hit) this.rows.delete(hit._id.toString());
+                return hit ?? null;
+            }),
+    }));
 }

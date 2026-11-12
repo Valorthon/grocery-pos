@@ -1099,3 +1099,132 @@ describe('role cards (#297)', () => {
         expect(cell.textContent).not.toContain(Role.UserManager);
     });
 });
+
+describe('step-up re-auth (#310)', () => {
+    const reauthRequired = () =>
+        httpError(403, {
+            error: ErrorCode.USER_REAUTH_REQUIRED,
+            message: 'Confirm your password to make this change',
+        });
+    const reauthOpen = () =>
+        document.body.textContent?.includes("Confirm it's you") ?? false;
+
+    async function editAna() {
+        const row = [...document.querySelectorAll('tbody tr')].find(
+            (tr) => tr.querySelector('td')?.textContent?.trim() === 'ana',
+        )!;
+        row.querySelector<HTMLButtonElement>('button[title="Edit"]')!.click();
+        await flush();
+    }
+
+    async function confirmPassword() {
+        await type('Your password', 'my-own-password');
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes("Confirm it's you"),
+        )!;
+        [...dialog.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Confirm')!
+            .click();
+        await flush();
+    }
+
+    it('Add User prompts, then retries the same request once', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.post
+            .mockRejectedValueOnce(reauthRequired())
+            .mockResolvedValue({ data: undefined });
+        await mount();
+        await click('Add User');
+        await type('Username', 'bea');
+        await type('Password', 'long-enough-1');
+        await checkRole(Role.Seller, true);
+        await click('Save');
+
+        expect(reauthOpen()).toBe(true);
+        await confirmPassword();
+
+        const body = {
+            users: [
+                {
+                    name: 'bea',
+                    password: 'long-enough-1',
+                    roles: [Role.Seller],
+                },
+            ],
+        };
+        expect(api.post.mock.calls).toEqual([
+            ['/users', body],
+            ['/auth/reauth', { password: 'my-own-password' }],
+            ['/users', body],
+        ]);
+        await new Promise((r) => setTimeout(r, 300));
+        expect(reauthOpen()).toBe(false);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User created'],
+        ]);
+    });
+
+    it('Edit User with a guarded change prompts, then succeeds', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.patch
+            .mockRejectedValueOnce(reauthRequired())
+            .mockResolvedValue({ data: {} });
+        api.post.mockResolvedValue({ data: undefined });
+        await mount();
+        await editAna();
+        await checkRole(Role.Adjuster, true);
+        await click('Save');
+
+        expect(reauthOpen()).toBe(true);
+        await confirmPassword();
+
+        expect(api.patch).toHaveBeenCalledTimes(2);
+        expect(api.patch.mock.calls[0]).toEqual(api.patch.mock.calls[1]);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User updated'],
+        ]);
+    });
+
+    it('Cancel saves nothing and keeps the edit dialog with its values', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.patch.mockRejectedValueOnce(reauthRequired());
+        await mount();
+        await editAna();
+        await checkRole(Role.Adjuster, true);
+        await click('Save');
+        const dialog = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes("Confirm it's you"),
+        )!;
+        [...dialog.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Cancel')!
+            .click();
+        await flush();
+
+        expect(api.patch).toHaveBeenCalledOnce();
+        expect(api.post).not.toHaveBeenCalled();
+        await new Promise((r) => setTimeout(r, 300));
+        expect(reauthOpen()).toBe(false);
+        expect(roleBox(Role.Adjuster).checked).toBe(true);
+        expect(useUIStore().toasts).toEqual([]);
+    });
+
+    it('a rename that the server accepts does not prompt', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        api.patch.mockResolvedValue({ data: {} });
+        await mount();
+        await editAna();
+        await type('Username', 'bea');
+        await click('Save');
+        const confirm = [...document.querySelectorAll('[role="dialog"]')].find(
+            (d) => d.textContent?.includes('will log in as'),
+        )!;
+        [...confirm.querySelectorAll('button')]
+            .find((b) => b.textContent?.trim() === 'Rename')!
+            .click();
+        await flush();
+
+        expect(reauthOpen()).toBe(false);
+        expect(api.patch).toHaveBeenCalledOnce();
+        expect(api.post).not.toHaveBeenCalled();
+    });
+});

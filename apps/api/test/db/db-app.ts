@@ -289,3 +289,28 @@ export async function seedSupplier(db: DbApp): Promise<string> {
         .create({ name: `Farm ${randomUUID()}`, isActive: true });
     return String(row._id);
 }
+
+/**
+ * Gives `who`'s session (`sid`, default its user id, as `call` signs it) a
+ * live refresh token and a fresh step-up (#310), as `POST /auth/reauth`
+ * would, so a guarded account change goes through.
+ */
+export async function grantStepUp(db: DbApp, who: Caller): Promise<void> {
+    const sid = who.sid ?? who.userId;
+    const user = new Types.ObjectId(who.userId);
+    const family = new Types.ObjectId(sid);
+    const tokens = db.model('RefreshToken');
+    if (!(await tokens.exists({ user, family })))
+        await tokens.create({
+            user,
+            family,
+            expiry: new Date(Date.now() + 3_600_000),
+        });
+    await db
+        .model('StepUp')
+        .updateOne(
+            { user, sid },
+            { $set: { expiresAt: new Date(Date.now() + 300_000) } },
+            { upsert: true },
+        );
+}

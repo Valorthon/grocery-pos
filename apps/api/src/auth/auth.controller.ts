@@ -1,17 +1,29 @@
-import { Body, Controller, Logger, Post, Req, Res } from '@nestjs/common';
-import { LoginDto } from './types';
+import {
+    Body,
+    Controller,
+    HttpCode,
+    HttpStatus,
+    Logger,
+    Post,
+    Req,
+    Res,
+} from '@nestjs/common';
+import { CurrentUser, LoginDto, ReauthDto } from './types';
+import type { AuthUser } from './types';
+import { ASSIGNABLE_ROLES } from '@grocery-pos/contracts';
 import type { Request, Response } from 'express';
 import type { LoginResponse } from '@grocery-pos/contracts';
 import { Types } from 'mongoose';
 import { AuthService } from './auth.service';
 import { CookieService } from '../common/utils/cookie/cookie.service';
-import { Public } from './auth.decorator';
+import { Public, Roles } from './auth.decorator';
 import { AppError, AuthError, ErrorCode } from '../common/errors';
 import 'cookie-parser';
 import {
     clientIp,
     LoginAttemptLimiter,
     LoginRateLimit,
+    ReauthRateLimit,
     RefreshRateLimit,
 } from './rate-limit/rate-limit';
 
@@ -111,6 +123,22 @@ export class AuthController {
             }
             throw err;
         }
+    }
+
+    /**
+     * Step-up re-authentication (#310): any signed-in user confirms their own
+     * password; sensitive account changes then work from this session for
+     * `STEP_UP_TTL_S`. Rate limited like the password change. 204.
+     */
+    @Roles(...ASSIGNABLE_ROLES)
+    @ReauthRateLimit()
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @Post('reauth')
+    async reauth(
+        @CurrentUser() user: AuthUser,
+        @Body() dto: ReauthDto,
+    ): Promise<void> {
+        await this.service.reauth(user, dto.password);
     }
 
     /**
