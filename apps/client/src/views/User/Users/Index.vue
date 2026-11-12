@@ -111,12 +111,14 @@
                 @update:model-value="clearCreateError('password')"
             />
             <div>
-                <label
+                <span
+                    id="create-roles-heading"
                     class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2"
-                    >Roles</label
+                    >Roles</span
                 >
                 <RoleCards
                     id-prefix="create-role"
+                    labelledby="create-roles-heading"
                     :roles="grantableRoles"
                     :selected="createForm.roles"
                     @toggle="
@@ -170,12 +172,15 @@
                 :error="editPasswordError"
             />
             <div>
-                <label
+                <span
+                    id="edit-roles-heading"
                     class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2"
-                    >Roles</label
+                    >Roles</span
                 >
                 <RoleCards
                     id-prefix="edit-role"
+                    labelledby="edit-roles-heading"
+                    hint-id="roles-locked-hint"
                     :roles="roleOptions"
                     :selected="editForm.roles"
                     :is-disabled="
@@ -189,6 +194,7 @@
                 />
                 <p
                     v-if="rolesLockedReason"
+                    id="roles-locked-hint"
                     class="mt-2 text-xs text-slate-500"
                     data-testid="roles-locked-hint"
                 >

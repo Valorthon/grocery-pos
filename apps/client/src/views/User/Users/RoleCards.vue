@@ -1,27 +1,34 @@
 <template>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <div
+        role="group"
+        :aria-labelledby="labelledby"
+        class="grid grid-cols-1 sm:grid-cols-2 gap-2"
+    >
         <label
             v-for="role in roles"
             :key="role"
             :data-testid="`role-card-${role}`"
-            class="flex items-start gap-3 rounded-control border p-3 transition-colors focus-within:ring-2 focus-within:ring-leaf-600 focus-within:ring-offset-1"
+            class="flex items-start gap-3 rounded-control border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-leaf-600 has-[:focus-visible]:ring-offset-1"
             :class="[
                 selected.includes(role)
                     ? 'border-leaf-600 bg-leaf-50'
                     : 'border-line-strong bg-surface',
-                locked(role)
+                isDisabled(role)
                     ? 'opacity-50 cursor-not-allowed'
                     : 'cursor-pointer hover:border-leaf-500',
             ]"
         >
             <input
                 type="checkbox"
-                class="mt-0.5 shrink-0"
-                :class="CHECKBOX_INPUT"
+                class="mt-0.5 h-4 w-4 shrink-0 accent-leaf-600 outline-none"
                 :checked="selected.includes(role)"
-                :disabled="locked(role)"
+                :disabled="isDisabled(role)"
                 :aria-labelledby="`${idPrefix}-${role}-name`"
-                :aria-describedby="`${idPrefix}-${role}-desc`"
+                :aria-describedby="
+                    isDisabled(role) && hintId
+                        ? `${idPrefix}-${role}-desc ${hintId}`
+                        : `${idPrefix}-${role}-desc`
+                "
                 @change="
                     emit(
                         'toggle',
@@ -45,7 +52,7 @@
                 >
                 <span
                     :id="`${idPrefix}-${role}-desc`"
-                    class="block text-xs text-slate-500"
+                    class="block text-xs text-muted"
                     >{{ look(role).description }}</span
                 >
             </span>
@@ -55,7 +62,6 @@
 
 <script setup lang="ts">
 import type { Role } from '@grocery-pos/contracts';
-import { CHECKBOX_INPUT } from '@/components/ui/field-style';
 import { type AssignableRole, ROLE_LOOK } from '../role-look';
 
 /**
@@ -63,15 +69,19 @@ import { type AssignableRole, ROLE_LOOK } from '../role-look';
  * checkbox per card, its description tied by `aria-describedby`. A checked
  * card is highlighted and keeps its tick, so the state is not colour alone.
  */
-const props = withDefaults(
+withDefaults(
     defineProps<{
         roles: readonly Role[];
         selected: readonly Role[];
         /** Makes the ids unique per dialog. */
         idPrefix: string;
+        /** The id of the heading naming the group. */
+        labelledby: string;
+        /** The id of the hint saying why cards are disabled. */
+        hintId?: string;
         isDisabled?: (role: Role) => boolean;
     }>(),
-    { isDisabled: () => false },
+    { isDisabled: () => false, hintId: '' },
 );
 
 const emit = defineEmits<{
@@ -80,9 +90,5 @@ const emit = defineEmits<{
 
 function look(role: Role) {
     return ROLE_LOOK[role as AssignableRole];
-}
-
-function locked(role: Role): boolean {
-    return props.isDisabled(role);
 }
 </script>

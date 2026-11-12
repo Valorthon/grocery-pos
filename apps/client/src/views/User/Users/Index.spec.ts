@@ -1032,9 +1032,32 @@ describe('role cards (#297)', () => {
         expect(roleBox(Role.Admin).disabled).toBe(true);
         expect(roleBox(Role.UserManager).disabled).toBe(true);
         expect(roleBox(Role.Supervisor).disabled).toBe(true);
+        // A disabled card's checkbox is also described by the reason.
+        expect(roleBox(Role.Admin).getAttribute('aria-describedby')).toContain(
+            'roles-locked-hint',
+        );
+        expect(
+            roleBox(Role.Seller).getAttribute('aria-describedby'),
+        ).not.toContain('roles-locked-hint');
+        expect(
+            document
+                .querySelector('[role="group"]')
+                ?.getAttribute('aria-labelledby'),
+        ).toBe('edit-roles-heading');
         expect(lockedHint()).toContain(
             'Only an admin can grant User manager, Admin, Supervisor.',
         );
+    });
+
+    it('shows no reason when an admin edits another user', async () => {
+        api.get.mockResolvedValue({ data: USERS });
+        await mount();
+        await openEditor();
+
+        for (const role of ASSIGNABLE_ROLES) {
+            expect(roleBox(role).disabled).toBe(false);
+        }
+        expect(lockedHint()).toBeUndefined();
     });
 
     it('disables every role on the own row', async () => {
