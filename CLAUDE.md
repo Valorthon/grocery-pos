@@ -769,8 +769,17 @@ requestId}`. A 5xx never carries details or internals.
   next sale with that item.
 - Void Ticket asks first, with lines and units ("Void this ticket (2
   lines, 5 items)?", singular for 1). A removed line has a 5s Undo. Quantities are
-  editable. The Qty multiplier (or `12*`) applies to the next scan only and
-  shows a badge.
+  editable. A typed `12*` prefix multiplies the next scan or pick only and
+  shows a badge; there is no Qty select (#323).
+- Every successful add (scan or match pick) focuses that line's quantity
+  with its value selected and selects the line (as F4); Enter commits and
+  returns to the scan box, Escape cancels; a failed add moves no focus
+  (#323). In a quantity field every digit is held back (`qty-burst.ts`)
+  and typed after 200 ms without another; a held run of a valid
+  EAN-13/UPC-A/EAN-8 (check digit) at most 200 ms apart, then Enter, is
+  a scan: the typed quantity is committed (a refused one keeps its error)
+  and the code goes through the scan box's normal flow, never showing in
+  the field. Same code again is +1.
 - Basket, discount and checkout attempt (`idempotencyKey`) are kept per
   cashier in localStorage `grocery_pos_cart_v1:<userId>`, so a reload
   retries the same key and can't double-charge. Cleared on sale, void and
@@ -820,14 +829,16 @@ requestId}`. A 5xx never carries details or internals.
   unmount while open (e.g. Back swapping the layout) leaves nothing on the
   stack and puts the focus on the new `<main>`, never `<body>`.
 - Every register button and field is at least 44px (`min-h-11 min-w-11` or
-  `w-11 h-11`), including the scan box's Clear, Enter / Scan, the Qty
-  select and `BaseModal`'s header close (×) in every dialog (#89); so
+  `w-11 h-11`), including the scan box's Clear, Enter / Scan
+  and `BaseModal`'s header close (×) in every dialog (#89); so
   are the admin app bar's Add Product/Restock/Adjust, the `UserProfileMenu`
   bar and rail (`icon`) triggers, the seller sidebar links, and the Cash
   In/Drop quick amounts (two columns below `sm`, four from `sm`) (#107).
   Below `sm` the admin bar tightens its padding and gaps to fit at 320px. The
   scan box hides its F2 hint below `sm`, and its right padding fits its
-  buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear. No text
+  buttons: `pr-32 sm:pr-48` empty, `pr-43 sm:pr-52` with Clear (rechecked
+  after the Qty select went, #323: the buttons are unchanged, the box now
+  takes the full row). No text
   below 12px (`text-xs`); `layout-drift.spec.ts` enforces it for classes
   and CSS `font-size`.
 - No third-party runtime assets: Instrument Sans (UI) and Bricolage

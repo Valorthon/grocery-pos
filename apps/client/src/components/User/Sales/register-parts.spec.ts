@@ -27,26 +27,21 @@ function mount(render: () => ReturnType<typeof h>) {
 const q = <T extends Element = HTMLElement>(selector: string) =>
     document.querySelector<T & HTMLElement>(selector)!;
 
-it('scan box: two-way query and multiplier, actions emitted, input exposed', async () => {
+it('scan box: two-way query, no Qty picker, actions emitted, input exposed', async () => {
     const query = ref('');
-    const multiplier = ref(1);
     const box = ref<{ input: HTMLInputElement | null } | null>(null);
     const on = {
         submit: vi.fn(),
         searchChange: vi.fn(() => query.value),
         enterMatches: vi.fn(),
         clear: vi.fn(),
-        multiplierChange: vi.fn(),
     };
     mount(() =>
         h(RegisterScanBox, {
             ref: box,
             modelValue: query.value,
             'onUpdate:modelValue': (v: string) => (query.value = v),
-            multiplier: multiplier.value,
-            'onUpdate:multiplier': (v: number) => (multiplier.value = v),
             locked: false,
-            qtyOptions: [1, 2, 3],
             matchCount: 2,
             matchesSettled: true,
             nextScanQty: 3,
@@ -55,11 +50,11 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
             onSearchChange: on.searchChange,
             onEnterMatches: on.enterMatches,
             onClear: on.clear,
-            onMultiplierChange: on.multiplierChange,
         }),
     );
     const input = q<HTMLInputElement>('[data-testid="scan-input"]');
     expect(box.value?.input).toBe(input);
+    expect(document.querySelector('select')).toBeNull();
     // Real focus moves into the matches (#322): no active descendant.
     expect(input.hasAttribute('aria-activedescendant')).toBe(false);
     expect(input.getAttribute('aria-expanded')).toBe('true');
@@ -89,12 +84,6 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
 
     q<HTMLButtonElement>('[aria-label="Clear search"]').click();
     expect(on.clear).toHaveBeenCalledOnce();
-
-    const select = q<HTMLSelectElement>('select');
-    select.value = '3';
-    select.dispatchEvent(new Event('change'));
-    expect(multiplier.value).toBe(3);
-    expect(on.multiplierChange).toHaveBeenCalledOnce();
 
     input.form!.dispatchEvent(new Event('submit', { cancelable: true }));
     expect(on.submit).toHaveBeenCalledOnce();
@@ -430,13 +419,11 @@ it('scan box design (#164): prominent field with a visible focus state', () => {
     mount(() =>
         h(RegisterScanBox, {
             locked: false,
-            qtyOptions: [1, 2],
             matchCount: 0,
             matchesSettled: true,
             nextScanQty: 1,
             scanFeedback: null,
             modelValue: '',
-            multiplier: 1,
         }),
     );
     const c = classesOf(q('[data-testid="scan-input"]'));
