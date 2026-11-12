@@ -163,12 +163,18 @@
                 scrollable
                 :closable="!reversing"
             >
-                <!-- The receipt (#218); the void/refund panel replaces it. -->
+                <!-- The sale summary (#218, #328); the void/refund panel replaces it. -->
                 <div
                     v-if="selectedSale && !pendingReversal"
                     class="space-y-4 text-sm"
                     data-testid="sale-receipt"
                 >
+                    <p
+                        class="text-xs font-bold text-ink"
+                        data-testid="not-official-receipt"
+                    >
+                        This is not an official receipt.
+                    </p>
                     <header class="space-y-2">
                         <p
                             class="text-xs font-bold uppercase tracking-widest text-muted"

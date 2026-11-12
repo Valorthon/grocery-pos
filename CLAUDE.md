@@ -787,10 +787,16 @@ requestId}`. A 5xx never carries details or internals.
 - Quick cash is Exact plus up to 4 next round amounts (₱20/50/100/500/1000
   steps). SPLIT: GCash pays what the cash doesn't; cash covering the total
   is sent as CASH (`splitTender`).
-- Receipt: the sale's server time in the store timezone, sale number (last 8
-  of the id) plus the full id, a Change line for any cash tender (₱0 too),
-  one "Discount" label. No print buttons or fake store details (store
-  settings are #47).
+- Sale summary (#328): the app issues no official receipts; BIR receipts
+  are the store's responsibility (#48). The on-screen view (post-sale modal,
+  Sale Details) is a "sale summary" whose paper always says "This is not an
+  official receipt." (not configurable; `official-receipt-wording.spec.ts`
+  refuses other "official receipt" text). It shows the sale's server time
+  in the store timezone, sale number (last 8 of the id) plus the full id, a
+  Change line for any cash tender (₱0 too), one "Discount" label. No print
+  buttons or fake store details (store settings are #47; the settings field
+  is "Sale summary footer"). Code/wire names (`Receipt`, `receiptFooter`)
+  and restock/PO receipts are unchanged.
 - The Roles page is built from contracts `PERMISSIONS`; `role-permissions`
   (API) and `role-pages` (client) specs keep it in step.
 - Denominations are unchanged. Shift In refuses a ₱0/empty float with an
@@ -991,8 +997,9 @@ requestId}`. A 5xx never carries details or internals.
 
 **Scope**
 
-- Receipts are shown on screen only, with no printing. BIR compliance (VAT,
-  official receipts, SC/PWD) is deferred to #48.
+- The app issues no official receipts: the on-screen sale summary is marked
+  "This is not an official receipt.", with no printing, and BIR receipts are
+  the store's responsibility (#48; VAT and SC/PWD stay there too).
 - Product editing and archival are implemented in #38; unit remains immutable.
 - Open decisions and follow-ups are listed in #31.
 
