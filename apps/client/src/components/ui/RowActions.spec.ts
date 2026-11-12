@@ -86,6 +86,25 @@ describe('RowActions (#172)', () => {
         expect(menu()!.style.bottom).not.toBe('');
         expect(menu()!.style.top).toBe('');
     });
+    it('aligns to the trigger right edge, kept 8px inside the viewport (#298)', async () => {
+        mount(['milk'], () => [{ label: 'Edit', onSelect: vi.fn() }]);
+        vi.spyOn(trigger('milk'), 'getBoundingClientRect').mockReturnValue(
+            DOMRect.fromRect({ x: 1000, y: 100, width: 44, height: 44 }),
+        );
+        vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(
+            192,
+        );
+        vi.spyOn(
+            document.documentElement,
+            'clientWidth',
+            'get',
+        ).mockReturnValue(1024);
+        trigger('milk').click();
+        await flush();
+        // Right edge 1044 - 192 = 852, clamped to 1024 - 192 - 8 = 824.
+        expect(menu()!.style.left).toBe('824px');
+        expect(menu()!.style.right).toBe('');
+    });
     it('is keyboard operable and skips disabled items', async () => {
         const run = vi.fn();
         mount(['milk'], () => [

@@ -211,3 +211,46 @@ describe('wording drift (#85)', () => {
         }
     });
 });
+
+/** FIELD_LABEL (not FIELD_LABEL_TEXT) beside a bottom-margin class. */
+function labelMarginConflict(line: string): boolean {
+    return (
+        /\bFIELD_LABEL\b/.test(line) &&
+        /(?<![\w-])-?m[by]?-[\w.[\]]+/.test(line)
+    );
+}
+
+describe('field label margins (#301)', () => {
+    it('recognises conflicting margins only', () => {
+        for (const bad of [
+            "[FIELD_LABEL, 'mb-0']",
+            '`${FIELD_LABEL} mb-0`',
+            "[FIELD_LABEL, 'x', ok ? 'my-2' : '']",
+            "[x, FIELD_LABEL, '-mb-1']",
+            "[FIELD_LABEL, 'm-0']",
+        ])
+            expect(labelMarginConflict(bad), bad).toBe(true);
+        for (const good of [
+            "[FIELD_LABEL, 'mt-2']",
+            "[FIELD_LABEL_TEXT, 'mb-0']",
+            ':class="FIELD_LABEL"',
+            "[FIELD_LABEL, 'min-w-0 text-sm']",
+        ])
+            expect(labelMarginConflict(good), good).toBe(false);
+    });
+
+    it('never overrides FIELD_LABEL margin by class order', () => {
+        // `mb-1.5` comes later in the stylesheet, so an added margin may
+        // lose; use FIELD_LABEL_TEXT instead.
+        const hits = Object.entries(sources)
+            .filter(([file]) => !file.endsWith('/field-style.ts'))
+            .flatMap(([file, text]) =>
+                text
+                    .split('\n')
+                    .filter(labelMarginConflict)
+                    .map((line) => `${file}: ${line.trim()}`),
+            );
+        expect(hits).toEqual([]);
+        expect(offending(/FIELD_LABEL\.replace\(/)).toEqual([]);
+    });
+});

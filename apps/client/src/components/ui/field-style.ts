@@ -3,8 +3,15 @@
  * (#154), on the Fresh market tokens in `assets/main.css`.
  */
 
+/**
+ * FIELD_LABEL without its bottom margin, for a label in a row that carries
+ * the margin itself (a label + ⓘ row). Never add `mb-0` to FIELD_LABEL:
+ * `mb-1.5` comes later in the stylesheet and wins (#301).
+ */
+export const FIELD_LABEL_TEXT = 'block text-sm font-semibold text-ink';
+
 /** Sentence-case label above a field, tied to it by `for`/`id`. */
-export const FIELD_LABEL = 'block text-sm font-semibold text-ink mb-1.5';
+export const FIELD_LABEL = `${FIELD_LABEL_TEXT} mb-1.5`;
 
 /** Border, radius, text and the leaf keyboard focus ring. */
 export const FIELD_BASE =
@@ -15,6 +22,14 @@ export const FIELD_BASE_SM = FIELD_BASE.replace('py-2.5', 'py-1').replace(
     'text-sm',
     'text-xs',
 );
+
+/**
+ * A read-only value box beside fields (#294): FIELD_BASE's padding, text,
+ * border width and radius, so one line is exactly as tall as an input, on
+ * a filled background so it doesn't look editable. Long values wrap.
+ */
+export const FIELD_READONLY =
+    'w-full min-w-0 px-3.5 py-2.5 rounded-control border border-line bg-paper text-sm text-ink num break-words';
 
 export const FIELD_OK = 'border-line-strong bg-surface';
 export const FIELD_ERROR = 'border-danger-fg bg-danger-bg';

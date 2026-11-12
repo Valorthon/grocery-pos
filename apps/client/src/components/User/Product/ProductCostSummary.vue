@@ -1,50 +1,62 @@
 <template>
     <div class="text-sm num" data-testid="product-cost">
-        <span v-if="loading">Loading cost…</span>
+        <span v-if="loading" class="text-muted">Loading cost…</span>
         <span v-else-if="error" role="alert"
             >{{ error }}
             <button class="min-h-11 underline" @click="load">
                 Retry
             </button></span
         >
+        <!-- Plain labelled read-only boxes on the price input's row:
+             labels share a line, boxes are input-high (#294). -->
         <div
             v-else-if="tiles"
-            class="grid min-w-0 grid-cols-2 gap-3"
+            class="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]"
             data-testid="cost-tiles"
         >
-            <StatTile
-                compact
-                label="Latest cost"
-                :value="
-                    cost?.lastCost === undefined
-                        ? 'Unknown'
-                        : `${formatCurrency(cost.lastCost)}/${unitLabel(unit)}`
-                "
-                data-testid="tile-cost"
-            />
-            <!-- Red keys on a negative profit: selling below the latest
-                 cost is a real loss per unit (#290). -->
-            <StatTile
-                compact
-                label="Margin"
-                :help="MARGIN_HELP"
-                :value="
-                    live === undefined
-                        ? '—'
-                        : `${(live.basisPoints / 100).toFixed(2)}%`
-                "
-                :hint="
-                    live === undefined
-                        ? undefined
-                        : `${formatCurrency(live.profit)}/${unitLabel(unit)} profit`
-                "
-                :tone="live && live.profit < 0 ? 'danger' : 'neutral'"
-                tone-label="negative margin"
-                :value-class="
-                    live && live.profit < 0 ? 'text-danger-fg' : undefined
-                "
-                data-testid="tile-margin"
-            />
+            <div class="flex min-w-0 flex-col" data-testid="tile-cost">
+                <p :id="`${uid}-cost`" :class="FIELD_LABEL">Latest cost</p>
+                <output
+                    :aria-labelledby="`${uid}-cost`"
+                    :class="['block flex-1', FIELD_READONLY]"
+                    aria-live="off"
+                    data-readonly-box
+                    >{{
+                        cost?.lastCost === undefined
+                            ? 'Unknown'
+                            : `${formatCurrency(cost.lastCost)}/${unitLabel(unit)}`
+                    }}</output
+                >
+            </div>
+            <!-- Red on a negative profit: selling below the latest cost is
+                 a real loss per unit (#290), named for screen readers. -->
+            <div class="flex min-w-0 flex-col" data-testid="tile-margin">
+                <div class="flex items-center gap-1 mb-1.5">
+                    <p :id="`${uid}-margin`" :class="FIELD_LABEL_TEXT">
+                        Margin<span v-if="negative" class="sr-only"
+                            >, negative margin</span
+                        >
+                    </p>
+                    <InfoTooltip class="-my-3 -ml-3.5" label="About margin">{{
+                        MARGIN_HELP
+                    }}</InfoTooltip>
+                </div>
+                <output
+                    :aria-labelledby="`${uid}-margin`"
+                    aria-live="off"
+                    :class="[
+                        'block flex-1',
+                        FIELD_READONLY,
+                        negative ? 'text-danger-fg' : '',
+                    ]"
+                    data-readonly-box
+                    >{{
+                        live === undefined
+                            ? '—'
+                            : `${(live.basisPoints / 100).toFixed(2)}% · ${formatCurrency(live.profit)}/${unitLabel(unit)}`
+                    }}</output
+                >
+            </div>
         </div>
         <template v-else-if="cost?.lastCost !== undefined">
             Latest receipt: {{ formatCurrency(cost.lastCost) }}/{{
@@ -59,7 +71,7 @@
     </div>
 </template>
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 import {
     marginBasisPoints,
     unitLabel,
@@ -67,7 +79,12 @@ import {
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
 import api from '@/axios';
-import StatTile from '@/components/ui/StatTile.vue';
+import InfoTooltip from '@/components/ui/InfoTooltip.vue';
+import {
+    FIELD_LABEL,
+    FIELD_LABEL_TEXT,
+    FIELD_READONLY,
+} from '@/components/ui/field-style';
 import { apiErrorText } from '@/utils/api-error';
 import { formatCurrency } from '@/utils/currency';
 const MARGIN_HELP =
@@ -75,7 +92,7 @@ const MARGIN_HELP =
 const props = defineProps<{
     product: string;
     unit?: UnitOfMeasure;
-    /** Edit Product: cost and live margin as tiles (#290). */
+    /** Edit Product: cost and live margin as read-only fields (#290, #294). */
     tiles?: boolean;
     /** Typed price in centavos; null when invalid or empty. */
     price?: number | null;
@@ -90,6 +107,10 @@ const live = computed(() => {
         ? undefined
         : { basisPoints, profit: price - basis };
 });
+const uid = useId();
+const negative = computed(
+    () => live.value !== undefined && live.value.profit < 0,
+);
 const cost = ref<ProductCostView>(),
     loading = ref(false),
     error = ref('');

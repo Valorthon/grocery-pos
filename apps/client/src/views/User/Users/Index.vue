@@ -33,7 +33,7 @@
                             v-for="role in item.roles"
                             :key="role"
                             color="primary"
-                            >{{ role }}</Badge
+                            >{{ roleLabel(role) }}</Badge
                         >
                     </div>
                 </template>
@@ -88,7 +88,7 @@
         v-model="createModel"
         title="Add User"
         scrollable
-        max-width="28rem"
+        max-width="36rem"
         :closable="!saving"
     >
         <div class="space-y-4">
@@ -111,22 +111,23 @@
                 @update:model-value="clearCreateError('password')"
             />
             <div>
-                <label
+                <span
+                    id="create-roles-heading"
                     class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2"
-                    >Roles</label
+                    >Roles</span
                 >
-                <div class="space-y-1.5">
-                    <BaseCheckbox
-                        v-for="role in grantableRoles"
-                        :key="role"
-                        :model-value="createForm.roles.includes(role)"
-                        :label="role"
-                        @update:model-value="
-                            toggleRole(createForm.roles, role, $event);
+                <RoleCards
+                    id-prefix="create-role"
+                    labelledby="create-roles-heading"
+                    :roles="grantableRoles"
+                    :selected="createForm.roles"
+                    @toggle="
+                        (role, checked) => {
+                            toggleRole(createForm.roles, role, checked);
                             clearCreateError('roles');
-                        "
-                    />
-                </div>
+                        }
+                    "
+                />
                 <p
                     v-if="createErrors.roles"
                     data-testid="create-roles-error"
@@ -151,7 +152,7 @@
         v-model="editModel"
         title="Edit User"
         scrollable
-        max-width="28rem"
+        max-width="36rem"
         :closable="!saving"
     >
         <div class="space-y-4">
@@ -171,24 +172,34 @@
                 :error="editPasswordError"
             />
             <div>
-                <label
+                <span
+                    id="edit-roles-heading"
                     class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2"
-                    >Roles</label
+                    >Roles</span
                 >
-                <div class="space-y-1.5">
-                    <BaseCheckbox
-                        v-for="role in roleOptions"
-                        :key="role"
-                        :model-value="editForm.roles.includes(role)"
-                        :label="role"
-                        :disabled="
+                <RoleCards
+                    id-prefix="edit-role"
+                    labelledby="edit-roles-heading"
+                    hint-id="roles-locked-hint"
+                    :roles="roleOptions"
+                    :selected="editForm.roles"
+                    :is-disabled="
+                        (role) =>
                             isEditingSelf || !grantableRoles.includes(role)
-                        "
-                        @update:model-value="
-                            toggleRole(editForm.roles, role, $event)
-                        "
-                    />
-                </div>
+                    "
+                    @toggle="
+                        (role, checked) =>
+                            toggleRole(editForm.roles, role, checked)
+                    "
+                />
+                <p
+                    v-if="rolesLockedReason"
+                    id="roles-locked-hint"
+                    class="mt-2 text-xs text-slate-500"
+                    data-testid="roles-locked-hint"
+                >
+                    {{ rolesLockedReason }}
+                </p>
             </div>
             <div>
                 <BaseCheckbox
@@ -239,6 +250,8 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import Badge from '@/components/ui/Badge.vue';
+import RoleCards from './RoleCards.vue';
+import { roleLabel } from '../role-look';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import SetManagerPinDialog from '@/components/User/SetManagerPinDialog.vue';
 import { useConfirm } from '@/composables/useConfirm';
@@ -378,6 +391,15 @@ const canToggleActive = computed(
 const canResetPassword = computed(
     () => authStore.isAdmin && !isEditingSelf.value,
 );
+
+/** Why some role cards in the editor are disabled (#297), or ''. */
+const rolesLockedReason = computed(() => {
+    if (isEditingSelf.value) return "You can't change your own roles.";
+    const locked = roleOptions
+        .filter((role) => !grantableRoles.value.includes(role))
+        .map(roleLabel);
+    return locked.length ? `Only an admin can grant ${locked.join(', ')}.` : '';
+});
 
 const createPasswordError = computed(() =>
     passwordError(createForm.value.password),

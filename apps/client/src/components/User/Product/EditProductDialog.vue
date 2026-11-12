@@ -50,7 +50,7 @@
             >
                 <h3 id="edit-product-pricing" :class="SECTION">Pricing</h3>
                 <div
-                    class="grid gap-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(0,1.4fr)]"
+                    class="grid gap-3 sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2.6fr)]"
                     data-testid="pricing-row"
                 >
                     <BaseInput
@@ -65,7 +65,6 @@
                         :product="product._id"
                         :unit="product.unit"
                         :price="typedPrice"
-                        class="text-muted"
                     />
                 </div>
             </section>

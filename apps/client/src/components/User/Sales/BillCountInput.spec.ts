@@ -183,6 +183,27 @@ describe('BillCountInput (issue #25)', () => {
         expect(testid('count-coins-pieces')).not.toContain('pcs');
     });
 
+    it('keeps Clear all on its own row above Bills, with a 44px target (#296)', async () => {
+        await mount();
+        const row = document.querySelector<HTMLElement>(
+            '[data-testid="count-clear-all-row"]',
+        )!;
+        const clear = button('count-clear-all');
+        expect(row.contains(clear)).toBe(true);
+        expect(
+            row.contains(
+                document.querySelector('[data-testid="count-bills-pieces"]'),
+            ),
+        ).toBe(false);
+        expect([...row.classList].some((c) => /^-m[by]-/.test(c))).toBe(false);
+        expect(row.nextElementSibling?.textContent).toContain('Bills');
+        expect(clear.classList).toContain('min-h-11');
+        expect(clear.classList).toContain('min-w-11');
+        expect(clear.classList).toContain('focus-ring');
+        expect(clear.classList).not.toContain('px-2');
+        expect(row.classList).toContain('mb-1');
+    });
+
     it('clears every count and every refused field at once', async () => {
         const { counts, invalid } = await mount();
         expect(button('count-clear-all').disabled).toBe(true);

@@ -5,7 +5,7 @@
         :aria-busy="loading ? 'true' : undefined"
         :class="[
             'relative flex min-w-0 flex-col gap-1 overflow-hidden rounded-card border border-line bg-surface',
-            compact ? 'px-3 py-2' : 'p-4 shadow-card',
+            'p-4 shadow-card',
             to
                 ? 'group transition-colors hover:border-leaf-600 hover:bg-paper focus-ring'
                 : '',
@@ -50,9 +50,7 @@
         <p
             v-else
             :class="[
-                'font-display num font-extrabold leading-tight',
-                compact ? 'text-lg break-words min-w-0' : 'text-2xl',
-                valueClass ?? 'text-ink',
+                'font-display num font-extrabold leading-tight text-2xl text-ink',
             ]"
         >
             {{ value }}
@@ -105,10 +103,6 @@ const props = withDefaults(
         loading?: boolean;
         /** An ⓘ note after the label (#271). */
         help?: string;
-        /** Lighter dialog-sized tile: no shadow, tighter padding (#290). */
-        compact?: boolean;
-        /** Overrides the value's text colour (e.g. `text-danger-fg`). */
-        valueClass?: string;
     }>(),
     {
         value: '',
@@ -118,8 +112,6 @@ const props = withDefaults(
         to: undefined,
         loading: false,
         help: undefined,
-        compact: false,
-        valueClass: undefined,
     },
 );
 
