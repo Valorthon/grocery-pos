@@ -173,25 +173,6 @@ describe('useProductSearch', () => {
         expect(search.error.value).toMatch(/too long/);
     });
 
-    it('moves the highlight through the matches, wrapping around', async () => {
-        const search = useProductSearch(
-            () => Promise.resolve([MILK, MINTS]),
-            term,
-        );
-        input.value = 'm';
-        await search.search('m');
-        expect(search.highlightedMatch()).toBeNull();
-
-        search.move(1);
-        expect(search.highlightedMatch()).toEqual(MILK);
-        search.move(1);
-        expect(search.highlightedMatch()).toEqual(MINTS);
-        search.move(1);
-        expect(search.highlightedMatch()).toEqual(MILK);
-        search.move(-1);
-        expect(search.highlightedMatch()).toEqual(MINTS);
-    });
-
     it('clears the highlight when new results arrive', async () => {
         const search = useProductSearch(
             () => Promise.resolve([MILK, MINTS]),
@@ -199,7 +180,7 @@ describe('useProductSearch', () => {
         );
         input.value = 'm';
         await search.search('m');
-        search.move(1);
+        search.highlighted.value = 0;
 
         input.value = 'mi';
         await search.search('mi');
@@ -207,28 +188,24 @@ describe('useProductSearch', () => {
         expect(search.highlighted.value).toBe(-1);
     });
 
-    it('will not highlight or pick from results for older text', async () => {
+    it('will not pick from results for older text', async () => {
         const { fetch, calls } = controlledFetch();
         const search = useProductSearch(fetch, term);
         input.value = 'milk';
         const first = search.search('milk');
         calls[0].resolve([MILK]);
         await first;
-        search.move(1);
+        search.highlighted.value = 0;
         expect(search.highlightedMatch()).toEqual(MILK);
 
         // Retyped: the milk list is still on screen, "eggs" not answered.
         input.value = 'eggs';
         expect(search.settled.value).toBe(false);
         expect(search.highlightedMatch()).toBeNull();
-        search.highlighted.value = -1;
-        search.move(1);
-        expect(search.highlighted.value).toBe(-1);
 
         // In flight for the current text is not settled either.
         const second = search.search('eggs');
-        search.move(1);
-        expect(search.highlighted.value).toBe(-1);
+        expect(search.highlightedMatch()).toBeNull();
         calls[1].resolve([]);
         await second;
         expect(search.settled.value).toBe(true);

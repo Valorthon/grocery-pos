@@ -34,8 +34,7 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
     const on = {
         submit: vi.fn(),
         searchChange: vi.fn(() => query.value),
-        move: vi.fn(),
-        unhighlight: vi.fn(),
+        enterMatches: vi.fn(),
         clear: vi.fn(),
         multiplierChange: vi.fn(),
     };
@@ -49,20 +48,20 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
             locked: false,
             qtyOptions: [1, 2, 3],
             matchCount: 2,
-            highlighted: 1,
+            matchesSettled: true,
             nextScanQty: 3,
             scanFeedback: { type: 'error', message: 'Nope' },
             onSubmit: on.submit,
             onSearchChange: on.searchChange,
-            onMove: on.move,
-            onUnhighlight: on.unhighlight,
+            onEnterMatches: on.enterMatches,
             onClear: on.clear,
             onMultiplierChange: on.multiplierChange,
         }),
     );
     const input = q<HTMLInputElement>('[data-testid="scan-input"]');
     expect(box.value?.input).toBe(input);
-    expect(input.getAttribute('aria-activedescendant')).toBe('product-match-1');
+    // Real focus moves into the matches (#322): no active descendant.
+    expect(input.hasAttribute('aria-activedescendant')).toBe(false);
     expect(input.getAttribute('aria-expanded')).toBe('true');
     expect(q('[data-testid="multiplier-badge"]').textContent).toContain('×3');
     expect(q('[data-testid="scan-alert"]').textContent).toContain('Nope');
@@ -74,11 +73,19 @@ it('scan box: two-way query and multiplier, actions emitted, input exposed', asy
     await nextTick();
     expect(input.className).toContain('pr-43');
 
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }));
-    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(on.move.mock.calls).toEqual([[1], [-1]]);
-    expect(on.unhighlight).toHaveBeenCalledOnce();
+    const down = new KeyboardEvent('keydown', {
+        key: 'ArrowDown',
+        cancelable: true,
+    });
+    input.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    // ↑, ←, → stay the text cursor's.
+    for (const key of ['ArrowUp', 'ArrowLeft', 'ArrowRight']) {
+        const event = new KeyboardEvent('keydown', { key, cancelable: true });
+        input.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+    }
+    expect(on.enterMatches).toHaveBeenCalledOnce();
 
     q<HTMLButtonElement>('[aria-label="Clear search"]').click();
     expect(on.clear).toHaveBeenCalledOnce();
@@ -127,6 +134,57 @@ it('matches: lists, highlights and reports a pick; empty and error states', asyn
     state.value = { matches: [], error: 'down', settled: true };
     await nextTick();
     expect(q('[data-testid="search-error"]').textContent).toContain('down');
+});
+
+it('matches (#322 review): a re-render keeps the highlight on the focused option, or hands the focus back', async () => {
+    const MILK = { product: 'p1', EAN: '2000000000015', name: 'milk' };
+    const MINTS = { product: 'p2', EAN: '2000000000022', name: 'mints' };
+    const list = ref([MILK, MINTS]);
+    const settled = ref(true);
+    const onHighlight = vi.fn();
+    const onExit = vi.fn();
+    const matches = ref<{ focusOption: (i: number) => void } | null>(null);
+    mount(() =>
+        h(RegisterMatches, {
+            ref: matches,
+            matches: list.value,
+            highlighted: -1,
+            settled: settled.value,
+            error: null,
+            term: 'mi',
+            locked: false,
+            onHighlight,
+            onExit,
+        }),
+    );
+    const option = (name: string) =>
+        [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+            (o) => o.textContent?.includes(name),
+        )!;
+
+    matches.value!.focusOption(1);
+    expect(document.activeElement).toBe(option('mints'));
+    onHighlight.mockClear();
+
+    // Reordered: the focused option moved, the highlight follows it.
+    list.value = [MINTS, MILK];
+    await nextTick();
+    await nextTick();
+    expect(document.activeElement).toBe(option('mints'));
+    expect(onHighlight).toHaveBeenLastCalledWith(0);
+    expect(onExit).not.toHaveBeenCalled();
+
+    // Gone: the focus goes back to the box, never to the page.
+    list.value = [MILK];
+    await nextTick();
+    await nextTick();
+    expect(onExit).toHaveBeenCalledOnce();
+
+    // Unsettled: no entering, moving or picking.
+    settled.value = false;
+    await nextTick();
+    matches.value!.focusOption(0);
+    expect(document.activeElement).not.toBe(option('milk'));
 });
 
 it('ticket: renders lines and drafts, reports every line action', () => {
@@ -374,7 +432,7 @@ it('scan box design (#164): prominent field with a visible focus state', () => {
             locked: false,
             qtyOptions: [1, 2],
             matchCount: 0,
-            highlighted: -1,
+            matchesSettled: true,
             nextScanQty: 1,
             scanFeedback: null,
             modelValue: '',

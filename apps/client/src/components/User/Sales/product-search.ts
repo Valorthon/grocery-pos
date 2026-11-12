@@ -68,8 +68,9 @@ export type FetchMatches = (
  *
  * `currentTerm` is what the input asks for right now (read reactively). Until the results
  * answer that term (`settled`), the list on screen belongs to older text,
- * so the highlight cannot move and nothing counts as highlighted: a quick
- * ↓+Enter after retyping must not add an item from the previous list.
+ * so nothing counts as highlighted: a quick ↓+Enter after retyping must
+ * not add an item from the previous list (the register also refuses to
+ * enter an unsettled list, #322).
  */
 export function useProductSearch(
     fetchMatches: FetchMatches,
@@ -145,15 +146,6 @@ export function useProductSearch(
         }
     }
 
-    /** Moves the highlight by `delta`, wrapping around the list. */
-    function move(delta: number) {
-        const count = matches.value.length;
-        if (!count || !settled.value) return;
-        const from =
-            highlighted.value === -1 && delta < 0 ? 0 : highlighted.value;
-        highlighted.value = (from + delta + count) % count;
-    }
-
     function highlightedMatch(): Match | null {
         if (!settled.value) return null;
         return matches.value[highlighted.value] ?? null;
@@ -169,7 +161,6 @@ export function useProductSearch(
         search,
         cancel,
         reset,
-        move,
         highlightedMatch,
     };
 }
