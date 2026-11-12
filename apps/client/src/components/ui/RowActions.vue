@@ -20,7 +20,7 @@
                 role="menuitem"
                 :disabled="action.disabled"
                 :class="[
-                    'w-full min-h-11 px-3 rounded-lg flex items-center text-left text-sm font-semibold transition-colors focus-ring disabled:opacity-50 disabled:cursor-not-allowed',
+                    'w-full min-h-11 px-3 py-1 rounded-lg flex flex-col justify-center items-start text-left text-sm font-semibold transition-colors focus-ring disabled:opacity-50 disabled:cursor-not-allowed',
                     action.danger
                         ? 'text-danger-fg hover:bg-danger-bg'
                         : 'text-ink hover:bg-paper',
@@ -28,6 +28,12 @@
                 @click="choose(action)"
             >
                 {{ action.label }}
+                <span
+                    v-if="action.reason"
+                    class="text-xs font-normal text-muted"
+                    data-row-action-reason
+                    >{{ action.reason }}</span
+                >
             </button>
         </template>
     </BaseDropdown>

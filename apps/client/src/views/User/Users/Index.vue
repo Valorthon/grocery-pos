@@ -25,6 +25,10 @@
                 :error="loadError"
                 empty-text="No users found"
                 :items-length="totalItems"
+                row-click
+                :row-clickable="canEdit"
+                row-hint="Press Enter to edit the user"
+                @click:row="openEdit"
                 @retry="fetchUsers"
             >
                 <template #cell-roles="{ item }">
@@ -43,42 +47,10 @@
                     }}</Badge>
                 </template>
                 <template #cell-actions="{ item }">
-                    <div class="flex justify-end gap-2">
-                        <button
-                            v-if="
-                                authStore.isAdmin &&
-                                item.roles.some(
-                                    (r) =>
-                                        r === Role.Admin ||
-                                        r === Role.Supervisor,
-                                )
-                            "
-                            type="button"
-                            class="min-h-11 min-w-11 px-2 rounded-lg text-sm text-leaf-600 focus-ring"
-                            :aria-label="`Manage PIN for ${item.name}`"
-                            @click="pinUser = item"
-                        >
-                            Manager PIN
-                        </button>
-                        <button
-                            type="button"
-                            class="p-1.5 rounded-lg text-slate-500 hover:text-leaf-600 hover:bg-leaf-50 disabled:opacity-40 disabled:pointer-events-none focus-ring"
-                            :disabled="!canEdit(item)"
-                            :title="
-                                canEdit(item)
-                                    ? 'Edit'
-                                    : 'Only an admin can edit this user'
-                            "
-                            :aria-label="
-                                canEdit(item)
-                                    ? `Edit ${item.name}`
-                                    : `Edit ${item.name} (only an admin can edit this user)`
-                            "
-                            @click="openEdit(item)"
-                        >
-                            <Pencil class="w-4 h-4" aria-hidden="true" />
-                        </button>
-                    </div>
+                    <RowActions
+                        :label="item.name"
+                        :actions="rowActions(item)"
+                    />
                 </template>
             </BaseTable>
         </PageCard>
@@ -244,12 +216,14 @@
 <script setup lang="ts">
 import { USER_HELP } from '../list-help';
 import { computed, ref } from 'vue';
-import { Pencil, Plus } from '@lucide/vue';
+import { Plus } from '@lucide/vue';
 import FilterBar from '@/components/ui/FilterBar.vue';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
+import RowActions from '@/components/ui/RowActions.vue';
+import type { RowAction } from '@/components/ui/row-actions';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -319,6 +293,26 @@ const grantableRoles = computed(() =>
 
 function canEdit(item: UserView): boolean {
     return isSelf(item) || canManageUser(myRoles.value, item.roles);
+}
+
+/**
+ * Edit (the row's own target, or disabled with the reason) and, for an
+ * ADMIN viewer on an Admin/Supervisor row, Manager PIN (#311).
+ */
+function rowActions(item: UserView): RowAction[] {
+    const editable = canEdit(item);
+    return [
+        {
+            label: 'Edit',
+            disabled: !editable,
+            reason: editable ? undefined : 'Only an admin can edit this user',
+            onSelect: () => openEdit(item),
+        },
+        ...(authStore.isAdmin &&
+        item.roles.some((r) => r === Role.Admin || r === Role.Supervisor)
+            ? [{ label: 'Manager PIN', onSelect: () => (pinUser.value = item) }]
+            : []),
+    ];
 }
 
 const headers = [

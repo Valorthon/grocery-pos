@@ -8,6 +8,9 @@
             :items="rows"
             :loading="loading && !rows.length"
             :error="error"
+            row-click
+            row-hint="Press Enter to edit the supplier"
+            @click:row="begin"
             @retry="refresh"
         >
             <template #cell-contactPerson="{ item }">{{
@@ -119,7 +122,7 @@ const headers: TableHeader[] = [
     { key: 'phone', title: 'Phone' },
     { key: 'email', title: 'Email' },
     { key: 'status', title: 'Status', help: SUPPLIER_HELP.status },
-    { key: 'actions', title: 'Actions' },
+    { key: 'actions', title: 'Actions', align: 'right' },
 ];
 const rows = computed(() =>
     suppliers.value.map((row) => ({ ...row, id: row._id })),

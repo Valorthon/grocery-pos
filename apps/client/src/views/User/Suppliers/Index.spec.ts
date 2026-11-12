@@ -266,4 +266,30 @@ describe('columns and row menu (#172)', () => {
             ),
         ).toEqual(['Edit', 'Archive', 'Delete']);
     });
+    it('opens Edit from the row (click, Enter), right-aligns Actions (#311)', async () => {
+        await mount();
+        const th = Array.from(document.querySelectorAll('thead th')).pop()!;
+        expect(th.className).toContain('text-right');
+        const row = () =>
+            document.querySelector<HTMLTableRowElement>('tbody tr')!;
+        row().querySelector('td')!.click();
+        await flush();
+        expect(document.querySelector('[role=dialog]')?.textContent).toContain(
+            'Edit supplier',
+        );
+        expect(api.patch).not.toHaveBeenCalled();
+        document.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+        await vi.waitFor(() =>
+            expect(document.querySelector('[role=dialog]')).toBeNull(),
+        );
+        row().dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+        );
+        await flush();
+        expect(document.querySelector('[role=dialog]')?.textContent).toContain(
+            'Edit supplier',
+        );
+    });
 });

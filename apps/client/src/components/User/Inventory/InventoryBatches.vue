@@ -91,14 +91,12 @@
                 <template #cell-remaining="{ item }">{{
                     formatQuantity(item.remainingQty, item.product.unit)
                 }}</template>
-                <template #cell-action="{ item }">
-                    <BaseButton
-                        v-if="canAdjust && item.remainingQty > 0"
-                        size="sm"
-                        variant="outline"
-                        @click="writeOff(item)"
-                        >Write off</BaseButton
-                    >
+                <template #cell-actions="{ item }">
+                    <RowActions
+                        v-if="batchActions(item).length"
+                        :label="`${item.product.name} batch ${item.batchNo || item._id.slice(-8)}`"
+                        :actions="batchActions(item)"
+                    />
                 </template>
                 <template #empty>
                     <EmptyState
@@ -150,6 +148,8 @@ import { apiErrorText } from '@/utils/api-error';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
+import RowActions from '@/components/ui/RowActions.vue';
+import type { RowAction } from '@/components/ui/row-actions';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
@@ -179,7 +179,7 @@ const days = ref<number | string>(settings.settings.expiryAlertDays),
     error = ref(''),
     daysError = ref(''),
     rows = ref<InventoryBatchView[]>([]);
-const headers: TableHeader[] = [
+const baseHeaders: TableHeader[] = [
     { key: 'product', title: 'Product' },
     { key: 'batch', title: 'Batch', help: BATCH_HELP.batch },
     { key: 'expiry', title: 'Expiry', help: BATCH_HELP.expiry },
@@ -190,8 +190,25 @@ const headers: TableHeader[] = [
         help: BATCH_HELP.daysLeft,
     },
     { key: 'remaining', title: 'Remaining', align: 'right' },
-    { key: 'action', title: 'Action', align: 'right' },
 ];
+/** Write off, for adjusters, on a lot with stock left (#311). */
+function batchActions(batch: InventoryBatchView): RowAction[] {
+    return canAdjust.value && batch.remainingQty > 0
+        ? [
+              {
+                  label: 'Write off',
+                  danger: true,
+                  onSelect: () => void writeOff(batch),
+              },
+          ]
+        : [];
+}
+/** No Actions column when no row has an item for this viewer (#311). */
+const headers = computed<TableHeader[]>(() =>
+    rows.value.some((row) => batchActions(row).length)
+        ? [...baseHeaders, { key: 'actions', title: 'Actions', align: 'right' }]
+        : baseHeaders,
+);
 /** Live store alert window behind the "Expiring soon" badge (#247). */
 const alertDays = computed(() => settings.settings.expiryAlertDays);
 /** Expiring soon means within the store's alert window, like the dashboard (#213). */

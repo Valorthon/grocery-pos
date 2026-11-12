@@ -254,3 +254,58 @@ describe('field label margins (#301)', () => {
         expect(offending(/FIELD_LABEL\.replace\(/)).toEqual([]);
     });
 });
+
+/**
+ * Row actions (#311): a row opens by row-click, the rest sit in a ⋯ menu
+ * under a right-aligned "Actions" column (key `actions`). No open-only
+ * column comes back. Audit's `action` is a data column (the event type),
+ * not a row action, so its "Action" title is allowed.
+ */
+describe('row actions drift (#311)', () => {
+    /** Every `{ key: '…', title: '…', … }` header literal in the sources. */
+    function headerLiterals(): { file: string; text: string }[] {
+        const found: { file: string; text: string }[] = [];
+        for (const [file, text] of Object.entries(sources))
+            for (const [literal] of text.matchAll(
+                /\{\s*key:\s*'[^']*',\s*title:\s*'[^']*'[^{}]*\}/g,
+            ))
+                found.push({ file, text: literal });
+        return found;
+    }
+
+    it('finds the header literals', () => {
+        expect(headerLiterals().length).toBeGreaterThan(30);
+    });
+
+    it('has no "Action", "Open" or "Details" header outside data columns', () => {
+        const bad = headerLiterals().filter(
+            ({ file, text }) =>
+                /title:\s*'(Open|Details|History)'/.test(text) ||
+                (/title:\s*'Action'/.test(text) &&
+                    !(
+                        file.endsWith('/views/User/Audit/Index.vue') &&
+                        /key:\s*'action'/.test(text)
+                    )),
+        );
+        expect(bad).toEqual([]);
+        // Draft tables write their headers by hand.
+        expect(offending(/>\s*(Action|Open|Details)\s*<\/th>/)).toEqual([]);
+    });
+
+    it('right-aligns every `actions` column, titled "Actions"', () => {
+        const actions = headerLiterals().filter(({ text }) =>
+            /key:\s*'actions'/.test(text),
+        );
+        expect(actions.length).toBeGreaterThan(3);
+        const bad = actions.filter(
+            ({ text }) =>
+                !/title:\s*'Actions'/.test(text) ||
+                !/align:\s*'right'/.test(text),
+        );
+        expect(bad).toEqual([]);
+    });
+
+    it('has no RowOpenButton left', () => {
+        expect(offending(/RowOpenButton/)).toEqual([]);
+    });
+});

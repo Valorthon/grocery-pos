@@ -689,6 +689,22 @@ requestId}`. A 5xx never carries details or internals.
   nothing. Create validates name (trimmed), password and roles like
   `CreateFields`; a field's error clears when it is edited.
 - Dashboard recent activity is sorted on raw timestamps, then cut to 7.
+- Row actions (#311, owner decision 2026-11-12): a row with a destination
+  opens by BaseTable `row-click` / `@click:row` (Inventory → Stock history,
+  PO/Stock counts → the order/count, Suppliers/Categories/Users → Edit,
+  Products → Edit for editors else Stock history, Audit → the event); no
+  open-only column or button (`RowOpenButton` is gone). A row the viewer
+  can't open isn't clickable (`rowClickable`), and its ⋯ menu shows the
+  item disabled with a `reason`. Everything else is one ⋯ `RowActions`
+  menu (even for one item) in a right-aligned last column titled
+  "Actions" (key `actions`), with only the viewer's items; a row with
+  none shows no ⋯, and the column is dropped when no row has any (e.g. a
+  RESTOCKER on Batches). Danger items keep their confirmations. Draft
+  tables use `DraftRowActions` (pencil + trash) under a right-aligned
+  "Actions" (PO draft lines: trash only, "Remove <product>"). The register
+  ticket is separate. `layout-drift.spec.ts` refuses "Open"/"Details"/
+  "History"/"Action" headers (Audit's `action` data column excepted) and a
+  non-right-aligned `actions` column.
 - Column help (#263): a `TableHeader` may carry `help` (text or
   `{term, meaning}[]`); BaseTable renders an ⓘ `InfoTooltip` (#258,
   popover top layer, "About {title}", 44px with `-my-3`) after the title

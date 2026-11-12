@@ -73,14 +73,6 @@
                     <template #cell-lines="{ item }">
                         {{ item.lines.length }}
                     </template>
-                    <template #cell-action="{ item }">
-                        <RowOpenButton
-                            :label="`Open count from ${formatStoreDateTime(item.createdAt)}`"
-                            :disabled="busy"
-                            data-testid="count-open"
-                            @open="load(item._id)"
-                        />
-                    </template>
                     <template #empty>
                         <!-- A failed load shows the Reload banner, never "none" (#18). -->
                         <p v-if="error" class="py-6 text-center text-muted">
@@ -259,7 +251,6 @@ import api from '@/axios';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseTable from '@/components/ui/BaseTable.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
-import RowOpenButton from '@/components/ui/RowOpenButton.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
 import type { TableHeader } from '@/components/ui/types';
 import { ClipboardList } from '@lucide/vue';
@@ -333,7 +324,6 @@ const listHeaders: TableHeader[] = [
         align: 'right',
         help: STOCK_COUNT_HELP.lines,
     },
-    { key: 'action', title: 'Open', align: 'right' as const },
 ];
 const listRows = computed(() =>
     rows.value.map((row) => ({ ...row, id: row._id })),

@@ -109,13 +109,6 @@
                     <template #cell-expectedTotal="{ item }">
                         {{ formatCurrency(item.expectedTotal) }}
                     </template>
-                    <template #cell-action="{ item }">
-                        <RowOpenButton
-                            :label="`Open ${purchaseOrderReference(item._id)}`"
-                            data-testid="po-open"
-                            @open="open(item)"
-                        />
-                    </template>
                 </BaseTable>
             </div>
             <template v-else>
@@ -292,7 +285,7 @@
                                     scope="col"
                                     :class="draftTable.thNum"
                                 >
-                                    Action
+                                    Actions
                                 </th>
                             </tr>
                         </thead>
@@ -374,15 +367,12 @@
                                     }}
                                 </td>
                                 <td :class="draftTable.tdActions">
-                                    <BaseButton
-                                        size="sm"
-                                        variant="outline"
-                                        class="min-h-11 min-w-11"
-                                        :aria-label="`Remove ${line.name}`"
+                                    <DraftRowActions
+                                        :editable="false"
+                                        :delete-label="`Remove ${line.name}`"
                                         :disabled="busy"
-                                        @click="removeLine(index)"
-                                        >Remove</BaseButton
-                                    >
+                                        @delete="removeLine(index)"
+                                    />
                                 </td>
                             </tr>
                         </tbody>
@@ -595,8 +585,8 @@ import { useRouter } from 'vue-router';
 import api from '@/axios';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
+import DraftRowActions from '@/components/ui/DraftRowActions.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
-import RowOpenButton from '@/components/ui/RowOpenButton.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
@@ -682,7 +672,6 @@ const headers = [
         align: 'right' as const,
         help: PURCHASE_ORDER_HELP.expectedTotal,
     },
-    { key: 'action', title: 'Open', align: 'right' as const },
 ];
 const rows = ref<PurchaseOrderView[]>([]);
 const totalItems = ref(0);

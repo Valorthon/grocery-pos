@@ -74,13 +74,21 @@ async function mount() {
     await flush();
 }
 async function exact(text: string) {
-    const button = [...document.querySelectorAll('button')].reverse().find(
-        (b) =>
-            b.textContent?.trim() === text ||
-            // The trailing row-open icon is named by its aria-label (#243).
-            b.getAttribute('aria-label')?.startsWith(`${text} `),
-    );
-    if (!button) throw new Error(text);
+    // Rows open by row-click alone (#311): the last clickable row.
+    if (text === 'Open count') {
+        const rows = document.querySelectorAll<HTMLElement>(
+            'tbody tr[data-row-click]',
+        );
+        const row = rows[rows.length - 1];
+        if (!row) throw new Error(`No row to open`);
+        row.querySelector('td')!.click();
+        await flush();
+        return;
+    }
+    const button = [...document.querySelectorAll('button')]
+        .reverse()
+        .find((b) => b.textContent?.trim() === text);
+    if (!button) throw new Error(`No button ${text}`);
     button.click();
     await flush();
 }
@@ -185,17 +193,12 @@ describe('physical stock count workflow', () => {
         await exact('Open count');
         expect(api.get).toHaveBeenCalledWith(`/stock-counts/${id}`);
     });
-    it('opens a count from its row (click, Enter, Space) or the trailing icon, badged by status; count lines are not clickable (#243)', async () => {
+    it('opens a count from its row (click, Enter, Space) badged by status, with no open-only column; count lines are not clickable (#243, #311)', async () => {
         await mount();
         const badge = document.querySelector('[data-testid="count-status"]')!;
         expect(badge.textContent?.trim()).toBe('Open');
         expect(badge.className).toContain('bg-info-bg');
-        const icon = document.querySelector<HTMLButtonElement>(
-            '[data-testid="count-open"]',
-        )!;
-        expect(icon.getAttribute('aria-label')).toMatch(/^Open count from /);
-        expect(icon.className).toContain('min-h-11');
-        expect(icon.className).toContain('min-w-11');
+        expect(document.querySelector('[data-testid="count-open"]')).toBeNull();
         expect(document.body.textContent).toContain(
             'Press Enter to open the count',
         );
@@ -215,15 +218,6 @@ describe('physical stock count workflow', () => {
             await flush();
             expect(api.get).toHaveBeenCalledWith(`/stock-counts/${id}`);
         }
-        await exact('Back to counts');
-        api.get.mockClear();
-        document
-            .querySelector<HTMLButtonElement>('[data-testid="count-open"]')!
-            .click();
-        await flush();
-        expect(
-            api.get.mock.calls.filter(([url]) => url === `/stock-counts/${id}`),
-        ).toHaveLength(1);
     });
     it('saves explicit zero and measured quantities without overwriting opening expectations', async () => {
         await mount();

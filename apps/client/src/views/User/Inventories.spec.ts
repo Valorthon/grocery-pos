@@ -189,7 +189,7 @@ describe('reorder list and restock draft', () => {
         );
         expect(document.body.textContent).not.toContain('No new products');
     });
-    it('fits Product, Stock, Status and a 44px history icon at phone width (#210, #232)', async () => {
+    it('fits Product, Stock and Status at phone width, with no open-only column (#210, #232, #311)', async () => {
         await mount();
         const ths = [
             ...document
@@ -201,7 +201,6 @@ describe('reorder list and restock draft', () => {
             'Stock',
             'Low stock at',
             'Status',
-            'History',
         ]);
         const th = (text: string) =>
             ths.find((cell) => headerText(cell) === text)!;
@@ -212,21 +211,14 @@ describe('reorder list and restock draft', () => {
         expect(classes(th('Status'))).toEqual(
             expect.arrayContaining(['hidden', 'sm:table-cell']),
         );
-        for (const shown of ['Product', 'Stock', 'History'])
+        for (const shown of ['Product', 'Stock'])
             expect(classes(th(shown))).not.toContain('hidden');
         expect(classes(th('Stock'))).toContain('text-right');
         expect(classes(th('Low stock at'))).toContain('text-right');
-        const button = document.querySelector<HTMLElement>(
-            '[data-testid="stock-history-button"]',
-        )!;
-        expect(button.getAttribute('aria-label')).toBe(
-            'Stock history for rice',
-        );
-        expect(classes(button)).toEqual(
-            expect.arrayContaining(['min-h-11', 'min-w-11']),
-        );
-        expect(button.textContent?.trim()).toBe('');
-        button.click();
+        expect(
+            document.querySelector('[data-testid="stock-history-button"]'),
+        ).toBeNull();
+        document.querySelector<HTMLElement>('tbody tr td')!.click();
         await flush();
         const product = document.querySelector(
             '[data-testid="stock-history-tiles"]',
