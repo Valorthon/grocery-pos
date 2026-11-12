@@ -84,6 +84,17 @@ export const QUICK_CASH_MAX = 4;
  * win: for ₱35 a ₱1,000 note is likelier than exactly ₱40. E.g. ₱1,180
  * gives ₱1,200, ₱1,500 and ₱2,000.
  */
+export function quickCashAmounts(total: number): number[] {
+    if (!Number.isSafeInteger(total) || total <= 0) return [];
+    const amounts = new Set<number>();
+    for (const step of [...QUICK_CASH_STEPS].reverse()) {
+        if (amounts.size === QUICK_CASH_MAX) break;
+        const next = (Math.floor(total / step) + 1) * step;
+        if (next <= NUMERIC_LIMITS.AMOUNT_MAX) amounts.add(next);
+    }
+    return [...amounts].sort((a, b) => a - b);
+}
+
 /**
  * The checkout's payment-method keys (#324, owner decision 2026-11-12).
  * They work anywhere in Complete Payment; F5 stays unbound.
@@ -107,17 +118,6 @@ export function stepQuickCash(
 ): number | null {
     if (direction === 'down') return amounts.find((a) => a > current) ?? null;
     return [...amounts].reverse().find((a) => a < current) ?? null;
-}
-
-export function quickCashAmounts(total: number): number[] {
-    if (!Number.isSafeInteger(total) || total <= 0) return [];
-    const amounts = new Set<number>();
-    for (const step of [...QUICK_CASH_STEPS].reverse()) {
-        if (amounts.size === QUICK_CASH_MAX) break;
-        const next = (Math.floor(total / step) + 1) * step;
-        if (next <= NUMERIC_LIMITS.AMOUNT_MAX) amounts.add(next);
-    }
-    return [...amounts].sort((a, b) => a - b);
 }
 
 /**
