@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { inFooter } from '@/testing/form-dom';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import { AxiosError, type AxiosResponse } from 'axios';
@@ -18,13 +19,6 @@ import {
     COUNTS_INVALID,
     offlinePendingText,
 } from './shift';
-
-function inFooter(testid: string): boolean {
-    const el = document.querySelector(`[data-testid="${testid}"]`);
-    return (
-        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
-    );
-}
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));

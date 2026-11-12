@@ -157,3 +157,14 @@ export function tileValue(label: string): string | undefined {
         ?.querySelector('.font-display')
         ?.textContent?.trim();
 }
+
+/**
+ * True when the element with `testid` sits in a BaseModal footer, outside
+ * its scrolling body (a pinned submit error, #321).
+ */
+export function inFooter(testid: string): boolean {
+    const el = document.querySelector(`[data-testid="${testid}"]`);
+    return (
+        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
+    );
+}

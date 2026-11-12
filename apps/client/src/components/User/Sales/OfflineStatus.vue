@@ -107,7 +107,7 @@
     </BaseModal>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useOfflineStore } from '@/stores/offline';
 import { useAuthStore } from '@/stores/auth';
 import { useShiftStore } from '@/stores/shift';
@@ -125,6 +125,13 @@ const shifts = useShiftStore();
 const reasons = reactive<Record<string, string>>({});
 const working = ref(false);
 const failure = ref('');
+// A closed dialog forgets its last failure, so reopening starts clean.
+watch(
+    () => status.pendingOpen,
+    (open) => {
+        if (!open) failure.value = '';
+    },
+);
 async function retry() {
     status.setConnection(navigator.onLine);
     if (shifts.activeShift && auth.user?.roles.includes(Role.Seller))

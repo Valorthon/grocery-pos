@@ -20,6 +20,7 @@ import {
     headerText,
     pickFirstMatch,
     type,
+    inFooter,
 } from '@/testing/form-dom';
 import { PURCHASE_ORDER_HELP } from '@/components/User/PurchaseOrder/purchase-order';
 import { SEARCH_DEBOUNCE_MS } from '@/composables/useProductMatches';
@@ -27,13 +28,6 @@ import { wedgeScan } from '@/testing/scanner';
 import { anyModalOpen } from '@/components/ui/modal-stack';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { ErrorCode } from '@grocery-pos/contracts';
-
-function inFooter(testid: string): boolean {
-    const el = document.querySelector(`[data-testid="${testid}"]`);
-    return (
-        !!el?.closest('[data-modal-footer]') && !el.closest('[data-modal-body]')
-    );
-}
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn() }));
 vi.mock('@/axios', () => ({ default: api }));
