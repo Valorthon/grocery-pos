@@ -195,8 +195,8 @@
                                         @focus="emit('select', item.product)"
                                         @keydown="burst.onKeydown"
                                         @blur="
-                                            burst.flush() &&
-                                            emit('qty-commit', item.product)
+                                            burst.flush();
+                                            emit('qty-commit', item.product);
                                         "
                                         @input="
                                             emit(

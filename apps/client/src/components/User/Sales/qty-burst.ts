@@ -7,6 +7,15 @@ export function isScannedCode(code: string): boolean {
     return isBarcode(code) && hasValidCheckDigit(code);
 }
 
+/** The trailing barcode of a held run, or null (#323 review). */
+function scannedTail(held: string): string | null {
+    for (const length of [13, 12, 8]) {
+        const tail = held.slice(-length);
+        if (tail.length === length && isScannedCode(tail)) return tail;
+    }
+    return null;
+}
+
 /**
  * Keeps a keyboard-wedge scan out of a ticket line's quantity field
  * (#323). Every digit is held back, not typed; when no digit follows
@@ -60,12 +69,11 @@ export function createQtyBurst(
         }
         const now = performance.now();
         const fast = held !== '' && now - last <= intervalMs;
-        if (event.key === 'Enter' && fast && isScannedCode(held)) {
-            const code = held;
-            if (timer) clearTimeout(timer);
-            timer = undefined;
-            held = '';
-            field = null;
+        const code = fast ? scannedTail(held) : null;
+        if (event.key === 'Enter' && code) {
+            // Digits typed just before the burst are the typed quantity.
+            held = held.slice(0, -code.length);
+            flush();
             event.preventDefault();
             event.stopImmediatePropagation();
             onScan(el, code);

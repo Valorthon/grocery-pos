@@ -760,8 +760,8 @@ requestId}`. A 5xx never carries details or internals.
   selected; else the last line). With text in the box (or mid-IME
   composition) Delete edits the text. Both have the 5s Undo. Only the
   first press counts (a held key's repeats are ignored). Never while the
-  tender sheet or a modal is on top, or from the discount, the Qty picker
-  or a quantity field.
+  tender sheet or a modal is on top, or from the discount or a quantity
+  field.
 - `BaseModal` is a labelled `role=dialog`; `modal-stack.ts` owns Escape
   (topmost only), the focus trap, `inert` background, scroll lock and focus
   return. The scan box takes the focus back after clicks and modals.

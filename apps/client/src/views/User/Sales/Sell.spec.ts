@@ -2842,6 +2842,53 @@ describe('Sell add focuses the quantity (#323)', () => {
         expect(cartNames()).toEqual(['12x milk']);
     });
 
+    it('a digit typed just before a burst is the typed quantity', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await scanBox(MILK.EAN);
+        const seen: string[] = [];
+        await burst(`3${MINTS.EAN}`, seen);
+        expect(seen.every((v) => v.length < 8)).toBe(true);
+        expect(cartNames()).toEqual(['3x milk', '1x mints']);
+        expect(document.activeElement).toBe(qtyInputs()[1]);
+    });
+
+    it.each(['Tab', 'F2', 'F4'])(
+        'a 3 followed at once by %s commits 3',
+        async (next) => {
+            serve(() => Promise.resolve([]));
+            mount();
+            await scanBox(MILK.EAN);
+            await press('3');
+            await press(next);
+            if (next === 'Tab') qtyInputs()[0].blur();
+            await flush();
+            expect(cartNames()).toEqual(['3x milk']);
+        },
+    );
+
+    it('keeps the next scan typed in the box during a slow lookup', async () => {
+        let resolve!: (p: unknown) => void;
+        serve(
+            () => Promise.resolve([]),
+            (EAN) =>
+                EAN === MILK.EAN
+                    ? new Promise((r) => (resolve = r))
+                    : Promise.resolve(PRODUCTS[EAN]),
+        );
+        mount();
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+        input().value = '200';
+        input().dispatchEvent(new Event('input'));
+        resolve(PRODUCTS[MILK.EAN]);
+        await flush();
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(document.activeElement).toBe(input());
+        expect(input().value).toBe('200');
+    });
+
     it('a failed add leaves the focus where it was', async () => {
         serve(() => Promise.resolve([]));
         mount();

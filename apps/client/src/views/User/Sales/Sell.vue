@@ -702,6 +702,8 @@ function focusLineQuantity() {
         ? selectedLine.value!
         : items[items.length - 1].product;
     selectedLine.value = product;
+    // F4 on the field being typed in commits it first (#323 review).
+    commitQuantity(product);
     const qty = qtyEls.get(product);
     qty?.focus();
     qty?.select();
@@ -1128,6 +1130,8 @@ async function focusAddedLine(product: string) {
     await nextTick();
     if (anyModalOpen.value || isTicketLocked.value) return;
     if (selectedLine.value !== product) return;
+    // The next scan already started in the box: its digits keep the focus.
+    if (searchQuery.value !== '') return;
     const qty = qtyEls.get(product);
     qty?.focus();
     qty?.select();
