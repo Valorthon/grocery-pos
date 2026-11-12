@@ -50,11 +50,12 @@
             >
                 <h3 id="edit-product-pricing" :class="SECTION">Pricing</h3>
                 <div
-                    class="grid gap-3 sm:grid-cols-[minmax(10rem,1fr)_minmax(0,1.4fr)]"
+                    class="grid grid-cols-2 gap-3 items-start sm:grid-cols-[minmax(10rem,1fr)_minmax(0,1fr)_minmax(0,1fr)]"
                     data-testid="pricing-row"
                 >
                     <BaseInput
                         v-model="price"
+                        class="col-span-2 sm:col-span-1"
                         label="Selling price (₱)"
                         inputmode="decimal"
                         :error="errors.price"
@@ -65,7 +66,7 @@
                         :product="product._id"
                         :unit="product.unit"
                         :price="typedPrice"
-                        class="text-muted"
+                        class="col-span-2"
                     />
                 </div>
             </section>
