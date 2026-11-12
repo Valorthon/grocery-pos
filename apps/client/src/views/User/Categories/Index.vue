@@ -9,6 +9,7 @@
             :loading="loading && !rows.length"
             :error="error"
             row-click
+            :row-clickable="() => !saving"
             row-hint="Press Enter to edit the category"
             @click:row="begin"
             @retry="refresh"

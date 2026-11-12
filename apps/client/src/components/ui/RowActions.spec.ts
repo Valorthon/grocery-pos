@@ -161,4 +161,30 @@ describe('RowActions (#172)', () => {
             expect(document.activeElement).toBe(trigger('b')),
         );
     });
+    it('keeps an item with a reason focusable, announced and inert (#311)', async () => {
+        const onSelect = vi.fn();
+        mount(['root'], () => [
+            {
+                label: 'Edit',
+                disabled: true,
+                reason: 'Only an admin can edit this user',
+                onSelect,
+            },
+        ]);
+        trigger('root').click();
+        await flush();
+        const item =
+            document.querySelector<HTMLButtonElement>('[role=menuitem]')!;
+        expect(item.disabled).toBe(false);
+        expect(item.getAttribute('aria-disabled')).toBe('true');
+        const reason = document.getElementById(
+            item.getAttribute('aria-describedby')!,
+        )!;
+        expect(reason.textContent).toBe('Only an admin can edit this user');
+        item.focus();
+        expect(document.activeElement).toBe(item);
+        item.click();
+        await flush();
+        expect(onSelect).not.toHaveBeenCalled();
+    });
 });

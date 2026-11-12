@@ -14,13 +14,19 @@
         </template>
         <template #menu>
             <button
-                v-for="action in actions"
+                v-for="(action, i) in actions"
                 :key="action.label"
                 type="button"
                 role="menuitem"
-                :disabled="action.disabled"
+                :disabled="action.disabled && !action.reason"
+                :aria-disabled="
+                    action.disabled && action.reason ? 'true' : undefined
+                "
+                :aria-describedby="
+                    action.reason ? `${reasonId}-${i}` : undefined
+                "
                 :class="[
-                    'w-full min-h-11 px-3 py-1 rounded-lg flex flex-col justify-center items-start text-left text-sm font-semibold transition-colors focus-ring disabled:opacity-50 disabled:cursor-not-allowed',
+                    'w-full min-h-11 px-3 py-1 rounded-lg flex flex-col justify-center items-start text-left text-sm font-semibold transition-colors focus-ring disabled:opacity-50 disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:cursor-not-allowed',
                     action.danger
                         ? 'text-danger-fg hover:bg-danger-bg'
                         : 'text-ink hover:bg-paper',
@@ -30,6 +36,7 @@
                 {{ action.label }}
                 <span
                     v-if="action.reason"
+                    :id="`${reasonId}-${i}`"
                     class="text-xs font-normal text-muted"
                     data-row-action-reason
                     >{{ action.reason }}</span
@@ -40,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from 'vue';
+import { onBeforeUnmount, ref, useId } from 'vue';
 import { Ellipsis } from '@lucide/vue';
 import BaseDropdown from '@/components/ui/BaseDropdown.vue';
 import type { RowAction } from '@/components/ui/row-actions';
@@ -58,12 +65,15 @@ import { focusPage } from '@/components/ui/modal-stack';
 defineProps<{ label: string; actions: RowAction[] }>();
 
 const open = ref(false);
+/** Ties a disabled item's reason to it, so it stays focusable and is announced. */
+const reasonId = useId();
 const triggerRef = ref<HTMLButtonElement | null>(null);
 
 /** The trigger's position among the table's, taken when an item is picked. */
 let index = -1;
 
 function choose(action: RowAction) {
+    if (action.disabled) return;
     const trigger = triggerRef.value;
     const table = trigger?.closest('table');
     index =

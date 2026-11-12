@@ -874,7 +874,7 @@ describe('renaming users (issue #106)', () => {
         const edit = [
             ...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'),
         ].find((b) => b.textContent?.includes('Edit'))!;
-        expect(edit.disabled).toBe(true);
+        expect(edit.getAttribute('aria-disabled')).toBe('true');
         expect(edit.textContent).toContain('Only an admin can edit this user');
         expect(
             [...document.querySelectorAll('[role=menuitem]')].map((b) =>

@@ -262,14 +262,38 @@ describe('field label margins (#301)', () => {
  * not a row action, so its "Action" title is allowed.
  */
 describe('row actions drift (#311)', () => {
-    /** Every `{ key: '…', title: '…', … }` header literal in the sources. */
-    function headerLiterals(): { file: string; text: string }[] {
-        const found: { file: string; text: string }[] = [];
+    /** A header literal: an object with both `key` and `title`, any order or quotes. */
+    interface HeaderLiteral {
+        file: string;
+        key: string;
+        title: string;
+        align?: string;
+    }
+    const prop = (text: string, name: string) =>
+        new RegExp(`\\b${name}:\\s*(['"\`])([^'"\`]*)\\1`).exec(text)?.[2];
+    function headerLiterals(): HeaderLiteral[] {
+        const found: HeaderLiteral[] = [];
         for (const [file, text] of Object.entries(sources))
-            for (const [literal] of text.matchAll(
-                /\{\s*key:\s*'[^']*',\s*title:\s*'[^']*'[^{}]*\}/g,
-            ))
-                found.push({ file, text: literal });
+            for (const [literal] of text.matchAll(/\{[^{}]*\}/g)) {
+                const key = prop(literal, 'key');
+                const title = prop(literal, 'title');
+                if (key === undefined || title === undefined) continue;
+                found.push({ file, key, title, align: prop(literal, 'align') });
+            }
+        return found;
+    }
+    /** The header arrays (`headers`/`baseHeaders`…) and the keys in order. */
+    function headerArrays(): { file: string; keys: string[] }[] {
+        const found: { file: string; keys: string[] }[] = [];
+        for (const [file, text] of Object.entries(sources))
+            for (const [, body] of text.matchAll(
+                /eaders\b[^=\n]*=\s*(?:computed[^[]*)?\[([\s\S]*?)\n\];?/g,
+            )) {
+                const keys = [
+                    ...body.matchAll(/\bkey:\s*(['"`])([^'"`]*)\1/g),
+                ].map((m) => m[2]);
+                if (keys.length) found.push({ file, keys });
+            }
         return found;
     }
 
@@ -277,32 +301,38 @@ describe('row actions drift (#311)', () => {
         expect(headerLiterals().length).toBeGreaterThan(30);
     });
 
-    it('has no "Action", "Open" or "Details" header outside data columns', () => {
+    it('has no "Action", "Open", "Details" or "History" header outside data columns', () => {
         const bad = headerLiterals().filter(
-            ({ file, text }) =>
-                /title:\s*'(Open|Details|History)'/.test(text) ||
-                (/title:\s*'Action'/.test(text) &&
+            ({ file, key, title }) =>
+                ['Open', 'Details', 'History'].includes(title) ||
+                (title === 'Action' &&
                     !(
                         file.endsWith('/views/User/Audit/Index.vue') &&
-                        /key:\s*'action'/.test(text)
+                        key === 'action'
                     )),
         );
         expect(bad).toEqual([]);
         // Draft tables write their headers by hand.
-        expect(offending(/>\s*(Action|Open|Details)\s*<\/th>/)).toEqual([]);
+        expect(offending(/>\s*(Action|Open|Details|History)\s*<\/th>/)).toEqual(
+            [],
+        );
     });
 
-    it('right-aligns every `actions` column, titled "Actions"', () => {
-        const actions = headerLiterals().filter(({ text }) =>
-            /key:\s*'actions'/.test(text),
-        );
+    it('titles every `actions` column "Actions", right-aligned and last', () => {
+        const actions = headerLiterals().filter(({ key }) => key === 'actions');
         expect(actions.length).toBeGreaterThan(3);
-        const bad = actions.filter(
-            ({ text }) =>
-                !/title:\s*'Actions'/.test(text) ||
-                !/align:\s*'right'/.test(text),
+        expect(
+            actions.filter(
+                ({ title, align }) => title !== 'Actions' || align !== 'right',
+            ),
+        ).toEqual([]);
+        const arrays = headerArrays().filter(({ keys }) =>
+            keys.includes('actions'),
         );
-        expect(bad).toEqual([]);
+        expect(arrays.length).toBeGreaterThan(3);
+        expect(
+            arrays.filter(({ keys }) => keys[keys.length - 1] !== 'actions'),
+        ).toEqual([]);
     });
 
     it('has no RowOpenButton left', () => {

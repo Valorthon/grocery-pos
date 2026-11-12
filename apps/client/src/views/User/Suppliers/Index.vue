@@ -9,6 +9,7 @@
             :loading="loading && !rows.length"
             :error="error"
             row-click
+            :row-clickable="() => !saving"
             row-hint="Press Enter to edit the supplier"
             @click:row="begin"
             @retry="refresh"
@@ -222,6 +223,7 @@ function rowActions(row: SupplierView): RowAction[] {
         {
             label: row.isActive ? 'Archive' : 'Restore',
             disabled: saving.value,
+            danger: row.isActive,
             onSelect: () => void toggle(row),
         },
         {
