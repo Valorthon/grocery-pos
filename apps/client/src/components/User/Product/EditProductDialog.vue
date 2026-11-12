@@ -49,7 +49,7 @@
                 class="space-y-4"
             >
                 <h3 id="edit-product-pricing" :class="SECTION">Pricing</h3>
-                <div class="grid gap-3 sm:grid-cols-2 sm:items-center">
+                <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <BaseInput
                         v-model="price"
                         label="Selling price (₱)"
@@ -58,9 +58,11 @@
                         @update:model-value="errors.price = ''"
                     />
                     <ProductCostSummary
+                        tiles
                         :product="product._id"
                         :unit="product.unit"
-                        class="text-muted sm:pt-6"
+                        :price="typedPrice"
+                        class="text-muted"
                     />
                 </div>
             </section>
@@ -86,7 +88,7 @@
                         @update:model-value="errors.reorderQuantity = ''"
                     />
                 </div>
-                <div>
+                <div class="flex items-center gap-1">
                     <label class="flex min-h-11 items-center gap-2 text-sm"
                         ><input
                             v-model="tracksExpiry"
@@ -95,13 +97,15 @@
                             :aria-describedby="expiryHintId"
                         />Track expiry and batches</label
                     >
-                    <p :id="expiryHintId" class="text-xs text-muted">
-                        {{
-                            expiryLocked
-                                ? 'Only at zero stock'
-                                : 'Change only at zero stock'
-                        }}
-                    </p>
+                    <InfoTooltip
+                        class="-my-3 -ml-3.5"
+                        label="About expiry tracking"
+                        data-testid="expiry-help"
+                        >{{ EXPIRY_HELP }}</InfoTooltip
+                    >
+                    <span :id="expiryHintId" class="sr-only">{{
+                        EXPIRY_HELP
+                    }}</span>
                 </div>
             </section>
         </div>
@@ -138,6 +142,7 @@ import {
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import Badge from '@/components/ui/Badge.vue';
+import InfoTooltip from '@/components/ui/InfoTooltip.vue';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import CategorySelect from './CategorySelect.vue';
 import { INVENTORY_HELP } from '@/components/User/Inventory/inventory-help';
@@ -149,6 +154,8 @@ import { Color, useUIStore } from '@/stores/ui';
 import { parsePesos } from '@/utils/currency';
 import { apiErrorText, isDuplicateName } from '@/utils/api-error';
 const SECTION = 'text-xs font-bold uppercase tracking-wider text-muted';
+const EXPIRY_HELP =
+    'Expiry tracking can be turned on or off only while this product has zero stock and no batch history, so existing stock never gains or loses expiry dates. Sell, adjust or count it down to zero first.';
 const open = defineModel<boolean>({ required: true });
 const props = defineProps<{ product: ProductView }>();
 const emit = defineEmits<{ saved: [] }>();
@@ -168,6 +175,15 @@ const errors = reactive({
     reorderQuantity: '',
 });
 const saving = ref(false);
+/** The typed price in centavos, or null when the save would refuse it. */
+const typedPrice = computed(() => {
+    const amount = parsePesos(price.value);
+    return amount === null ||
+        amount < NUMERIC_LIMITS.PRICE_MIN ||
+        amount > NUMERIC_LIMITS.AMOUNT_MAX
+        ? null
+        : amount;
+});
 /*
  * Current stock, from the ledger integrity check every product role can
  * read; null while unknown. Tracking can change only at zero stock, so a

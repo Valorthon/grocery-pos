@@ -54,3 +54,22 @@ export const PRODUCT_COST_SHAPE: WireShape<ProductCostView> = {
     costUpdatedAt: 'optional',
     marginBasisPoints: 'optional',
 };
+
+/**
+ * Latest-receipt margin in basis points, truncated toward zero with
+ * integer math. `GET /suppliers/costs` and the Edit Product tiles share
+ * it (#290). Undefined without a positive integer price or a known cost.
+ */
+export function marginBasisPoints(
+    price: number,
+    cost: number | undefined,
+): number | undefined {
+    if (
+        cost === undefined ||
+        !Number.isSafeInteger(price) ||
+        !Number.isSafeInteger(cost) ||
+        price <= 0
+    )
+        return undefined;
+    return Number((BigInt(price - cost) * 10000n) / BigInt(price));
+}
