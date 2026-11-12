@@ -26,6 +26,8 @@ interface MountOptions {
     roles?: Role[];
     stock?: number;
     product?: Partial<ProductView>;
+    /** `GET /suppliers/costs` row's lastCost; undefined is unknown. */
+    lastCost?: number;
 }
 
 async function mount(options: MountOptions = {}) {
@@ -37,7 +39,16 @@ async function mount(options: MountOptions = {}) {
                       movementTotal: options.stock ?? 0,
                       matches: true,
                   }
-                : { data: [], total: 0 },
+                : url === '/suppliers/costs'
+                  ? [
+                        {
+                            product: 'p1',
+                            ...(options.lastCost !== undefined && {
+                                lastCost: options.lastCost,
+                            }),
+                        },
+                    ]
+                  : { data: [], total: 0 },
         }),
     );
     isOpen.value = false;
@@ -305,16 +316,31 @@ describe('EditProductDialog expiry box (#282)', () => {
             .getElementById(box().getAttribute('aria-describedby')!)!
             .textContent?.trim();
 
-    it('is disabled with the reason when stock is not zero', async () => {
+    const help = () =>
+        document.querySelector<HTMLButtonElement>(
+            '[data-testid="expiry-help"] button',
+        )!;
+    const tipText = () =>
+        document
+            .getElementById(help().getAttribute('aria-describedby')!)!
+            .textContent?.trim();
+
+    it('is disabled with the reason in an ⓘ when stock is not zero (#290)', async () => {
         await mount({ stock: 5 });
         expect(box().disabled).toBe(true);
-        expect(hint()).toBe('Only at zero stock');
+        expect(help().disabled).toBe(false);
+        expect(tipText()).toContain('zero stock and no batch history');
+        expect(hint()).toBe(tipText());
+        expect(document.body.textContent).not.toContain('Only at zero stock');
     });
 
-    it('is enabled at zero stock', async () => {
+    it('is enabled at zero stock with the same ⓘ (#290)', async () => {
         await mount({ stock: 0 });
         expect(box().disabled).toBe(false);
-        expect(hint()).toBe('Change only at zero stock');
+        expect(tipText()).toContain('Sell, adjust or count it down');
+        expect(document.body.textContent).not.toContain(
+            'Change only at zero stock',
+        );
     });
 });
 
@@ -352,5 +378,55 @@ describe('EditProductDialog stock answers (#282 review)', () => {
             '[role="dialog"] input[type="checkbox"]',
         )!;
         expect(box.disabled).toBe(false);
+    });
+});
+
+describe('EditProductDialog pricing tiles (#290)', () => {
+    const tile = (id: string) =>
+        document.querySelector<HTMLElement>(`[data-testid="${id}"]`)!;
+
+    it('shows cost, margin and profit, and follows the typed price', async () => {
+        await mount({ roles: [Role.Admin], lastCost: 3641 });
+        expect(tile('tile-cost').textContent).toContain('36.41/pc');
+        // 5000 vs 3641: trunc(1359 * 10000 / 5000) = 2718 bp.
+        expect(tile('tile-margin').textContent).toContain('27.18%');
+        expect(tile('tile-margin').textContent).toContain('13.59/pc');
+        await type(field('Selling price').input, '114.29');
+        expect(tile('tile-margin').textContent).toContain('68.14%');
+        expect(tile('tile-margin').textContent).toContain('77.88/pc');
+    });
+
+    it('a negative margin is red with a tone label', async () => {
+        await mount({ roles: [Role.Admin], lastCost: 6000 });
+        await type(field('Selling price').input, '40');
+        const margin = tile('tile-margin');
+        expect(margin.textContent).toContain('-50.00%');
+        expect(margin.textContent).toContain('negative margin');
+        expect(margin.querySelector('.text-danger-fg')).not.toBeNull();
+    });
+
+    it('an invalid or empty price shows —', async () => {
+        await mount({ roles: [Role.Admin], lastCost: 100 });
+        await type(field('Selling price').input, 'abc');
+        expect(tile('tile-margin').textContent).toContain('—');
+        await type(field('Selling price').input, '');
+        expect(tile('tile-margin').textContent).toContain('—');
+    });
+
+    it('unknown cost reads Unknown and —', async () => {
+        await mount({ roles: [Role.Admin] });
+        expect(tile('tile-cost').textContent).toContain('Unknown');
+        expect(tile('tile-margin').textContent).toContain('—');
+    });
+
+    it('keeps the price input a minimum width beside the tiles', async () => {
+        await mount({ roles: [Role.Admin], lastCost: 100 });
+        const row = document.querySelector('[data-testid="pricing-row"]')!;
+        expect(row.className).toContain('minmax(10rem,1fr)');
+    });
+
+    it('non-ADMIN users see no tiles', async () => {
+        await mount({ roles: [Role.Restocker], lastCost: 100 });
+        expect(document.querySelector('[data-testid="cost-tiles"]')).toBeNull();
     });
 });

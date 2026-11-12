@@ -14,7 +14,10 @@ import { Product, type ProductDoc } from '../product/product.schema';
 import { ErrorCode, NotFoundError, ValidationError } from '../common/errors';
 import { runInTransaction } from '../common/utils/db';
 import { containsRegex } from '../common/utils/regex';
-import type { ProductCostView } from '@grocery-pos/contracts';
+import {
+    marginBasisPoints,
+    type ProductCostView,
+} from '@grocery-pos/contracts';
 
 @Injectable()
 export class SupplierService {
@@ -131,10 +134,7 @@ export class SupplierService {
                 }),
                 ...(margin &&
                     basis !== undefined && {
-                        marginBasisPoints: Number(
-                            (BigInt(row.price - basis) * 10000n) /
-                                BigInt(row.price),
-                        ),
+                        marginBasisPoints: marginBasisPoints(row.price, basis),
                     }),
             };
         });

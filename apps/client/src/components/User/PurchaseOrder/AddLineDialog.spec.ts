@@ -3,7 +3,10 @@ import { createApp, defineComponent, h, ref, type App } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { UnitOfMeasure, type ProductView } from '@grocery-pos/contracts';
 import AddLineDialog from './AddLineDialog.vue';
-import type { PurchaseOrderDraftLine } from './purchase-order';
+import {
+    PURCHASE_ORDER_HELP,
+    type PurchaseOrderDraftLine,
+} from './purchase-order';
 import {
     field,
     fieldError,
@@ -91,6 +94,30 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = '';
     vi.useRealTimers();
+});
+
+function note(name: string): string | undefined {
+    const button = document.querySelector(
+        `[data-info-tooltip][aria-label="${name}"]`,
+    );
+    if (!button) return undefined;
+    return document
+        .getElementById(button.getAttribute('aria-describedby')!)
+        ?.textContent?.trim();
+}
+
+describe('Purchase order Add product dialog help (#288)', () => {
+    it('explains Ordered and Expected cost with the shared texts', async () => {
+        mount();
+        await show();
+        await pickMilk();
+        expect(note('About Ordered')).toBe(PURCHASE_ORDER_HELP.ordered);
+        expect(note('About Expected cost')).toBe(
+            PURCHASE_ORDER_HELP.expectedCost,
+        );
+        expect(field('Ordered (L)')).not.toBeNull();
+        expect(field('Expected cost (₱/L)')).not.toBeNull();
+    });
 });
 
 describe('Purchase order Add product dialog (#284)', () => {

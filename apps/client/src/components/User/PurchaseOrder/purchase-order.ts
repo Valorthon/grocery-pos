@@ -208,7 +208,7 @@ export function newReceiveKey(): string {
     return `po-${crypto.randomUUID()}`;
 }
 
-/** Column help for the purchase order list (#263). */
+/** Column and field help for purchase orders (#263, #288). */
 export const PURCHASE_ORDER_HELP = {
     status: statusHelp(PURCHASE_ORDER_STATUS, {
         [PurchaseOrderStatus.DRAFT]: 'Editable, not yet sent.',
@@ -222,4 +222,9 @@ export const PURCHASE_ORDER_HELP = {
     lines: 'Number of products on the order (one line per product).',
     expectedTotal:
         'Ordered quantity × expected cost, summed over the lines. The cost entered at receipt may differ.',
+    /** Shared by the Add product dialog and the Lines table (#288). */
+    ordered:
+        "How much you're ordering from the supplier, in the product's unit. Stock doesn't change until you receive it.",
+    expectedCost:
+        'What you expect to pay per unit. Prefilled from the latest receipt; you confirm the real cost when receiving.',
 } satisfies Record<string, ColumnHelp>;
