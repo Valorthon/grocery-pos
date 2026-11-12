@@ -396,13 +396,57 @@ describe('EditProductDialog pricing tiles (#290)', () => {
         expect(tile('tile-margin').textContent).toContain('77.88/pc');
     });
 
+    it('labels Latest cost and Margin and boxes values like the input (#294)', async () => {
+        await mount({ roles: [Role.Admin], lastCost: 3641 });
+        const input = field('Selling price').input;
+        for (const [id, label] of [
+            ['tile-cost', 'Latest cost'],
+            ['tile-margin', 'Margin'],
+        ] as const) {
+            const box = tile(id).querySelector<HTMLElement>(
+                '[data-readonly-box]',
+            )!;
+            const name = document.getElementById(
+                box.getAttribute('aria-labelledby')!,
+            )!;
+            expect(name.textContent!.trim()).toBe(label);
+            expect(name.className).toContain('font-semibold');
+            expect(box.tagName).toBe('OUTPUT');
+            for (const cls of [
+                'py-2.5',
+                'text-sm',
+                'border',
+                'rounded-control',
+            ]) {
+                expect(input.classList).toContain(cls);
+                expect(box.classList).toContain(cls);
+            }
+            expect(box.classList).toContain('break-words');
+        }
+        // The ⓘ row supplies the gap; a leftover mb-1.5 pushed the box 6px down.
+        expect(tile('tile-margin').querySelector('p')!.classList).not.toContain(
+            'mb-1.5',
+        );
+        expect(
+            tile('tile-margin').querySelector('[data-readonly-box]')!
+                .textContent,
+        ).toContain('27.18% · ₱13.59/pc');
+        expect(
+            document
+                .querySelector('[data-testid="tile-cost"]')!
+                .closest('[data-testid="pricing-row"]'),
+        ).not.toBeNull();
+    });
+
     it('a negative margin is red with a tone label', async () => {
         await mount({ roles: [Role.Admin], lastCost: 6000 });
         await type(field('Selling price').input, '40');
         const margin = tile('tile-margin');
         expect(margin.textContent).toContain('-50.00%');
         expect(margin.textContent).toContain('negative margin');
-        expect(margin.querySelector('.text-danger-fg')).not.toBeNull();
+        expect(
+            margin.querySelector('[data-readonly-box]')!.classList,
+        ).toContain('text-danger-fg');
     });
 
     it('an invalid or empty price shows —', async () => {
@@ -419,10 +463,20 @@ describe('EditProductDialog pricing tiles (#290)', () => {
         expect(tile('tile-margin').textContent).toContain('—');
     });
 
-    it('keeps the price input a minimum width beside the tiles', async () => {
+    it('keeps the price input a minimum width and gives Margin the wider column', async () => {
         await mount({ roles: [Role.Admin], lastCost: 100 });
         const row = document.querySelector('[data-testid="pricing-row"]')!;
-        expect(row.className).toContain('minmax(10rem,1fr)');
+        // Price ≥8rem, the pair gets 2.6fr split 1:1.6, so the Margin
+        // box fits "-50.00% · -₱20.00/pc" on one line at 32rem (#294).
+        expect(row.className).toContain('minmax(8rem,1fr)_minmax(0,2.6fr)');
+        const pair = document.querySelector('[data-testid="cost-tiles"]')!;
+        expect(pair.classList).toContain('grid-cols-2');
+        expect(pair.className).toContain('minmax(0,1.6fr)');
+        expect(pair.classList).not.toContain('items-start');
+        for (const box of pair.querySelectorAll('[data-readonly-box]')) {
+            expect(box.classList).toContain('flex-1');
+            expect(box.getAttribute('aria-live')).toBe('off');
+        }
     });
 
     it('non-ADMIN users see no tiles', async () => {

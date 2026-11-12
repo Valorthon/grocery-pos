@@ -16,6 +16,14 @@ export const FIELD_BASE_SM = FIELD_BASE.replace('py-2.5', 'py-1').replace(
     'text-xs',
 );
 
+/**
+ * A read-only value box beside fields (#294): FIELD_BASE's padding, text,
+ * border width and radius, so one line is exactly as tall as an input, on
+ * a filled background so it doesn't look editable. Long values wrap.
+ */
+export const FIELD_READONLY =
+    'w-full min-w-0 px-3.5 py-2.5 rounded-control border border-line bg-paper text-sm text-ink num break-words';
+
 export const FIELD_OK = 'border-line-strong bg-surface';
 export const FIELD_ERROR = 'border-danger-fg bg-danger-bg';
 /** A combobox with a picked option. */

@@ -90,7 +90,7 @@ describe('live margin tiles (#290)', () => {
         const margin = () =>
             document.querySelector('[data-testid="tile-margin"]')!.textContent;
         expect(margin()).toContain('66.66%');
-        expect(margin()).toContain('120.00/kg');
+        expect(margin()).toContain('66.66% · ₱120.00/kg');
         props.price = 9001;
         await flush();
         // trunc(3001 * 10000 / 9001) = 3334.
