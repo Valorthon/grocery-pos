@@ -254,3 +254,88 @@ describe('field label margins (#301)', () => {
         expect(offending(/FIELD_LABEL\.replace\(/)).toEqual([]);
     });
 });
+
+/**
+ * Row actions (#311): a row opens by row-click, the rest sit in a ⋯ menu
+ * under a right-aligned "Actions" column (key `actions`). No open-only
+ * column comes back. Audit's `action` is a data column (the event type),
+ * not a row action, so its "Action" title is allowed.
+ */
+describe('row actions drift (#311)', () => {
+    /** A header literal: an object with both `key` and `title`, any order or quotes. */
+    interface HeaderLiteral {
+        file: string;
+        key: string;
+        title: string;
+        align?: string;
+    }
+    const prop = (text: string, name: string) =>
+        new RegExp(`\\b${name}:\\s*(['"\`])([^'"\`]*)\\1`).exec(text)?.[2];
+    function headerLiterals(): HeaderLiteral[] {
+        const found: HeaderLiteral[] = [];
+        for (const [file, text] of Object.entries(sources))
+            for (const [literal] of text.matchAll(/\{[^{}]*\}/g)) {
+                const key = prop(literal, 'key');
+                const title = prop(literal, 'title');
+                if (key === undefined || title === undefined) continue;
+                found.push({ file, key, title, align: prop(literal, 'align') });
+            }
+        return found;
+    }
+    /** The header arrays (`headers`/`baseHeaders`…) and the keys in order. */
+    function headerArrays(): { file: string; keys: string[] }[] {
+        const found: { file: string; keys: string[] }[] = [];
+        for (const [file, text] of Object.entries(sources))
+            for (const [, body] of text.matchAll(
+                /eaders\b[^=\n]*=\s*(?:computed[^[]*)?\[([\s\S]*?)\n\];?/g,
+            )) {
+                const keys = [
+                    ...body.matchAll(/\bkey:\s*(['"`])([^'"`]*)\1/g),
+                ].map((m) => m[2]);
+                if (keys.length) found.push({ file, keys });
+            }
+        return found;
+    }
+
+    it('finds the header literals', () => {
+        expect(headerLiterals().length).toBeGreaterThan(30);
+    });
+
+    it('has no "Action", "Open", "Details" or "History" header outside data columns', () => {
+        const bad = headerLiterals().filter(
+            ({ file, key, title }) =>
+                ['Open', 'Details', 'History'].includes(title) ||
+                (title === 'Action' &&
+                    !(
+                        file.endsWith('/views/User/Audit/Index.vue') &&
+                        key === 'action'
+                    )),
+        );
+        expect(bad).toEqual([]);
+        // Draft tables write their headers by hand.
+        expect(offending(/>\s*(Action|Open|Details|History)\s*<\/th>/)).toEqual(
+            [],
+        );
+    });
+
+    it('titles every `actions` column "Actions", right-aligned and last', () => {
+        const actions = headerLiterals().filter(({ key }) => key === 'actions');
+        expect(actions.length).toBeGreaterThan(3);
+        expect(
+            actions.filter(
+                ({ title, align }) => title !== 'Actions' || align !== 'right',
+            ),
+        ).toEqual([]);
+        const arrays = headerArrays().filter(({ keys }) =>
+            keys.includes('actions'),
+        );
+        expect(arrays.length).toBeGreaterThan(3);
+        expect(
+            arrays.filter(({ keys }) => keys[keys.length - 1] !== 'actions'),
+        ).toEqual([]);
+    });
+
+    it('has no RowOpenButton left', () => {
+        expect(offending(/RowOpenButton/)).toEqual([]);
+    });
+});

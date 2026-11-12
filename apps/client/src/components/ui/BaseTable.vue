@@ -140,11 +140,15 @@
                             :key="row.id ?? index"
                             :class="[
                                 'hover:bg-paper transition-colors',
-                                rowClick ? 'cursor-pointer focus-ring' : '',
+                                clickable(row)
+                                    ? 'cursor-pointer focus-ring'
+                                    : '',
                             ]"
-                            :tabindex="rowClick ? 0 : undefined"
-                            :aria-describedby="rowClick ? rowHintId : undefined"
-                            :data-row-click="rowClick ? '' : undefined"
+                            :tabindex="clickable(row) ? 0 : undefined"
+                            :aria-describedby="
+                                clickable(row) ? rowHintId : undefined
+                            "
+                            :data-row-click="clickable(row) ? '' : undefined"
                             @click="onRowClick($event, row)"
                             @keydown="onRowKeydown($event, row)"
                         >
@@ -258,10 +262,15 @@ const props = withDefaults(
         /**
          * Opt-in row activation (#234): the whole row is focusable and a
          * click, Enter or Space on it emits `click:row`. Clicks and keys on
-         * inner buttons, links and fields never do. Keep the row's explicit
-         * open button too.
+         * inner buttons, links and fields never do. The row is the open
+         * target; no separate open button (#311).
          */
         rowClick?: boolean;
+        /**
+         * With `rowClick`, which rows open (#311): a row the viewer can't
+         * open isn't clickable (its ⋯ menu says why). Default: every row.
+         */
+        rowClickable?: (row: T) => boolean;
         /** Screen-reader hint tied to each clickable row. */
         rowHint?: string;
         itemsLength?: number;
@@ -276,6 +285,7 @@ const props = withDefaults(
         caption: '',
         emptyText: 'No data found',
         rowClick: false,
+        rowClickable: () => true,
         rowHint: 'Press Enter to open details',
         itemsLength: 0,
         page: 1,
@@ -301,13 +311,17 @@ function fromInnerControl(event: Event): boolean {
     return !!hit && hit !== row && !!row?.contains(hit);
 }
 
+function clickable(row: T): boolean {
+    return props.rowClick && props.rowClickable(row);
+}
+
 function onRowClick(event: MouseEvent, row: T) {
-    if (!props.rowClick || fromInnerControl(event)) return;
+    if (!clickable(row) || fromInnerControl(event)) return;
     emit('click:row', row);
 }
 
 function onRowKeydown(event: KeyboardEvent, row: T) {
-    if (!props.rowClick) return;
+    if (!clickable(row)) return;
     if (event.key !== 'Enter' && event.key !== ' ') return;
     // Only the row itself: a focused inner control handles its own keys.
     if (event.target !== event.currentTarget) return;

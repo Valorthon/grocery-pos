@@ -35,6 +35,37 @@ async function exact(text: string) {
     button.click();
     await flush();
 }
+/** Answers the confirmation dialog. */
+async function confirmWith(text: string) {
+    await vi.waitFor(() =>
+        expect(
+            [
+                ...document.querySelectorAll<HTMLButtonElement>(
+                    '[role=dialog] button',
+                ),
+            ].some((b) => b.textContent?.trim() === text),
+        ).toBe(true),
+    );
+    [...document.querySelectorAll<HTMLButtonElement>('[role=dialog] button')]
+        .find((b) => b.textContent?.trim() === text)!
+        .click();
+    await flush();
+}
+/** Opens Frozen's ⋯ menu (#311) and picks one of its items. */
+async function rowAction(label: string) {
+    const trigger = document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Actions for Frozen"]',
+    );
+    if (!trigger) throw new Error('no row menu');
+    trigger.click();
+    await flush();
+    const item = [
+        ...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]'),
+    ].find((b) => b.textContent?.trim() === label);
+    if (!item) throw new Error(label);
+    item.click();
+    await flush();
+}
 function deferred() {
     let resolve!: (value: unknown) => void, reject!: (value: unknown) => void;
     const promise = new Promise((yes, no) => {
@@ -81,7 +112,7 @@ describe('category administration', () => {
     });
     it('edits an existing name/order without changing product price permissions', async () => {
         await mount();
-        await exact('Edit');
+        await rowAction('Edit');
         await type('Category name', 'Frozen foods');
         await type('Sort order', '3');
         await exact('Save');
@@ -138,9 +169,9 @@ describe('category administration', () => {
     });
     it('confirms archive and restore while retaining category rows', async () => {
         await mount();
-        await exact('Archive');
+        await rowAction('Archive');
         expect(api.patch).not.toHaveBeenCalled();
-        await exact('Archive');
+        await confirmWith('Archive');
         expect(api.patch).toHaveBeenCalledWith(`/categories/${row._id}`, {
             isActive: false,
         });
@@ -150,8 +181,8 @@ describe('category administration', () => {
             data: { data: [{ ...row, isActive: false }], totalItems: 1 },
         });
         await mount();
-        await exact('Restore');
-        await exact('Restore');
+        await rowAction('Restore');
+        await confirmWith('Restore');
         expect(api.patch).toHaveBeenCalledWith(`/categories/${row._id}`, {
             isActive: true,
         });
@@ -159,8 +190,8 @@ describe('category administration', () => {
     it('confirms delete and reports referenced-category rejection without removing it', async () => {
         api.delete.mockRejectedValue(new Error('Referenced'));
         await mount();
-        await exact('Delete');
-        await exact('Delete');
+        await rowAction('Delete');
+        await confirmWith('Delete');
         expect(api.delete).toHaveBeenCalledWith(`/categories/${row._id}`);
         expect(document.body.textContent).toContain('Frozen');
         expect(useUIStore().toasts.length).toBeGreaterThan(0);
@@ -170,15 +201,52 @@ describe('category administration', () => {
         await mount();
         expect(document.querySelector('[role=alert]')).not.toBeNull();
         await exact('Retry');
-        await exact('Delete');
-        await exact('Delete');
+        await rowAction('Delete');
+        await confirmWith('Delete');
         expect(api.delete).toHaveBeenCalled();
     });
     it('reports an archive request failure', async () => {
         api.patch.mockRejectedValue(new Error('offline'));
         await mount();
-        await exact('Archive');
-        await exact('Archive');
+        await rowAction('Archive');
+        await confirmWith('Archive');
         expect(useUIStore().toasts.length).toBeGreaterThan(0);
+    });
+    it('opens Edit from the row (click, Enter) and keeps one right-aligned ⋯ column (#311)', async () => {
+        await mount();
+        const th = Array.from(document.querySelectorAll('thead th')).pop()!;
+        expect(th.textContent).toContain('Actions');
+        expect(th.className).toContain('text-right');
+        const row = () =>
+            document.querySelector<HTMLTableRowElement>('tbody tr')!;
+        row().querySelector('td')!.click();
+        await flush();
+        expect(document.querySelector('[role=dialog]')?.textContent).toContain(
+            'Edit category',
+        );
+        await exact('Cancel');
+        await vi.waitFor(() =>
+            expect(document.querySelector('[role=dialog]')).toBeNull(),
+        );
+        row().dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+        );
+        await flush();
+        expect(
+            document.querySelector<HTMLInputElement>('[role=dialog] input')
+                ?.value,
+        ).toBe('Frozen');
+        await exact('Cancel');
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Actions for Frozen"]',
+            )!
+            .click();
+        await flush();
+        expect(
+            [...document.querySelectorAll('[role=menuitem]')].map((b) =>
+                b.textContent?.trim(),
+            ),
+        ).toEqual(['Edit', 'Archive', 'Delete']);
     });
 });

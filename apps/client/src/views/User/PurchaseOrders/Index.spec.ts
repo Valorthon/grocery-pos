@@ -85,12 +85,20 @@ async function mount() {
     await flush();
 }
 async function press(text: string) {
-    const button = [...document.querySelectorAll('button')].reverse().find(
-        (b) =>
-            b.textContent?.trim() === text ||
-            // The trailing row-open icon is named by its aria-label (#243).
-            b.getAttribute('aria-label')?.startsWith(`${text} `),
-    );
+    // Rows open by row-click alone (#311): the last clickable row.
+    if (text === 'Open') {
+        const rows = document.querySelectorAll<HTMLElement>(
+            'tbody tr[data-row-click]',
+        );
+        const row = rows[rows.length - 1];
+        if (!row) throw new Error(`No row to open`);
+        row.querySelector('td')!.click();
+        await flush();
+        return;
+    }
+    const button = [...document.querySelectorAll('button')]
+        .reverse()
+        .find((b) => b.textContent?.trim() === text);
     if (!button) throw new Error(`No button ${text}`);
     button.click();
     await flush();
@@ -182,17 +190,19 @@ describe('Purchase orders page (#123)', () => {
                 ['Cancelled', expect.stringContaining('bg-danger-bg')],
             ],
         );
-        const open = document.querySelector<HTMLButtonElement>(
-            '[data-testid="po-open"]',
-        )!;
-        expect(open.getAttribute('aria-label')).toBe('Open PO-PO0');
-        expect(open.className).toContain('min-h-11');
-        expect(open.className).toContain('min-w-11');
+        // No open-only column or button (#311): the row opens the order.
+        expect(document.querySelector('[data-testid="po-open"]')).toBeNull();
         expect(
-            [...document.querySelectorAll('button')].some(
-                (b) => b.textContent?.trim() === 'Open',
-            ),
-        ).toBe(false);
+            [...document.querySelectorAll('thead th')].map(headerText),
+        ).not.toContain('Open');
+        const row = document.querySelector<HTMLElement>(
+            'tbody tr[data-row-click]',
+        )!;
+        row.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+        );
+        await flush();
+        expect(document.body.textContent).toContain('Back to list');
     });
 
     it('takes the low-stock handoff and fills known costs without overwriting edits', async () => {
@@ -456,7 +466,14 @@ describe('Purchase order drafting (#123)', () => {
         expect(
             document.querySelector('[aria-label="Remove milk"]'),
         ).not.toBeNull();
-        await press('Remove');
+        const remove = document.querySelector<HTMLButtonElement>(
+            '[aria-label="Remove milk"]',
+        )!;
+        // A trash icon like the other drafts (#311), no text.
+        expect(remove.textContent?.trim()).toBe('');
+        expect(remove.querySelector('svg')).not.toBeNull();
+        remove.click();
+        await flush();
         expect(document.querySelector('[aria-label="Remove milk"]')).toBeNull();
         expect(
             document.querySelector('[data-testid="po-no-lines"]'),
@@ -910,7 +927,7 @@ describe('Purchase order editor layout and order view (#275)', () => {
             'Ordered',
             'Expected cost',
             'Line total',
-            'Action',
+            'Actions',
         ]);
         expect(byId('po-no-lines')!.closest('tbody')).not.toBeNull();
         expect(byId('po-no-lines')!.textContent).toContain('No products yet');

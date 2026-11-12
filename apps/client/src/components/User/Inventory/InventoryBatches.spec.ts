@@ -63,6 +63,19 @@ async function mount(component = InventoryBatches, props = {}) {
     app.mount(host);
     await flush();
 }
+/** Opens the first row's ⋯ menu and picks Write off (#311). */
+async function writeOff() {
+    document.querySelector<HTMLButtonElement>('[data-row-actions]')!.click();
+    await flush();
+    [...document.querySelectorAll<HTMLButtonElement>('[role=menuitem]')]
+        .find((b) => b.textContent?.trim() === 'Write off')!
+        .click();
+    await flush();
+}
+const headerTitles = () =>
+    [...document.querySelectorAll('thead th')].map((th) =>
+        th.textContent?.trim(),
+    );
 it('shows store-day expiry, measured remainder and prefills a batch-specific adjustment without stock writes', async () => {
     await mount();
     expect(document.body.textContent).toContain('Expired 2 days ago');
@@ -70,7 +83,10 @@ it('shows store-day expiry, measured remainder and prefills a batch-specific adj
     expect(api.get).toHaveBeenCalledWith('/inventories/expiring', {
         params: { page: 1, limit: 25, days: 7 },
     });
-    await click('Write off');
+    const th = Array.from(document.querySelectorAll('thead th')).pop()!;
+    expect(th.textContent?.trim()).toBe('Actions');
+    expect(th.className).toContain('text-right');
+    await writeOff();
     expect(nav.push).toHaveBeenCalledWith({ name: 'Adjustments/Add' });
     expect(useAdjustmentPrefillStore().take()).toMatchObject({
         product: 'milk',
@@ -85,6 +101,9 @@ it('offers expiry review without adjustment controls to restockers', async () =>
     useAuthStore().user!.roles = [Role.Restocker];
     await mount();
     expect(document.body.textContent).not.toContain('Write off');
+    // No items for this viewer: no Actions column at all (#311).
+    expect(headerTitles().some((t) => t?.startsWith('Action'))).toBe(false);
+    expect(document.querySelector('[data-row-actions]')).toBeNull();
 });
 it('reviews reconciliation deficits without pretending they have a date or a writeoff quantity', async () => {
     api.get.mockResolvedValue({
@@ -106,6 +125,7 @@ it('reviews reconciliation deficits without pretending they have a date or a wri
     expect(document.body.textContent).toContain('Reconciliation / unknown');
     expect(document.body.textContent).toContain('-0.450 kg');
     expect(document.body.textContent).not.toContain('Write off');
+    expect(headerTitles().some((t) => t?.startsWith('Action'))).toBe(false);
 });
 it('validates day boundaries, supports all batches and preserves server paging', async () => {
     api.get.mockResolvedValue({ data: { data: [batch()], totalItems: 26 } });
@@ -335,6 +355,6 @@ it('shows the product cell and a status badge per batch, with no row click (#242
     (firstRow as HTMLElement).click();
     await flush();
     expect(nav.push).not.toHaveBeenCalled();
-    await click('Write off');
+    await writeOff();
     expect(nav.push).toHaveBeenCalledWith({ name: 'Adjustments/Add' });
 });
