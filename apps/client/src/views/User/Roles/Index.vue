@@ -52,68 +52,22 @@
 </template>
 
 <script setup lang="ts">
-import type { Component } from 'vue';
-import { ClipboardEdit, Crown, ShoppingCart, Truck, Users } from '@lucide/vue';
-import {
-    ASSIGNABLE_ROLES,
-    appPermissionsOf,
-    Role,
-} from '@grocery-pos/contracts';
+import { ASSIGNABLE_ROLES, appPermissionsOf } from '@grocery-pos/contracts';
 import PageCard from '@/components/ui/PageCard.vue';
 import PageFrame from '@/components/ui/PageFrame.vue';
 import Badge from '@/components/ui/Badge.vue';
+import { type AssignableRole, ROLE_LOOK } from '../role-look';
 
 /**
  * One card per assignable role. What each role may do comes from
  * `PERMISSIONS` in contracts, which the API's role-permissions spec checks
- * against every controller's `@Roles(...)` (issue #24); only the look of a
- * card lives here.
+ * against every controller's `@Roles(...)` (issue #24); the look of a card
+ * is shared with the Users screen (`role-look.ts`, #297).
  */
-type AssignableRole = Exclude<Role, Role.Unauthenticated>;
-
-const LOOK: Record<
-    AssignableRole,
-    { label: string; icon: Component; avatarClass: string; note?: string }
-> = {
-    [Role.Admin]: {
-        label: 'Admin',
-        icon: Crown,
-        avatarClass: 'bg-leaf-50 text-leaf-600',
-        // Selling and cash shifts are `ownRoleOnly` in PERMISSIONS (#84).
-        note: 'To sell, an admin also needs the Seller role.',
-    },
-    [Role.Supervisor]: {
-        label: 'Supervisor',
-        icon: Crown,
-        avatarClass: 'bg-indigo-50 text-indigo-600',
-        note: 'Approves reversals by PIN. Add another role to use the app.',
-    },
-    [Role.Seller]: {
-        label: 'Seller',
-        icon: ShoppingCart,
-        avatarClass: 'bg-emerald-50 text-emerald-600',
-    },
-    [Role.Restocker]: {
-        label: 'Restocker',
-        icon: Truck,
-        avatarClass: 'bg-sky-50 text-sky-600',
-    },
-    [Role.Adjuster]: {
-        label: 'Adjuster',
-        icon: ClipboardEdit,
-        avatarClass: 'bg-amber-50 text-amber-600',
-    },
-    [Role.UserManager]: {
-        label: 'User Manager',
-        icon: Users,
-        avatarClass: 'bg-purple-50 text-purple-600',
-    },
-};
-
 const roles = ASSIGNABLE_ROLES.map((role) => ({
     key: role,
     // ASSIGNABLE_ROLES never holds Unauthenticated (see contracts roles.ts).
-    ...LOOK[role as AssignableRole],
+    ...ROLE_LOOK[role as AssignableRole],
     permissions: appPermissionsOf(role).map((p) => p.label),
 }));
 </script>
