@@ -37,8 +37,13 @@ describe('StepUpService (#310)', () => {
     afterEach(() => jest.useRealTimers());
 
     it('lasts five minutes from the re-auth, then is refused', async () => {
-        const expiresAt = await service.grant(actor.userId, actor.sid);
+        const expiresAt = await service.grant(actor.userId, actor.sid, session);
         expect(expiresAt.toISOString()).toBe('2026-11-12T08:05:00.000Z');
+        expect(stepUps.updateOne).toHaveBeenCalledWith(
+            { user: userId, sid: actor.sid },
+            { $set: { expiresAt } },
+            { upsert: true, session },
+        );
 
         jest.setSystemTime(new Date('2026-11-12T08:04:59Z'));
         await expect(
@@ -53,13 +58,13 @@ describe('StepUpService (#310)', () => {
     });
 
     it('a guarded action does not extend it; a new re-auth starts a new window', async () => {
-        await service.grant(actor.userId, actor.sid);
+        await service.grant(actor.userId, actor.sid, session);
         jest.setSystemTime(new Date('2026-11-12T08:04:00Z'));
         await service.assertLive(actor, session);
         expect(stepUps.rows[0].expiresAt.toISOString()).toBe(
             '2026-11-12T08:05:00.000Z',
         );
-        await service.grant(actor.userId, actor.sid);
+        await service.grant(actor.userId, actor.sid, session);
         expect(stepUps.rows).toHaveLength(1);
         expect(stepUps.rows[0].expiresAt.toISOString()).toBe(
             '2026-11-12T08:09:00.000Z',
@@ -67,7 +72,7 @@ describe('StepUpService (#310)', () => {
     });
 
     it('needs the session to still exist', async () => {
-        await service.grant(actor.userId, actor.sid);
+        await service.grant(actor.userId, actor.sid, session);
         tokens.rows.clear();
         await expect(service.assertLive(actor, session)).rejects.toMatchObject({
             code: ErrorCode.USER_REAUTH_REQUIRED,
