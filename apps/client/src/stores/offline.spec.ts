@@ -667,12 +667,21 @@ it('probes only the configured API, bounded, and classifies its answers', async 
     expect(api.get).toHaveBeenLastCalledWith('/health/live', {
         timeout: PROBE_TIMEOUT_MS,
     });
+    const fromApi = (status: number) => {
+        const cause = failure(status);
+        cause.response!.headers = { 'x-request-id': 'req-1' };
+        return cause;
+    };
     for (const [cause, reachable] of [
         [failure(), false],
+        // A proxy's 5xx carries no API request id: the API is down.
         [failure(502), false],
         [failure(503), false],
         [failure(504), false],
-        [failure(500), true],
+        [failure(500), false],
+        // The API's own unhealthy 503 still means the API answered.
+        [fromApi(503), true],
+        [fromApi(500), true],
         [failure(401), true],
         [new Error('boom'), false],
     ] as const) {
@@ -694,6 +703,27 @@ it('shares one probe at a time and recovers after an API restart', async () => {
     expect(await second).toBe(true);
     expect(store.connected).toBe(true);
     expect(api.get).toHaveBeenCalledTimes(1);
+});
+it('does not let an older probe undo a newer connection verdict', async () => {
+    let answer: (v: { data: object }) => void = () => undefined;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((resolve) => (answer = resolve)),
+    );
+    const late = store.probe();
+    // A real request lost the network while the probe was in flight.
+    store.setConnection(false);
+    answer({ data: {} });
+    expect(await late).toBe(true);
+    expect(store.connected).toBe(false);
+});
+it('does not share a probe started before logout with later callers', async () => {
+    vi.mocked(api.get).mockReturnValueOnce(new Promise(() => undefined));
+    void store.probe();
+    store.reset();
+    vi.mocked(api.get).mockRejectedValueOnce(failure());
+    expect(await store.probe()).toBe(false);
+    expect(store.connected).toBe(false);
+    expect(api.get).toHaveBeenCalledTimes(2);
 });
 it('ignores a probe answer that arrives after logout', async () => {
     let answer: (v: unknown) => void = () => undefined;

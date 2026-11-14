@@ -168,6 +168,8 @@ let timer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
     window.addEventListener('offline', offline);
     window.addEventListener('online', online);
+    // Learn the API's state once now rather than waiting for the timer.
+    void status.probe();
     timer = setInterval(() => {
         void retry();
     }, 30000);

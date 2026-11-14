@@ -116,6 +116,10 @@ it('syncs explicitly and automatically when the connection returns', async () =>
     await flush();
     expect(status.refreshPending).toHaveBeenCalled();
 });
+it('probes the API once as soon as it mounts', () => {
+    mount();
+    expect(status.probe).toHaveBeenCalledTimes(1);
+});
 it('does not prepare or sync while the API does not answer', async () => {
     status.probe.mockResolvedValue(false);
     mount();
