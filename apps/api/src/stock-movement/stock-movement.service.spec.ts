@@ -59,16 +59,41 @@ function fixture() {
             .fn()
             .mockResolvedValue([{ total: Types.Decimal128.fromString('5') }]),
     };
+    async function batchRow(query: ReturnType<typeof chain>, key: string) {
+        const value: unknown = await query.lean();
+        return value && typeof value === 'object'
+            ? [{ ...value, [key]: new Types.ObjectId(id) }]
+            : [];
+    }
+    const movementBatch = {
+        session: jest.fn(() => batchRow(latest, '_id')),
+    };
+    const currentBatch = {
+        select: jest.fn().mockReturnThis(),
+        session: jest.fn().mockReturnThis(),
+        lean: jest.fn(() => batchRow(current, 'product')),
+    };
+    const definitionBatch = {
+        select: jest.fn().mockReturnThis(),
+        session: jest.fn().mockReturnThis(),
+        lean: jest.fn(() => batchRow(definition, '_id')),
+    };
     const movements = {
         init: jest.fn().mockResolvedValue(undefined),
         db: { collection: () => ({ findOne: marker }) },
         findOne: jest.fn(() => latest),
         find: jest.fn(() => rows),
         countDocuments: jest.fn().mockResolvedValue(1),
-        create: jest.fn().mockResolvedValue([]),
-        aggregate: jest.fn(() => aggregate),
+        insertMany: jest.fn().mockResolvedValue([]),
+        aggregate: jest.fn((pipeline: { $match?: { product: unknown } }[]) => {
+            const product = pipeline[0]?.$match?.product;
+            return product && typeof product === 'object' && '$in' in product
+                ? movementBatch
+                : aggregate;
+        }),
     };
     const inventory = {
+        find: jest.fn(() => currentBatch),
         findOne: jest.fn(() => current),
         db: {
             transaction: jest.fn(async (fn: (s: unknown) => unknown) =>
@@ -77,6 +102,7 @@ function fixture() {
         },
     };
     const products = {
+        find: jest.fn(() => definitionBatch),
         findById: jest.fn(() => definition),
         exists: jest.fn().mockResolvedValue(true),
     };
@@ -150,7 +176,9 @@ describe('stock ledger exact posting', () => {
             session,
         );
         expect(
-            f.movements.create.mock.calls.map((call) => (call as unknown[])[0]),
+            f.movements.insertMany.mock.calls.map(
+                (call) => (call as unknown[])[0],
+            ),
         ).toMatchObject([
             [
                 {
@@ -161,8 +189,6 @@ describe('stock ledger exact posting', () => {
                     refModel: 'Opening',
                     unit: 'KG',
                 },
-            ],
-            [
                 {
                     type: 'RESTOCK',
                     quantity: 3,
@@ -175,7 +201,11 @@ describe('stock ledger exact posting', () => {
             ],
         ]);
         expect(
-            (f.movements.create.mock.calls[0] as unknown[])[0],
+            (
+                (
+                    f.movements.insertMany.mock.calls[0] as unknown[]
+                )[0] as object[]
+            )[0],
         ).not.toHaveProperty('user');
     });
     it('extends a matching ledger without another baseline and defaults legacy unit to pieces', async () => {
@@ -187,8 +217,8 @@ describe('stock ledger exact posting', () => {
             context,
             session,
         );
-        expect(f.movements.create).toHaveBeenCalledTimes(1);
-        expect(f.movements.create.mock.calls[0]).toMatchObject([
+        expect(f.movements.insertMany).toHaveBeenCalledTimes(1);
+        expect(f.movements.insertMany.mock.calls[0]).toMatchObject([
             [{ sequence: 8, unit: 'PIECE' }],
             { session },
         ]);
@@ -200,7 +230,7 @@ describe('stock ledger exact posting', () => {
             context,
             session,
         );
-        expect(f.movements.create).not.toHaveBeenCalled();
+        expect(f.movements.insertMany).not.toHaveBeenCalled();
     });
     it.each([null, { stock: 0.5 }, { stock: Infinity }])(
         'rejects missing/corrupt stock %j',
@@ -242,7 +272,7 @@ describe('stock ledger exact posting', () => {
     });
     it('propagates ledger write failure so caller transaction can roll back stock', async () => {
         const f = fixture();
-        f.movements.create.mockRejectedValue(new Error('Disk'));
+        f.movements.insertMany.mockRejectedValue(new Error('Disk'));
         await expect(
             f.service.record([{ product: id, quantity: 3 }], context, session),
         ).rejects.toThrow('Disk');
