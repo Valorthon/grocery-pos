@@ -314,3 +314,14 @@ export async function grantStepUp(db: DbApp, who: Caller): Promise<void> {
             { upsert: true },
         );
 }
+
+/** Explicit retry identity for a new drawer movement in HTTP fixtures. */
+export async function drawerRequest(db: DbApp, who: Caller) {
+    const shift = await db
+        .model<{ _id: Types.ObjectId }>('Shift')
+        .findOne({ cashier: new Types.ObjectId(who.userId), status: 'OPEN' })
+        .lean();
+    if (!shift)
+        throw new Error('Open a test shift before creating a drawer request');
+    return { shiftId: String(shift._id), idempotencyKey: randomUUID() };
+}

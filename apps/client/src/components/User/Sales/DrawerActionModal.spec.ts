@@ -153,6 +153,8 @@ describe('DrawerActionModal (issue #25)', () => {
         await submit();
 
         expect(api.post).toHaveBeenCalledWith('/shifts/current/drawer', {
+            shiftId: SHIFT._id,
+            idempotencyKey: expect.any(String) as string,
             type: DrawerMovementType.CASH_DROP,
             amount: 123_456,
             reason: 'Excess to safe',
@@ -174,6 +176,8 @@ describe('DrawerActionModal (issue #25)', () => {
         await submit();
 
         expect(api.post).toHaveBeenCalledWith('/shifts/current/drawer', {
+            shiftId: SHIFT._id,
+            idempotencyKey: expect.any(String) as string,
             type: DrawerMovementType.CASH_IN,
             amount: 20_000,
             reason: 'coins',
@@ -281,4 +285,18 @@ describe('DrawerActionModal while submitting (issue #22)', () => {
         await flush();
         expect(shift.drawerAction).toBeNull();
     });
+});
+
+it('retries the still-open dialog with its original key after a lost response (#333)', async () => {
+    const shift = await openModal(DrawerMovementType.CASH_DROP);
+    api.post
+        .mockRejectedValueOnce(new Error('lost answer'))
+        .mockResolvedValue({ data: SHIFT });
+    await type('amount', '1000');
+    await type('reason', 'safe');
+    await submit();
+    expect(shift.drawerAction).toBe(DrawerMovementType.CASH_DROP);
+    await submit();
+    expect(api.post.mock.calls[1]?.[1]).toEqual(api.post.mock.calls[0]?.[1]);
+    expect(shift.drawerAction).toBeNull();
 });

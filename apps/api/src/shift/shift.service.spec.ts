@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
@@ -210,6 +211,10 @@ describe('ShiftService.current (blind)', () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         await ring(ANA, cashSale(45_000, 50_000));
         await service.recordDrawer(ANA, {
+            shiftId:
+                (await service.current(ANA))?._id ??
+                new Types.ObjectId().toString(),
+            idempotencyKey: randomUUID(),
             type: DrawerMovementType.CASH_DROP,
             amount: 20_000,
             reason: 'to safe',
@@ -258,6 +263,10 @@ describe('ShiftService.recordDrawer', () => {
         await service.open(ANA, FLOAT_COUNTS);
 
         const view = await service.recordDrawer(ANA, {
+            shiftId:
+                (await service.current(ANA))?._id ??
+                new Types.ObjectId().toString(),
+            idempotencyKey: randomUUID(),
             type: DrawerMovementType.CASH_IN,
             amount: 10_000,
             reason: 'coins',
@@ -277,6 +286,10 @@ describe('ShiftService.recordDrawer', () => {
 
         await expect(
             service.recordDrawer(ANA, {
+                shiftId:
+                    (await service.current(ANA))?._id ??
+                    new Types.ObjectId().toString(),
+                idempotencyKey: randomUUID(),
                 type: DrawerMovementType.CASH_DROP,
                 amount: FLOAT * 10,
                 reason: 'safe',
@@ -287,6 +300,10 @@ describe('ShiftService.recordDrawer', () => {
     it('refuses without an open shift', async () => {
         await expect(
             service.recordDrawer(ANA, {
+                shiftId:
+                    (await service.current(ANA))?._id ??
+                    new Types.ObjectId().toString(),
+                idempotencyKey: randomUUID(),
                 type: DrawerMovementType.CASH_IN,
                 amount: 100,
                 reason: 'x',
@@ -399,11 +416,19 @@ describe('ShiftService.closeOwn (Z-read)', () => {
             ),
         );
         await service.recordDrawer(ANA, {
+            shiftId:
+                (await service.current(ANA))?._id ??
+                new Types.ObjectId().toString(),
+            idempotencyKey: randomUUID(),
             type: DrawerMovementType.CASH_IN,
             amount: 20_000,
             reason: 'coins',
         });
         await service.recordDrawer(ANA, {
+            shiftId:
+                (await service.current(ANA))?._id ??
+                new Types.ObjectId().toString(),
+            idempotencyKey: randomUUID(),
             type: DrawerMovementType.CASH_DROP,
             amount: 50_000,
             reason: 'safe',
@@ -914,5 +939,38 @@ describe('ShiftService.list and getById', () => {
         await expect(
             service.getById(new Types.ObjectId().toString()),
         ).rejects.toMatchObject({ statusCode: 404 });
+    });
+});
+
+describe('drawer retry evidence (#333)', () => {
+    it('replays once while open and closed, rejects mismatched context, and never leaks retry evidence', async () => {
+        const { _id: shiftId } = await service.open(ANA, FLOAT_COUNTS);
+        const request = {
+            shiftId,
+            idempotencyKey: randomUUID(),
+            type: DrawerMovementType.CASH_IN,
+            amount: 100,
+            reason: 'coins',
+        } as const;
+        const first = await service.recordDrawer(ANA, request);
+        expect(await service.recordDrawer(ANA, request)).toEqual(first);
+        expect(shifts.byId(shiftId)!.movements).toHaveLength(1);
+        expect(JSON.stringify(first)).not.toMatch(/idempotencyKey|requestHash/);
+        await expect(
+            service.recordDrawer(ANA, { ...request, amount: 200 }),
+        ).rejects.toMatchObject({
+            code: ErrorCode.SHIFT_DRAWER_IDEMPOTENCY_MISMATCH,
+            statusCode: 409,
+        });
+        await service.closeOwn(ANA, FLOAT_COUNTS);
+        const replay = await service.recordDrawer(ANA, request);
+        expect(replay.status).toBe(ShiftStatus.CLOSED);
+        expect(replay.movements).toEqual(first.movements);
+        await expect(
+            service.recordDrawer(ANA, {
+                ...request,
+                idempotencyKey: randomUUID(),
+            }),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
     });
 });

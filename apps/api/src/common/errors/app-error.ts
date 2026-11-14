@@ -83,6 +83,7 @@ export class AppError extends Error {
             case ErrorCode.SHIFT_CLOSED:
             case ErrorCode.SHIFT_PAYOUT_REQUIRED:
             case ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT:
+            case ErrorCode.SHIFT_DRAWER_IDEMPOTENCY_MISMATCH:
             case ErrorCode.OFFLINE_INVALID:
             case ErrorCode.OFFLINE_RECONCILIATION_REQUIRED:
             case ErrorCode.OFFLINE_PENDING:

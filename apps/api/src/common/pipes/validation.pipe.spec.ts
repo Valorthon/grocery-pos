@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 /**
  * Request text is stored as typed (issue #15). The old global
  * SanitationPipe ran every body string through sanitize-html, which
@@ -69,6 +70,8 @@ describe('createValidationPipe: text is stored as typed (#15)', () => {
 
     it('does not strip anything that looks like markup', async () => {
         const dto = await body(DrawerMovementDto, {
+            shiftId: new Types.ObjectId().toString(),
+            idempotencyKey: randomUUID(),
             type: 'CASH_IN',
             amount: 100,
             reason: '<b>float</b> top-up &amp; change',

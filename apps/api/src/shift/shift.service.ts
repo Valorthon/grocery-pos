@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { receiptStoreIdentity } from '@grocery-pos/contracts';
 import { SettingsService } from '../settings/settings.service';
 import {
@@ -287,7 +288,20 @@ export class ShiftService {
         user: AuthUser,
         dto: DrawerMovementDto,
     ): Promise<CurrentShiftView> {
+        const requestHash = createHash('sha256')
+            .update(
+                JSON.stringify([
+                    user.userId,
+                    dto.shiftId,
+                    dto.type,
+                    dto.amount,
+                    dto.reason,
+                ]),
+            )
+            .digest('hex');
         const movement: DrawerMovement = {
+            idempotencyKey: dto.idempotencyKey,
+            requestHash,
             type: dto.type,
             amount: dto.amount,
             reason: dto.reason,
@@ -297,9 +311,32 @@ export class ShiftService {
         };
 
         return runInTransaction(async (session) => {
+            const filter = {
+                _id: new Types.ObjectId(dto.shiftId),
+                cashier: new Types.ObjectId(user.userId),
+            };
+            const original = await this.model
+                .findOne(filter)
+                .session(session)
+                .lean<ShiftDoc>();
+            if (!original) throw this.notOpen();
+            const recorded = original.movements.find(
+                (m) => m.idempotencyKey === dto.idempotencyKey,
+            );
+            if (recorded) {
+                if (recorded.requestHash !== requestHash) {
+                    throw new ConflictError(
+                        ErrorCode.SHIFT_DRAWER_IDEMPOTENCY_MISMATCH,
+                        'This drawer retry key was already used for different movement details',
+                    );
+                }
+                return toCurrentView(original);
+            }
+            // The write conflicts with other drawer writes and close. Driver
+            // transaction retries reread the committed movement before appending.
             const shift = await this.model
                 .findOneAndUpdate(
-                    this.openFilter(user.userId),
+                    { ...filter, status: ShiftStatus.OPEN },
                     { $push: { movements: movement } },
                     { new: true, runValidators: true, session },
                 )

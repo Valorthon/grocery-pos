@@ -189,6 +189,7 @@ describe('GlobalFilter on shift errors (issue #2)', () => {
         ErrorCode.SHIFT_CLOSED,
         ErrorCode.SHIFT_PAYOUT_REQUIRED,
         ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT,
+        ErrorCode.SHIFT_DRAWER_IDEMPOTENCY_MISMATCH,
     ])('answers %s with 409 and the code', (code) => {
         const { host, res } = hostFor('/v1/shifts');
 

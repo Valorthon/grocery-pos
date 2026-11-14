@@ -1,5 +1,6 @@
 import { terminalLabel } from '@/settings/presentation';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { isAxiosError } from 'axios';
 import { defineStore } from 'pinia';
 import api from '@/axios';
 import { useOfflineStore } from './offline';
@@ -16,6 +17,7 @@ import {
     ErrorCode,
     type LastClosedResponse,
     type OpenShiftRequest,
+    ShiftStatus,
     type ZReadReport,
 } from '@grocery-pos/contracts';
 
@@ -85,6 +87,17 @@ export const useShiftStore = defineStore('shift', () => {
     // not repopulate the store for the next user. Every request captures it
     // and drops its result if it changed.
     let generation = 0;
+    let drawerAttempt: {
+        signature: string;
+        request: DrawerMovementRequest;
+    } | null = null;
+    watch(
+        drawerAction,
+        () => {
+            drawerAttempt = null;
+        },
+        { flush: 'sync' },
+    );
 
     function setShift(shift: CurrentShiftView | null) {
         activeShift.value = shift;
@@ -150,15 +163,48 @@ export const useShiftStore = defineStore('shift', () => {
         reason: string,
     ): Promise<void> {
         const gen = generation;
+        const shiftId = activeShift.value?._id;
+        if (!shiftId)
+            throw new Error('Open a shift before recording a drawer movement');
+        const signature = JSON.stringify([shiftId, type, amount, reason]);
+        if (drawerAttempt?.signature !== signature) {
+            drawerAttempt = {
+                signature,
+                request: {
+                    shiftId,
+                    type,
+                    amount,
+                    reason,
+                    idempotencyKey: crypto.randomUUID(),
+                },
+            };
+        }
+        const attempt = drawerAttempt;
         try {
             const res = await api.post<CurrentShiftView>(
                 '/shifts/current/drawer',
-                { type, amount, reason } satisfies DrawerMovementRequest,
+                attempt.request,
             );
             if (gen !== generation) throw new StaleResponseError();
-            setShift(res.data);
+            if (drawerAttempt === attempt) drawerAttempt = null;
+            // A successful replay may belong to a shift closed after the
+            // original movement. Never restore that shift as an open drawer.
+            if (res.data.status === ShiftStatus.OPEN) setShift(res.data);
+            else {
+                await fetchCurrent();
+                if (gen !== generation) throw new StaleResponseError();
+            }
         } catch (error) {
             if (gen !== generation) throw new StaleResponseError();
+            // Network failures and 5xx may have lost a committed answer.
+            // A definite 4xx refusal, or changed normalized body, starts anew.
+            if (
+                isAxiosError(error) &&
+                error.response &&
+                error.response.status < 500 &&
+                drawerAttempt === attempt
+            )
+                drawerAttempt = null;
             if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
                 shiftClosedElsewhere();
             }
@@ -242,6 +288,7 @@ export const useShiftStore = defineStore('shift', () => {
     /** Forgets everything, e.g. on logout. The server shift stays open. */
     function reset() {
         generation++;
+        drawerAttempt = null;
         activeShift.value = null;
         loaded.value = false;
         loadError.value = false;

@@ -129,6 +129,8 @@ describe('shift store (server-backed, issue #2)', () => {
         api.post.mockResolvedValue({ data: updated });
         const store = await loadStore();
 
+        store.activeShift = { ...SHIFT };
+
         // Larger than any float: the client does not check drops.
         await store.recordDrawer(
             DrawerMovementType.CASH_DROP,
@@ -137,6 +139,8 @@ describe('shift store (server-backed, issue #2)', () => {
         );
 
         expect(api.post).toHaveBeenCalledWith('/shifts/current/drawer', {
+            shiftId: SHIFT._id,
+            idempotencyKey: expect.any(String) as string,
             type: DrawerMovementType.CASH_DROP,
             amount: 1_000_000,
             reason: 'safe',
@@ -268,6 +272,7 @@ describe('shift store (server-backed, issue #2)', () => {
             const req = held('post');
             const store = await loadStore();
 
+            store.activeShift = { ...SHIFT };
             const pending = store.recordDrawer(
                 DrawerMovementType.CASH_IN,
                 100,
@@ -284,6 +289,7 @@ describe('shift store (server-backed, issue #2)', () => {
             const req = held('post');
             const store = await loadStore();
 
+            store.activeShift = { ...SHIFT };
             const pending = store.recordDrawer(
                 DrawerMovementType.CASH_IN,
                 100,
@@ -373,5 +379,93 @@ describe('shift store (server-backed, issue #2)', () => {
             expect(router.push).not.toHaveBeenCalled();
             expect(store.shiftInOpen).toBe(true);
         });
+    });
+});
+
+describe('drawer retry identity (#333)', () => {
+    beforeEach(() => {
+        setActivePinia(createPinia());
+        api.get.mockReset();
+        api.post.mockReset();
+    });
+    async function ready() {
+        const store = await loadStore();
+        store.activeShift = { ...SHIFT };
+        return store;
+    }
+    const move = (store: Awaited<ReturnType<typeof ready>>, amount = 100) =>
+        store.recordDrawer(DrawerMovementType.CASH_IN, amount, 'coins');
+    function request(index: number) {
+        return api.post.mock.calls[index]?.[1] as {
+            idempotencyKey: string;
+            shiftId: string;
+        };
+    }
+
+    it.each([
+        new Error('lost answer'),
+        apiError(502, ErrorCode.INTERNAL_ERROR),
+    ])('reuses the same key after an ambiguous failure: %s', async (error) => {
+        const store = await ready();
+        api.post
+            .mockRejectedValueOnce(error)
+            .mockResolvedValue({ data: SHIFT });
+        await expect(move(store)).rejects.toThrow();
+        await move(store);
+        expect(request(1)).toEqual(request(0));
+        await move(store);
+        expect(request(2).idempotencyKey).not.toBe(request(0).idempotencyKey);
+    });
+    it('makes a new key for a changed body and after a definite refusal', async () => {
+        const store = await ready();
+        api.post
+            .mockRejectedValueOnce(new Error('lost answer'))
+            .mockRejectedValueOnce(
+                apiError(400, ErrorCode.VALIDATION_INVALID_INPUT),
+            )
+            .mockResolvedValue({ data: SHIFT });
+        await expect(move(store)).rejects.toThrow();
+        await expect(move(store, 200)).rejects.toThrow();
+        await move(store, 200);
+        expect(
+            new Set([0, 1, 2].map((i) => request(i).idempotencyKey)).size,
+        ).toBe(3);
+    });
+    it('binds a request to its original shift and never restores a closed replay as active', async () => {
+        const store = await ready();
+        const next = { ...SHIFT, _id: 'next-shift' };
+        api.post.mockResolvedValue({
+            data: { ...SHIFT, status: ShiftStatus.CLOSED },
+        });
+        api.get.mockResolvedValue({ data: { shift: next } });
+        await move(store);
+        expect(request(0).shiftId).toBe(SHIFT._id);
+        expect(store.activeShift).toEqual(next);
+    });
+    it('rejects a closed replay whose follow-up current-shift read finishes after logout', async () => {
+        const store = await ready();
+        let answer!: (value: { data: { shift: typeof SHIFT | null } }) => void;
+        const response = new Promise<{ data: { shift: typeof SHIFT | null } }>(
+            (resolve) => {
+                answer = resolve;
+            },
+        );
+        api.post.mockResolvedValue({
+            data: { ...SHIFT, status: ShiftStatus.CLOSED },
+        });
+        api.get.mockReturnValue(response);
+        const pending = move(store);
+        await vi.waitFor(() => expect(api.get).toHaveBeenCalled());
+        store.reset();
+        store.drawerAction = DrawerMovementType.CASH_DROP;
+        answer({ data: { shift: SHIFT } });
+        await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
+        expect(store.activeShift).toBeNull();
+        expect(store.drawerAction).toBe(DrawerMovementType.CASH_DROP);
+    });
+    it('does not submit without an open shift', async () => {
+        const store = await loadStore();
+        await expect(move(store)).rejects.toThrow('Open a shift');
+        expect(api.post).not.toHaveBeenCalled();
     });
 });

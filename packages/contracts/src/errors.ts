@@ -55,6 +55,8 @@ export enum ErrorCode {
      * Nothing was reversed; open a shift first.
      */
     SHIFT_PAYOUT_NO_OPEN_SHIFT = 'SHIFT_005',
+    /** A drawer retry reused its key for different movement details. */
+    SHIFT_DRAWER_IDEMPOTENCY_MISMATCH = 'SHIFT_006',
 
     /** The caller is signed in but may not do this (generic 403). */
     FORBIDDEN = 'FORBIDDEN_001',

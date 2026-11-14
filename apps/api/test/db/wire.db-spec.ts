@@ -1,3 +1,4 @@
+import { drawerRequest } from './db-app';
 import { grantStepUp, seedSupplier } from './db-app';
 import { approvalHeaders, discountApprovalHeaders } from './approval-fixtures';
 import {
@@ -346,6 +347,7 @@ beforeAll(async () => {
     // (one voided, one refunded). The shift stays open.
     seed.opened = await post(seller, '/shifts', { counts: FLOAT_COUNTS });
     seed.drawer = await post(seller, '/shifts/current/drawer', {
+        ...(await drawerRequest(db, seller)),
         type: DrawerMovementType.CASH_IN,
         amount: 5_000,
         reason: 'Change',
@@ -392,6 +394,7 @@ beforeAll(async () => {
         reason: 'Mis-rung',
     });
     await post(closer, '/shifts/current/drawer', {
+        ...(await drawerRequest(db, closer)),
         type: DrawerMovementType.CASH_DROP,
         amount: 10_000,
         reason: 'Safe',
