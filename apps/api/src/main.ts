@@ -7,7 +7,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { createValidationPipe } from './common/pipes/validation.pipe';
 import { corsOptions } from './common/cors';
-import { isDeployedEnv } from './common/typed-config/app-env';
+import { applyTrustProxy, listenHost } from './common/http-topology';
 import { useBodyParsers } from './common/body-parsers';
 
 async function bootstrap() {
@@ -38,24 +38,19 @@ async function bootstrap() {
     // gets the CORS headers, so the client can read the error.
     useBodyParsers(app);
 
-    // Deployed (APP_ENV prod/stage on Railway), the API sits behind exactly one
-    // reverse proxy, which appends the real client address to
-    // X-Forwarded-For. Trusting that one hop makes `req.ip` the client, which
-    // the login/refresh rate limits key on. Trusting more hops (or `true`)
-    // would let a client pick its own IP by sending X-Forwarded-For; trusting
-    // none would put every client in the proxy's single rate-limit bucket.
-    // Locally (dev/test) there is no proxy, so the header is ignored.
-    if (isDeployedEnv(config.get('APP_ENV'))) {
-        app.set('trust proxy', 1);
-    }
+    // prod/stage trust their one cloud proxy hop; single-pc, dev and test
+    // trust none (see trustProxySetting, #358).
+    applyTrustProxy(app, config.get('APP_ENV'));
 
     app.enableShutdownHooks();
 
     const port = config.get('PORT') ?? process.env.PORT;
-    await app.listen(port, '0.0.0.0');
+    // single-pc listens on loopback only (#358); cloud keeps 0.0.0.0.
+    const host = listenHost(config.get('APP_ENV'), config.get('HOST'));
+    await app.listen(port, host);
 
     logger.log(
-        `API running on port: ${port}, APP_ENV=${config.get('APP_ENV')}, NODE_ENV=${process.env.NODE_ENV ?? 'unset'}`,
+        `API running on ${host}:${port}, APP_ENV=${config.get('APP_ENV')}, NODE_ENV=${process.env.NODE_ENV ?? 'unset'}`,
     );
 }
 

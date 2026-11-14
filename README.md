@@ -102,6 +102,26 @@ variable of each service, which client variables are build arguments, `APP_ENV`
 versus `NODE_ENV` (and the client's `VITE_APP_ENV`), the security headers,
 healthchecks and running the images locally.
 
+### Single-PC edition: local access (#358)
+
+The single-PC edition ([packaging/single-pc/ARCHITECTURE.md](packaging/single-pc/ARCHITECTURE.md))
+runs the same code with `APP_ENV=single-pc`. Chrome opens
+`https://localhost:1443`, served by Caddy
+([packaging/single-pc/caddy/Caddyfile](packaging/single-pc/caddy/Caddyfile))
+on `127.0.0.1` and `::1` with its internal CA; it serves the client and
+forwards `/v1/*` to the API.
+
+- API: `APP_ENV=single-pc`, `PORT=13000`, `FRONTEND_URL=https://localhost:1443`,
+  `DOMAIN` blank. It listens on `127.0.0.1` (`HOST` may be `::1`, nothing
+  else), trusts no proxy (`req.ip` is the socket peer), uses prod's strict secret rules and
+  sets Secure, host-only, `SameSite=Lax` cookies. Every request must carry
+  `Host: localhost:1443`, and an `Origin` must be `https://localhost:1443`,
+  or it gets a 403 before its body is read. GET/HEAD `/v1/health*` are
+  exempt, so diagnostics may call `127.0.0.1:13000` directly.
+- Client build: `VITE_APP_ENV=single-pc VITE_API_URL=/v1` (same-origin,
+  relative) and no `VITE_DOMAIN`.
+- Cloud and staging (`prod`/`stage`) are unchanged.
+
 ## Deploy notes (operator)
 
 The client Docker build fetches the login photo itself, best effort (see

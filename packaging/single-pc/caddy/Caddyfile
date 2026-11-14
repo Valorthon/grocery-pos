@@ -1,0 +1,69 @@
+# Single-PC local HTTPS entry point (#358, ARCHITECTURE.md "Local access
+# interface"). Chrome on this computer opens https://localhost:1443. Caddy
+# serves the compiled client and forwards /v1/* to the API on loopback, so
+# the browser sees one origin: no CORS, host-only cookies, same-origin CSP
+# reports.
+#
+# Environment (set by the service definition, #360/#362):
+#   GPOS_CLIENT_ROOT  the compiled client (apps/client/dist) of this release
+# Caddy's own state (internal CA, certificates) lives in its data directory
+# (XDG_DATA_HOME / AppData), which the installer places under the protected
+# persistent `tls` directory.
+{
+	# No local admin API (it would let any local process reconfigure the
+	# proxy) and no saved config to resume from.
+	admin off
+	persist_config off
+	# Certificates from Caddy's per-installation internal CA only: no public
+	# ACME, no HTTP listener for redirects. The installer installs the root
+	# into the Windows trust store itself (#362), so Caddy never does.
+	local_certs
+	skip_install_trust
+	auto_https disable_redirects
+	# Never listen on a LAN interface.
+	default_bind 127.0.0.1 [::1]
+}
+
+https://localhost:1443 {
+	bind 127.0.0.1 [::1]
+	tls internal
+
+	encode gzip
+
+	# The nginx template's policy (apps/client/nginx.conf.template), with the
+	# API on this same origin: connect-src and the CSP report endpoint are
+	# 'self'. No Strict-Transport-Security: Chrome would apply it to every
+	# localhost port on this computer.
+	header {
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-to csp-endpoint; report-uri /v1/csp-report"
+		Reporting-Endpoints "csp-endpoint=\"https://localhost:1443/v1/csp-report\""
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# The API (APP_ENV=single-pc, loopback only). Caddy keeps the browser's
+	# Host, which the API checks against FRONTEND_URL, and replaces any
+	# client-sent X-Forwarded-For with the real peer (no trusted_proxies).
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:13000
+	}
+
+	# Hashed build output: cached for a year, a missing file is a 404 (never
+	# index.html served as JS).
+	handle /assets/* {
+		root * {$GPOS_CLIENT_ROOT}
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Everything else revalidates; unknown paths are the SPA.
+	handle {
+		root * {$GPOS_CLIENT_ROOT}
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

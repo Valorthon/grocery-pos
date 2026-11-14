@@ -89,6 +89,14 @@ describe.each([
         sameSite: 'lax',
         domain: '.example.com',
     },
+    // single-pc (#358): HTTPS at https://localhost:1443 behind a
+    // same-origin proxy, so Secure, Lax and host-only (no DOMAIN).
+    {
+        env: { APP_ENV: 'single-pc' },
+        secure: true,
+        sameSite: 'lax',
+        domain: undefined,
+    },
     {
         env: { APP_ENV: 'test' },
         secure: false,
