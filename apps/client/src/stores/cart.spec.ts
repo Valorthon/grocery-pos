@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, getActivePinia, setActivePinia } from 'pinia';
 import { DiscountType } from '@grocery-pos/contracts';
 import {
@@ -354,6 +354,38 @@ describe('the saved checkout attempt (#23 review)', () => {
         const again = useCartStore();
         again.setOwner('ana');
         expect(again.attempt).toEqual(ATTEMPT);
+    });
+
+    it.each(['getItem', 'setItem'] as const)(
+        'keeps the previous attempt and basket when storage %s fails',
+        (operation) => {
+            const cart = useCartStore();
+            cart.setOwner('ana');
+            cart.add(MILK);
+            cart.setAttempt(ATTEMPT);
+            const previous = localStorage.getItem(cartStorageKey('ana'));
+            const storage = vi
+                .spyOn(Storage.prototype, operation)
+                .mockImplementation(() => {
+                    throw new DOMException('unavailable', 'SecurityError');
+                });
+
+            expect(() =>
+                cart.setAttempt({ ...ATTEMPT, idempotencyKey: 'key-2' }),
+            ).toThrow('Nothing was charged');
+            expect(cart.items).toEqual([{ ...MILK, quantity: 1 }]);
+            expect(cart.attempt).toEqual(ATTEMPT);
+            storage.mockRestore();
+            expect(localStorage.getItem(cartStorageKey('ana'))).toBe(previous);
+        },
+    );
+
+    it('refuses an attempt without a cashier to save it for', () => {
+        const cart = useCartStore();
+        cart.add(MILK);
+        expect(() => cart.setAttempt(ATTEMPT)).toThrow('could not be saved');
+        expect(cart.attempt).toBeNull();
+        expect(cart.items).toEqual([{ ...MILK, quantity: 1 }]);
     });
 
     it('is cleared on a sale or a void (clear) and on logout (reset)', () => {

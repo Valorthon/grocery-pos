@@ -43,6 +43,8 @@ beforeEach(() => {
     get.mockReset();
     post.mockReset();
     localStorage.clear();
+    // The authenticated layout binds a cashier before checkout can save its key.
+    useCartStore().setOwner('u-ana');
 });
 
 afterEach(() => {
@@ -1819,6 +1821,59 @@ describe('Sell checkout across a reload (#23 review)', () => {
             localStorage.getItem('grocery_pos_cart_v1:u-ana')!,
         ) as { attempt: StoredAttempt | null };
     }
+
+    it.each(['quota', 'security'])(
+        'refuses checkout when the retry key cannot be saved (%s), then recovers safely',
+        async (failure) => {
+            useCartStore().setOwner('u-ana');
+            withTicket();
+            mount();
+            const basket = localStorage.getItem('grocery_pos_cart_v1:u-ana');
+            const storage = vi
+                .spyOn(Storage.prototype, 'setItem')
+                .mockImplementation(() => {
+                    throw new DOMException(
+                        failure,
+                        failure === 'quota'
+                            ? 'QuotaExceededError'
+                            : 'SecurityError',
+                    );
+                });
+
+            await payExactCash();
+            expect(post).not.toHaveBeenCalled();
+            expect(text('checkout-error')).toContain('could not be saved');
+            expect(text('checkout-error')).toContain('Nothing was charged');
+            expect(dialog('Complete Payment')).not.toBeNull();
+            expect(cartNames()).toEqual(['2x milk', '1x mints']);
+            expect(useCartStore().locked).toBe(false);
+            expect(useCartStore().attempt).toBeNull();
+            expect(localStorage.getItem('grocery_pos_cart_v1:u-ana')).toBe(
+                basket,
+            );
+
+            // A second click while storage is still unavailable must not bypass
+            // the failed durable write through an in-memory attempt.
+            await clickButton(buttonNamed('Retry'));
+            expect(post).not.toHaveBeenCalled();
+
+            storage.mockRestore();
+            post.mockRejectedValueOnce(networkError());
+            await clickButton(buttonNamed('Retry'));
+            const firstKey = post.mock.calls[0][1].idempotencyKey;
+            expect(saved().attempt?.idempotencyKey).toBe(firstKey);
+
+            // Storage recovered; this request committed but its answer was lost.
+            // Reloading must replay it with the durably saved key.
+            reload();
+            post.mockResolvedValueOnce({ data: RECEIPT });
+            await payExactCash();
+            expect(post).toHaveBeenCalledTimes(2);
+            expect(post.mock.calls[1][1].idempotencyKey).toBe(firstKey);
+            expect(cartNames()).toEqual([]);
+            expect(dialog('Transaction Complete')).not.toBeNull();
+        },
+    );
 
     it('saves the key with the basket before the sale is sent', async () => {
         useCartStore().setOwner('u-ana');
