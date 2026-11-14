@@ -43,9 +43,15 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     exit 0
 }
 
-# Removable drives only (the export refuses anything else anyway).
-$drives = @(Get-CimInstance -ClassName Win32_LogicalDisk -Filter 'DriveType = 2' |
-    ForEach-Object { $_.DeviceID + '\' })
+# The drives the export accepts, by its own rule (usb-drives.mjs reuses
+# removable.mjs: USB/SD/MMC/1394 bus, never the system or installation
+# disk), so USB hard disks and SSDs are listed too.
+$node = Join-Path $Release 'node\node.exe'
+$listing = & $node (Join-Path $Release 'tools\installer\usb-drives.mjs') '--data-root' $DataRoot
+$drives = @()
+if ($LASTEXITCODE -eq 0 -and $listing) {
+    $drives = @(([string]::Join('', @($listing)) | ConvertFrom-Json))
+}
 if ($drives.Count -eq 0) {
     Show-Message ("No USB drive was found.`n`nPlug in your backup USB drive, " +
         'wait until Windows shows it, then open "Back up to USB drive" again.') 'Warning'
@@ -81,7 +87,6 @@ $form.CancelButton = $cancel
 if ($form.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { exit 0 }
 $target = [string]$combo.SelectedItem
 
-$node = Join-Path $Release 'node\node.exe'
 $script = Join-Path $Release 'tools\backup\backup.mjs'
 $bin = Join-Path $Release 'mongodb\bin'
 
@@ -93,8 +98,14 @@ function Invoke-Backup([string[]]$Arguments) {
         $quoted = $Arguments | ForEach-Object { '"' + ($_ -replace '(\\+)$', '$1$1') + '"' }
         $process = Start-Process -FilePath $node -ArgumentList $quoted -Wait -PassThru `
             -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
-        $lines = @(Get-Content -LiteralPath $err | Where-Object { $_ -match '\S' })
-        $reason = if ($lines.Count) { $lines[-1] } else { '' }
+        # Only backup.mjs's own fixed result lines ("Refused: ..." or
+        # "Failed [CODE]: ..."); anything else, or anything that looks like
+        # a connection string or credential, becomes a generic line.
+        $lines = @(Get-Content -LiteralPath $err | Where-Object { $_ -match '^(Refused: |Failed )' })
+        $reason = 'The backup tool reported an error.'
+        if ($lines.Count -and $lines[-1] -notmatch 'mongodb(\+srv)?://|password|secret') {
+            $reason = $lines[-1]
+        }
         return @{ Code = $process.ExitCode; Reason = $reason }
     } finally {
         Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue

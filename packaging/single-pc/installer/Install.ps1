@@ -104,7 +104,12 @@ try {
 
     $nodeArgs = @((Join-Path $run 'tools\installer\install.mjs'), $Mode)
     if ($Mode -eq 'install' -or $Mode -eq 'repair') {
-        $nodeArgs += @('--bundle', $bundle)
+        # The manifest bytes already checked against -ManifestSha256, written
+        # into the admin-only run folder; install.mjs never reads the bundle's.
+        $verifiedManifest = Join-Path $run 'bundle-manifest.json'
+        [System.IO.File]::WriteAllBytes($verifiedManifest, $manifestBytes)
+        $nodeArgs += @('--bundle', $bundle, '--manifest', $verifiedManifest,
+            '--manifest-sha256', $manifestHash)
         if ($BackupTime) { $nodeArgs += @('--backup-time', $BackupTime) }
     }
     if ($Mode -eq 'install') {

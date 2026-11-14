@@ -40,7 +40,7 @@ import {
     releaseLayout,
     serviceDefinitions,
 } from '../runtime/layout.mjs';
-import { MANIFEST, verifyTree } from './bundle.mjs';
+import { sha256, verifyTree } from './bundle.mjs';
 import {
     DEFAULT_BACKUP_TIME,
     HANDOVER_FILE,
@@ -87,8 +87,15 @@ export function parseArgs(argv) {
         throw new Error(`The first argument is one of: ${MODES.join(', ')}.`);
     }
     const allowed = {
-        install: ['bundle', 'admin-username', 'store-timezone', 'backup-time'],
-        repair: ['bundle', 'backup-time'],
+        install: [
+            'bundle',
+            'manifest',
+            'manifest-sha256',
+            'admin-username',
+            'store-timezone',
+            'backup-time',
+        ],
+        repair: ['bundle', 'manifest', 'manifest-sha256', 'backup-time'],
         uninstall: ['remove-ca-trust'],
         'handover-done': [],
     }[mode];
@@ -111,9 +118,18 @@ export function parseArgs(argv) {
         }
         out[key] = value;
     }
-    if ((mode === 'install' || mode === 'repair') && !out.bundle) {
-        throw new Error('--bundle is required.');
+    if (mode === 'install' || mode === 'repair') {
+        for (const name of ['bundle', 'manifest', 'manifestSha256']) {
+            if (!out[name])
+                throw new Error(
+                    `--${name.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())} is required.`,
+                );
+        }
+        if (!/^[0-9a-f]{64}$/i.test(out.manifestSha256)) {
+            throw new Error('--manifest-sha256 must be a SHA-256 hash.');
+        }
     }
+
     if (out.backupTime !== undefined)
         out.backupTime = parseTime(out.backupTime);
     if (
@@ -128,13 +144,27 @@ export function parseArgs(argv) {
 // ------------------------------------------------------------ bundle
 
 /** Reads the bundle manifest and verifies every release file. */
-export async function readBundle(bundleDir) {
+/**
+ * The manifest is never read from the (possibly user-writable) bundle
+ * folder: Install.ps1 passes its own copy in the admin-only run folder and
+ * the SHA-256 the vendor recorded, and this re-checks that pin. Every
+ * release file is then verified against it here and again at the
+ * destination after copying (`placeRelease`).
+ */
+export async function readBundle(
+    bundleDir,
+    { manifest: manifestPath, manifestSha256 },
+) {
     const dir = resolve(bundleDir);
-    const manifest = JSON.parse(
-        await readFile(join(dir, MANIFEST), 'utf8').catch(() => {
-            throw new RefusedError('This folder is not a Grocery POS bundle.');
-        }),
-    );
+    const bytes = await readFile(manifestPath).catch(() => {
+        throw new RefusedError('The verified bundle manifest is missing.');
+    });
+    if (sha256(bytes) !== String(manifestSha256).toLowerCase()) {
+        throw new RefusedError(
+            'The bundle manifest does not match the SHA-256 the vendor recorded.',
+        );
+    }
+    const manifest = JSON.parse(bytes.toString('utf8'));
     if (!/^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$/.test(manifest.version ?? '')) {
         throw new RefusedError('The bundle manifest has no valid version.');
     }
@@ -192,7 +222,10 @@ export async function placeRelease(bundle, releasesDir, log, now = new Date()) {
     await cp(join(bundle.dir, 'release'), partial, { recursive: true });
     const problems = await verifyTree(partial, files, 'release/');
     if (problems.length) {
-        throw new Error(`Copied release failed verification: ${problems[0]}`);
+        await rm(partial, { recursive: true, force: true });
+        throw new RefusedError(
+            `The release changed while it was copied (${problems[0]}); nothing was installed.`,
+        );
     }
     await rename(partial, target);
     log(`release: ${bundle.manifest.version} installed`);
@@ -294,7 +327,10 @@ function handoverNote(username) {
 
 async function installOrRepair(options, ctx, log) {
     const loc = ctx.locations;
-    const bundle = await readBundle(options.bundle);
+    const bundle = await readBundle(options.bundle, {
+        manifest: options.manifest,
+        manifestSha256: options.manifestSha256,
+    });
     const dataState = await classifyDataRoot(loc.dataRoot);
     const facts = await ctx.facts({ loc, bundle, dataState });
     const { refusals, warnings } = evaluatePreflight(

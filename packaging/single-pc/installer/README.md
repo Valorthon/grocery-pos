@@ -97,7 +97,13 @@ user-writable (USB stick, Downloads): it checks the manifest's SHA-256
 against `-ManifestSha256`, copies `release\node` and `release\tools` into a
 fresh `%ProgramFiles%\Valorthon\GroceryPOS\installer-run-<guid>` (only
 administrators and SYSTEM can write there), refuses any unlisted file,
-verifies every hash there, runs `install.mjs` from that copy and deletes it.
+verifies every hash there, writes the manifest bytes it checked into the
+same folder and runs `install.mjs` from that copy with `--manifest <copy>
+--manifest-sha256 <hash>`, then deletes it. `install.mjs` never reads the
+bundle's own manifest: it re-checks its copy against the hash, verifies the
+bundle's release files against it, and verifies every file again at the
+destination after copying (a file swapped in between is refused and nothing
+is installed).
 
 Steps (each idempotent; `state\installer.json` records the stages):
 
@@ -161,11 +167,16 @@ Steps (each idempotent; `state\installer.json` records the stages):
 12. **Shortcut** "Back up to USB drive" in the same two places (owner
     decision 2026-11-15): `BackupToUsb.ps1 -DataRoot <root> -Release
 <release>` asks for elevation (the Windows UAC prompt; the person needs an
-    administrator account of this PC), lists removable drives
-    (`Win32_LogicalDisk` type 2) to pick one, runs `backup.mjs create --kind
+    administrator account of this PC), lists the drives the export
+    accepts (`usb-drives.mjs`, which applies `removable.mjs`'s rule per
+    lettered volume: USB/SD/MMC/1394 bus or removable type, never the
+    boot/system disk or the installation disk, so USB hard disks and SSDs
+    are listed) to pick one, runs `backup.mjs create --kind
 manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
     export itself refuses non-removable drives), and shows a plain success
-    or failure message with the command's own reason line.
+    or failure message. Only `backup.mjs`'s own fixed `Refused:`/`Failed
+[CODE]:` lines are shown, never one that looks like a connection string or
+    credential (`report()` never prints driver text or `detail`).
 13. **Old releases**: after a successful install or repair, `releases\`
     keeps the current release and the newest other complete one (for
     rollback by #364); older releases and every `*.damaged-*` and

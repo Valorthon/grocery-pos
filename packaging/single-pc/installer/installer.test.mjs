@@ -53,6 +53,9 @@ import {
     uninstallSteps,
 } from './plan.mjs';
 import { readZip, writeZip } from './zip.mjs';
+import { acceptableDrives, parseLetters } from './usb-drives.mjs';
+import { classifyWindows } from '../backup/removable.mjs';
+import { BackupError, report } from '../backup/backup.mjs';
 
 const here = new URL('.', import.meta.url);
 const components = JSON.parse(
@@ -267,6 +270,19 @@ async function fakeApp(release) {
         await mkdir(join(release, path, '..'), { recursive: true });
         await writeFile(join(release, path), text);
     }
+}
+
+/** What Install.ps1 hands install.mjs: its own verified manifest copy in a
+ *  separate (admin-only) folder and the vendor-recorded hash. */
+async function pin(bundle) {
+    const run = await scratch();
+    const bytes = await readFile(join(bundle, MANIFEST));
+    await writeFile(join(run, MANIFEST), bytes);
+    return {
+        bundle,
+        manifest: join(run, MANIFEST),
+        manifestSha256: sha256(bytes),
+    };
 }
 
 async function makeBundle(dir) {
@@ -699,22 +715,26 @@ function recordingContext(dir, { failProvisionOnce = false } = {}) {
 test('install, repair, uninstall and reinstall keep data, secrets and the release separate', async () => {
     const dir = await scratch();
     const bundle = await makeBundle(dir);
+    const pinned = await pin(bundle);
     const ctx = recordingContext(dir, { failProvisionOnce: true });
     const where = ctx.locations;
 
     await assert.rejects(
-        runInstaller({ mode: 'install', bundle }, ctx),
+        runInstaller({ mode: 'install', ...pinned }, ctx),
         /--admin-username is required/,
     );
     // Interrupted install (power cut during provisioning): nothing removed,
     // the release stays verified in place, the re-run resumes.
     await assert.rejects(
-        runInstaller({ mode: 'install', bundle, adminUsername: 'owner' }, ctx),
+        runInstaller(
+            { mode: 'install', ...pinned, adminUsername: 'owner' },
+            ctx,
+        ),
         /power cut/,
     );
     assert.ok(await stat(join(where.releasesDir, '0.0.1-test')));
     const result = await runInstaller(
-        { mode: 'install', bundle, adminUsername: 'owner' },
+        { mode: 'install', ...pinned, adminUsername: 'owner' },
         ctx,
     );
     assert.equal(result.handover, where.handoverDir);
@@ -771,11 +791,14 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
     // Install again is refused (services exist); repair stops in reverse
     // order, keeps the verified release, re-registers and keeps the admin.
     await assert.rejects(
-        runInstaller({ mode: 'install', bundle, adminUsername: 'owner' }, ctx),
+        runInstaller(
+            { mode: 'install', ...pinned, adminUsername: 'owner' },
+            ctx,
+        ),
         /use repair/,
     );
     ctx.log.length = 0;
-    await runInstaller({ mode: 'repair', bundle }, ctx);
+    await runInstaller({ mode: 'repair', ...pinned }, ctx);
     assert.deepEqual(
         ctx.log.filter((e) => e[0] === 'stop').map((e) => e[1]),
         [SERVICES.proxy, SERVICES.api, SERVICES.mongo],
@@ -801,7 +824,7 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
     // A damaged release is moved aside and replaced on repair.
     const release = join(where.releasesDir, '0.0.1-test');
     await writeFile(join(release, 'caddy', 'caddy.exe'), 'damaged');
-    await runInstaller({ mode: 'repair', bundle }, ctx);
+    await runInstaller({ mode: 'repair', ...pinned }, ctx);
     assert.equal(
         await readFile(join(release, 'caddy', 'caddy.exe'), 'utf8'),
         'caddy',
@@ -830,7 +853,7 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
 
     // Reinstall over the preserved data: no username needed, admin kept.
     ctx.log.length = 0;
-    await runInstaller({ mode: 'install', bundle }, ctx);
+    await runInstaller({ mode: 'install', ...pinned }, ctx);
     assert.ok(ctx.log.some((e) => e[0] === 'provision'));
     assert.equal(
         await readFile(layout(where.dataRoot).apiEnv, 'utf8'),
@@ -854,13 +877,17 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
 test('a modified bundle and a foreign data folder are refused before any change', async () => {
     const dir = await scratch();
     const bundle = await makeBundle(dir);
+    const pinned = await pin(bundle);
     const ctx = recordingContext(dir);
     await writeFile(
         join(bundle, 'release', 'api', 'dist', 'main.js'),
         'tampered',
     );
     await assert.rejects(
-        runInstaller({ mode: 'install', bundle, adminUsername: 'owner' }, ctx),
+        runInstaller(
+            { mode: 'install', ...pinned, adminUsername: 'owner' },
+            ctx,
+        ),
         /damaged or modified/,
     );
     const clean = await makeBundle(await scratch());
@@ -868,13 +895,59 @@ test('a modified bundle and a foreign data folder are refused before any change'
     await writeFile(join(ctx.locations.dataRoot, 'someone-elses.txt'), '');
     await assert.rejects(
         runInstaller(
-            { mode: 'install', bundle: clean, adminUsername: 'owner' },
+            { mode: 'install', ...(await pin(clean)), adminUsername: 'owner' },
             ctx,
         ),
         /not a Grocery POS installation/,
     );
     assert.deepEqual(ctx.log, []);
     assert.equal(await stat(ctx.locations.releasesDir).catch(() => null), null);
+    await rm(dir, { recursive: true });
+});
+
+test('a manifest or release file swapped after Install.ps1 checked it is refused', async () => {
+    const dir = await scratch();
+    const bundle = await makeBundle(dir);
+    const pinned = await pin(bundle);
+    const install = (ctx, extra = {}) =>
+        runInstaller(
+            { mode: 'install', ...pinned, adminUsername: 'owner', ...extra },
+            ctx,
+        );
+
+    // The bundle's own manifest is rewritten to match a swapped file: the
+    // installer only trusts its verified copy, so the swap is caught.
+    const evil = join(bundle, 'release', 'caddy', 'caddy.exe');
+    await writeFile(evil, 'evil');
+    const manifest = JSON.parse(await readFile(join(bundle, MANIFEST), 'utf8'));
+    manifest.files['release/caddy/caddy.exe'] = sha256(Buffer.from('evil'));
+    await writeFile(join(bundle, MANIFEST), JSON.stringify(manifest));
+    const ctx = recordingContext(dir);
+    await assert.rejects(install(ctx), /damaged or modified/);
+
+    // A verified copy that no longer matches the recorded hash is refused.
+    await writeFile(pinned.manifest, JSON.stringify(manifest));
+    await assert.rejects(install(ctx), /does not match the SHA-256/);
+
+    // A file swapped after verification, while the release is being placed,
+    // is caught at the destination; nothing is installed.
+    const clean = await makeBundle(await scratch());
+    const cleanPin = await pin(clean);
+    const racing = recordingContext(await scratch());
+    const facts = racing.facts;
+    racing.facts = async (...args) => {
+        await writeFile(join(clean, 'release', 'caddy', 'caddy.exe'), 'evil');
+        return facts(...args);
+    };
+    await assert.rejects(
+        runInstaller(
+            { mode: 'install', ...cleanPin, adminUsername: 'owner' },
+            racing,
+        ),
+        /changed while it was copied/,
+    );
+    assert.deepEqual(await readdir(racing.locations.releasesDir), []);
+    assert.ok(!racing.log.some((e) => e[0] === 'provision'));
     await rm(dir, { recursive: true });
 });
 
@@ -886,7 +959,18 @@ test('installer arguments are validated per mode', () => {
         /Unknown option/,
     );
     assert.throws(
-        () => parseArgs(['repair', '--bundle', 'x', '--backup-time', '7pm']),
+        () =>
+            parseArgs([
+                'repair',
+                '--bundle',
+                'x',
+                '--manifest',
+                'm',
+                '--manifest-sha256',
+                'a'.repeat(64),
+                '--backup-time',
+                '7pm',
+            ]),
         /HH:MM/,
     );
     assert.deepEqual(parseArgs(['uninstall', '--remove-ca-trust']), {
@@ -898,6 +982,10 @@ test('installer arguments are validated per mode', () => {
             'install',
             '--bundle',
             'b',
+            '--manifest',
+            'm',
+            '--manifest-sha256',
+            'a'.repeat(64),
             '--admin-username',
             'owner',
             '--backup-time',
@@ -906,6 +994,8 @@ test('installer arguments are validated per mode', () => {
         {
             mode: 'install',
             bundle: 'b',
+            manifest: 'm',
+            manifestSha256: 'a'.repeat(64),
             adminUsername: 'owner',
             backupTime: '21:00',
         },
@@ -972,7 +1062,15 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
     );
     const backup = await readFile(new URL('BackupToUsb.ps1', here), 'utf8');
     assert.match(backup, /-Verb RunAs/);
-    assert.match(backup, /DriveType = 2/);
+    assert.match(backup, /usb-drives\.mjs/);
+    assert.doesNotMatch(backup, /DriveType/);
+    assert.ok(
+        backup.includes("'^(Refused: |Failed )'"),
+        'fixed result lines only',
+    );
+    assert.ok(
+        backup.includes("-notmatch 'mongodb(\\+srv)?://|password|secret'"),
+    );
     assert.match(backup, /'create'.*'manual'/s);
     assert.match(backup, /'export', '--data-root'/);
     const reminder = await readFile(
@@ -983,4 +1081,69 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
     const launch = await readFile(new URL('Launch.ps1', here), 'utf8');
     assert.match(launch, /\/v1\/health\/ready/);
     assert.match(launch, /Tls12/);
+});
+
+// ------------------------------------------------------------ USB backup
+
+test('the USB drive list uses the export rule, so USB disks and SSDs are offered', async () => {
+    assert.deepEqual(parseLetters('E\r\nC\r\n\r\nf\r\nE\r\nnot a letter\r\n'), [
+        'C:\\',
+        'E:\\',
+        'F:\\',
+    ]);
+    // C: system NVMe, D: second internal SATA disk, E: USB stick, F: USB
+    // SSD (fixed drive type, USB bus), G: SD card, H: installation's disk.
+    const facts = {
+        'C:\\': {
+            diskNumber: 0,
+            busType: 'NVMe',
+            driveType: 'Fixed',
+            isBoot: true,
+            isSystem: true,
+        },
+        'D:\\': { diskNumber: 1, busType: 'SATA', driveType: 'Fixed' },
+        'E:\\': { diskNumber: 2, busType: 'USB', driveType: 'Removable' },
+        'F:\\': { diskNumber: 3, busType: 'USB', driveType: 'Fixed' },
+        'G:\\': { diskNumber: 4, busType: 'SD', driveType: 'Removable' },
+        'H:\\': { diskNumber: 5, busType: 'USB', driveType: 'Fixed' },
+    };
+    const root = { diskNumber: 5 };
+    const media = async (letter) => classifyWindows(facts[letter], root);
+    assert.deepEqual(
+        await acceptableDrives(Object.keys(facts), '/data', media),
+        ['E:\\', 'F:\\', 'G:\\'],
+    );
+    // A drive whose facts cannot be read is never offered.
+    assert.deepEqual(
+        await acceptableDrives(['Z:\\'], '/data', async () => {
+            throw new Error('no facts');
+        }),
+        [],
+    );
+});
+
+test('backup failures shown to the owner never carry secrets or connection strings', () => {
+    const written = [];
+    const original = process.stderr.write;
+    process.stderr.write = (text) => (written.push(String(text)), true);
+    try {
+        report(
+            new Error('connect mongodb://gpos_root:s3cret@127.0.0.1:27018/x'),
+        );
+        report(
+            new BackupError(
+                'DUMP_FAILED',
+                'mongodump failed.',
+                'uri: mongodb://gpos_root:s3cret@127.0.0.1:27018',
+            ),
+        );
+    } finally {
+        process.stderr.write = original;
+    }
+    const text = written.join('');
+    assert.doesNotMatch(text, /mongodb:\/\/|s3cret|gpos_root/);
+    // Every line is one the dialog shows (Refused: / Failed ...).
+    for (const line of text.split('\n').filter(Boolean)) {
+        assert.match(line, /^(Refused: |Failed )/);
+    }
 });

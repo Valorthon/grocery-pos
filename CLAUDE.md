@@ -1218,7 +1218,9 @@ on upstream fixes).
 - `Install.ps1 -ManifestSha256 <hash>` (PowerShell 5.1, elevated) refuses
   another manifest, copies node\ and tools\ into a fresh admin-only
   `%ProgramFiles%\Valorthon\GroceryPOS\installer-run-<guid>`, refuses
-  unlisted files, verifies there and runs `install.mjs`
+  unlisted files, verifies there and runs `install.mjs` with its verified
+  manifest copy and hash (never the bundle's manifest; release files are
+  re-verified at the destination)
   (install|repair|uninstall|handover-done) from the copy, never from the
   bundle folder. Logic is in `plan.mjs` (pure) and `install.mjs`
   (injectable context); no MSI/Inno tooling. Preflight refuses before any
@@ -1233,8 +1235,8 @@ on upstream fixes).
   missed); weekly reminder Monday 09:00 for the logged-on user, pointing to
   "Back up to USB drive". Shortcuts on the Public Desktop and common Start
   menu: "Grocery POS" runs `Launch.ps1` (waits for `/v1/health/ready`,
-  then Chrome); "Back up to USB drive" runs `BackupToUsb.ps1` (UAC
-  elevation, pick a removable drive, `create --kind manual` then
+  then Chrome); "Back up to USB drive" runs `BackupToUsb.ps1` (UAC elevation, pick a drive the export accepts via `usb-drives.mjs` +
+  `removable.mjs`, USB disks/SSDs included, `create --kind manual` then
   `export`, plain success/failure messages).
 - Install/repair keep the current release and the newest other one in
   `releases\`; older, `*.damaged-*` and `*.partial` copies are deleted.

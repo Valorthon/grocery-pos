@@ -63,6 +63,8 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/installer/Launch.ps1',
     'tools/installer/ExportReminder.ps1',
     'tools/installer/BackupToUsb.ps1',
+    'tools/installer/usb-drives.mjs',
+    'tools/backup/removable.mjs',
     'tools/installer/Install.ps1',
     'notices/COMPONENTS.md',
     // Apache-2.0 §4(a): Caddy's license text ships with it.
