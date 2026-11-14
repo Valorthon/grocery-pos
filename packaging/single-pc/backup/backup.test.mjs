@@ -185,17 +185,11 @@ test('argument parsing is strict and paths are absolute', () => {
             ]),
         /kind/,
     );
-    assert.equal(
-        parseArgs([
-            'export',
-            '--data-root',
-            root,
-            '--to',
-            root,
-            '--test-allow-fixed-destination',
-        ]).testAllowFixedDestination,
-        true,
-    );
+    // No operator option bypasses the removable-only export rule.
+    for (const flag of ['--test-allow-fixed-destination', '--allow-same-disk'])
+        assert.throws(() =>
+            parseArgs(['export', '--data-root', root, '--to', root, flag]),
+        );
     assert.throws(
         () => parseRestoreArgs(['--data-root', root, '--from', root]),
         /--confirm is required/,
@@ -465,6 +459,55 @@ test('an unreadable status file is kept aside and reported, never silently reset
             ),
         );
         assert.ok(status.consecutiveFailures >= 1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('the export CLI refuses a fixed destination unless the test harness allows it', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-export-'));
+    try {
+        const paths = layout(join(dir, 'root'));
+        await mkdir(paths.dirs.state, { recursive: true });
+        await mkdir(paths.dirs.backups, { recursive: true });
+        await writeFile(
+            paths.install,
+            JSON.stringify({ schema: 1, installationId: 'i' }),
+        );
+        await fakeBackup(
+            paths.dirs.backups,
+            '20261113T000000Z-scheduled-cccccc',
+            '2026-11-13T00:00:00Z',
+        );
+        const to = join(dir, 'fixed');
+        await mkdir(to);
+        const cli = fileURLToPath(new URL('./backup.mjs', import.meta.url));
+        const args = [cli, 'export', '--data-root', paths.root, '--to', to];
+        const { GPOS_TEST_ALLOW_FIXED_DESTINATION: _, ...env } = process.env;
+        let r = spawnSync(process.execPath, args, { encoding: 'utf8', env });
+        assert.equal(r.status, 1);
+        assert.match(
+            r.stderr,
+            /DESTINATION_(SAME_DISK|NOT_REMOVABLE|UNKNOWN_MEDIA)/,
+        );
+        assert.deepEqual(await readdir(to), []);
+        r = spawnSync(
+            process.execPath,
+            [...args, '--test-allow-fixed-destination'],
+            {
+                encoding: 'utf8',
+                env,
+            },
+        );
+        assert.equal(r.status, 2, 'no bypass option');
+        r = spawnSync(process.execPath, args, {
+            encoding: 'utf8',
+            env: { ...env, GPOS_TEST_ALLOW_FIXED_DESTINATION: '1' },
+        });
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(await readdir(to), [
+            'GroceryPOS-backup-20261113T000000Z-scheduled-cccccc',
+        ]);
     } finally {
         await rm(dir, { recursive: true, force: true });
     }

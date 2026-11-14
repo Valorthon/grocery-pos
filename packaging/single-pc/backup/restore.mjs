@@ -465,7 +465,7 @@ export async function restore(options, log = () => {}) {
             }
             await checkInstallationDatabase(root, install);
             // Recorded in the restored database, so it survives the restore.
-            await db.collection('audits').insertOne(
+            await db.collection('auditlogs').insertOne(
                 auditEntry({
                     backupId: manifest.backupId,
                     backupCreatedAt: manifest.createdAt,

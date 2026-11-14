@@ -43,9 +43,10 @@ const { MongoClient } = createRequire(join(apiDir, 'package.json'))(
     'mongoose',
 ).mongo;
 
-function run(args, { input } = {}) {
+function run(args, { input, env } = {}) {
     const child = spawn(process.execPath, args, {
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, ...env },
     });
     let stdout = '';
     let stderr = '';
@@ -199,9 +200,9 @@ const DOMAIN = [
     'salesdetails',
     'shifts',
     'inventories',
-    'batches',
+    'inventorybatches',
     'stockmovements',
-    'audits',
+    'auditlogs',
     'settings',
     'offlinecosts',
     'offlineleases',
@@ -216,7 +217,7 @@ async function digest(client) {
             // Restore and login events are written after a restore, on
             // purpose; compare the store data itself.
             .find(
-                name === 'audits'
+                name === 'auditlogs'
                     ? {
                           action: {
                               $nin: ['SYSTEM.DATABASE_RESTORED', 'AUTH.LOGIN'],
@@ -439,13 +440,18 @@ describe(
             assert.equal(status.lastFailure.code, 'DESTINATION_SAME_DISK');
             assert.equal(status.exportReminderDue, true);
 
-            result = await backup(
-                'export',
-                paths.root,
-                '--to',
-                exportDir,
-                '--test-allow-fixed-destination',
-            );
+            // Test-only: CI's temp folder is not removable media.
+            result = await run(
+                [
+                    backupCli,
+                    'export',
+                    '--data-root',
+                    paths.root,
+                    '--to',
+                    exportDir,
+                ],
+                { env: { GPOS_TEST_ALLOW_FIXED_DESTINATION: '1' } },
+            ).done;
             assert.equal(result.code, 0, result.stderr);
             exported = JSON.parse(
                 result.stdout.slice(result.stdout.indexOf('{')),
@@ -636,11 +642,22 @@ describe(
             status = JSON.parse((await backup('status', paths.root)).stdout);
             assert.equal(status.backups.filter((b) => b.verified).length, 2);
             assert.equal(status.consecutiveFailures, 0);
+            const left = (await readdir(paths.dirs.backups)).filter((n) =>
+                n.startsWith('.'),
+            );
             assert.deepEqual(
-                (await readdir(paths.dirs.backups)).filter((n) =>
-                    n.startsWith('.'),
-                ),
+                left,
                 [],
+                JSON.stringify({
+                    out: result.stdout,
+                    files: await Promise.all(
+                        left.map((n) =>
+                            readdir(join(paths.dirs.backups, n), {
+                                recursive: true,
+                            }),
+                        ),
+                    ),
+                }),
             );
         });
 
@@ -735,11 +752,19 @@ describe(
                         0,
                 );
                 const [audit] = await db
-                    .collection('audits')
+                    .collection('auditlogs')
                     .find({ action: 'SYSTEM.DATABASE_RESTORED' })
                     .toArray();
                 assert.equal(audit.actor, null);
                 assert.equal(audit.targetModel, 'Database');
+                // The API's own audit collection (the bootstrap entry is there).
+                if (compiledApi)
+                    assert.equal(
+                        await db.collection('auditlogs').countDocuments({
+                            action: 'SYSTEM.INITIAL_ADMIN_CREATED',
+                        }),
+                        1,
+                    );
                 assert.deepEqual(audit.after, {
                     backupId: id,
                     backupCreatedAt: JSON.parse(

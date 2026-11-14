@@ -160,9 +160,6 @@ const OPTIONS = {
     confirm: 'confirm',
 };
 const FLAGS = {
-    // Test harnesses only (a CI runner has no removable drive); the
-    // installer never exposes it.
-    'test-allow-fixed-destination': 'testAllowFixedDestination',
     'accept-open-shifts': 'acceptOpenShifts',
     'accept-newer-sales': 'acceptNewerSales',
     'accept-pending-offline': 'acceptPendingOffline',
@@ -231,13 +228,7 @@ export function parseOptions(args, required, allowed) {
 const ALLOWED = {
     create: ['data-root', 'mongod', 'tools', 'api', 'kind', 'reserve-mb'],
     verify: ['data-root', 'mongod', 'tools', 'api', 'backup', 'from'],
-    export: [
-        'data-root',
-        'to',
-        'backup',
-        'test-allow-fixed-destination',
-        'reserve-mb',
-    ],
+    export: ['data-root', 'to', 'backup', 'reserve-mb'],
     prune: ['data-root'],
     status: ['data-root'],
 };
@@ -770,6 +761,12 @@ export async function testRestore({
         ],
         { stdio: 'ignore', windowsHide: true },
     );
+    if (child.pid)
+        await writeFile(
+            join(scratch, 'port'),
+            JSON.stringify({ port, credential, pid: child.pid }),
+            { mode: 0o600 },
+        );
     let exited = false;
     child.once('exit', () => (exited = true));
     child.once('error', () => (exited = true));
@@ -923,17 +920,56 @@ export async function listBackups(paths) {
  * Stops a test-restore mongod a killed run left behind, but only after it
  * proves (by its own reported dbPath) to be that scratch instance.
  */
+function waitForExit(pid) {
+    return boundedWait(
+        async () => {
+            try {
+                process.kill(pid, 0);
+                return false;
+            } catch (error) {
+                return error.code === 'ESRCH';
+            }
+        },
+        { timeoutMs: 60000 },
+    );
+}
+
+/** A process's command line (Linux /proc, Windows CIM); else undefined. */
+async function processCommandLine(pid) {
+    if (!Number.isSafeInteger(pid) || pid <= 0) return undefined;
+    if (process.platform === 'linux')
+        return readFile(`/proc/${pid}/cmdline`, 'utf8')
+            .then((t) => t.split('\0').join(' '))
+            .catch(() => undefined);
+    if (process.platform === 'win32') {
+        const { output, code } = await runTool(
+            'powershell.exe',
+            [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+            ],
+            { timeoutMs: 30000 },
+        ).catch(() => ({ code: 1 }));
+        return code === 0 ? output : undefined;
+    }
+    return undefined;
+}
+
 async function stopOrphan(scratch, driver) {
     let port;
     let credential;
+    let pid;
     try {
-        ({ port, credential } = JSON.parse(
+        ({ port, credential, pid } = JSON.parse(
             await readFile(join(scratch, 'port'), 'utf8'),
         ));
     } catch {
-        return;
+        return 'none';
     }
-    if (!Number.isSafeInteger(port) || port <= 0) return;
+    if (!Number.isSafeInteger(port) || port <= 0) return 'none';
+    let last = 'none';
     // With the run's credential; if it was killed before creating that
     // user, the localhost exception still answers anonymously.
     for (const auth of [
@@ -952,7 +988,10 @@ async function stopOrphan(scratch, driver) {
                 resolve(opts.parsed?.storage?.dbPath ?? '') !==
                 resolve(join(scratch, 'db'))
             )
-                return;
+                return 'foreign';
+            const status = await client
+                .db('admin')
+                .command({ serverStatus: 1 });
             await client
                 .db('admin')
                 .command({ shutdown: 1, force: true })
@@ -968,13 +1007,32 @@ async function stopOrphan(scratch, driver) {
                 },
                 { timeoutMs: 60000 },
             );
-            return;
-        } catch {
+            // The socket closes before mongod has finished writing its
+            // files: wait for that process (pid from the instance itself)
+            // to exit before its folder is removed.
+            await waitForExit(Number(status.pid));
+            return 'stopped';
+        } catch (error) {
             // not answering with these credentials; try the next
+            last = `${error.codeName ?? error.name}`;
         } finally {
             await client.close().catch(() => {});
         }
     }
+    // Killed mid-restore, the instance's users may be mid-replacement and
+    // no credential works. Then stop the recorded process, but only if its
+    // command line proves it is this scratch instance.
+    const commandLine = await processCommandLine(pid);
+    if (commandLine?.includes(join(scratch, 'db'))) {
+        try {
+            process.kill(pid, 'SIGTERM');
+            await waitForExit(pid);
+            return 'stopped';
+        } catch (error) {
+            last = error.code ?? error.name;
+        }
+    }
+    return last;
 }
 
 /**
@@ -993,8 +1051,13 @@ async function cleanInterrupted(paths, log, driver) {
         const scratch = name.startsWith(SCRATCH);
         if (scratch && !driver) continue;
         if (scratch || name.startsWith(INCOMPLETE) || name.includes('.tmp-')) {
-            if (scratch)
-                await stopOrphan(join(paths.dirs.backups, name), driver);
+            if (scratch) {
+                const stopped = await stopOrphan(
+                    join(paths.dirs.backups, name),
+                    driver,
+                );
+                log(`cleanup: leftover test mongod ${stopped}`);
+            }
             await rm(join(paths.dirs.backups, name), {
                 recursive: true,
                 force: true,
@@ -1373,7 +1436,10 @@ export async function exportBackup(options, log = () => {}) {
                     `Export destination ${options.to} is not available. Connect the drive and retry.`,
                 );
             }
-            if (!options.testAllowFixedDestination) {
+            // Exports are removable-only (owner decision). Test harnesses
+            // (CI has no removable drive) set this variable; there is no
+            // operator option to bypass the check.
+            if (process.env.GPOS_TEST_ALLOW_FIXED_DESTINATION !== '1') {
                 if (destInfo.dev === (await stat(paths.root)).dev)
                     throw new BackupError(
                         'DESTINATION_SAME_DISK',

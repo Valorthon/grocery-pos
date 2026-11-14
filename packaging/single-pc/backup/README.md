@@ -150,8 +150,9 @@ by their bus. On Linux it reads `/sys/dev/block` (`removable` flag or a USB
 path). A second internal disk, the installation's disk, or anything that
 cannot be identified is refused (`DESTINATION_NOT_REMOVABLE`,
 `DESTINATION_UNKNOWN_MEDIA`, `DESTINATION_SAME_DISK`).
-`--test-allow-fixed-destination` exists for test harnesses only (CI has no
-removable drive); the installer never exposes it. `verify --from <export>`
+There is no option to bypass this: only the test harness sets the
+environment variable `GPOS_TEST_ALLOW_FIXED_DESTINATION=1` (CI has no
+removable drive). `verify --from <export>`
 re-runs the test restore on an exported copy.
 
 ## Restore
