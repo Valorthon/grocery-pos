@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { Types } from 'mongoose';
+import { Types, type InsertManyOptions } from 'mongoose';
 import {
     Role,
     OverrideAction,
     StockMovementType,
+    UnitOfMeasure,
     STOCK_MOVEMENT_SHAPE,
     wireShapeDiff,
     type Paginated,
@@ -22,6 +23,7 @@ import {
     type DbApp,
 } from './db-app';
 import { approvalHeaders, ensureApprovalFixtures } from './approval-fixtures';
+import { StockMovement } from '../../src/stock-movement/stock-movement.schema';
 let db: DbApp, supplier: string;
 const admin = caller('ledger-admin', Role.Admin),
     restocker = caller('ledger-restocker', Role.Restocker),
@@ -348,4 +350,114 @@ it('fails startup rather than serving requests before unique ledger indexes exis
         (await db.call(admin, 'GET', `/products/${randomUUID()}/movements`))
             .status,
     ).toBe(400);
+});
+
+it('batches mixed first-use/existing measured products and repeated lines without changing sequences', async () => {
+    const existing = await seedProduct(db, 100, 1000);
+    const firstUse = await seedProduct(db, 100, 2000);
+    await db
+        .model('Product')
+        .collection.updateOne(
+            { _id: new Types.ObjectId(existing) },
+            { $set: { unit: UnitOfMeasure.KG } },
+        );
+    await db
+        .model('Product')
+        .collection.updateOne(
+            { _id: new Types.ObjectId(firstUse) },
+            { $set: { unit: UnitOfMeasure.L } },
+        );
+    expect((await receive(existing, 500)).status).toBe(201);
+    const model = db.model<StockMovement>('StockMovement');
+    const insert = jest.spyOn(model, 'insertMany');
+    try {
+        const result = await db.call(restocker, 'POST', '/restocks', {
+            supplier,
+            description: 'Mixed ledger batch',
+            restockDetails: [
+                { product: firstUse, quantity: 250, unitCost: 100 },
+                { product: existing, quantity: 125, unitCost: 100 },
+                { product: firstUse, quantity: 500, unitCost: 100 },
+            ],
+        });
+        expect(result.status).toBe(201);
+        expect(insert).toHaveBeenCalledTimes(1);
+        expect(insert.mock.calls[0]?.[0]).toHaveLength(3);
+    } finally {
+        insert.mockRestore();
+    }
+    expect(
+        (await movements(existing)).data.map(
+            ({ sequence, quantity, unit, balanceAfter }) => ({
+                sequence,
+                quantity,
+                unit,
+                balanceAfter,
+            }),
+        ),
+    ).toEqual([
+        { sequence: 2, quantity: 125, unit: 'KG', balanceAfter: 1625 },
+        { sequence: 1, quantity: 500, unit: 'KG', balanceAfter: 1500 },
+        { sequence: 0, quantity: 1000, unit: 'KG', balanceAfter: 1000 },
+    ]);
+    expect(
+        (await movements(firstUse)).data.map(
+            ({ sequence, quantity, unit, balanceAfter }) => ({
+                sequence,
+                quantity,
+                unit,
+                balanceAfter,
+            }),
+        ),
+    ).toEqual([
+        { sequence: 1, quantity: 750, unit: 'L', balanceAfter: 2750 },
+        { sequence: 0, quantity: 2000, unit: 'L', balanceAfter: 2000 },
+    ]);
+    await assertMatches(existing);
+    await assertMatches(firstUse);
+});
+
+it('rolls back an actually inserted ledger batch, opening rows, receipt and costs after a late failure', async () => {
+    const existing = await seedProduct(db, 100, 5);
+    const firstUse = await seedProduct(db, 100, 2);
+    expect((await receive(existing, 1)).status).toBe(201);
+    const before = await movements(existing);
+    const model = db.model<StockMovement>('StockMovement');
+    const insert = model.insertMany.bind(model) as (
+        rows: StockMovement[],
+        options: InsertManyOptions,
+    ) => Promise<unknown>;
+    const spy = jest
+        .spyOn(model, 'insertMany')
+        .mockImplementationOnce(
+            async (rows: unknown, options: InsertManyOptions = {}) => {
+                await insert(rows as StockMovement[], options);
+                throw new Error('Failed after ledger batch insertion');
+            },
+        );
+    const receipts = await db.model('Restock').countDocuments();
+    const productBefore = await db.model('Product').findById(existing).lean();
+    try {
+        const result = await db.call(restocker, 'POST', '/restocks', {
+            supplier,
+            description: 'Whole batch must roll back',
+            restockDetails: [
+                { product: existing, quantity: 3, unitCost: 999 },
+                { product: firstUse, quantity: 4, unitCost: 999 },
+            ],
+        });
+        expect(result.status).toBe(500);
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0]?.[0]).toHaveLength(3);
+    } finally {
+        spy.mockRestore();
+    }
+    expect(await movements(existing)).toEqual(before);
+    expect((await movements(firstUse)).data).toEqual([]);
+    expect(await stockOf(db, existing)).toBe(6);
+    expect(await stockOf(db, firstUse)).toBe(2);
+    expect(await db.model('Restock').countDocuments()).toBe(receipts);
+    expect(await db.model('Product').findById(existing).lean()).toEqual(
+        productBefore,
+    );
 });
