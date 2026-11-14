@@ -149,6 +149,12 @@ TLS state location and service wiring remain #360/#362.
   endpoint, automatic upload or telemetry. Customer UI details remain in the
   owning issue and owner decisions.
 
+Implemented (#360): [runtime/](runtime/README.md) defines the data-root layout,
+generated secrets and `secrets\api.env`, ports, mongod configuration, service
+definitions/WinSW XML and the idempotent `provision.mjs`; in `APP_ENV=single-pc`
+the API listens only after the DB is a writable primary with its indexes built.
+Verified on Linux with a real mongod; Windows service/ACL execution is pending.
+
 Release manifest interface: schema/version, Git commit, platform/architecture,
 exact component pins/checksums/notices, client/API/contracts compatibility,
 data/migration version, backup compatibility, packaged command entry points and

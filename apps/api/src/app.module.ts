@@ -24,6 +24,8 @@ import { SalesModule } from './sales/sales.module';
 import { ShiftModule } from './shift/shift.module';
 import { EanCounterModule } from './ean-counter/ean-counter.module';
 import { TypedConfigService } from './common/typed-config/typed-config.service';
+import { isSinglePcEnv } from './common/typed-config/app-env';
+import { connectionRetryOptions } from './common/startup-readiness';
 import { TimingMiddleware } from './common/middleware/timing.middleware';
 import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -48,6 +50,7 @@ import { CspReportModule } from './csp-report/csp-report.module';
             inject: [TypedConfigService],
             useFactory: (config: TypedConfigService) => ({
                 uri: config.get('DATABASE_URL'),
+                ...connectionRetryOptions(isSinglePcEnv(config.get('APP_ENV'))),
             }),
         }),
         CookieModule,
