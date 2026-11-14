@@ -204,6 +204,10 @@ export class UserService implements OnModuleInit {
                     const set: Record<string, unknown> = { ...fields };
                     if (password !== undefined) {
                         set.passwordHash = await argon.hash(password);
+                        // Owner decision (#361): a reset password is
+                        // temporary; the user must change it at next login.
+                        // (Resetting your own is refused by the policy.)
+                        set.mustChangePassword = true;
                     }
                     const invalidatesApproval =
                         password !== undefined ||

@@ -253,34 +253,42 @@ describe('Login page (#21)', () => {
         });
 
         // #361: the bootstrap ADMIN's temporary password.
-        it('asks for a new password instead of going home', async () => {
-            auth.login.mockImplementation(() => {
-                auth.user = {
-                    username: 'owner',
-                    roles: [Role.Admin],
-                    mustChangePassword: true,
-                };
-                return Promise.resolve({});
-            });
-            const host = await mount();
+        // Also after an ADMIN reset another user's password (owner decision).
+        it.each([
+            ['the bootstrap ADMIN', [Role.Admin]],
+            ['a cashier after an admin reset', [Role.Seller]],
+        ])(
+            'asks %s for a new password instead of going home',
+            async (_who, roles) => {
+                auth.login.mockImplementation(() => {
+                    auth.user = {
+                        username: 'owner',
+                        roles,
+                        mustChangePassword: true,
+                    };
+                    return Promise.resolve({});
+                });
+                const host = await mount();
 
-            await submit(host, 'owner', 'temporary-pass');
+                await submit(host, 'owner', 'temporary-pass');
 
-            expect(router.currentRoute.value.name).toBe('Login');
-            expect(input(host, 'password').value).toBe('');
-            const dialog = document.querySelector('[role="dialog"]');
-            expect(dialog?.textContent).toContain(
-                'Change your temporary password',
-            );
-            // No close button; the secondary action logs out.
-            expect(
-                dialog?.querySelector('[data-testid="change-password-cancel"]')
-                    ?.textContent,
-            ).toContain('Log out');
-            expect(
-                dialog?.querySelector('button[aria-label="Close"]'),
-            ).toBeNull();
-        });
+                expect(router.currentRoute.value.name).toBe('Login');
+                expect(input(host, 'password').value).toBe('');
+                const dialog = document.querySelector('[role="dialog"]');
+                expect(dialog?.textContent).toContain(
+                    'Change your temporary password',
+                );
+                // No close button; the secondary action logs out.
+                expect(
+                    dialog?.querySelector(
+                        '[data-testid="change-password-cancel"]',
+                    )?.textContent,
+                ).toContain('Log out');
+                expect(
+                    dialog?.querySelector('button[aria-label="Close"]'),
+                ).toBeNull();
+            },
+        );
     });
 });
 

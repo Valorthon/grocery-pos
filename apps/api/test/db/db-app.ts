@@ -37,6 +37,8 @@ export interface Caller {
     username: string;
     roles: Role[];
     sid?: string;
+    /** Signs the #361 temporary-password claim. */
+    mustChangePassword?: true;
 }
 
 export function caller(username: string, ...roles: Role[]): Caller {
@@ -139,6 +141,9 @@ export async function bootDbApp(): Promise<DbApp> {
                     username: who.username,
                     roles: who.roles,
                     sid: who.sid ?? who.userId,
+                    ...(who.mustChangePassword
+                        ? { mustChangePassword: true }
+                        : {}),
                 },
                 { secret: JWT_SECRET, expiresIn: 600 },
             );

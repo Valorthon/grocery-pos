@@ -486,6 +486,10 @@ requestId}`. A 5xx never carries details or internals.
 - Deactivating a user, changing their roles, or resetting or changing a password
   revokes that user's sessions. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.
+- An ADMIN's reset of another user's password is temporary (#361, owner
+  decision 2026-11-14): it sets `mustChangePassword`, so that user gets
+  the same restriction and required change dialog at next login as the
+  bootstrap ADMIN. Their own change clears it.
 
 **Manager approvals** (#34)
 
@@ -552,7 +556,12 @@ requestId}`. A 5xx never carries details or internals.
   limits the account to `@AllowPasswordChangePending()` routes (profile,
   own password change) with 403 `USER_PASSWORD_CHANGE_REQUIRED`; the change
   must differ (400 `USER_PASSWORD_UNCHANGED`) and clears the flag. The
-  client keeps the account on Login with the required change dialog.
+  client keeps the account on Login with the required change dialog
+  (wording owner-approved). An ADMIN password reset sets the same flag.
+- `--password-stdin` refuses a terminal (it would echo). On Windows the
+  file mode does nothing: the command warns, and keeping the file in an
+  installer-restricted directory is a #362 packaging requirement. Errors
+  redact `DATABASE_URL` and any `mongodb(+srv)://` credentials.
 
 **Sessions** (#21)
 

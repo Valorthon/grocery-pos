@@ -84,6 +84,8 @@ export function generatePassword(): string {
 
 export interface CliIo {
     platform: NodeJS.Platform;
+    /** True when standard input is an interactive terminal (it would echo). */
+    stdinIsTTY: boolean;
     readStdin(): Promise<string>;
     out(line: string): void;
     err(line: string): void;
@@ -94,7 +96,14 @@ export async function obtainPassword(
     source: PasswordSource,
     io: CliIo,
 ): Promise<string> {
-    if (source.kind === 'stdin') return firstLine(await io.readStdin());
+    if (source.kind === 'stdin') {
+        if (io.stdinIsTTY)
+            throw new BootstrapInputError(
+                '--password-stdin reads a pipe or redirected file, not a terminal (it would show the password).',
+            );
+        return firstLine(await io.readStdin());
+    }
+    if (io.platform === 'win32') io.err(WINDOWS_FILE_WARNING);
     if (source.kind === 'file') {
         if (io.platform !== 'win32') {
             const { mode } = await stat(source.path);
@@ -116,12 +125,24 @@ export async function obtainPassword(
     return password;
 }
 
-/** An error message for the operator, with the database URL's secret kept out. */
+/**
+ * Windows ignores the file mode: the file inherits its directory's ACL.
+ * Keeping it in an installer-restricted directory is a #362 packaging
+ * requirement.
+ */
+export const WINDOWS_FILE_WARNING =
+    'Warning: on Windows this file is not ACL-protected by this command. Keep it only in a directory the installer restricts to the operator/owner (never a shared or Public folder).';
+
+/** Credentials in any MongoDB URI: `mongodb(+srv)://user:pass@`. */
+const URI_CREDENTIALS = /(mongodb(?:\+srv)?:\/\/)[^@\s/]+@/gi;
+
+/** An error message for the operator, with database credentials kept out. */
 export function safeMessage(err: unknown, databaseUrl?: string): string {
     const message = err instanceof Error ? err.message : String(err);
-    return databaseUrl
+    const withoutUrl = databaseUrl
         ? message.split(databaseUrl).join('<DATABASE_URL>')
         : message;
+    return withoutUrl.replace(URI_CREDENTIALS, '$1<credentials>@');
 }
 
 function isExists(err: unknown): boolean {
@@ -213,6 +234,7 @@ export async function readAll(stream: NodeJS.ReadableStream): Promise<string> {
 if (require.main === module) {
     void run(process.argv.slice(2), process.env, {
         platform: process.platform,
+        stdinIsTTY: process.stdin.isTTY === true,
         readStdin: () => readAll(process.stdin),
         out: (line) => process.stdout.write(`${line}\n`),
         err: (line) => process.stderr.write(`${line}\n`),

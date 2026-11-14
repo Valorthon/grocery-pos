@@ -930,6 +930,15 @@ describe('users and auth', () => {
         );
     });
 
+    it('GET /users/profile with a temporary password answers ProfileView (#361)', async () => {
+        const body = await get(
+            { ...seller, mustChangePassword: true },
+            '/users/profile',
+        );
+        expect(body).toMatchObject({ mustChangePassword: true });
+        expectShape('GET /users/profile (flagged)', body, PROFILE_VIEW_SHAPE);
+    });
+
     it('POST /auth/login answers LoginResponse', () => {
         expect(seed.login.status).toBe(201);
         expectShape('POST /auth/login', seed.login.body, LOGIN_RESPONSE_SHAPE);

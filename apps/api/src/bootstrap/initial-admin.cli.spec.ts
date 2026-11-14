@@ -19,6 +19,7 @@ import {
     readAll,
     run,
     safeMessage,
+    WINDOWS_FILE_WARNING,
     type CliIo,
     type RunDeps,
 } from './initial-admin.cli';
@@ -36,11 +37,16 @@ afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
 });
 
-function io(stdin = '', platform: NodeJS.Platform = 'linux') {
+function io(
+    stdin = '',
+    platform: NodeJS.Platform = 'linux',
+    stdinIsTTY = false,
+) {
     const out: string[] = [];
     const err: string[] = [];
     const value: CliIo = {
         platform,
+        stdinIsTTY,
         readStdin: () => Promise.resolve(stdin),
         out: (line) => out.push(line),
         err: (line) => err.push(line),
@@ -143,6 +149,15 @@ describe('helpers', () => {
             ),
         ).toBe('cannot reach <DATABASE_URL>');
         expect(safeMessage('plain')).toBe('plain');
+        expect(
+            safeMessage(
+                new Error(
+                    'failed mongodb+srv://u:p%40ss@host/db and mongodb://a:b@h:1',
+                ),
+            ),
+        ).toBe(
+            'failed mongodb+srv://<credentials>@host/db and mongodb://<credentials>@h:1',
+        );
     });
 
     it('reads a whole stream', async () => {
@@ -153,6 +168,25 @@ describe('helpers', () => {
 });
 
 describe('obtainPassword', () => {
+    it('refuses an interactive terminal on stdin', async () => {
+        const t = io('typed', 'linux', true);
+        await expect(obtainPassword({ kind: 'stdin' }, t.io)).rejects.toThrow(
+            BootstrapInputError,
+        );
+    });
+
+    it('warns on Windows that a password file is not ACL-protected', async () => {
+        const path = join(dir, 'w.txt');
+        const t = io('', 'win32');
+        await obtainPassword({ kind: 'generate', path }, t.io);
+        expect(t.err).toEqual([WINDOWS_FILE_WARNING]);
+        const posix = io();
+        await obtainPassword({ kind: 'file', path }, posix.io).catch(
+            () => undefined,
+        );
+        expect(posix.err).toEqual([]);
+    });
+
     it('reads stdin', async () => {
         expect(
             await obtainPassword({ kind: 'stdin' }, io('from-stdin-1\n').io),

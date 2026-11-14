@@ -202,6 +202,8 @@ describe('UserService', () => {
 
             const row = model.byId(cashier._id)!;
             expect(row).not.toHaveProperty('password');
+            // #361 owner decision: a reset password must be changed at next login.
+            expect(row).toMatchObject({ mustChangePassword: true });
             await expect(
                 argon.verify(row.passwordHash, 'new-secret'),
             ).resolves.toBe(true);

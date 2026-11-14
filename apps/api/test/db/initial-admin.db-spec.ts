@@ -6,6 +6,7 @@
  */
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import * as argon from 'argon2';
 import { join } from 'node:path';
 import { AuditAction, ErrorCode, Role } from '@grocery-pos/contracts';
 import { bootDbApp, dbName, read, type DbApp } from './db-app';
@@ -251,6 +252,64 @@ it('requires a password change at first login', async () => {
     ).toBe(200);
 });
 
+// Owner decision on #361: an ADMIN's reset of another user's password is
+// temporary too.
+it('requires a change after an ADMIN resets a password', async () => {
+    await createInitialAdmin(db.connection, {
+        username: 'owner',
+        password: PASSWORD,
+    });
+    const first = await login('owner', PASSWORD);
+    await call(first.cookie, 'PATCH', '/users/me/password', {
+        currentPassword: PASSWORD,
+        newPassword: 'owner-chosen-pass',
+    });
+    const admin = await login('owner', 'owner-chosen-pass');
+    const reauth = await call(admin.cookie, 'POST', '/auth/reauth', {
+        password: 'owner-chosen-pass',
+    });
+    expect(reauth.status).toBe(204);
+    const created = await call(admin.cookie, 'POST', '/users', {
+        users: [
+            { name: 'ana', password: 'ana-first-pass', roles: [Role.Seller] },
+        ],
+    });
+    expect(created.status).toBe(201);
+    const ana = await db
+        .model('User')
+        .findOne({ name: 'ana' })
+        .lean<{ _id: unknown; mustChangePassword?: boolean }>();
+    expect(ana?.mustChangePassword).toBeUndefined();
+
+    const reset = await call(admin.cookie, 'PATCH', '/users', {
+        updates: [
+            { user: String(ana!._id), update: { password: 'reset-pass-1' } },
+        ],
+    });
+    expect(reset.status).toBe(200);
+
+    const session = await login('ana', 'reset-pass-1');
+    expect(session.status).toBe(201);
+    expect(
+        (await read(await call(session.cookie, 'GET', '/users/profile'))).body,
+    ).toMatchObject({ mustChangePassword: true });
+    expect((await call(session.cookie, 'GET', '/shifts/current')).status).toBe(
+        403,
+    );
+    expect(
+        (
+            await call(session.cookie, 'PATCH', '/users/me/password', {
+                currentPassword: 'reset-pass-1',
+                newPassword: 'ana-own-pass-2',
+            })
+        ).status,
+    ).toBe(200);
+    const after = await login('ana', 'ana-own-pass-2');
+    expect(
+        (await read(await call(after.cookie, 'GET', '/users/profile'))).body,
+    ).not.toHaveProperty('mustChangePassword');
+});
+
 it('runs from the command with a generated, owner-only password file', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'gpos-361-'));
     const file = join(dir, 'temporary-password.txt');
@@ -258,6 +317,7 @@ it('runs from the command with a generated, owner-only password file', async () 
     const err: string[] = [];
     const io = {
         platform: process.platform,
+        stdinIsTTY: false,
         readStdin: () => Promise.resolve(''),
         out: (line: string) => out.push(line),
         err: (line: string) => err.push(line),
@@ -275,7 +335,12 @@ it('runs from the command with a generated, owner-only password file', async () 
         const password = (await readFile(file, 'utf8')).trim();
         expect(password).toHaveLength(24);
         expect([...out, ...err].join('\n')).not.toContain(password);
-        expect((await login('owner', password)).status).toBe(201);
+        // Checked on the stored hash: the login rate limit is per file.
+        const stored = await db
+            .model('User')
+            .findOne({ name: 'owner' })
+            .lean<{ passwordHash: string }>();
+        expect(await argon.verify(stored!.passwordHash, password)).toBe(true);
 
         // A second run is refused and leaves no new password file.
         const again = join(dir, 'again.txt');

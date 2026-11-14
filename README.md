@@ -274,15 +274,18 @@ DATABASE_URL="mongodb://…" node dist/bootstrap/initial-admin.cli.js \
   by the API at its first start, as before.
 - The password is never an argument and never printed. Use exactly one of
   `--generate-password-file <new path>` (a unique random temporary password,
-  written to a new file, mode 600; on Windows put it in an ACL-protected
-  directory), `--password-file <path>` (first line; refused on POSIX unless
-  owner-only) or `--password-stdin`. Hand the temporary password over
+  written to a new file, mode 600), `--password-file <path>` (first line;
+  refused on POSIX unless owner-only) or `--password-stdin` (a pipe or
+  redirected file; a terminal is refused). On Windows the mode has no
+  effect: the command warns, and the file must live in a directory the
+  installer restricts to the operator/owner (#362). Hand the temporary password over
   securely and delete the file.
 - At first login the account must change that password: until then the API
   answers every route except `GET /users/profile` and
   `PATCH /users/me/password` with 403 `USER_PASSWORD_CHANGE_REQUIRED`, and
   the login page asks for the change (a new password, not the temporary
-  one). Manager PIN and step-up rules are unchanged afterwards.
+  one). Manager PIN and step-up rules are unchanged afterwards. An ADMIN
+  resetting another user's password sets the same requirement for them.
 - It refuses (exit 3, nothing changed) a database that is already
   initialized or has any user; concurrent runs cannot both succeed. Exit 0
   is created, 2 a usage/input error, 1 any other failure.
