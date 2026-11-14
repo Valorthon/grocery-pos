@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { AuditService } from '../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
@@ -36,6 +38,7 @@ describe('ProductService.update', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -172,6 +175,7 @@ describe('ProductService.getMatches', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -270,6 +274,7 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -328,8 +333,18 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
         expect(ids).toHaveLength(2);
         expect(insertMany).toHaveBeenCalledWith(
             [
-                { name: 'bread', price: 100, EAN: 'generated-1' },
-                { name: 'milk', price: 200, EAN: '4006381333931' },
+                {
+                    name: 'bread',
+                    price: 100,
+                    reorderLevel: 10,
+                    EAN: 'generated-1',
+                },
+                {
+                    name: 'milk',
+                    price: 200,
+                    reorderLevel: 10,
+                    EAN: '4006381333931',
+                },
             ],
             expect.anything(),
         );
@@ -406,6 +421,7 @@ describe('ProductService.ensureValid (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -549,6 +565,7 @@ describe('ProductService.getAll search (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -632,6 +649,7 @@ describe('ProductService expiry tracking transitions', () => {
             {
                 record: jest.fn().mockResolvedValue(undefined),
             } as unknown as AuditService,
+            settingsMock() as unknown as SettingsService,
         );
         const user = {
             userId: '507f1f77bcf86cd799439011',
@@ -674,6 +692,7 @@ describe('ProductService.getByBarcode (#214)', () => {
             {} as never,
             undefined,
             {} as never,
+            settingsMock() as unknown as SettingsService,
         );
     }
 

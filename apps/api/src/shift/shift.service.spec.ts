@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { randomUUID } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { Test } from '@nestjs/testing';
@@ -68,6 +70,7 @@ beforeEach(async () => {
 
     const moduleRef = await Test.createTestingModule({
         providers: [
+            { provide: SettingsService, useValue: settingsMock() },
             {
                 provide: AuditService,
                 useValue: { record: jest.fn().mockResolvedValue(undefined) },

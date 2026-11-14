@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { Types } from 'mongoose';
 import {
     StockMovementSource,
@@ -77,7 +79,7 @@ function fixture(count: number, opening: boolean) {
         movements as never,
         inventory as never,
         products as never,
-        {} as never,
+        settingsMock() as unknown as SettingsService,
     );
     return {
         service,

@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { MOCK_MANAGER_APPROVALS } from '../auth/override/testing/fake-override';
 /**
  * Cashier scoping of the sales history, over real HTTP (issues #13, #2). The
@@ -188,6 +190,7 @@ describe('Sales history scoping (e2e)', () => {
             [SalesController],
             [
                 SalesService,
+                { provide: SettingsService, useValue: settingsMock() },
                 MOCK_MANAGER_APPROVALS,
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(Sales.name), useValue: salesModel },

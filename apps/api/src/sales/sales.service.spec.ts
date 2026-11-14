@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { AuditService } from '../audit/audit.service';
 import { MOCK_MANAGER_APPROVALS } from '../auth/override/testing/fake-override';
 import { Test } from '@nestjs/testing';
@@ -146,6 +148,7 @@ describe('SalesService.sell', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -174,7 +177,13 @@ describe('SalesService.sell', () => {
                     provide: InventoryService,
                     useValue: { sell: inventorySell },
                 },
-                { provide: ShiftService, useValue: { chargeSale } },
+                {
+                    provide: ShiftService,
+                    useValue: {
+                        chargeSale,
+                        terminalOf: jest.fn().mockResolvedValue('Register'),
+                    },
+                },
                 STORE_CONFIG,
             ],
         }).compile();
@@ -1088,6 +1097,7 @@ describe('SalesService.reverse', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -1458,6 +1468,7 @@ describe('Sales history scoping (issues #13, #2)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: AuditService,
                     useValue: {

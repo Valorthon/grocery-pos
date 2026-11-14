@@ -1,9 +1,6 @@
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
+import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import {
@@ -18,7 +15,6 @@ import { User } from '../user/user.schema';
 import { auditFields } from './audit-fields';
 import { auditMetadata } from './audit-context';
 import { AuditQueryDto } from './audit.dto';
-import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { dateRangeFilter } from '../common/utils/timezone';
 
 export interface AuditEvent {
@@ -34,12 +30,10 @@ export interface AuditEvent {
 export class AuditService implements OnModuleInit {
     constructor(
         @InjectModel(AuditLog.name) private model: Model<AuditLog>,
-        private config: TypedConfigService,
         @InjectModel(User.name) private users: Model<User>,
-        @OptionalSettings()
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
-        @OptionalSettings()
+        private settings: SettingsService,
+        @Optional()
         @InjectConnection()
         private connection?: Connection,
     ) {}
@@ -87,9 +81,7 @@ export class AuditService implements OnModuleInit {
             filter.$or = user ? [{ actor: user._id }, failed] : [failed];
         }
         if (dto.action) filter.action = dto.action;
-        const timeZone = this.settings
-            ? await this.settings.timezone()
-            : this.config.get('STORE_TIMEZONE');
+        const timeZone = await this.settings.timezone();
         const range = dateRangeFilter(dto.from, dto.to, timeZone);
         if (range) filter.createdAt = range;
         const [rows, totalItems] = await Promise.all([

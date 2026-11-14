@@ -1,11 +1,7 @@
 import { SettingsService } from '../../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { InventoryBatchService } from '../batch/batch.service';
-import { Optional } from '@nestjs/common';
 import { SupplierService } from '../../supplier/supplier.service';
 import { ValidationError, ErrorCode } from '../../common/errors';
 import { Injectable } from '@nestjs/common';
@@ -25,7 +21,6 @@ import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
 import { productSearchFilter } from '../../product/product-search';
 import { dateRangeFilter } from '../../common/utils/timezone';
-import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
 import { ProductService } from '../../product/product.service';
 /** One entry of the `GET .../users` filter list: nothing beyond the name. */
@@ -43,13 +38,11 @@ export class RestockService {
         @InjectModel(RestockDetails.name)
         private modelDetails: Model<RestockDetails>,
         private inventoryService: InventoryService,
-        private config: TypedConfigService,
         private productService: ProductService,
         private suppliers: SupplierService,
-        @Optional() private batches?: InventoryBatchService,
-        @OptionalSettings()
+        private batches: InventoryBatchService,
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     async restock(
@@ -138,7 +131,7 @@ export class RestockService {
                 }));
 
                 await this.modelDetails.bulkWrite(inserts, { session });
-                await this.batches?.receive(batchLines, session);
+                await this.batches.receive(batchLines, session);
                 await this.productService.recordReceiptCosts(
                     updatedRestockDetails,
                     session,
@@ -178,9 +171,7 @@ export class RestockService {
         const createdAt = dateRangeFilter(
             dateFrom,
             dateTo,
-            this.settings
-                ? await this.settings.timezone()
-                : this.config.get('STORE_TIMEZONE'),
+            await this.settings.timezone(),
         );
         if (createdAt) {
             query.createdAt = createdAt;

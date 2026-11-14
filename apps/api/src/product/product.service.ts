@@ -1,8 +1,5 @@
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@grocery-pos/contracts';
 import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
@@ -76,9 +73,8 @@ export class ProductService {
         @Inject(CategoryService)
         private categories: CategoryService | undefined = undefined,
         private audit: AuditService,
-        @OptionalSettings()
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     async getByBarcode(
@@ -308,9 +304,8 @@ export class ProductService {
             );
         }
 
-        const defaultLevel = this.settings
-            ? (await this.settings.read(session)).defaultReorderLevel
-            : undefined;
+        const defaultLevel = (await this.settings.read(session))
+            .defaultReorderLevel;
         const withEANs = [];
         for (const product of products) {
             if (product.category)
@@ -320,15 +315,13 @@ export class ProductService {
                 );
             withEANs.push({
                 ...product,
-                ...(defaultLevel !== undefined && {
-                    reorderLevel:
-                        product.reorderLevel ??
-                        defaultLevel *
-                            (product.unit === UnitOfMeasure.KG ||
-                            product.unit === UnitOfMeasure.L
-                                ? 1000
-                                : 1),
-                }),
+                reorderLevel:
+                    product.reorderLevel ??
+                    defaultLevel *
+                        (product.unit === UnitOfMeasure.KG ||
+                        product.unit === UnitOfMeasure.L
+                            ? 1000
+                            : 1),
                 EAN:
                     product.EAN ||
                     (await this.EANCounterService.generate(session)),

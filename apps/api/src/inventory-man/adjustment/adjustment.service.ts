@@ -1,8 +1,5 @@
 import { SettingsService } from '../../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
@@ -19,7 +16,6 @@ import { InventoryService } from '../inventory/inventory.service';
 import { runInTransaction } from '../../common/utils/db';
 import { productSearchFilter } from '../../product/product-search';
 import { dateRangeFilter } from '../../common/utils/timezone';
-import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 import { AuthUser } from '../../auth/types';
 /** One entry of the `GET .../users` filter list: nothing beyond the name. */
 export type UserOption = NameRef;
@@ -32,10 +28,8 @@ export class AdjustmentService {
         @InjectModel(AdjustmentDetails.name)
         private modelDetails: Model<AdjustmentDetails>,
         private inventoryService: InventoryService,
-        private config: TypedConfigService,
-        @OptionalSettings()
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     async getAll(dto: GetAllDto): Promise<Paginated<AdjustmentRowDoc>> {
@@ -51,9 +45,7 @@ export class AdjustmentService {
         const createdAt = dateRangeFilter(
             dateFrom,
             dateTo,
-            this.settings
-                ? await this.settings.timezone()
-                : this.config.get('STORE_TIMEZONE'),
+            await this.settings.timezone(),
         );
         if (createdAt) {
             query.createdAt = createdAt;

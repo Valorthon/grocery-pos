@@ -1,9 +1,10 @@
+import { settingsMock } from '../../common/testing/business-collaborators';
+import { SettingsService } from '../../settings/settings.service';
 import { Model, Types, type ClientSession } from 'mongoose';
 import { InventoryBatchService } from './batch.service';
 import { InventoryBatch } from './batch.schema';
 import { Product } from '../../product/product.schema';
 import { Inventory } from '../inventory/inventory.schema';
-import { TypedConfigService } from '../../common/typed-config/typed-config.service';
 const product = new Types.ObjectId(),
     batch = new Types.ObjectId(),
     detail = new Types.ObjectId();
@@ -54,7 +55,7 @@ beforeEach(() => {
         batchModel as unknown as Model<InventoryBatch>,
         productModel as unknown as Model<Product>,
         inventoryModel as unknown as Model<Inventory>,
-        { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
+        settingsMock() as unknown as SettingsService,
     );
 });
 it('waits for batch indexes and propagates initialization failure', async () => {
@@ -68,10 +69,12 @@ it.each([
     ['2026-01-01T16:00:00Z', '2026-01-02'],
     ['2024-02-29T16:00:00Z', '2024-03-01'],
 ])('interprets store calendar day at %s', (at, expected) =>
-    expect(service.today(new Date(at))).toBe(expected),
+    expect(service.today(new Date(at), 'Asia/Manila')).toBe(expected),
 );
 it('uses current time by default', () =>
-    expect(service.today()).toMatch(/^\d{4}-\d{2}-\d{2}$/));
+    expect(service.today(new Date(), 'Asia/Manila')).toMatch(
+        /^\d{4}-\d{2}-\d{2}$/,
+    ));
 it('ignores ordinary receipts without batch metadata', async () => {
     productModel.findById.mockReturnValue(query({}));
     await service.receive([{ _id: detail, product, quantity: 1 }], session);
@@ -143,7 +146,7 @@ it('consumes FEFO lots up to exact quantity without taking later rows', async ()
     expect(batchModel.find).toHaveBeenCalledWith(
         expect.objectContaining({
             reconciliation: { $ne: true },
-            expiryDate: { $gte: service.today() },
+            expiryDate: { $gte: service.today(new Date(), 'Asia/Manila') },
         }),
     );
 });
@@ -343,7 +346,7 @@ it('serializes only explicit batch view keys with date and provenance', async ()
                 product: { _id: product, name: 'Milk', EAN: '123', unit: 'KG' },
                 restockDetail: detail,
                 batchNo: 'A',
-                expiryDate: service.today(),
+                expiryDate: service.today(new Date(), 'Asia/Manila'),
                 receivedQty: 10,
                 remainingQty: 5,
                 reconciliation: false,

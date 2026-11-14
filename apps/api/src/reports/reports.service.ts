@@ -1,8 +1,5 @@
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, type PipelineStage } from 'mongoose';
@@ -17,7 +14,6 @@ import {
     type SalesReportRow,
 } from '@grocery-pos/contracts';
 import { Sales } from '../sales/sales.schema';
-import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { dateRangeFilter, calendarDateInZone } from '../common/utils/timezone';
 import { ErrorCode, ValidationError, InternalError } from '../common/errors';
 import { SalesReportQuery } from './reports.dto';
@@ -321,15 +317,11 @@ export async function buildSalesReport(
 export class ReportsService {
     constructor(
         @InjectModel(Sales.name) private sales: Model<Sales>,
-        private config: TypedConfigService,
-        @OptionalSettings()
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
     async options(): Promise<ReportOptions> {
-        const timeZone = this.settings
-            ? await this.settings.timezone()
-            : this.config.get('STORE_TIMEZONE');
+        const timeZone = await this.settings.timezone();
         return {
             timeZone,
             today: isoDay(new Date(), timeZone),
@@ -338,9 +330,7 @@ export class ReportsService {
     }
 
     async salesReport(dto: SalesReportQuery): Promise<SalesReport> {
-        const timeZone = this.settings
-            ? await this.settings.timezone()
-            : this.config.get('STORE_TIMEZONE');
+        const timeZone = await this.settings.timezone();
         const cursor = this.sales
             .aggregate<ReportSale>(reportPipeline(dto, timeZone))
             .allowDiskUse(true)

@@ -1,3 +1,9 @@
+import { InventoryBatchService } from '../inventory-man/batch/batch.service';
+import {
+    settingsMock,
+    batchesMock,
+} from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 /**
  * Who reaches GET /dashboard and which fields they get, over real HTTP
  * (issue #13). The real DashboardController and DashboardService run behind
@@ -93,6 +99,8 @@ describe('GET /dashboard access by role (e2e)', () => {
             [DashboardController],
             [
                 DashboardService,
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
                 {
                     provide: getModelToken(Sales.name),
                     useValue: { aggregate, find: findOver([SALE]) },
@@ -151,6 +159,8 @@ describe('GET /dashboard access by role (e2e)', () => {
         const body = (await (await get(Role.Admin)).json()) as Row;
 
         expect(body).toEqual({
+            expiringBatchCount: 0,
+            expiryAlertDays: 7,
             totalProducts: 40,
             lowStockCount: 3,
             outOfStockCount: 1,
@@ -168,6 +178,8 @@ describe('GET /dashboard access by role (e2e)', () => {
             const body = (await (await get(role)).json()) as Row;
 
             expect(body).toEqual({
+                expiringBatchCount: 0,
+                expiryAlertDays: 7,
                 totalProducts: 40,
                 lowStockCount: 3,
                 outOfStockCount: 1,

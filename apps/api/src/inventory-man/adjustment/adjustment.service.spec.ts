@@ -1,3 +1,5 @@
+import { settingsMock } from '../../common/testing/business-collaborators';
+import { SettingsService } from '../../settings/settings.service';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { ClientSession, Types } from 'mongoose';
@@ -43,6 +45,7 @@ describe('AdjustmentService.adjust', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 AdjustmentService,
                 {
                     provide: getConnectionToken(),
@@ -133,6 +136,7 @@ describe('AdjustmentService.getAll date filter', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 AdjustmentService,
                 { provide: getConnectionToken(), useValue: {} },
                 {
@@ -244,6 +248,7 @@ describe('AdjustmentService.getDetails (issue #30)', () => {
         aggregate = jest.fn().mockResolvedValue([]);
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
                 AdjustmentService,
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(Adjustment.name), useValue: {} },

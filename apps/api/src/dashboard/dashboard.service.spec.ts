@@ -1,3 +1,7 @@
+import {
+    settingsMock,
+    batchesMock,
+} from '../common/testing/business-collaborators';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import {
@@ -64,6 +68,8 @@ describe('DashboardService.getDashboard', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
                 DashboardService,
                 {
                     provide: getModelToken(Sales.name),
@@ -191,6 +197,8 @@ describe('DashboardService.getDashboard', () => {
             const result = await service.getDashboard({ includeMoney: false });
 
             expect(result).toEqual({
+                expiringBatchCount: 0,
+                expiryAlertDays: 7,
                 totalProducts: 0,
                 lowStockCount: 0,
                 outOfStockCount: 0,

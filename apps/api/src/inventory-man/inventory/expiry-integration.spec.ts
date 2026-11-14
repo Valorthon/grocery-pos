@@ -1,3 +1,5 @@
+import { ledgerMock } from '../../common/testing/business-collaborators';
+import { StockMovementService } from '../../stock-movement/stock-movement.service';
 import { Types, type Model, type ClientSession } from 'mongoose';
 import { InventoryService } from './inventory.service';
 import { Inventory } from './inventory.schema';
@@ -41,6 +43,7 @@ function fixture(tracked = true) {
         inventory as unknown as Model<Inventory>,
         products as unknown as ProductService,
         batches as unknown as InventoryBatchService,
+        ledgerMock() as unknown as StockMovementService,
     );
     return { service, inventory, products, batches };
 }
