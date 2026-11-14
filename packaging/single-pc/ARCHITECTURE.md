@@ -46,8 +46,9 @@ Exact proof/runtime pins, upstream locations and archive checksums are in
 [components.json](components.json): Node 22.23.5, MongoDB 7.0.48, argon2 0.44.0,
 Caddy 2.11.9 and WinSW 2.12.0 NET461. Node/Mongo hashes were read from official
 release metadata on 2026-11-14. The proof verifies them before extraction and
-compares its executing Node binary with the verified archive. Caddy/WinSW
-acquisition, archive hashes and redistribution materials remain #362 work; these
+compares its executing Node binary with the verified archive. #362 pinned the
+Caddy archive (matched to upstream SHA-512) and WinSW (no upstream checksum;
+hash recorded from the release asset) and bundles their notices; these
 pins do not mean those executables have passed Windows execution tests.
 [Node checksums](https://nodejs.org/dist/v22.23.5/SHASUMS256.txt),
 [Mongo release metadata](https://downloads.mongodb.org/current.json),

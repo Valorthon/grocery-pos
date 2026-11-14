@@ -1205,6 +1205,30 @@ on upstream fixes).
   evidence), and writes `SYSTEM.DATABASE_RESTORED`. Kept offline leases have
   no session, so their queued cash needs ADMIN reconciliation (#37).
 
+**Single-PC installer** (#362, `packaging/single-pc/installer/README.md`)
+
+- `bundle.mjs` (vendor build machine, online) builds the offline bundle:
+  pinned `components.json` archives verified by SHA-256 (cache tampering
+  refused), mapped onto `releaseLayout` by `zip.mjs`, API via `pnpm deploy
+--prod --legacy` hoisted (Windows x64 prebuilds only), client with
+  `VITE_APP_ENV=single-pc`, tools, notices, a per-file `bundle-manifest.json`
+  and `SHA256SUMS`. The store downloads nothing.
+- `Install.ps1` (PowerShell 5.1, elevated) verifies node.exe and the
+  scripts, then `install.mjs install|repair|uninstall|handover-done`.
+  Logic is in `plan.mjs` (pure) and `install.mjs` (injectable context);
+  no MSI/Inno tooling. Preflight refuses before any write.
+- Services in order MongoDB → API → proxy under `NT SERVICE\<name>`
+  virtual accounts with the runtime README ACLs, SCM recovery 10/30/60 s.
+  Caddy's root goes in the machine Root store. First ADMIN via the #361
+  command into `%ProgramData%\Valorthon\GroceryPOS-Handover` (SYSTEM +
+  Administrators only), deleted only by `handover-done`. Daily backup task
+  as SYSTEM (`create --kind scheduled`), weekly reminder for the logged-on
+  user, "Grocery POS" shortcut runs `Launch.ps1` (waits for
+  `/v1/health/ready`, then Chrome).
+- Uninstall removes services, tasks, shortcuts and releases only; data root,
+  secrets, TLS, backups, handover, CA trust (unless `-RemoveCaTrust`) and
+  Chrome profiles stay. Windows execution is unproven until #357/#366.
+
 **Store settings** (#47, owner decision 2026-11-05)
 
 - Currency remains PHP only; existing centavos are never relabelled as another currency.
