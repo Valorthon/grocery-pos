@@ -28,6 +28,7 @@ function fixture() {
         busy: false,
         admin: false,
         setConnection: vi.fn(),
+        probe: vi.fn().mockResolvedValue(true),
         prepare: vi.fn().mockResolvedValue(undefined),
         sync: vi.fn().mockResolvedValue(undefined),
         refreshPending: vi.fn().mockResolvedValue(undefined),
@@ -106,11 +107,22 @@ it('syncs explicitly and automatically when the connection returns', async () =>
     await flush();
     expect(status.prepare).toHaveBeenCalledWith(mock.shifts.activeShift);
     expect(status.sync).toHaveBeenCalled();
+    status.probe.mockClear();
     window.dispatchEvent(new Event('offline'));
-    expect(status.setConnection).toHaveBeenCalledWith(false);
+    // The browser's offline event is a hint: the API decides (#359).
+    expect(status.probe).toHaveBeenCalledTimes(1);
+    expect(status.setConnection).not.toHaveBeenCalled();
     window.dispatchEvent(new Event('online'));
     await flush();
     expect(status.refreshPending).toHaveBeenCalled();
+});
+it('does not prepare or sync while the API does not answer', async () => {
+    status.probe.mockResolvedValue(false);
+    mount();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(status.probe).toHaveBeenCalled();
+    expect(status.prepare).not.toHaveBeenCalled();
+    expect(status.sync).not.toHaveBeenCalled();
 });
 it('refreshes periodically and removes its listeners/timer after unmount', async () => {
     mount();

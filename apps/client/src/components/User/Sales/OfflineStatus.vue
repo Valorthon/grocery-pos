@@ -132,8 +132,10 @@ watch(
         if (!open) failure.value = '';
     },
 );
+// The browser's online/offline events are hints only: the API itself
+// decides (#359), so a local API keeps working without internet.
 async function retry() {
-    status.setConnection(navigator.onLine);
+    if (!(await status.probe())) return;
     if (shifts.activeShift && auth.user?.roles.includes(Role.Seller))
         await status.prepare(shifts.activeShift);
     await status.sync();
@@ -156,7 +158,9 @@ async function reconcile(entry: OfflinePendingSale) {
         working.value = false;
     }
 }
-const offline = () => status.setConnection(false);
+const offline = () => {
+    void status.probe();
+};
 const online = () => {
     void retry();
 };

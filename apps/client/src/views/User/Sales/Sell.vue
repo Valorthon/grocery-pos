@@ -459,7 +459,7 @@ const offline = useOfflineStore();
 const searchQuery = ref('');
 const search = useProductSearch(
     async (name, signal) => {
-        if (offline.offline || !navigator.onLine) return offline.matches(name);
+        if (offline.offline) return offline.matches(name);
         try {
             return (
                 await api.get<Match[]>('/products/matches', {
@@ -1033,12 +1033,11 @@ async function lookUpBarcode(
 ): Promise<'added' | 'missing' | 'failed'> {
     const basket = cartStore.items;
     try {
-        const res =
-            offline.offline || !navigator.onLine
-                ? { data: await offline.product(EAN) }
-                : await api.get<ProductView>(
-                      `/products/${encodeURIComponent(EAN)}`,
-                  );
+        const res = offline.offline
+            ? { data: await offline.product(EAN) }
+            : await api.get<ProductView>(
+                  `/products/${encodeURIComponent(EAN)}`,
+              );
         if (basket !== cartStore.items) return 'failed';
         addProduct(res.data, qty, submitted);
         return 'added';
@@ -1073,12 +1072,11 @@ async function selectMatch(
     const basket = cartStore.items;
     clearFeedback();
     try {
-        const res =
-            offline.offline || !navigator.onLine
-                ? { data: await offline.product(match.EAN) }
-                : await api.get<ProductView>(
-                      `/products/${encodeURIComponent(match.EAN)}`,
-                  );
+        const res = offline.offline
+            ? { data: await offline.product(match.EAN) }
+            : await api.get<ProductView>(
+                  `/products/${encodeURIComponent(match.EAN)}`,
+              );
         if (basket !== cartStore.items) return;
         addProduct(res.data, qty, submitted);
     } catch {
@@ -1250,7 +1248,7 @@ async function voidTicket() {
 
 function openCheckout(method: PaymentType = PaymentType.CASH) {
     if (
-        (offline.offline || !navigator.onLine) &&
+        offline.offline &&
         (method !== PaymentType.CASH || discountRequest.value)
     ) {
         showFeedback(
@@ -1282,8 +1280,7 @@ const checkout = useSaleCheckout({
     cart: cartStore,
     ticket: () => toSaleTicket(cartStore.items, discountRequest.value),
     post: async (body) => {
-        if (offline.offline || !navigator.onLine)
-            return offline.queue(body, cartStore.items);
+        if (offline.offline) return offline.queue(body, cartStore.items);
         try {
             return (await api.post<Receipt>('/sales', body)).data;
         } catch (error) {
@@ -1332,7 +1329,7 @@ async function submitSale(payment: PaymentRequest) {
     // What the cashier tendered against, priced when the items were scanned.
     const previewTotal = total.value;
     if (
-        (offline.offline || !navigator.onLine) &&
+        offline.offline &&
         cartStore.attempt &&
         !(await offline.hasQueued(cartStore.attempt.idempotencyKey))
     )
@@ -1341,14 +1338,13 @@ async function submitSale(payment: PaymentRequest) {
         );
     const outcome = await checkout.submit(payment).catch(explainFailure);
     receipt.value = outcome.receipt;
-    receiptNotice.value =
-        offline.offline || !navigator.onLine
-            ? 'Offline cash sale — pending server sync. Keep this terminal and its browser data until all pending sales are confirmed.'
-            : outcome.alreadyRecorded
-              ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this sale summary, not the amount just entered.`
-              : outcome.receipt.totalAmount !== previewTotal
-                ? PRICES_CHANGED_NOTICE
-                : null;
+    receiptNotice.value = offline.offline
+        ? 'Offline cash sale — pending server sync. Keep this terminal and its browser data until all pending sales are confirmed.'
+        : outcome.alreadyRecorded
+          ? `This sale was already recorded with its original payment (${paymentLabel(outcome.receipt.paymentType)}). Settle change from this sale summary, not the amount just entered.`
+          : outcome.receipt.totalAmount !== previewTotal
+            ? PRICES_CHANGED_NOTICE
+            : null;
     resetDiscountUi();
     dismissUndo();
     for (const product of Object.keys(qtyDrafts)) delete qtyDrafts[product];
