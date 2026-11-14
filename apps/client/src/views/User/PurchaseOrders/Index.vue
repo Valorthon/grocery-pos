@@ -354,6 +354,9 @@
                                         inputmode="decimal"
                                         :error="lineErrors[index]?.cost"
                                         :disabled="busy"
+                                        @update:model-value="
+                                            editedCosts.add(line)
+                                        "
                                     />
                                 </td>
                                 <td
@@ -724,6 +727,9 @@ const supplier = ref<string | number | null>('');
 const note = ref('');
 const draft = ref<PurchaseOrderDraftLine[]>([]);
 const saved = ref('');
+// Pending defaults belong to one editor generation, not merely a product id.
+let editorGeneration = 0;
+const editedCosts = new WeakSet<PurchaseOrderDraftLine>();
 const busy = ref(false);
 const validation = ref('');
 const lineErrors = ref<Record<number, Record<string, string>>>({});
@@ -797,6 +803,7 @@ useUnsavedDraftsGuard({
 });
 
 function show(po: PurchaseOrderView | null, lines: PurchaseOrderDraftLine[]) {
+    editorGeneration++;
     current.value = po;
     supplier.value = po?.supplier?._id ?? '';
     note.value = po?.note ?? '';
@@ -823,6 +830,7 @@ async function closeEditor() {
         }))
     )
         return;
+    editorGeneration++;
     editing.value = false;
     current.value = null;
     draft.value = [];
@@ -847,6 +855,7 @@ function saveLine(line: PurchaseOrderDraftLine) {
     if (existing) {
         existing.quantity = line.quantity;
         existing.cost = line.cost;
+        editedCosts.add(existing);
     } else draft.value = [...draft.value, line];
     lineErrors.value = {};
 }
@@ -918,25 +927,34 @@ useBarcodeCapture(
     { enabled: () => isDraft.value && !busy.value && !addingLine.value },
 );
 
-/** Known latest costs fill untouched lines only, never an edit (#41, #123). */
-async function prefillCosts(lines: PurchaseOrderDraftLine[]) {
-    if (!lines.length) return;
-    const before = new Map(lines.map((l) => [l.product, l.cost]));
+/** Known latest costs fill this draft's original untouched lines only. */
+async function prefillCosts() {
+    const generation = editorGeneration;
+    const before = new Map(
+        draft.value.map((line) => [line.product, { line, cost: line.cost }]),
+    );
+    if (!before.size) return;
+    const isCurrent = () =>
+        !unmounted && generation === editorGeneration && isDraft.value;
     try {
         const result = await api.get<ProductCostView[]>('/suppliers/costs', {
-            params: { products: lines.map((l) => l.product).join(',') },
+            params: { products: [...before.keys()].join(',') },
         });
-        if (unmounted) return;
+        if (!isCurrent()) return;
         for (const row of result.data) {
-            const line = draft.value.find((l) => l.product === row.product);
-            if (!line || row.lastCost === undefined) continue;
-            if (line.cost !== before.get(row.product)) continue;
-            const wasSaved = !dirty.value;
+            const original = before.get(row.product);
+            if (!original || row.lastCost === undefined) continue;
+            const { line, cost } = original;
+            if (
+                !draft.value.includes(line) ||
+                editedCosts.has(line) ||
+                line.cost !== cost
+            )
+                continue;
             line.cost = centavosToPesoInput(row.lastCost);
-            if (wasSaved) saved.value = snapshot();
         }
     } catch (cause) {
-        if (!unmounted)
+        if (isCurrent())
             ui.queueMessage(
                 Color.ERROR,
                 apiErrorText(
@@ -960,6 +978,8 @@ function checkDraft(): boolean {
 
 async function saveDraft() {
     if (busy.value || !checkDraft()) return;
+    // The submitted body is fixed; a late default must not change its editor.
+    editorGeneration++;
     busy.value = true;
     const body = toPurchaseOrderBody(
         String(supplier.value),
@@ -1153,7 +1173,7 @@ if (prefilled.length) {
         Color.INFO,
         'Choose a supplier and review quantities and expected costs before saving.',
     );
-    void prefillCosts(prefilled);
+    void prefillCosts();
 }
 const deepLink = router.currentRoute?.value.query.id;
 // The open order is in the address as `?id=` (#143), so it can be
