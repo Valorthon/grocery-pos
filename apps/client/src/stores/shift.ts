@@ -190,7 +190,10 @@ export const useShiftStore = defineStore('shift', () => {
             // A successful replay may belong to a shift closed after the
             // original movement. Never restore that shift as an open drawer.
             if (res.data.status === ShiftStatus.OPEN) setShift(res.data);
-            else await fetchCurrent();
+            else {
+                await fetchCurrent();
+                if (gen !== generation) throw new StaleResponseError();
+            }
         } catch (error) {
             if (gen !== generation) throw new StaleResponseError();
             // Network failures and 5xx may have lost a committed answer.

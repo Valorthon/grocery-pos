@@ -442,6 +442,27 @@ describe('drawer retry identity (#333)', () => {
         expect(request(0).shiftId).toBe(SHIFT._id);
         expect(store.activeShift).toEqual(next);
     });
+    it('rejects a closed replay whose follow-up current-shift read finishes after logout', async () => {
+        const store = await ready();
+        let answer!: (value: { data: { shift: typeof SHIFT | null } }) => void;
+        const response = new Promise<{ data: { shift: typeof SHIFT | null } }>(
+            (resolve) => {
+                answer = resolve;
+            },
+        );
+        api.post.mockResolvedValue({
+            data: { ...SHIFT, status: ShiftStatus.CLOSED },
+        });
+        api.get.mockReturnValue(response);
+        const pending = move(store);
+        await vi.waitFor(() => expect(api.get).toHaveBeenCalled());
+        store.reset();
+        store.drawerAction = DrawerMovementType.CASH_DROP;
+        answer({ data: { shift: SHIFT } });
+        await expect(pending).rejects.toBeInstanceOf(StaleResponseError);
+        expect(store.activeShift).toBeNull();
+        expect(store.drawerAction).toBe(DrawerMovementType.CASH_DROP);
+    });
     it('does not submit without an open shift', async () => {
         const store = await loadStore();
         await expect(move(store)).rejects.toThrow('Open a shift');
