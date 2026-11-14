@@ -300,7 +300,7 @@ function writeStorage(key: string, value: string | null): boolean {
         else localStorage.setItem(key, value);
         return true;
     } catch {
-        // Ordinary basket edits still work unsaved; parking requires a durable write.
+        // Ordinary basket edits still work unsaved; parking and checkout require a durable write.
         return false;
     }
 }
@@ -371,18 +371,19 @@ export const useCartStore = defineStore('cart', () => {
         return true;
     }
 
-    function persist() {
-        if (!owner.value || applyingRemote) return;
-        if (!reconcileParked()) return;
+    function persist(nextAttempt = attempt.value): boolean {
+        if (!owner.value || applyingRemote) return false;
+        if (!reconcileParked()) return false;
         const key = cartStorageKey(owner.value);
         if (
             items.value.length === 0 &&
             discount.value === null &&
-            attempt.value === null &&
+            nextAttempt === null &&
             parked.value.length === 0
         ) {
-            if (writeStorage(key, null)) savedSnapshot = null;
-            return;
+            if (!writeStorage(key, null)) return false;
+            savedSnapshot = null;
+            return true;
         }
         const stored: StoredCart = {
             version: CART_STORAGE_VERSION,
@@ -397,18 +398,20 @@ export const useCartStore = defineStore('cart', () => {
                 }),
             ),
             discount: discount.value && { ...discount.value },
-            attempt: attempt.value && { ...attempt.value },
+            attempt: nextAttempt && { ...nextAttempt },
             ...(parked.value.length
                 ? { parked: parked.value.map(copyParked) }
                 : {}),
         };
         const json = JSON.stringify(stored);
-        if (writeStorage(key, json)) savedSnapshot = json;
+        if (!writeStorage(key, json)) return false;
+        savedSnapshot = json;
+        return true;
     }
 
     // Saved on every change, synchronously, so a crash right after a scan
     // still has it.
-    watch([items, discount, attempt, parked], persist, {
+    watch([items, discount, attempt, parked], () => persist(), {
         deep: true,
         flush: 'sync',
     });
@@ -608,7 +611,22 @@ export const useCartStore = defineStore('cart', () => {
     }
 
     function setAttempt(next: StoredAttempt | null) {
-        attempt.value = next && { ...next };
+        if (!next) {
+            attempt.value = null;
+            return;
+        }
+        // Save the basket and key before exposing it to checkout. A failed
+        // write must not leave an in-memory key that bypasses saving on Retry.
+        if (!persist(next))
+            throw new Error(
+                'Checkout could not be saved in this browser. Nothing was charged. Your ticket is kept; restore browser storage and retry.',
+            );
+        applyingRemote = true;
+        try {
+            attempt.value = { ...next };
+        } finally {
+            applyingRemote = false;
+        }
     }
 
     /**
