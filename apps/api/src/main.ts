@@ -9,6 +9,10 @@ import { createValidationPipe } from './common/pipes/validation.pipe';
 import { corsOptions } from './common/cors';
 import { applyTrustProxy, listenHost } from './common/http-topology';
 import { useBodyParsers } from './common/body-parsers';
+import { getConnectionToken } from '@nestjs/mongoose';
+import type { Connection } from 'mongoose';
+import { isSinglePcEnv } from './common/typed-config/app-env';
+import { awaitDatabaseReady } from './common/startup-readiness';
 
 async function bootstrap() {
     const logger = new Logger('Bootstrap');
@@ -43,6 +47,12 @@ async function bootstrap() {
     applyTrustProxy(app, config.get('APP_ENV'));
 
     app.enableShutdownHooks();
+
+    // single-pc (#360): no traffic before the local replica set is a
+    // writable primary and every index exists. Cloud startup is unchanged.
+    if (isSinglePcEnv(config.get('APP_ENV'))) {
+        await awaitDatabaseReady(app.get<Connection>(getConnectionToken()));
+    }
 
     const port = config.get('PORT') ?? process.env.PORT;
     // single-pc listens on loopback only (#358); cloud keeps 0.0.0.0.

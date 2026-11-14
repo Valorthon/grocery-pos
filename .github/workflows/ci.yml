@@ -182,6 +182,21 @@ jobs:
             - name: DB tests
               run: pnpm --filter grocery-pos-api test:db
 
+            # The single-PC runtime (#360) provisions its own authenticated
+            # mongod from a MongoDB 7 binary on loopback ports 27018/13000.
+            - name: Extract mongod for the single-PC runtime tests
+              run: |
+                  id=$(docker create mongo:7.0)
+                  docker cp "$id:/usr/bin/mongod" "$RUNNER_TEMP/mongod"
+                  docker rm "$id"
+                  "$RUNNER_TEMP/mongod" --version | head -1
+
+            - name: Build API (compiled single-PC runtime checks)
+              run: pnpm --filter grocery-pos-api build
+
+            - name: Single-PC runtime provisioning on real MongoDB
+              run: GPOS_TEST_MONGOD="$RUNNER_TEMP/mongod" pnpm test:single-pc-runtime
+
             - name: MongoDB logs on failure
               if: failure()
               run: docker logs mongodb 2>&1 | tail -200
