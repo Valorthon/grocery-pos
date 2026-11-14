@@ -89,6 +89,10 @@ jobs:
             - name: Build Contracts
               run: pnpm --filter @grocery-pos/contracts build
 
+            # #357 portable fail-closed checks only, not Windows platform proof.
+            - name: Single-PC proof policy checks
+              run: pnpm test:single-pc-proof
+
             - name: Format Check
               run: pnpm format:check
 
