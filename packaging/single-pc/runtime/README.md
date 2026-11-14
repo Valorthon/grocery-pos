@@ -23,28 +23,29 @@ Replaceable binaries, one directory per release (built by #362):
 
 Persistent data root, `%ProgramData%\Valorthon\GroceryPOS` (`layout`):
 
-| Path                                          | Contents                                                              | POSIX mode |
-| --------------------------------------------- | --------------------------------------------------------------------- | ---------- |
-| `config\mongod.cfg`                           | mongod configuration (regenerated, no secrets)                        | 0750 dir   |
-| `config\runtime.json`                         | non-secret manifest: ports, paths, service names, install id          |            |
-| `secrets\mongo-keyfile`                       | replica-set keyfile (756 random bytes, base64)                        | 0700/0600  |
-| `secrets\mongo-root-password`                 | `gpos_root` (root role); provisioning/maintenance only                |            |
-| `secrets\mongo-api-password`                  | `gpos_api` (readWrite on `grocery` only)                              |            |
-| `secrets\jwt-secret`, `cookie-secret`         | distinct 48-byte base64url values                                     |            |
-| `secrets\api.env`                             | the API's environment (`node --env-file`), derived from above         |            |
-| `database\`                                   | MongoDB dbPath                                                        | 0700       |
-| `tls\data`, `tls\config`                      | Caddy `XDG_DATA_HOME`/`XDG_CONFIG_HOME`: internal CA and certs        | 0700       |
-| `logs\mongod.log`, `logs\api\`, `logs\proxy\` | service logs                                                          | 0750       |
-| `backups\`                                    | reserved for #363                                                     | 0700       |
-| `state\install.json`                          | `{schema, installationId, createdAt}`, written once                   | 0700       |
-| `state\provision.json`                        | stage journal (`layout`, `secrets`, `database`, `config`, `complete`) |            |
-| `state\provision.lock`, `state\mongod.pid`    | present only while a run is active                                    |            |
+| Path                                          | Contents                                                               | POSIX mode |
+| --------------------------------------------- | ---------------------------------------------------------------------- | ---------- |
+| `config\mongod.cfg`                           | mongod configuration (regenerated, no secrets)                         | 0750 dir   |
+| `config\runtime.json`                         | non-secret manifest: ports, paths, service names, install id           |            |
+| `secrets\mongo-keyfile`                       | replica-set keyfile (756 random bytes, base64)                         | 0700/0600  |
+| `secrets\mongo-root-password`                 | `gpos_root` (root role); provisioning/maintenance only                 |            |
+| `secrets\mongo-api-password`                  | `gpos_api` (readWrite on `grocery` only)                               |            |
+| `secrets\jwt-secret`, `cookie-secret`         | distinct 48-byte base64url values                                      |            |
+| `secrets\api.env`                             | the API's environment (`node --env-file`), derived from above          |            |
+| `database\`                                   | MongoDB dbPath                                                         | 0700       |
+| `tls\data`, `tls\config`                      | Caddy `XDG_DATA_HOME`/`XDG_CONFIG_HOME`: internal CA and certs         | 0700       |
+| `logs\mongod.log`, `logs\api\`, `logs\proxy\` | service logs                                                           | 0750       |
+| `backups\`                                    | verified backups and `status.json` ([../backup/](../backup/README.md)) | 0700       |
+| `state\install.json`                          | `{schema, installationId, createdAt}`, written once                    | 0700       |
+| `state\provision.json`                        | stage journal (`layout`, `secrets`, `database`, `config`, `complete`)  |            |
+| `state\provision.lock`, `state\mongod.pid`    | present only while a run is active                                     |            |
 
 Secrets are generated with `crypto.randomBytes` on the target, written once
 (create-then-link, never overwritten) and never printed, passed as arguments
-or put in the release, `config\` or logs. Backups (#363) must carry
+or put in the release, `config\` or logs. Backups (#363) carry
 `secrets\` and `state\install.json` with the database: without them the
-database is unreachable (no reset path exists, by design).
+database is unreachable (no reset path exists, by design). See
+[../backup/README.md](../backup/README.md).
 
 ## Ports and binds
 
@@ -149,7 +150,8 @@ data migrations (`migrate:categories`, `migrate:stock-ledger`,
 `migrate:decode-entities`): they read and write `grocery` collections and
 build indexes, with no `collMod`, `dropIndex` on other databases or admin
 commands. They exist for legacy cloud data; a fresh single-PC installation
-needs none of them. `gpos_root` is used only by `provision.mjs`; a future
+needs none of them. `gpos_root` is used only by `provision.mjs` and the backup/restore tools
+(#363, `mongodump --oplog` needs more than `readWrite`); a future
 migration that needs more than `readWrite` must get its own credential in
 a later change rather than widening `gpos_api`.
 

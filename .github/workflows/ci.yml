@@ -186,18 +186,26 @@ jobs:
             # mongod on loopback ports 27018/13000, from the exact MongoDB
             # version the installer ships (packaging/single-pc/components.json;
             # layout.test.mjs keeps this tag in step with it).
-            - name: Extract mongod for the single-PC runtime tests
+            # The same image carries the MongoDB Database Tools used for
+            # backups (#363): mongodump/mongorestore beside mongod.
+            - name: Extract mongod and the database tools for the single-PC tests
               run: |
                   id=$(docker create mongo:7.0.48)
                   docker cp "$id:/usr/bin/mongod" "$RUNNER_TEMP/mongod"
+                  docker cp "$id:/usr/bin/mongodump" "$RUNNER_TEMP/mongodump"
+                  docker cp "$id:/usr/bin/mongorestore" "$RUNNER_TEMP/mongorestore"
                   docker rm "$id"
                   "$RUNNER_TEMP/mongod" --version | head -1
+                  "$RUNNER_TEMP/mongodump" --version | head -1
 
             - name: Build API (compiled single-PC runtime checks)
               run: pnpm --filter grocery-pos-api build
 
             - name: Single-PC runtime provisioning on real MongoDB
               run: GPOS_TEST_MONGOD="$RUNNER_TEMP/mongod" pnpm test:single-pc-runtime
+
+            - name: Single-PC backup and restore on real MongoDB
+              run: GPOS_TEST_MONGOD="$RUNNER_TEMP/mongod" GPOS_TEST_MONGO_TOOLS="$RUNNER_TEMP" pnpm test:single-pc-backup
 
             - name: MongoDB logs on failure
               if: failure()

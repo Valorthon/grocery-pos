@@ -83,6 +83,11 @@ export function layout(root) {
         install: join(dirs.state, 'install.json'),
         journal: join(dirs.state, 'provision.json'),
         lock: join(dirs.state, 'provision.lock'),
+        // Backup/restore (#363): one maintenance lock, the status interface
+        // diagnostics (#365) read, and the restore journal.
+        backupLock: join(dirs.state, 'backup.lock'),
+        backupStatus: join(dirs.backups, 'status.json'),
+        restoreJournal: join(dirs.state, 'restore.json'),
         mongodPid: join(dirs.state, 'mongod.pid'),
         mongodLog: join(dirs.logs, 'mongod.log'),
         apiLogs: join(dirs.logs, 'api'),
@@ -178,6 +183,9 @@ export function releaseLayout(release, { windows = true } = {}) {
     return {
         node: join(release, 'node', exe('node')),
         mongod: join(release, 'mongodb', 'bin', exe('mongod')),
+        // MongoDB Database Tools (components.json `mongodbTools`), #363.
+        mongodump: join(release, 'mongodb', 'bin', exe('mongodump')),
+        mongorestore: join(release, 'mongodb', 'bin', exe('mongorestore')),
         api: join(release, 'api'),
         apiMain: join(release, 'api', 'dist', 'main.js'),
         initialAdmin: join(
