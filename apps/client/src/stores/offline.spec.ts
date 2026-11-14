@@ -1,4 +1,4 @@
-import { IDBFactory } from 'fake-indexeddb';
+import { IDBFactory, IDBKeyRange, IDBObjectStore } from 'fake-indexeddb';
 import { createPinia, setActivePinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
@@ -100,6 +100,7 @@ function failure(status?: number, error?: ErrorCode) {
 beforeEach(async () => {
     closeOfflineDatabase();
     vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
     setActivePinia(createPinia());
     await saveOfflineState({
@@ -386,6 +387,7 @@ it('does not expose an old cashier’s late sync failure after logout', async ()
 it('atomically prepares one durable terminal identity across fresh tabs', async () => {
     closeOfflineDatabase();
     vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
     const a = useOfflineStore(createPinia());
     const b = useOfflineStore(createPinia());
     await Promise.all([
@@ -416,6 +418,7 @@ it('atomically prepares one durable terminal identity across fresh tabs', async 
 it('reuses committed terminal identity after a lost first lease response and reload', async () => {
     closeOfflineDatabase();
     vi.stubGlobal('indexedDB', new IDBFactory());
+    vi.stubGlobal('IDBKeyRange', IDBKeyRange);
     const a = useOfflineStore(createPinia());
     await a.restore(USER, [Role.Seller]);
     vi.mocked(api.post).mockRejectedValueOnce(failure());
@@ -446,4 +449,34 @@ it('applies archived tombstones without losing pending cash receipts', async () 
     await store.prepare(lease().shift);
     expect(store.state?.products).toEqual([]);
     expect(store.state?.cursor).not.toBeNull();
+});
+
+it('looks up present and absent receipt keys directly without listing the outbox', async () => {
+    await store.queue(body(), items());
+    const get = vi.spyOn(IDBObjectStore.prototype, 'get');
+    const getAll = vi.spyOn(IDBObjectStore.prototype, 'getAll');
+    expect(await store.hasQueued(body().idempotencyKey)).toBe(true);
+    expect(await store.hasQueued('absent')).toBe(false);
+    expect(getAll).not.toHaveBeenCalled();
+    expect(get.mock.calls).toEqual([
+        [[USER, body().idempotencyKey]],
+        [[USER, 'absent']],
+    ]);
+    await store.restore('another', [Role.Seller]);
+    getAll.mockClear();
+    expect(await store.hasQueued(body().idempotencyKey)).toBe(false);
+    expect(getAll).not.toHaveBeenCalled();
+});
+it('replays a queued receipt through its compound key without a full outbox read', async () => {
+    const receipt = await store.queue(body(), items());
+    const getAll = vi.spyOn(IDBObjectStore.prototype, 'getAll');
+    expect(await store.queue(body(), items())).toEqual(receipt);
+    expect(getAll).not.toHaveBeenCalled();
+});
+
+it('does not look up a receipt under a placeholder owner after logout', async () => {
+    store.reset();
+    const get = vi.spyOn(IDBObjectStore.prototype, 'get');
+    expect(await store.hasQueued('any')).toBe(false);
+    expect(get).not.toHaveBeenCalled();
 });
