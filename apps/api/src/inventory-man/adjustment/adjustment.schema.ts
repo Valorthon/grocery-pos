@@ -18,12 +18,14 @@ export class Adjustment {
         required: true,
         type: mongoose.Schema.ObjectId,
         ref: User.name,
-        index: true,
     })
     adjustedBy!: User | Types.ObjectId;
 }
 
 export const AdjustmentSchema = SchemaFactory.createForClass(Adjustment);
+// History pages and dashboard activity share descending date order (#339).
+AdjustmentSchema.index({ createdAt: -1 });
+AdjustmentSchema.index({ adjustedBy: 1, createdAt: -1 });
 
 /** An adjustment read with `adjustedBy` populated by name (null once deleted). */
 export type AdjustmentRowDoc = Omit<Adjustment, 'adjustedBy'> & {

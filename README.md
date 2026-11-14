@@ -135,6 +135,26 @@ db.sales.dropIndex('shift_1');
 Before the new index exists, `shift_1` is still what closing a shift reads
 sales through, so don't drop it earlier.
 
+### Replace the history actor indexes (#339), once
+
+Restock and adjustment history add `createdAt_-1` indexes for newest-first
+history and dashboard activity. The compound indexes
+`restockedBy_1_createdAt_-1` and `adjustedBy_1_createdAt_-1` replace their
+single-field actor indexes; restocks also add `purchaseOrder_1_createdAt_-1`
+for purchase-order receipt links. Existing filters and exact totals are unchanged.
+
+Mongoose adds the declared indexes but does not remove old ones. After the new
+compound indexes exist (check `db.restocks.getIndexes()` and
+`db.adjustments.getIndexes()`), remove the redundant old indexes in `mongosh`:
+
+```js
+db.restocks.dropIndex('restockedBy_1');
+db.adjustments.dropIndex('adjustedBy_1');
+```
+
+Do not drop the old actor indexes before their replacements have finished building.
+This is an operator rollout step; the application does not drop indexes at startup.
+
 ### Decode HTML entities in stored text (#15), once
 
 Before #15 the API stored request text HTML-encoded: `M&M's` became
