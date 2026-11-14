@@ -30,12 +30,16 @@ export class StepUpService {
      * Records a step-up for `{userId, sid}` lasting `STEP_UP_TTL_S` from now.
      * A later re-auth starts a new window; a guarded action never extends it.
      */
-    async grant(userId: string, sid: string): Promise<Date> {
+    async grant(
+        userId: string,
+        sid: string,
+        session: ClientSession,
+    ): Promise<Date> {
         const expiresAt = new Date(Date.now() + STEP_UP_TTL_S * MS_PER_SECOND);
         await this.stepUps.updateOne(
             { user: new Types.ObjectId(userId), sid },
             { $set: { expiresAt } },
-            { upsert: true },
+            { upsert: true, session },
         );
         return expiresAt;
     }

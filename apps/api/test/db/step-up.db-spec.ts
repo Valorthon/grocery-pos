@@ -7,6 +7,8 @@ import * as argon from 'argon2';
 import { Types } from 'mongoose';
 import { AuditAction, ErrorCode, Role } from '@grocery-pos/contracts';
 import { bootDbApp, caller, read, type DbApp } from './db-app';
+import { AuditService } from '../../src/audit/audit.service';
+import type { StepUp } from '../../src/auth/step-up/step-up.schema';
 
 let db: DbApp;
 const admin = caller('stepup-admin', Role.Admin);
@@ -131,3 +133,53 @@ it('a step-up whose session was revoked does not count', async () => {
     expect(res.status).toBe(403);
     expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
 });
+
+it.each([false, true])(
+    'rolls back the grant and audit on an audit failure (prior grant: %s)',
+    async (hasPriorGrant) => {
+        const stepUps = db.model<StepUp>('StepUp');
+        const user = new Types.ObjectId(admin.userId);
+        if (hasPriorGrant) {
+            await stepUps.create({
+                user,
+                sid: admin.userId,
+                expiresAt: new Date(Date.now() + 60_000),
+            });
+        }
+        const before = await stepUps.findOne({ user }).lean();
+        const audit = db.app.get(AuditService);
+        const eventsBefore = await db.model('AuditLog').countDocuments({
+            action: AuditAction.AUTH_REAUTH,
+        });
+        const record = audit.record.bind(audit);
+        const failure = jest
+            .spyOn(audit, 'record')
+            .mockImplementationOnce(async (event, session) => {
+                // Fail after insertion so both the grant and audit rollback
+                // are proved against real MongoDB, including existing grants.
+                await record(event, session);
+                throw new Error('forced re-auth audit outage');
+            });
+        let response: Response;
+        try {
+            response = await db.call(admin, 'POST', '/auth/reauth', {
+                password: PASSWORD,
+            });
+        } finally {
+            failure.mockRestore();
+        }
+        expect(response.status).toBe(500);
+        expect(await stepUps.findOne({ user }).lean()).toEqual(before);
+        expect(
+            await db.model('AuditLog').countDocuments({
+                action: AuditAction.AUTH_REAUTH,
+            }),
+        ).toBe(eventsBefore);
+        const guarded = await read(
+            await createUser(`stepup-rollback-${String(hasPriorGrant)}`),
+        );
+        expect(guarded.status).toBe(hasPriorGrant ? 201 : 403);
+        if (!hasPriorGrant)
+            expect(guarded.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+    },
+);

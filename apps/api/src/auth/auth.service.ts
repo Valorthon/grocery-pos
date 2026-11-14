@@ -1,6 +1,9 @@
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@grocery-pos/contracts';
 import { Injectable } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection } from 'mongoose';
+import { runInTransaction } from '../common/utils/db';
 import { LoginDto } from './types';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
@@ -23,6 +26,7 @@ export class AuthService {
         private refreshTokenService: RefreshTokenService,
         private audit: AuditService,
         private stepUp: StepUpService,
+        @InjectConnection() private connection: Connection,
     ) {}
 
     /**
@@ -57,14 +61,19 @@ export class AuthService {
                 'That password isn’t right',
             );
         }
-        await this.stepUp.grant(actor.userId, sid);
-        await this.audit.record({
-            actor: auditActor,
-            action: AuditAction.AUTH_REAUTH,
-            targetModel: 'User',
-            targetId: actor.userId,
-            after: { name: user.name },
-        });
+        await runInTransaction(async (session) => {
+            await this.stepUp.grant(actor.userId, sid, session);
+            await this.audit.record(
+                {
+                    actor: auditActor,
+                    action: AuditAction.AUTH_REAUTH,
+                    targetModel: 'User',
+                    targetId: actor.userId,
+                    after: { name: user.name },
+                },
+                session,
+            );
+        }, this.connection);
     }
 
     async login(dto: LoginDto): Promise<{

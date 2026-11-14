@@ -22,10 +22,10 @@ import {
 } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule, JwtService } from '@nestjs/jwt';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
-import { Types } from 'mongoose';
+import { Types, type ClientSession } from 'mongoose';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { Roles } from './auth.decorator';
@@ -190,6 +190,7 @@ describe('Auth session flow (e2e)', () => {
     const verifyOwnPassword = jest.fn();
     let stepUps: FakeStepUpModel;
     let audit: { record: jest.Mock };
+    const session = {} as ClientSession;
 
     function accessToken(expiresInS: number): string {
         const nowS = Math.floor(Date.now() / 1000);
@@ -235,6 +236,18 @@ describe('Auth session flow (e2e)', () => {
                     },
                 },
                 AuthService,
+                {
+                    provide: getConnectionToken(),
+                    useValue: {
+                        startSession: () =>
+                            Promise.resolve({
+                                withTransaction: (
+                                    run: (s: ClientSession) => Promise<unknown>,
+                                ) => run(session),
+                                endSession: () => Promise.resolve(),
+                            }),
+                    },
+                },
                 JWTStrategy,
                 CookieService,
                 RefreshTokenService,
@@ -875,6 +888,12 @@ describe('Auth session flow (e2e)', () => {
                     action: AuditAction.AUTH_REAUTH,
                     targetId: SELLER._id.toString(),
                 }),
+                session,
+            );
+            expect(stepUps.updateOne).toHaveBeenLastCalledWith(
+                expect.anything(),
+                expect.anything(),
+                { upsert: true, session },
             );
         });
 
