@@ -40,11 +40,15 @@ import type { CartItem } from './cart';
 
 const networkFailure = (error: unknown) =>
     isAxiosError(error) && !error.response;
+/** How long an availability probe may take before the API counts as down. */
+export const PROBE_TIMEOUT_MS = 5000;
 export const useOfflineStore = defineStore('offline', () => {
     const owner = ref<string | null>(null);
     const state = ref<OfflineState | null>(null);
     const pending = ref<OfflinePendingSale[]>([]);
-    const connected = ref(typeof navigator === 'undefined' || navigator.onLine);
+    // Whether the configured API answers. The browser's online flag is
+    // only a hint: a local API stays reachable without internet (#359).
+    const connected = ref(true);
     const busy = ref(false);
     const error = ref('');
     const pendingOpen = ref(false);
@@ -52,6 +56,9 @@ export const useOfflineStore = defineStore('offline', () => {
     let generation = 0;
     let syncing: Promise<void> | undefined;
     let preparing: Promise<void> | undefined;
+    let probing: Promise<boolean> | undefined;
+    // Bumped by every connection verdict, so an older probe can't undo it.
+    let verdict = 0;
     const offline = computed(() => !connected.value);
     const ready = computed(
         () =>
@@ -73,6 +80,7 @@ export const useOfflineStore = defineStore('offline', () => {
         roles: Role[],
     ): Promise<CurrentShiftView | null> {
         preparing = undefined;
+        probing = undefined;
         const gen = ++generation;
         owner.value = id;
         admin.value = roles.includes(Role.Admin);
@@ -93,6 +101,7 @@ export const useOfflineStore = defineStore('offline', () => {
     function reset() {
         generation++;
         preparing = undefined;
+        probing = undefined;
         busy.value = false;
         owner.value = null;
         state.value = null;
@@ -119,10 +128,7 @@ export const useOfflineStore = defineStore('offline', () => {
         return operation;
     }
     async function prepareOnce(shift: CurrentShiftView): Promise<void> {
-        if (!owner.value || !navigator.onLine) {
-            connected.value = false;
-            return;
-        }
+        if (!owner.value) return;
         const id = owner.value;
         const gen = generation;
         try {
@@ -164,13 +170,13 @@ export const useOfflineStore = defineStore('offline', () => {
                 return;
             if (gen !== generation) return;
             state.value = saved;
-            connected.value = true;
+            setConnection(true);
             error.value = '';
             void navigator.storage?.persist?.().catch(() => false);
             await sync();
         } catch (cause) {
             if (gen !== generation) return;
-            if (networkFailure(cause)) connected.value = false;
+            if (networkFailure(cause)) setConnection(false);
             error.value = message(cause);
         }
     }
@@ -187,7 +193,7 @@ export const useOfflineStore = defineStore('offline', () => {
         return product;
     }
     async function product(EAN: string): Promise<ProductView> {
-        if (connected.value && navigator.onLine) {
+        if (connected.value) {
             try {
                 return (
                     await api.get<ProductView>(
@@ -196,7 +202,7 @@ export const useOfflineStore = defineStore('offline', () => {
                 ).data;
             } catch (cause) {
                 if (!networkFailure(cause)) throw cause;
-                connected.value = false;
+                setConnection(false);
             }
         }
         const p = cached(EAN);
@@ -211,7 +217,7 @@ export const useOfflineStore = defineStore('offline', () => {
         };
     }
     async function matches(term: string): Promise<ProductMatch[]> {
-        if (connected.value && navigator.onLine) {
+        if (connected.value) {
             try {
                 return (
                     await api.get<ProductMatch[]>('/products/matches', {
@@ -220,7 +226,7 @@ export const useOfflineStore = defineStore('offline', () => {
                 ).data;
             } catch (cause) {
                 if (!networkFailure(cause)) throw cause;
-                connected.value = false;
+                setConnection(false);
             }
         }
         if (!ready.value) return [];
@@ -352,7 +358,7 @@ export const useOfflineStore = defineStore('offline', () => {
     }
     async function sync(): Promise<void> {
         if (syncing) return syncing;
-        if (!owner.value || !connected.value || !navigator.onLine) return;
+        if (!owner.value || !connected.value) return;
         const id = owner.value;
         const gen = generation;
         syncing = (async () => {
@@ -370,7 +376,7 @@ export const useOfflineStore = defineStore('offline', () => {
                     } catch (cause) {
                         if (gen !== generation) break;
                         if (networkFailure(cause)) {
-                            connected.value = false;
+                            setConnection(false);
                             break;
                         }
                         const code = apiErrorCode(cause);
@@ -415,7 +421,7 @@ export const useOfflineStore = defineStore('offline', () => {
     async function beforeClose(): Promise<void> {
         if (!owner.value || !state.value?.lease) return;
         const id = owner.value;
-        if (!navigator.onLine || !connected.value)
+        if (!(await probe()))
             throw new Error(
                 'Reconnect and sync pending cash sales before closing this shift.',
             );
@@ -436,7 +442,46 @@ export const useOfflineStore = defineStore('offline', () => {
                 };
         }
     }
+    /**
+     * Asks the configured API (never an external service) whether it
+     * answers, once at a time and bounded by PROBE_TIMEOUT_MS. The API
+     * process answered when the response carries its X-Request-Id, even an
+     * unhealthy 503 from its own health check; no response, a timeout or a
+     * 5xx without that header (a proxy) counts as unreachable. A probe that
+     * outlives a logout or cashier change, or a newer verdict, writes
+     * nothing.
+     */
+    function probe(): Promise<boolean> {
+        if (probing) return probing;
+        const gen = generation;
+        const seen = verdict;
+        // Started inside a promise, so a synchronous throw is a failed probe.
+        const operation = Promise.resolve()
+            .then(() => api.get('/health/live', { timeout: PROBE_TIMEOUT_MS }))
+            .then(
+                () => true,
+                (cause: unknown) => {
+                    if (!isAxiosError(cause) || !cause.response) return false;
+                    const { status, headers } = cause.response;
+                    return (
+                        status < 500 ||
+                        !!(headers as Record<string, unknown>)['x-request-id']
+                    );
+                },
+            )
+            .then((reachable) => {
+                if (gen === generation && seen === verdict)
+                    setConnection(reachable);
+                return reachable;
+            })
+            .finally(() => {
+                if (probing === operation) probing = undefined;
+            });
+        probing = operation;
+        return operation;
+    }
     function setConnection(value: boolean) {
+        verdict++;
         connected.value = value;
     }
     return {
@@ -461,6 +506,7 @@ export const useOfflineStore = defineStore('offline', () => {
         sync,
         reconcileEntry,
         beforeClose,
+        probe,
         setConnection,
     };
 });

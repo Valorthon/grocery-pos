@@ -20,7 +20,7 @@ import {
     readOfflineState,
     saveOfflineState,
 } from '@/offline/database';
-import { useOfflineStore } from './offline';
+import { PROBE_TIMEOUT_MS, useOfflineStore } from './offline';
 import { seedLegacyOfflineDatabase } from '@/offline/testing/legacy-database';
 vi.mock('@/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 const USER = '0123456789abcdef01234567';
@@ -353,7 +353,7 @@ it('drains and suspends offline mode before releasing the exact terminal lease',
     expect((await readOfflineState(USER))?.suspended).toBe(true);
 });
 it('keeps shift open while offline or with a blocked collected sale', async () => {
-    store.setConnection(false);
+    vi.mocked(api.get).mockRejectedValueOnce(failure());
     await expect(store.beforeClose()).rejects.toThrow('Reconnect');
     store.setConnection(true);
     await store.queue(body(), items());
@@ -635,4 +635,104 @@ it('does not apply an old cashier catalogue response after logout', async () => 
     await work;
     expect(store.state).toBeNull();
     expect((await readOfflineState(USER))?.products[0]?.price).toBe(18000);
+});
+it('uses the reachable API while the browser reports no internet (#359)', async () => {
+    vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    setActivePinia(createPinia());
+    store = useOfflineStore();
+    await store.restore(USER, [Role.Seller]);
+    expect(store.connected).toBe(true);
+    vi.mocked(api.get).mockResolvedValueOnce({
+        data: { ...product(), price: 20000 },
+    });
+    expect((await store.product(product().EAN)).price).toBe(20000);
+    vi.mocked(api.get).mockResolvedValueOnce({ data: [] });
+    expect(await store.matches('rice')).toEqual([]);
+    await store.prepare(lease().shift);
+    expect(api.post).toHaveBeenCalledWith('/offline/lease', {
+        terminalId: 'terminal',
+    });
+    await store.queue(body(), items());
+    await store.sync();
+    expect(await pendingOffline(USER)).toEqual([]);
+    await store.beforeClose();
+    expect(api.post).toHaveBeenLastCalledWith(
+        `/offline/leases/${LEASE}/release`,
+        { terminalId: 'terminal' },
+    );
+});
+it('probes only the configured API, bounded, and classifies its answers', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({ data: {} });
+    expect(await store.probe()).toBe(true);
+    expect(api.get).toHaveBeenLastCalledWith('/health/live', {
+        timeout: PROBE_TIMEOUT_MS,
+    });
+    const fromApi = (status: number) => {
+        const cause = failure(status);
+        cause.response!.headers = { 'x-request-id': 'req-1' };
+        return cause;
+    };
+    for (const [cause, reachable] of [
+        [failure(), false],
+        // A proxy's 5xx carries no API request id: the API is down.
+        [failure(502), false],
+        [failure(503), false],
+        [failure(504), false],
+        [failure(500), false],
+        // The API's own unhealthy 503 still means the API answered.
+        [fromApi(503), true],
+        [fromApi(500), true],
+        [failure(401), true],
+        [new Error('boom'), false],
+    ] as const) {
+        vi.mocked(api.get).mockRejectedValueOnce(cause);
+        expect(await store.probe()).toBe(reachable);
+        expect(store.connected).toBe(reachable);
+    }
+});
+it('shares one probe at a time and recovers after an API restart', async () => {
+    store.setConnection(false);
+    let answer: (v: { data: object }) => void = () => undefined;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((resolve) => (answer = resolve)),
+    );
+    const first = store.probe();
+    const second = store.probe();
+    answer({ data: {} });
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(store.connected).toBe(true);
+    expect(api.get).toHaveBeenCalledTimes(1);
+});
+it('does not let an older probe undo a newer connection verdict', async () => {
+    let answer: (v: { data: object }) => void = () => undefined;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((resolve) => (answer = resolve)),
+    );
+    const late = store.probe();
+    // A real request lost the network while the probe was in flight.
+    store.setConnection(false);
+    answer({ data: {} });
+    expect(await late).toBe(true);
+    expect(store.connected).toBe(false);
+});
+it('does not share a probe started before logout with later callers', async () => {
+    vi.mocked(api.get).mockReturnValueOnce(new Promise(() => undefined));
+    void store.probe();
+    store.reset();
+    vi.mocked(api.get).mockRejectedValueOnce(failure());
+    expect(await store.probe()).toBe(false);
+    expect(store.connected).toBe(false);
+    expect(api.get).toHaveBeenCalledTimes(2);
+});
+it('ignores a probe answer that arrives after logout', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((_, reject) => (answer = reject)),
+    );
+    const late = store.probe();
+    store.reset();
+    answer(failure());
+    expect(await late).toBe(false);
+    expect(store.connected).toBe(true);
 });
