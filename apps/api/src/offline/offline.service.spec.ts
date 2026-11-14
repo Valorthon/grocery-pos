@@ -739,6 +739,46 @@ describe('sub-second offline selling deadline', () => {
             expect(f.body.lines[0].proof).toBe(proof);
         },
     );
+    it.each([false, true])(
+        'preserves a legacy proof across a signing pause without extending the lease (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            f.lease.expiresAt = new Date(200000);
+            clock.mockReturnValue(100000);
+            const expiresIn = Math.max(
+                1,
+                Math.floor((f.lease.expiresAt.getTime() - Date.now()) / 1000),
+            );
+            const payload = f.jwt.decode<Record<string, unknown>>(
+                f.body.lines[0].proof,
+            );
+            delete payload.iat;
+            delete payload.exp;
+            clock.mockReturnValue(101000);
+            f.body.lines[0].proof = f.jwt.sign(payload, {
+                secret: SECRET,
+                expiresIn,
+            });
+            expect(
+                f.jwt.decode<{ iat: number; exp: number }>(
+                    f.body.lines[0].proof,
+                ),
+            ).toMatchObject({ iat: 101, exp: 201 });
+            f.body.soldAt = new Date(199999).toISOString();
+            clock.mockReturnValue(admin ? 210000 : 199999);
+            const request = {
+                ...f.body,
+                reason: 'Verified cash after legacy signing pause',
+            };
+            await expect(
+                f.service.sync(admin ? f.admin : f.actor, request, admin),
+            ).resolves.toEqual(f.receipt);
+            request.soldAt = new Date(200000).toISOString();
+            await expect(
+                f.service.sync(admin ? f.admin : f.actor, request, admin),
+            ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
+        },
+    );
     it('does not treat an impossible historical expiry as rounding loss', async () => {
         const clock = boundary();
         f.lease.expiresAt = new Date(200999);

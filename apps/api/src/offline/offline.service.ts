@@ -396,8 +396,9 @@ export class OfflineService {
         }
         // An immutable historical proof may expire early because its issuer
         // used floor(iat) + max(1, floor(remaining lifetime)). Reconstruct the
-        // possible results within that signed iat second, rather than granting
-        // a general expiry tolerance. New proofs use the absolute ceiling.
+        // earliest result within that signed iat second. A signing pause may
+        // increase exp, so retain the historical upper cap (lease + 1000ms).
+        // New proofs use the absolute ceiling; no lease time is added.
         // Every proof remains bounded by the exact, exclusive lease deadline.
         const deadline = lease.expiresAt.getTime();
         const issuedSecond = p.iat * 1000;
@@ -405,8 +406,7 @@ export class OfflineService {
         const legacyMin =
             p.iat +
             Math.max(1, Math.floor((deadline - lastPossibleIssue) / 1000));
-        const legacyMax =
-            p.iat + Math.max(1, Math.floor((deadline - issuedSecond) / 1000));
+        const legacyMax = Math.floor(deadline / 1000) + 1;
         const matchesExpiry =
             p.exp === Math.ceil(deadline / 1000) ||
             (issuedSecond < deadline &&
