@@ -1,3 +1,9 @@
+import {
+    settingsMock,
+    batchesMock,
+} from '../../common/testing/business-collaborators';
+import { InventoryBatchService } from '../batch/batch.service';
+import { SettingsService } from '../../settings/settings.service';
 import { AuditService } from '../../audit/audit.service';
 import { SupplierService } from '../../supplier/supplier.service';
 import { Test } from '@nestjs/testing';
@@ -30,6 +36,8 @@ describe('RestockService.getAll date filter', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -256,6 +264,8 @@ describe('RestockService.restock (issue #30)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -434,6 +444,8 @@ describe('RestockService.getDetails (issue #30)', () => {
         aggregate = jest.fn().mockResolvedValue([]);
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
                 {
                     provide: AuditService,
                     useValue: {

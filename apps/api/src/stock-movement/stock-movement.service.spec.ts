@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { Types } from 'mongoose';
 import {
     StockMovementType,
@@ -110,7 +112,7 @@ function fixture() {
         movements as never,
         inventory as never,
         products as never,
-        { get: () => 'Asia/Manila' } as never,
+        settingsMock() as unknown as SettingsService,
     );
     return {
         service,

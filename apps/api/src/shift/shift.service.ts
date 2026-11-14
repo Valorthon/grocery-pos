@@ -1,10 +1,7 @@
 import { createHash } from 'node:crypto';
 import { receiptStoreIdentity } from '@grocery-pos/contracts';
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@grocery-pos/contracts';
 import { OfflineLease } from '../offline/offline-lease.schema';
@@ -154,9 +151,8 @@ export class ShiftService {
         @InjectModel(OfflineLease.name)
         private offlineLeases: Model<OfflineLease>,
         private audit: AuditService,
-        @OptionalSettings()
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     private openFilter(cashier: string) {
@@ -188,7 +184,7 @@ export class ShiftService {
 
         try {
             return await runInTransaction(async (session) => {
-                const store = await this.settings?.lockContext(session);
+                const store = await this.settings.lockContext(session);
                 const [created] = await this.model
                     .create(
                         [
@@ -196,7 +192,7 @@ export class ShiftService {
                                 cashier: new Types.ObjectId(user.userId),
                                 cashierName: user.username,
                                 terminal,
-                                ...(store && { storeSettings: store }),
+                                storeSettings: store,
                                 status: ShiftStatus.OPEN,
                                 openedAt: new Date(),
                                 openingFloat,
@@ -618,11 +614,9 @@ export class ShiftService {
             .lean<ShiftSale[]>();
 
         const closedAt = new Date();
-        const store = await this.settings?.read(session);
+        const store = await this.settings.read(session);
         const zRead: StoredZRead = {
-            ...(store && {
-                storeIdentity: receiptStoreIdentity(store, shift.terminal),
-            }),
+            storeIdentity: receiptStoreIdentity(store, shift.terminal),
             shiftId: String(shift._id),
             cashierName: shift.cashierName,
             terminal: shift.terminal,

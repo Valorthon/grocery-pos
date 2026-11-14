@@ -1,8 +1,9 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { SalesReportGroup, type SalesReport } from '@grocery-pos/contracts';
 import { emptyMetrics } from './report-math';
-import type { TypedConfigService } from '../common/typed-config/typed-config.service';
 import type { Model } from 'mongoose';
 import type { Sales } from '../sales/sales.schema';
 
@@ -34,7 +35,9 @@ describe('report delivery', () => {
     it('returns actual store-day settings and streams validated report CSV headers/body', async () => {
         const service = new ReportsService(
             {} as Model<Sales>,
-            { get: () => 'Pacific/Auckland' } as unknown as TypedConfigService,
+            settingsMock({
+                timezone: 'Pacific/Auckland',
+            }) as unknown as SettingsService,
         );
         const call = jest
             .spyOn(service, 'salesReport')
@@ -65,7 +68,7 @@ describe('report delivery', () => {
     it('propagates pre-stream errors instead of returning partial successful CSV', async () => {
         const service = new ReportsService(
             {} as Model<Sales>,
-            {} as TypedConfigService,
+            settingsMock() as unknown as SettingsService,
         );
         jest.spyOn(service, 'salesReport').mockRejectedValue(
             new Error('invalid source'),
@@ -88,7 +91,7 @@ describe('report delivery', () => {
         const aggregate = jest.fn(() => ({ allowDiskUse }));
         const service = new ReportsService(
             { aggregate } as unknown as Model<Sales>,
-            { get: () => 'UTC' } as unknown as TypedConfigService,
+            settingsMock() as unknown as SettingsService,
         );
         expect((await service.salesReport(query)).totals.netSales).toBe(0);
         expect(close).toHaveBeenCalledTimes(1);
@@ -119,7 +122,7 @@ it('reads one current database timezone for each report and its metadata', async
     const aggregate = jest.fn(() => ({ allowDiskUse: () => ({ option }) }));
     const service = new ReportsService(
         { aggregate } as unknown as Model<Sales>,
-        { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
+        settingsMock() as unknown as SettingsService,
     );
     const timezone = jest.fn().mockResolvedValue('America/Los_Angeles');
     Reflect.set(service, 'settings', { timezone });

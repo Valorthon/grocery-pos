@@ -1,3 +1,4 @@
+import { SettingsService } from '../../src/settings/settings.service';
 import { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
@@ -25,17 +26,19 @@ import {
 } from './db-app';
 import { approvalHeaders } from './approval-fixtures';
 let db: DbApp, supplier: string;
+let storeTimezone: string;
 const admin = caller('expiry-admin', Role.Admin),
     restocker = caller('expiry-restocker', Role.Restocker),
     adjuster = caller('expiry-adjuster', Role.Adjuster);
 beforeAll(async () => {
     db = await bootDbApp();
+    storeTimezone = await db.app.get(SettingsService).timezone();
     supplier = await seedSupplier(db);
 });
 afterAll(async () => db?.close());
 function day(offset: number) {
     const d = new Date(
-        `${db.app.get(InventoryBatchService).today()}T00:00:00Z`,
+        `${db.app.get(InventoryBatchService).today(new Date(), storeTimezone)}T00:00:00Z`,
     );
     d.setUTCDate(d.getUTCDate() + offset);
     return d.toISOString().slice(0, 10);

@@ -1,14 +1,10 @@
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { StockMovementService } from '../stock-movement/stock-movement.service';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
 import { receiptCost } from '../supplier/cost';
 import { OfflineCost } from './offline-cost.schema';
 import { InventoryBatchService } from '../inventory-man/batch/batch.service';
-import { Optional } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
@@ -123,11 +119,10 @@ export class OfflineService {
         private jwt: JwtService,
         private config: TypedConfigService,
         @InjectModel(OfflineCost.name) private costQuotes: Model<OfflineCost>,
-        @Optional() private batches?: InventoryBatchService,
-        @Optional() private ledger?: StockMovementService,
-        @OptionalSettings()
+        private batches: InventoryBatchService,
+        private ledger: StockMovementService,
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     private async currentSession(actor: AuthUser, session?: ClientSession) {
@@ -155,7 +150,7 @@ export class OfflineService {
         dto: OfflineLeaseDto,
     ): Promise<OfflineLeaseView> {
         return runInTransaction(async (session) => {
-            const store = await this.settings?.lockContext(session);
+            const store = await this.settings.lockContext(session);
             const user = await this.seller(actor, session);
             const auth = await this.currentSession(actor, session);
             if (!auth) throw reconcile();
@@ -200,14 +195,10 @@ export class OfflineService {
                                 issuedAt: new Date(),
                                 expiresAt: auth.expiry,
                                 securityVersion: user.overridePinVersion,
-                                ...(store
-                                    ? {
-                                          storeIdentity: receiptStoreIdentity(
-                                              store,
-                                              shift.terminal,
-                                          ),
-                                      }
-                                    : {}),
+                                storeIdentity: receiptStoreIdentity(
+                                    store,
+                                    shift.terminal,
+                                ),
                             },
                         ],
                         { session },
@@ -624,7 +615,7 @@ export class OfflineService {
                         { session, upsert: true },
                     );
                     if (product.tracksExpiry)
-                        await this.batches!.reconcileOffline(
+                        await this.batches.reconcileOffline(
                             new Types.ObjectId(line.product),
                             line.quantity,
                             session,
@@ -703,7 +694,7 @@ export class OfflineService {
                     })),
                     { session },
                 );
-                await this.ledger?.record(
+                await this.ledger.record(
                     lines.map((line) => ({
                         product: line.product,
                         quantity: -line.quantity,

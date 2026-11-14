@@ -1,3 +1,11 @@
+import {
+    batchesMock,
+    ledgerMock,
+    settingsMock,
+} from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
+import { StockMovementService } from '../stock-movement/stock-movement.service';
+import { InventoryBatchService } from '../inventory-man/batch/batch.service';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import {
@@ -215,6 +223,9 @@ function fixture() {
         jwt,
         config as never,
         costQuotes as never,
+        batchesMock() as unknown as InventoryBatchService,
+        ledgerMock() as unknown as StockMovementService,
+        settingsMock() as unknown as SettingsService,
     );
     return {
         service,

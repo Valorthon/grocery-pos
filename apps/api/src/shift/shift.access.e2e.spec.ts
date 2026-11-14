@@ -1,3 +1,5 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { randomUUID } from 'node:crypto';
 /**
  * Who may do what with shifts, over real HTTP (issue #2). The real
@@ -45,6 +47,7 @@ describe('Shift routes (e2e)', () => {
             [ShiftController],
             [
                 ShiftService,
+                { provide: SettingsService, useValue: settingsMock() },
                 {
                     provide: getConnectionToken(),
                     useValue: fakeConnection(shifts, sales),

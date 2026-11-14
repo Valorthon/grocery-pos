@@ -1,3 +1,11 @@
+import {
+    settingsMock,
+    batchesMock,
+    ledgerMock,
+} from '../../common/testing/business-collaborators';
+import { StockMovementService } from '../../stock-movement/stock-movement.service';
+import { InventoryBatchService } from '../batch/batch.service';
+import { SettingsService } from '../../settings/settings.service';
 import { AuditService } from '../../audit/audit.service';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
@@ -28,6 +36,10 @@ function leanChain(rows: unknown[]) {
 }
 
 /** The acting user; every stock write records it as `updatedBy`. */
+const P1 = '507f1f77bcf86cd799439011';
+const P2 = '507f1f77bcf86cd799439012';
+const GHOST = '507f1f77bcf86cd799439099';
+
 const ACTOR = '507f1f77bcf86cd799439077';
 const ACTOR_ID = new Types.ObjectId(ACTOR);
 
@@ -51,6 +63,9 @@ describe('InventoryService.sell', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
+                { provide: StockMovementService, useValue: ledgerMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -62,7 +77,12 @@ describe('InventoryService.sell', () => {
                     provide: getModelToken(Inventory.name),
                     useValue: { bulkWrite, find },
                 },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: {
+                        getMany: jest.fn().mockResolvedValue(new Map()),
+                    },
+                },
             ],
         }).compile();
 
@@ -75,7 +95,7 @@ describe('InventoryService.sell', () => {
 
         await service.sell(
             ACTOR,
-            sellDto([{ product: 'p1', quantity: 3 }]),
+            sellDto([{ product: P1, quantity: 3 }]),
             session,
         );
 
@@ -86,7 +106,7 @@ describe('InventoryService.sell', () => {
         // Mongoose `min` validators do not run on update operators, so the
         // only thing preventing an oversell is this filter condition.
         expect(operations[0].updateOne.filter).toEqual({
-            product: 'p1',
+            product: P1,
             stock: { $gte: 3 },
         });
     });
@@ -95,12 +115,17 @@ describe('InventoryService.sell', () => {
         // Guarded update matched nothing: stock is below the requested quantity.
         bulkWrite.mockResolvedValue({ matchedCount: 0 });
         find.mockReturnValue(
-            leanChain([{ product: { _id: 'p1', name: 'bread' }, stock: 2 }]),
+            leanChain([
+                {
+                    product: { _id: P1, name: 'bread' },
+                    stock: 2,
+                },
+            ]),
         );
 
         const attempt = service.sell(
             ACTOR,
-            sellDto([{ product: 'p1', quantity: 5 }]),
+            sellDto([{ product: P1, quantity: 5 }]),
             session,
         );
 
@@ -108,7 +133,12 @@ describe('InventoryService.sell', () => {
         await expect(attempt).rejects.toMatchObject({
             statusCode: 400,
             details: [
-                { product: 'p1', name: 'bread', requested: 5, available: 2 },
+                {
+                    product: P1,
+                    name: 'bread',
+                    requested: 5,
+                    available: 2,
+                },
             ],
         });
     });
@@ -117,23 +147,34 @@ describe('InventoryService.sell', () => {
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
         find.mockReturnValue(
             leanChain([
-                { product: { _id: 'p1', name: 'bread' }, stock: 10 },
-                { product: { _id: 'p2', name: 'milk' }, stock: 1 },
+                {
+                    product: { _id: P1, name: 'bread' },
+                    stock: 10,
+                },
+                {
+                    product: { _id: P2, name: 'milk' },
+                    stock: 1,
+                },
             ]),
         );
 
         const attempt = service.sell(
             ACTOR,
             sellDto([
-                { product: 'p1', quantity: 2 },
-                { product: 'p2', quantity: 4 },
+                { product: P1, quantity: 2 },
+                { product: P2, quantity: 4 },
             ]),
             session,
         );
 
         await expect(attempt).rejects.toMatchObject({
             details: [
-                { product: 'p2', name: 'milk', requested: 4, available: 1 },
+                {
+                    product: P2,
+                    name: 'milk',
+                    requested: 4,
+                    available: 1,
+                },
             ],
         });
     });
@@ -142,8 +183,14 @@ describe('InventoryService.sell', () => {
         // p1 6 of 10 applies; p2 20 of 5 is blocked. p1 must not be listed.
         find.mockReturnValue(
             leanChain([
-                { product: { _id: 'p1', name: 'bread' }, stock: 10 },
-                { product: { _id: 'p2', name: 'milk' }, stock: 5 },
+                {
+                    product: { _id: P1, name: 'bread' },
+                    stock: 10,
+                },
+                {
+                    product: { _id: P2, name: 'milk' },
+                    stock: 5,
+                },
             ]),
         );
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
@@ -152,13 +199,19 @@ describe('InventoryService.sell', () => {
             service.sell(
                 ACTOR,
                 sellDto([
-                    { product: 'p1', quantity: 6 },
-                    { product: 'p2', quantity: 20 },
+                    { product: P1, quantity: 6 },
+                    { product: P2, quantity: 20 },
                 ]),
                 session,
             ),
         ).rejects.toMatchObject({
-            details: [{ product: 'p2', requested: 20, available: 5 }],
+            details: [
+                {
+                    product: P2,
+                    requested: 20,
+                    available: 5,
+                },
+            ],
         });
         expect(find.mock.invocationCallOrder[0]).toBeLessThan(
             bulkWrite.mock.invocationCallOrder[0],
@@ -167,7 +220,12 @@ describe('InventoryService.sell', () => {
 
     it('sums repeated lines for one product into a single guarded decrement', async () => {
         find.mockReturnValue(
-            leanChain([{ product: { _id: 'p1', name: 'bread' }, stock: 10 }]),
+            leanChain([
+                {
+                    product: { _id: P1, name: 'bread' },
+                    stock: 10,
+                },
+            ]),
         );
         bulkWrite.mockResolvedValue({ matchedCount: 0 });
 
@@ -175,20 +233,26 @@ describe('InventoryService.sell', () => {
             service.sell(
                 ACTOR,
                 sellDto([
-                    { product: 'p1', quantity: 6 },
-                    { product: 'p1', quantity: 6 },
+                    { product: P1, quantity: 6 },
+                    { product: P1, quantity: 6 },
                 ]),
                 session,
             ),
         ).rejects.toMatchObject({
-            details: [{ product: 'p1', requested: 12, available: 10 }],
+            details: [
+                {
+                    product: P1,
+                    requested: 12,
+                    available: 10,
+                },
+            ],
         });
 
         const [operations] = bulkWrite.mock.calls[0] as [
             { updateOne: { filter: Record<string, unknown> } }[],
         ];
         expect(operations.map((op) => op.updateOne.filter)).toEqual([
-            { product: 'p1', stock: { $gte: 12 } },
+            { product: P1, stock: { $gte: 12 } },
         ]);
     });
 
@@ -199,11 +263,17 @@ describe('InventoryService.sell', () => {
         await expect(
             service.sell(
                 ACTOR,
-                sellDto([{ product: 'ghost', quantity: 1 }]),
+                sellDto([{ product: GHOST, quantity: 1 }]),
                 session,
             ),
         ).rejects.toMatchObject({
-            details: [{ product: 'ghost', requested: 1, available: 0 }],
+            details: [
+                {
+                    product: GHOST,
+                    requested: 1,
+                    available: 0,
+                },
+            ],
         });
     });
 });
@@ -228,6 +298,9 @@ describe('InventoryService.adjust', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
+                { provide: StockMovementService, useValue: ledgerMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -239,7 +312,12 @@ describe('InventoryService.adjust', () => {
                     provide: getModelToken(Inventory.name),
                     useValue: { bulkWrite, find },
                 },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: {
+                        getMany: jest.fn().mockResolvedValue(new Map()),
+                    },
+                },
             ],
         }).compile();
 
@@ -271,13 +349,16 @@ describe('InventoryService.adjust', () => {
     }
 
     it('rejects a net change or resulting stock beyond the safe integer range', async () => {
-        stock({ p1: 1 });
+        stock({ [P1]: 1 });
         await expect(
             service.adjust(
                 ACTOR,
                 adjustDto([
-                    { product: 'p1', change: Number.MAX_SAFE_INTEGER },
-                    { product: 'p1', change: 1 },
+                    {
+                        product: P1,
+                        change: Number.MAX_SAFE_INTEGER,
+                    },
+                    { product: P1, change: 1 },
                 ]),
                 session,
             ),
@@ -285,7 +366,12 @@ describe('InventoryService.adjust', () => {
         await expect(
             service.adjust(
                 ACTOR,
-                adjustDto([{ product: 'p1', change: Number.MAX_SAFE_INTEGER }]),
+                adjustDto([
+                    {
+                        product: P1,
+                        change: Number.MAX_SAFE_INTEGER,
+                    },
+                ]),
                 session,
             ),
         ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_INVALID_INPUT });
@@ -294,11 +380,11 @@ describe('InventoryService.adjust', () => {
     it.each([1.5, -1])(
         'treats corrupt stored stock %s as an internal error',
         async (value) => {
-            stock({ p1: value });
+            stock({ [P1]: value });
             await expect(
                 service.adjust(
                     ACTOR,
-                    adjustDto([{ product: 'p1', change: 1 }]),
+                    adjustDto([{ product: P1, change: 1 }]),
                     session,
                 ),
             ).rejects.toMatchObject({ code: ErrorCode.INTERNAL_ERROR });
@@ -306,31 +392,37 @@ describe('InventoryService.adjust', () => {
     );
 
     it('guards negative stock and positive safe-integer overflow', async () => {
-        stock({ p1: 10, p2: 0 });
+        stock({
+            [P1]: 10,
+            [P2]: 0,
+        });
         bulkWrite.mockResolvedValue({ matchedCount: 2 });
 
         await service.adjust(
             ACTOR,
             adjustDto([
-                { product: 'p1', change: -4 },
-                { product: 'p2', change: 7 },
+                { product: P1, change: -4 },
+                { product: P2, change: 7 },
             ]),
             session,
         );
 
         expect(operations().map((op) => op.filter)).toEqual([
-            { product: 'p1', stock: { $gte: 4 } },
-            { product: 'p2', stock: { $lte: Number.MAX_SAFE_INTEGER - 7 } },
+            { product: P1, stock: { $gte: 4 } },
+            {
+                product: P2,
+                stock: { $lte: Number.MAX_SAFE_INTEGER - 7 },
+            },
         ]);
     });
 
     it('reads stock before writing so shortfalls reflect the pre-request state', async () => {
-        stock({ p1: 10 });
+        stock({ [P1]: 10 });
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
 
         await service.adjust(
             ACTOR,
-            adjustDto([{ product: 'p1', change: -1 }]),
+            adjustDto([{ product: P1, change: -1 }]),
             session,
         );
 
@@ -341,12 +433,12 @@ describe('InventoryService.adjust', () => {
 
     it('rejects a change that would drive stock negative, leaving stock untouched', async () => {
         // Stock is 10: the guarded filter matches nothing, so no $inc applies.
-        stock({ p1: 10 });
+        stock({ [P1]: 10 });
         bulkWrite.mockResolvedValue({ matchedCount: 0 });
 
         const attempt = service.adjust(
             ACTOR,
-            adjustDto([{ product: 'p1', change: -999999 }]),
+            adjustDto([{ product: P1, change: -999999 }]),
             session,
         );
 
@@ -355,58 +447,76 @@ describe('InventoryService.adjust', () => {
             statusCode: 400,
             details: [
                 {
-                    product: 'p1',
-                    name: 'name-p1',
+                    product: P1,
+                    name: `name-${P1}`,
                     change: -999999,
                     available: 10,
                 },
             ],
         });
         expect(operations().map((op) => op.filter)).toEqual([
-            { product: 'p1', stock: { $gte: 999999 } },
+            { product: P1, stock: { $gte: 999999 } },
         ]);
     });
 
     it('lists only the failing product when an earlier line succeeded', async () => {
         // p1 -6 vs 10 applies; p2 -20 vs 5 is blocked by its guard.
-        stock({ p1: 10, p2: 5 });
+        stock({
+            [P1]: 10,
+            [P2]: 5,
+        });
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
 
         await expect(
             service.adjust(
                 ACTOR,
                 adjustDto([
-                    { product: 'p1', change: -6 },
-                    { product: 'p2', change: -20 },
+                    { product: P1, change: -6 },
+                    { product: P2, change: -20 },
                 ]),
                 session,
             ),
         ).rejects.toMatchObject({
             statusCode: 400,
-            details: [{ product: 'p2', change: -20, available: 5 }],
+            details: [
+                {
+                    product: P2,
+                    change: -20,
+                    available: 5,
+                },
+            ],
         });
     });
 
     it('nets repeated lines for one product into a single guarded op', async () => {
         // -5 then -6 against 10 is a net -11: rejected, available still 10.
-        stock({ p1: 10 });
+        stock({ [P1]: 10 });
         bulkWrite.mockResolvedValue({ matchedCount: 0 });
 
         await expect(
             service.adjust(
                 ACTOR,
                 adjustDto([
-                    { product: 'p1', change: -5 },
-                    { product: 'p1', change: -6 },
+                    { product: P1, change: -5 },
+                    { product: P1, change: -6 },
                 ]),
                 session,
             ),
         ).rejects.toMatchObject({
-            details: [{ product: 'p1', change: -11, available: 10 }],
+            details: [
+                {
+                    product: P1,
+                    change: -11,
+                    available: 10,
+                },
+            ],
         });
         expect(operations()).toEqual([
             {
-                filter: { product: 'p1', stock: { $gte: 11 } },
+                filter: {
+                    product: P1,
+                    stock: { $gte: 11 },
+                },
                 update: {
                     $inc: { stock: -11 },
                     $set: { updatedBy: ACTOR_ID },
@@ -417,15 +527,15 @@ describe('InventoryService.adjust', () => {
 
     it('accepts lines whose net is positive regardless of their order', async () => {
         // -3 then +5 against 0 is a net +2, the same as +5 then -3.
-        stock({ p1: 0 });
+        stock({ [P1]: 0 });
         bulkWrite.mockResolvedValue({ matchedCount: 1 });
 
         await expect(
             service.adjust(
                 ACTOR,
                 adjustDto([
-                    { product: 'p1', change: -3 },
-                    { product: 'p1', change: 5 },
+                    { product: P1, change: -3 },
+                    { product: P1, change: 5 },
                 ]),
                 session,
             ),
@@ -433,7 +543,7 @@ describe('InventoryService.adjust', () => {
         expect(operations()).toEqual([
             {
                 filter: {
-                    product: 'p1',
+                    product: P1,
                     stock: { $lte: Number.MAX_SAFE_INTEGER - 2 },
                 },
                 update: {
@@ -445,13 +555,13 @@ describe('InventoryService.adjust', () => {
     });
 
     it('skips the write when every product nets to zero', async () => {
-        stock({ p1: 4 });
+        stock({ [P1]: 4 });
 
         await service.adjust(
             ACTOR,
             adjustDto([
-                { product: 'p1', change: 3 },
-                { product: 'p1', change: -3 },
+                { product: P1, change: 3 },
+                { product: P1, change: -3 },
             ]),
             session,
         );
@@ -462,7 +572,10 @@ describe('InventoryService.adjust', () => {
     it('rejects products with no inventory row or whose product is gone, before writing', async () => {
         find.mockReturnValue(
             leanChain([
-                { product: { _id: 'p1', name: 'bread' }, stock: 10 },
+                {
+                    product: { _id: P1, name: 'bread' },
+                    stock: 10,
+                },
                 // Inventory row whose product document no longer exists.
                 { product: null, stock: 4 },
             ]),
@@ -471,9 +584,9 @@ describe('InventoryService.adjust', () => {
         const attempt = service.adjust(
             ACTOR,
             adjustDto([
-                { product: 'p1', change: 1 },
+                { product: P1, change: 1 },
                 { product: 'orphan', change: 1 },
-                { product: 'ghost', change: 5 },
+                { product: GHOST, change: 5 },
             ]),
             session,
         );
@@ -481,22 +594,25 @@ describe('InventoryService.adjust', () => {
         await expect(attempt).rejects.toBeInstanceOf(NotFoundError);
         await expect(attempt).rejects.toMatchObject({
             statusCode: 404,
-            details: [{ product: 'orphan' }, { product: 'ghost' }],
+            details: [{ product: 'orphan' }, { product: GHOST }],
         });
         expect(bulkWrite).not.toHaveBeenCalled();
     });
 
     describe('returnStock', () => {
         it('puts sold units back as one positive increment per product', async () => {
-            stock({ p1: 0, p2: 4 });
+            stock({
+                [P1]: 0,
+                [P2]: 4,
+            });
             bulkWrite.mockResolvedValue({ matchedCount: 2 });
 
             await service.returnStock(
                 ACTOR,
                 [
-                    { product: 'p1', quantity: 2 },
-                    { product: 'p2', quantity: 3 },
-                    { product: 'p1', quantity: 1 },
+                    { product: P1, quantity: 2 },
+                    { product: P2, quantity: 3 },
+                    { product: P1, quantity: 1 },
                 ],
                 session,
             );
@@ -504,7 +620,7 @@ describe('InventoryService.adjust', () => {
             expect(operations()).toEqual([
                 {
                     filter: {
-                        product: 'p1',
+                        product: P1,
                         stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
                     },
                     update: {
@@ -514,7 +630,7 @@ describe('InventoryService.adjust', () => {
                 },
                 {
                     filter: {
-                        product: 'p2',
+                        product: P2,
                         stock: { $lte: Number.MAX_SAFE_INTEGER - 3 },
                     },
                     update: {
@@ -526,13 +642,13 @@ describe('InventoryService.adjust', () => {
         });
 
         it('rejects with a 404 when a product has no inventory row', async () => {
-            stock({ p1: 0 });
+            stock({ [P1]: 0 });
 
             await expect(
                 service.returnStock(
                     ACTOR,
                     [
-                        { product: 'p1', quantity: 1 },
+                        { product: P1, quantity: 1 },
                         { product: 'gone', quantity: 1 },
                     ],
                     session,
@@ -551,11 +667,11 @@ describe('InventoryService.restock', () => {
 
     const session = {} as ClientSession;
     const user: AuthUser = {
-        userId: '507f1f77bcf86cd799439099',
+        userId: GHOST,
         username: 'admin',
         roles: [Role.Admin],
     };
-    const EXISTING = '507f1f77bcf86cd799439011';
+    const EXISTING = P1;
     const dto = {
         restockDetails: [{ product: EXISTING, quantity: 3, unitCost: 1000 }],
     } as RestockDto;
@@ -570,6 +686,9 @@ describe('InventoryService.restock', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
+                { provide: StockMovementService, useValue: ledgerMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -798,16 +917,23 @@ describe('InventoryService stock writes record updatedBy (issue #14)', () => {
 
     beforeEach(async () => {
         bulkWrite = jest.fn().mockResolvedValue({ matchedCount: 1 });
-        find = jest
-            .fn()
-            .mockReturnValue(
-                leanChain([
-                    { product: { _id: 'p1', name: 'bread' }, stock: 10 },
-                ]),
-            );
+        find = jest.fn().mockReturnValue(
+            leanChain([
+                {
+                    product: {
+                        _id: P1,
+                        name: 'bread',
+                    },
+                    stock: 10,
+                },
+            ]),
+        );
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
+                { provide: StockMovementService, useValue: ledgerMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -819,7 +945,12 @@ describe('InventoryService stock writes record updatedBy (issue #14)', () => {
                     provide: getModelToken(Inventory.name),
                     useValue: { bulkWrite, find },
                 },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: {
+                        getMany: jest.fn().mockResolvedValue(new Map()),
+                    },
+                },
             ],
         }).compile();
 
@@ -836,7 +967,7 @@ describe('InventoryService stock writes record updatedBy (issue #14)', () => {
     it('on a sale', async () => {
         await service.sell(
             ACTOR,
-            sellDto([{ product: 'p1', quantity: 2 }]),
+            sellDto([{ product: P1, quantity: 2 }]),
             session,
         );
 
@@ -848,7 +979,7 @@ describe('InventoryService stock writes record updatedBy (issue #14)', () => {
     it('on an adjustment', async () => {
         await service.adjust(
             ACTOR,
-            adjustDto([{ product: 'p1', change: -1 }]),
+            adjustDto([{ product: P1, change: -1 }]),
             session,
         );
 
@@ -860,7 +991,7 @@ describe('InventoryService stock writes record updatedBy (issue #14)', () => {
     it('on a void or refund putting stock back', async () => {
         await service.returnStock(
             ACTOR,
-            [{ product: 'p1', quantity: 4 }],
+            [{ product: P1, quantity: 4 }],
             session,
         );
 
@@ -879,6 +1010,9 @@ describe('InventoryService.getAll (issue #14)', () => {
 
         const moduleRef = await Test.createTestingModule({
             providers: [
+                { provide: SettingsService, useValue: settingsMock() },
+                { provide: InventoryBatchService, useValue: batchesMock() },
+                { provide: StockMovementService, useValue: ledgerMock() },
                 {
                     provide: AuditService,
                     useValue: {
@@ -890,7 +1024,12 @@ describe('InventoryService.getAll (issue #14)', () => {
                     provide: getModelToken(Inventory.name),
                     useValue: { aggregate },
                 },
-                { provide: ProductService, useValue: {} },
+                {
+                    provide: ProductService,
+                    useValue: {
+                        getMany: jest.fn().mockResolvedValue(new Map()),
+                    },
+                },
             ],
         }).compile();
 

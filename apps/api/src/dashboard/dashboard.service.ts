@@ -1,14 +1,9 @@
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { InventoryBatchService } from '../inventory-man/batch/batch.service';
-import { Optional } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, PipelineStage } from 'mongoose';
-import { SETTINGS_LIMITS } from '@grocery-pos/contracts';
 import {
     COUNTED_SALES_FILTER,
     INTERNAL_SALE_FIELDS,
@@ -25,7 +20,6 @@ import {
     Adjustment,
     type AdjustmentRowDoc,
 } from '../inventory-man/adjustment/adjustment.schema';
-import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { calendarDateInZone, dayRangeInZone } from '../common/utils/timezone';
 import { reorderLevelExpression } from '../inventory-man/inventory/reorder-query';
 import type { NameRef } from '../common/wire';
@@ -131,11 +125,9 @@ export class DashboardService {
         @InjectModel(Restock.name) private restockModel: Model<Restock>,
         @InjectModel(Adjustment.name)
         private adjustmentModel: Model<Adjustment>,
-        private config: TypedConfigService,
-        @Optional() private batches?: InventoryBatchService,
-        @OptionalSettings()
+        private batches: InventoryBatchService,
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     /**
@@ -147,12 +139,9 @@ export class DashboardService {
     async getDashboard({
         includeMoney,
     }: DashboardOptions): Promise<DashboardResponse> {
-        const settings = this.settings ? await this.settings.read() : null;
-        const timeZone =
-            settings?.timezone ?? this.config.get('STORE_TIMEZONE');
-        const expiryAlertDays =
-            settings?.expiryAlertDays ??
-            SETTINGS_LIMITS.EXPIRY_ALERT_DAYS_DEFAULT;
+        const settings = await this.settings.read();
+        const timeZone = settings.timezone;
+        const expiryAlertDays = settings.expiryAlertDays;
         const { start: startOfDay, end: endOfDay } = dayRangeInZone(
             calendarDateInZone(new Date(), timeZone),
             timeZone,
@@ -249,13 +238,11 @@ export class DashboardService {
 
         const stats: DashboardStats = {
             totalProducts,
-            ...(this.batches && {
-                expiringBatchCount: await this.batches.expiringCount({
-                    timezone: timeZone,
-                    expiryAlertDays,
-                }),
+            expiringBatchCount: await this.batches.expiringCount({
+                timezone: timeZone,
                 expiryAlertDays,
             }),
+            expiryAlertDays,
             lowStockCount: stockAlerts?.lowStockCount ?? 0,
             outOfStockCount: stockAlerts?.outOfStockCount ?? 0,
             recentRestocks,

@@ -3,10 +3,7 @@ import {
     type ReceiptStoreIdentity,
 } from '@grocery-pos/contracts';
 import { SettingsService } from '../settings/settings.service';
-import {
-    Inject as InjectSettings,
-    Optional as OptionalSettings,
-} from '@nestjs/common';
+import { Inject as InjectSettings } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '@grocery-pos/contracts';
 import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
@@ -61,7 +58,6 @@ import {
 import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
 import { ShiftService } from '../shift/shift.service';
-import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { dateRangeFilter } from '../common/utils/timezone';
 import { ManagerOverrideService } from '../auth/override/override.service';
 
@@ -167,12 +163,10 @@ export class SalesService {
         private productService: ProductService,
         private inventoryService: InventoryService,
         private shiftService: ShiftService,
-        private config: TypedConfigService,
         private overrides: ManagerOverrideService,
         private audit: AuditService,
-        @OptionalSettings()
         @InjectSettings(SettingsService)
-        private settings?: SettingsService,
+        private settings: SettingsService,
     ) {}
 
     /** `saleScope` for the caller, looking up their open shift if needed. */
@@ -203,9 +197,7 @@ export class SalesService {
         const filter = salesListFilter(
             scope,
             dto,
-            this.settings
-                ? await this.settings.timezone()
-                : this.config.get('STORE_TIMEZONE'),
+            await this.settings.timezone(),
         );
         if (!filter) return { data: [], totalItems: 0 };
 
@@ -566,12 +558,10 @@ export class SalesService {
                     session,
                 );
 
-                const storeIdentity = this.settings
-                    ? receiptStoreIdentity(
-                          await this.settings.read(session),
-                          await this.shiftService.terminalOf(shift, session),
-                      )
-                    : undefined;
+                const storeIdentity = receiptStoreIdentity(
+                    await this.settings.read(session),
+                    await this.shiftService.terminalOf(shift, session),
+                );
                 const { subtotal, fullSellDetails } = await this.prepareSell(
                     dto,
                     session,

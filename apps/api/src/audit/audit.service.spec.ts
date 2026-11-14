@@ -1,10 +1,11 @@
+import { settingsMock } from '../common/testing/business-collaborators';
+import { SettingsService } from '../settings/settings.service';
 import { Types, type Model } from 'mongoose';
 import { AuditAction } from '@grocery-pos/contracts';
 import { AuditService } from './audit.service';
 import { AuditLog } from './audit.schema';
 import type { User } from '../user/user.schema';
 import { AuditContextMiddleware, auditMetadata } from './audit-context';
-import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import type { Request, Response } from 'express';
 
 const id = new Types.ObjectId();
@@ -32,8 +33,8 @@ function setup(
     return {
         service: new AuditService(
             model as unknown as Model<AuditLog>,
-            { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
             users as unknown as Model<User>,
+            settingsMock() as unknown as SettingsService,
         ),
         model,
         query,
@@ -372,9 +373,8 @@ it('resolves current target and approver names with one $in query per model (#30
     };
     const service = new AuditService(
         model as unknown as Model<AuditLog>,
-        { get: () => 'Asia/Manila' } as unknown as TypedConfigService,
         users as unknown as Model<User>,
-        undefined,
+        settingsMock() as unknown as SettingsService,
         { models } as never,
     );
     const { data } = await service.list({ page: 1, limit: 20 } as never);

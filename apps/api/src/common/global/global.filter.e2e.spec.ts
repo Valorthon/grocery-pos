@@ -1,3 +1,5 @@
+import { settingsMock } from '../testing/business-collaborators';
+import { SettingsService } from '../../settings/settings.service';
 import { AuditService } from '../../audit/audit.service';
 /**
  * Error responses over real HTTP (issue #8): the real GlobalFilter,
@@ -81,6 +83,7 @@ describe('Error responses (e2e, issue #8)', () => {
         {
             record: jest.fn().mockResolvedValue(undefined),
         } as unknown as AuditService,
+        settingsMock() as unknown as SettingsService,
     );
 
     const restocker = caller(Role.Restocker);
