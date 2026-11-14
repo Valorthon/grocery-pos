@@ -21,6 +21,8 @@ tooling only):
 pnpm --filter @grocery-pos/contracts build
 pnpm --filter grocery-pos-api build
 pnpm --filter grocery-pos-api deploy --legacy --prod C:\gpos-proof-api
+# API's gitignore excludes dist from package copying; add the compiled output.
+Copy-Item -Recurse apps\api\dist C:\gpos-proof-api\dist
 ```
 
 In **that new throwaway artifact directory only**, remove the copied `src`,
