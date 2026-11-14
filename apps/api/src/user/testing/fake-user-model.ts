@@ -139,7 +139,10 @@ export class FakeUserModel {
 
     updateOne(
         filter: Filter,
-        update: { $set: Record<string, unknown> },
+        update: {
+            $set: Record<string, unknown>;
+            $unset?: Record<string, unknown>;
+        },
         options: Record<string, unknown> = {},
     ): Promise<{ matchedCount: number }> {
         this.writes.push({ op: 'updateOne', filter, update, options });
@@ -147,6 +150,8 @@ export class FakeUserModel {
         if (!row) return Promise.resolve({ matchedCount: 0 });
         if (options.runValidators) this.validate(update.$set);
         Object.assign(row, update.$set);
+        for (const key of Object.keys(update.$unset ?? {}))
+            delete (row as unknown as Record<string, unknown>)[key];
         return Promise.resolve({ matchedCount: 1 });
     }
 

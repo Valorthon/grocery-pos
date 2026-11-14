@@ -29,6 +29,11 @@ export enum AuditAction {
     PURCHASE_ORDER_SENT = 'PURCHASE_ORDER.SENT',
     PURCHASE_ORDER_CANCELLED = 'PURCHASE_ORDER.CANCELLED',
     PURCHASE_ORDER_RECEIVED = 'PURCHASE_ORDER.RECEIVED',
+    /**
+     * The operator's bootstrap command created the first ADMIN of an empty
+     * installation (#361). No actor: nobody was signed in.
+     */
+    SYSTEM_INITIAL_ADMIN_CREATED = 'SYSTEM.INITIAL_ADMIN_CREATED',
 }
 /** Audit Log screen labels, one per action. */
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
@@ -59,6 +64,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
     [AuditAction.PURCHASE_ORDER_SENT]: 'Purchase order sent',
     [AuditAction.PURCHASE_ORDER_CANCELLED]: 'Purchase order cancelled',
     [AuditAction.PURCHASE_ORDER_RECEIVED]: 'Purchase order received',
+    [AuditAction.SYSTEM_INITIAL_ADMIN_CREATED]: 'Initial administrator created',
 };
 export const AUDIT_LIMITS = { USER_AGENT: 512, IP: 64 } as const;
 export type AuditValue = string | number | boolean | null | string[];

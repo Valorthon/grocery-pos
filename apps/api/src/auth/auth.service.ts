@@ -126,6 +126,9 @@ export class AuthService {
             username: userInfo.name,
             roles: userInfo.roles,
             sid,
+            ...(userInfo.mustChangePassword
+                ? { mustChangePassword: true as const }
+                : {}),
         };
 
         return {

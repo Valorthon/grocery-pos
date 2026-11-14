@@ -538,6 +538,22 @@ requestId}`. A 5xx never carries details or internals.
   and bulk-write operations. This is application/model-level immutability, not
   protection against a privileged direct MongoDB administrator.
 
+**First administrator** (#361, owner decisions 2026-11-14)
+
+- A fresh installation's first account comes only from the compiled
+  operator command `dist/bootstrap/initial-admin.cli.js` (`src/bootstrap/`),
+  never an HTTP route or `seed.ts`. It creates one active ADMIN-only user
+  (no SELLER, no PIN), the `systembootstrap` marker and an allowlisted
+  `SYSTEM.INITIAL_ADMIN_CREATED` audit entry (actor null, `source`) in one
+  transaction; any existing marker or user refuses it unchanged.
+- The password is a unique temporary one per store, read from a new
+  generated file, an owner-only file or stdin; never an argument, printed
+  or shared. `mustChangePassword` (user, JWT claim, optional profile field)
+  limits the account to `@AllowPasswordChangePending()` routes (profile,
+  own password change) with 403 `USER_PASSWORD_CHANGE_REQUIRED`; the change
+  must differ (400 `USER_PASSWORD_UNCHANGED`) and clears the flag. The
+  client keeps the account on Login with the required change dialog.
+
 **Sessions** (#21)
 
 - A session lasts `REFRESH_EXPIRY_S` (7 days in `.env.example`) from login,

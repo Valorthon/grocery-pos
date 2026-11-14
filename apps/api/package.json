@@ -23,7 +23,8 @@
         "dev": "nest start --watch",
         "lint:fix": "eslint . --fix",
         "migrate:categories": "ts-node migrate-categories.ts",
-        "migrate:stock-ledger": "ts-node migrate-stock-ledger.ts"
+        "migrate:stock-ledger": "ts-node migrate-stock-ledger.ts",
+        "bootstrap:initial-admin": "node dist/bootstrap/initial-admin.cli.js"
     },
     "dependencies": {
         "@grocery-pos/contracts": "workspace:*",

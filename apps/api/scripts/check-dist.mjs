@@ -10,3 +10,15 @@ if (!existsSync(new URL('../dist/main.js', import.meta.url))) {
     );
     process.exit(1);
 }
+
+// The operator's first-install command (#361) ships compiled, never via ts-node.
+if (
+    !existsSync(
+        new URL('../dist/bootstrap/initial-admin.cli.js', import.meta.url),
+    )
+) {
+    console.error(
+        'apps/api/dist/bootstrap/initial-admin.cli.js is missing: the bootstrap command must ship in the build.',
+    );
+    process.exit(1);
+}

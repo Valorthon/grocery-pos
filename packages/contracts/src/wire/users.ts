@@ -45,12 +45,15 @@ export interface ProfileView {
     userId: string;
     username: string;
     roles: Role[];
+    /** Present (true) only while the temporary password must be changed (#361). */
+    mustChangePassword?: true;
 }
 
 export const PROFILE_VIEW_SHAPE: WireShape<ProfileView> = {
     userId: 'required',
     username: 'required',
     roles: 'required',
+    mustChangePassword: 'optional',
 };
 
 /** `POST /auth/login`. The roles come from `GET /users/profile`. */

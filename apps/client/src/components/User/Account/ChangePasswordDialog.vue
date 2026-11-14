@@ -1,10 +1,14 @@
 <template>
     <BaseModal
         v-model="model"
-        title="Change password"
-        subtitle="After the change, you log in again with the new password."
+        :title="required ? REQUIRED_TITLE : 'Change password'"
+        :subtitle="
+            required
+                ? REQUIRED_SUBTITLE
+                : 'After the change, you log in again with the new password.'
+        "
         max-width="28rem"
-        :closable="!saving"
+        :closable="!saving && !required"
     >
         <form
             :id="formId"
@@ -44,8 +48,9 @@
             <BaseButton
                 variant="outline"
                 :disabled="saving"
-                @click="model = false"
-                >Cancel</BaseButton
+                data-testid="change-password-cancel"
+                @click="cancel"
+                >{{ required ? 'Log out' : 'Cancel' }}</BaseButton
             >
             <BaseButton type="submit" :form="formId" :loading="saving"
                 >Change password</BaseButton
@@ -78,6 +83,9 @@ import {
 import {
     PASSWORD_CHANGED,
     PASSWORD_CHANGED_STAYED,
+    PASSWORD_UNCHANGED,
+    REQUIRED_SUBTITLE,
+    REQUIRED_TITLE,
     WRONG_CURRENT_PASSWORD,
 } from './change-password';
 
@@ -93,8 +101,11 @@ import {
  *   this session and ends the others, so this logs out through
  *   `requestLogout`, which lets a draft page ask first (#19) and shows the
  *   success notice on the login page.
+ * - `required` (#361): the account still has its temporary password, so
+ *   the API refuses everything else. Escape and the backdrop do nothing,
+ *   and the secondary button logs out instead of cancelling.
  */
-const props = defineProps<{ modelValue: boolean }>();
+const props = defineProps<{ modelValue: boolean; required?: boolean }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void }>();
 
 const authStore = useAuthStore();
@@ -131,6 +142,16 @@ watch(
     },
 );
 
+async function cancel() {
+    if (!props.required) {
+        model.value = false;
+        return;
+    }
+    if (saving.value) return;
+    emit('update:modelValue', false);
+    await authStore.logout();
+}
+
 function clearError(field: keyof ChangePasswordDraft) {
     const next = { ...errors.value };
     delete next[field];
@@ -155,8 +176,11 @@ async function save() {
     try {
         await api.patch('/users/me/password', toChangePasswordBody(form.value));
     } catch (error) {
-        if (apiErrorCode(error) === ErrorCode.USER_WRONG_PASSWORD) {
+        const code = apiErrorCode(error);
+        if (code === ErrorCode.USER_WRONG_PASSWORD) {
             errors.value = { currentPassword: WRONG_CURRENT_PASSWORD };
+        } else if (code === ErrorCode.USER_PASSWORD_UNCHANGED) {
+            errors.value = { newPassword: PASSWORD_UNCHANGED };
         } else {
             uiStore.queueMessage(
                 Color.ERROR,
@@ -168,7 +192,7 @@ async function save() {
         saving.value = false;
     }
 
-    model.value = false;
+    emit('update:modelValue', false);
     const loggedOut = await authStore.requestLogout(PASSWORD_CHANGED);
     if (!loggedOut)
         uiStore.queueMessage(Color.INFO, PASSWORD_CHANGED_STAYED, {

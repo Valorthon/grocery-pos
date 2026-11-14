@@ -255,6 +255,38 @@ Passwords must be at least 8 characters when set (new users, admin resets,
 self-service changes). Login does not check the length, so older, shorter
 passwords still work until they are changed.
 
+### First administrator of a new installation (#361)
+
+A fresh installation gets its first account from the operator's bootstrap
+command, never from `seed.ts` (which drops collections and creates demo
+users) and never over HTTP. It ships compiled in the API build and runs with
+plain Node, no ts-node or source checkout:
+
+```bash
+cd apps/api
+DATABASE_URL="mongodb://…" node dist/bootstrap/initial-admin.cli.js \
+  --username owner --generate-password-file /secure/dir/owner-temporary.txt
+```
+
+- It creates one active account with the ADMIN role only, plus a
+  `SYSTEM.INITIAL_ADMIN_CREATED` audit entry (no actor), in one transaction.
+  No other users, products or demo data. Initial store settings are created
+  by the API at its first start, as before.
+- The password is never an argument and never printed. Use exactly one of
+  `--generate-password-file <new path>` (a unique random temporary password,
+  written to a new file, mode 600; on Windows put it in an ACL-protected
+  directory), `--password-file <path>` (first line; refused on POSIX unless
+  owner-only) or `--password-stdin`. Hand the temporary password over
+  securely and delete the file.
+- At first login the account must change that password: until then the API
+  answers every route except `GET /users/profile` and
+  `PATCH /users/me/password` with 403 `USER_PASSWORD_CHANGE_REQUIRED`, and
+  the login page asks for the change (a new password, not the temporary
+  one). Manager PIN and step-up rules are unchanged afterwards.
+- It refuses (exit 3, nothing changed) a database that is already
+  initialized or has any user; concurrent runs cannot both succeed. Exit 0
+  is created, 2 a usage/input error, 1 any other failure.
+
 ## Manager approvals
 
 Every nonzero sale discount requires an admin's approval. Voids and refunds

@@ -9,6 +9,15 @@ export const IS_PUBLIC_KEY = 'isPublic';
  */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
+/**
+ * Marks a route (or controller) a signed-in account may call while it
+ * still has to change its temporary password (#361): `RoleGuard` refuses
+ * every other route with 403 `USER_PASSWORD_CHANGE_REQUIRED`.
+ */
+export const ALLOW_PASSWORD_CHANGE_PENDING_KEY = 'allowPasswordChangePending';
+export const AllowPasswordChangePending = () =>
+    SetMetadata(ALLOW_PASSWORD_CHANGE_PENDING_KEY, true);
+
 export const ROLES_KEY = 'roles';
 /**
  * Whether ADMIN passes a route's role check on its own. Always set

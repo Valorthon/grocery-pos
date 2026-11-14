@@ -367,6 +367,12 @@ router.beforeEach(async (to) => {
         return { name: 'Login' };
     }
 
+    // A temporary password (#361): the API refuses everything until it is
+    // changed, so the account stays on Login, where the change is asked.
+    if (isAuthenticated && authStore.user?.mustChangePassword) {
+        return to.name === 'Login' ? true : { name: 'Login' };
+    }
+
     // Logging out goes to Login before the session ends (requestLogout).
     if (
         to.name === 'Login' &&

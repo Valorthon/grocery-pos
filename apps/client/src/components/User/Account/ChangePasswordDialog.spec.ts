@@ -14,7 +14,12 @@ import { useAuthStore } from '@/stores/auth';
 import { Color, useUIStore } from '@/stores/ui';
 import { PASSWORD_HINT, PASSWORDS_DIFFER } from '@/utils/rules';
 import ChangePasswordDialog from './ChangePasswordDialog.vue';
-import { PASSWORD_CHANGED, WRONG_CURRENT_PASSWORD } from './change-password';
+import {
+    PASSWORD_CHANGED,
+    PASSWORD_UNCHANGED,
+    REQUIRED_TITLE,
+    WRONG_CURRENT_PASSWORD,
+} from './change-password';
 
 const api = vi.hoisted(() => ({
     get: vi.fn<ApiGet>(),
@@ -44,7 +49,7 @@ function apiError(status: number, data: unknown): AxiosError {
     } as AxiosResponse);
 }
 
-async function mount() {
+async function mount(required = false) {
     open.value = true;
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -53,6 +58,7 @@ async function mount() {
             render: () =>
                 h(ChangePasswordDialog, {
                     modelValue: open.value,
+                    required,
                     'onUpdate:modelValue': (value: boolean) => {
                         open.value = value;
                     },
@@ -254,5 +260,65 @@ describe('ChangePasswordDialog (#88)', () => {
         expect(field('Current password').value).toBe('');
         expect(field('New password').value).toBe('');
         expect(fieldError('New password')).toBe('');
+    });
+});
+
+// #361: the bootstrap ADMIN must replace the temporary password.
+describe('ChangePasswordDialog, required', () => {
+    it('cannot be dismissed, and its secondary button logs out', async () => {
+        await mount(true);
+
+        expect(dialog()?.textContent).toContain(REQUIRED_TITLE);
+        expect(
+            dialog()?.querySelector('button[aria-label="Close"]'),
+        ).toBeNull();
+        document.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+        );
+        await flush();
+        expect(open.value).toBe(true);
+
+        await click('Log out');
+        await flush();
+
+        expect(open.value).toBe(false);
+        expect(api.post.mock.calls).toEqual([['/auth/logout']]);
+        expect(useAuthStore().user).toBeNull();
+        expect(router.currentRoute.value.name).toBe('Login');
+    });
+
+    it('shows a reused temporary password on the new-password field', async () => {
+        api.patch.mockRejectedValueOnce(
+            apiError(400, { error: ErrorCode.USER_PASSWORD_UNCHANGED }),
+        );
+        await mount(true);
+        await fill('temporary-1', 'temporary-1');
+
+        await submit();
+
+        expect(fieldError('New password')).toBe(PASSWORD_UNCHANGED);
+        expect(open.value).toBe(true);
+        expect(useUIStore().toasts).toEqual([]);
+    });
+});
+
+describe('router while a password change is required (#361)', () => {
+    it('keeps the account on Login', async () => {
+        const flagged = {
+            ...USER,
+            roles: [Role.Admin],
+            mustChangePassword: true,
+        };
+        localStorage.setItem('user', JSON.stringify(flagged));
+        setActivePinia(createPinia());
+        api.get.mockReset().mockResolvedValue({ data: flagged });
+
+        // Login itself stays open to the account (the change is asked there).
+        await router.push({ name: 'Login' });
+        expect(router.currentRoute.value.name).toBe('Login');
+        await router.push({ name: 'SellerDashboard' });
+        expect(router.currentRoute.value.name).toBe('Login');
+        await router.push('/admin');
+        expect(router.currentRoute.value.name).toBe('Login');
     });
 });

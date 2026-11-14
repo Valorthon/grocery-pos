@@ -61,6 +61,7 @@ export class AppError extends Error {
             case ErrorCode.USER_WRONG_PASSWORD:
             case ErrorCode.USER_SELF_DEACTIVATE:
             case ErrorCode.USER_REAUTH_REQUIRED:
+            case ErrorCode.USER_PASSWORD_CHANGE_REQUIRED:
             case ErrorCode.PRODUCT_PRICE_CHANGE_FORBIDDEN:
                 return HttpStatus.FORBIDDEN;
             case ErrorCode.VALIDATION_INVALID_INPUT:
@@ -68,6 +69,7 @@ export class AppError extends Error {
             case ErrorCode.PRODUCT_DUPLICATE:
             case ErrorCode.DB_DUPLICATE_KEY:
             case ErrorCode.DB_VALIDATION_ERROR:
+            case ErrorCode.USER_PASSWORD_UNCHANGED:
                 return HttpStatus.BAD_REQUEST;
             case ErrorCode.PRODUCT_NOT_FOUND:
             case ErrorCode.NOT_FOUND:

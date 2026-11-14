@@ -193,6 +193,7 @@
                 </form>
             </div>
         </div>
+        <ChangePasswordDialog v-model="mustChangePassword" required />
     </div>
 </template>
 
@@ -213,6 +214,7 @@ import { homeRouteFor } from '@/router/access';
 import { LOGIN_HERO_URL } from '@/constant';
 import logo from '@/assets/logo-icon.svg';
 import { loginErrorMessage } from './login-error';
+import ChangePasswordDialog from '@/components/User/Account/ChangePasswordDialog.vue';
 
 /**
  * The optional hero photo loaded: the produce art then steps aside (#193).
@@ -245,6 +247,13 @@ const showPassword = ref(false);
 const errorMsg = ref('');
 
 const form = reactive({ username: '', password: '' });
+/**
+ * The required change of a temporary password (#361), also after a reload
+ * of a session that has not changed it yet.
+ */
+const mustChangePassword = ref(
+    authStore.isAuthenticated && !!authStore.user?.mustChangePassword,
+);
 
 const handleLogin = async () => {
     if (!form.username || !form.password) {
@@ -257,6 +266,12 @@ const handleLogin = async () => {
 
     try {
         await authStore.login(form.username, form.password);
+        // A temporary password (#361): change it before anything else.
+        if (authStore.user?.mustChangePassword) {
+            form.password = '';
+            mustChangePassword.value = true;
+            return;
+        }
         const home = homeRouteFor(authStore.user?.roles ?? []);
         if (home.name === 'Login') {
             // No role opens any page: do not stay half logged in.

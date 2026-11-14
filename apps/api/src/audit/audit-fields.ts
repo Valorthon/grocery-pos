@@ -86,6 +86,13 @@ const FIELDS: Record<AuditAction, readonly string[]> = {
         'lineCount',
         'lines',
     ],
+    [AuditAction.SYSTEM_INITIAL_ADMIN_CREATED]: [
+        'name',
+        'roles',
+        'isActive',
+        'mustChangePassword',
+        'source',
+    ],
 };
 /** Longest string list: PO lines are capped by the batch limit. */
 const MAX_LIST = BATCH_LIMITS.RESTOCK_LINES;

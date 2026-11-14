@@ -26,6 +26,27 @@ export interface AuditEvent {
     after?: Record<string, unknown>;
     approvedBy?: string;
 }
+/**
+ * The stored form of `event`: allowlisted fields only (`auditFields`) plus
+ * this request's bounded metadata. Shared by `AuditService.record` and the
+ * operator bootstrap command (#361), which has no request and no Nest app.
+ */
+export function auditDocument(event: AuditEvent) {
+    return {
+        actor: event.actor ? new Types.ObjectId(event.actor.userId) : null,
+        actorName: event.actor?.username ?? null,
+        action: event.action,
+        targetModel: event.targetModel,
+        targetId: event.targetId ? new Types.ObjectId(event.targetId) : null,
+        before: auditFields(event.action, event.before ?? {}),
+        after: auditFields(event.action, event.after ?? {}),
+        approvedBy: event.approvedBy
+            ? new Types.ObjectId(event.approvedBy)
+            : null,
+        ...auditMetadata(),
+    };
+}
+
 @Injectable()
 export class AuditService implements OnModuleInit {
     constructor(
@@ -42,25 +63,7 @@ export class AuditService implements OnModuleInit {
     }
     async record(event: AuditEvent, session?: ClientSession): Promise<void> {
         await this.model.create(
-            [
-                {
-                    actor: event.actor
-                        ? new Types.ObjectId(event.actor.userId)
-                        : null,
-                    actorName: event.actor?.username ?? null,
-                    action: event.action,
-                    targetModel: event.targetModel,
-                    targetId: event.targetId
-                        ? new Types.ObjectId(event.targetId)
-                        : null,
-                    before: auditFields(event.action, event.before ?? {}),
-                    after: auditFields(event.action, event.after ?? {}),
-                    approvedBy: event.approvedBy
-                        ? new Types.ObjectId(event.approvedBy)
-                        : null,
-                    ...auditMetadata(),
-                },
-            ],
+            [auditDocument(event)],
             session ? { session } : {},
         );
     }
