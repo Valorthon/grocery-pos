@@ -25,8 +25,8 @@ describe('TypedConfigService', () => {
         if (savedDomain !== undefined) process.env.DOMAIN = savedDomain;
     });
 
-    it('marks only DOMAIN optional: defaulted keys are never absent', () => {
-        expect([...OPTIONAL_ENV_KEYS]).toEqual(['DOMAIN']);
+    it('marks only DOMAIN and HOST optional: defaulted keys are never absent', () => {
+        expect([...OPTIONAL_ENV_KEYS]).toEqual(['DOMAIN', 'HOST']);
     });
 
     it('treats a field whose probe throws as not optional, without crashing', () => {

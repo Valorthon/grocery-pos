@@ -88,6 +88,74 @@ describe('envSchema.STORE_TIMEZONE', () => {
     });
 });
 
+describe('envSchema single-pc (#358)', () => {
+    const SINGLE_PC_ENV = {
+        ...PROD_ENV,
+        APP_ENV: 'single-pc',
+        DOMAIN: undefined,
+        FRONTEND_URL: 'https://localhost:1443',
+    };
+
+    it('accepts the local edition: HTTPS localhost origin, no DOMAIN', () => {
+        expect(issuePaths(SINGLE_PC_ENV)).toEqual([]);
+        expect(issuePaths({ ...SINGLE_PC_ENV, DOMAIN: '' })).toEqual([]);
+        expect(validateEnv(SINGLE_PC_ENV).APP_ENV).toBe('single-pc');
+    });
+
+    it('refuses a DOMAIN: its cookies are host-only', () => {
+        expect(issuePaths({ ...SINGLE_PC_ENV, DOMAIN: 'localhost' })).toEqual([
+            'DOMAIN',
+        ]);
+    });
+
+    it.each([
+        'http://localhost:1443',
+        'https://127.0.0.1:1443',
+        'https://pos.example.com',
+        'https://localhost:1443/',
+        'https://localhost:1443/app',
+        'https://user:pw@localhost:1443',
+    ])('refuses the FRONTEND_URL %s', (FRONTEND_URL) => {
+        expect(issuePaths({ ...SINGLE_PC_ENV, FRONTEND_URL })).toEqual([
+            'FRONTEND_URL',
+        ]);
+    });
+
+    it.each(['127.0.0.1', '::1'])('accepts the loopback HOST %s', (HOST) => {
+        expect(issuePaths({ ...SINGLE_PC_ENV, HOST })).toEqual([]);
+    });
+
+    it.each(['0.0.0.0', '::', '192.168.1.10', 'localhost'])(
+        'refuses the non-loopback HOST %s',
+        (HOST) => {
+            expect(issuePaths({ ...SINGLE_PC_ENV, HOST })).toEqual(['HOST']);
+        },
+    );
+
+    it('treats a blank HOST as unset', () => {
+        expect(envSchema.parse({ ...SINGLE_PC_ENV, HOST: ' ' }).HOST).toBe(
+            undefined,
+        );
+    });
+
+    it('keeps any HOST outside single-pc (cloud unchanged)', () => {
+        expect(issuePaths({ ...PROD_ENV, HOST: '0.0.0.0' })).toEqual([]);
+    });
+
+    it('applies the strict secret rules', () => {
+        expect(
+            issuePaths({
+                ...SINGLE_PC_ENV,
+                JWT_SECRET: EXAMPLE_JWT_SECRET,
+                COOKIE_SECRET: EXAMPLE_COOKIE_SECRET,
+            }),
+        ).toEqual(['JWT_SECRET', 'COOKIE_SECRET']);
+        expect(
+            issuePaths({ ...SINGLE_PC_ENV, COOKIE_SECRET: REAL_JWT_SECRET }),
+        ).toEqual(['COOKIE_SECRET']);
+    });
+});
+
 describe.each(['JWT_SECRET', 'COOKIE_SECRET'] as const)(
     'envSchema.%s',
     (key) => {

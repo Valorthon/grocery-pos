@@ -107,6 +107,13 @@ loopback binds must prevent spoofed proxy or unapproved browser-origin use.
 Cloud/staging domains, Secure cookies and origin allowlists retain their defaults.
 Business services, permissions, money, approvals and audit semantics remain shared.
 
+Implemented (#358): API `APP_ENV=single-pc` (`HOST` loopback, default
+`127.0.0.1`; `trust proxy` loopback; Host/Origin must match `FRONTEND_URL`;
+Secure host-only Lax cookies), client `VITE_APP_ENV=single-pc` with the
+relative `VITE_API_URL=/v1`, and [caddy/Caddyfile](caddy/Caddyfile). The
+API listens on IPv4 loopback only; Caddy on both. Root trust installation,
+TLS state location and service wiring remain #360/#362.
+
 ## Persistent installation and lifecycle interfaces (#360–#365)
 
 - Replaceable binaries: `%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>`.

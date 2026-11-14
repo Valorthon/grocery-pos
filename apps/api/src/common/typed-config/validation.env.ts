@@ -1,7 +1,14 @@
 import * as zod from 'zod';
 import { isValidTimeZone } from '../utils/timezone';
 import { EAN_COUNTER } from '../../constants';
-import { APP_ENVS, isDeployedEnv, resolveAppEnv } from './app-env';
+import {
+    APP_ENVS,
+    isDeployedEnv,
+    isSinglePcEnv,
+    requiresStrictSecrets,
+    resolveAppEnv,
+} from './app-env';
+import { isLoopbackHost } from '../http-topology';
 
 const GENERATE_SECRET_HINT = 'Generate one with: openssl rand -base64 48';
 
@@ -74,6 +81,16 @@ export const envSchema = zod
                 'Database URL must be a MongoDB connection string starting with mongodb:// or mongodb+srv://',
             ),
         DOMAIN: zod.string().trim().optional(),
+        // The address the API listens on (#358). Unset: 0.0.0.0, except in
+        // single-pc, where it is 127.0.0.1 and must stay loopback.
+        // Blank (as .env.example ships it) means unset.
+        HOST: zod.preprocess(
+            (value) =>
+                typeof value === 'string' && value.trim() === ''
+                    ? undefined
+                    : value,
+            zod.string().trim().optional(),
+        ),
         COOKIE_SECRET: secretSchema('COOKIE_SECRET'),
         JWT_SECRET: secretSchema('JWT_SECRET'),
         JWT_EXPIRY_S: zod.coerce.number().int().positive(),
@@ -143,21 +160,49 @@ export const envSchema = zod
             path: ['DOMAIN'],
         },
     )
+    // single-pc (#358): host-only cookies (no DOMAIN), the fixed HTTPS
+    // localhost origin, and a loopback-only listener.
+    .refine((data) => !isSinglePcEnv(data.APP_ENV) || !data.DOMAIN, {
+        message:
+            'DOMAIN must be blank in single-pc: its cookies are host-only on localhost.',
+        path: ['DOMAIN'],
+    })
     .refine(
         (data) =>
-            !isDeployedEnv(data.APP_ENV) ||
+            !isSinglePcEnv(data.APP_ENV) ||
+            isSinglePcFrontendUrl(data.FRONTEND_URL),
+        {
+            message:
+                'FRONTEND_URL must be the HTTPS localhost origin in single-pc, e.g. https://localhost:1443 (no path).',
+            path: ['FRONTEND_URL'],
+        },
+    )
+    .refine(
+        (data) =>
+            !isSinglePcEnv(data.APP_ENV) ||
+            data.HOST === undefined ||
+            isLoopbackHost(data.HOST),
+        {
+            message:
+                'HOST must be a loopback address (127.0.0.1 or ::1) in single-pc: the API is never reachable from the LAN.',
+            path: ['HOST'],
+        },
+    )
+    .refine(
+        (data) =>
+            !requiresStrictSecrets(data.APP_ENV) ||
             !isPlaceholderSecret(data.JWT_SECRET),
         {
-            message: `JWT_SECRET is the .env.example value or an obvious placeholder, which is not allowed in prod/stage. ${GENERATE_SECRET_HINT}`,
+            message: `JWT_SECRET is the .env.example value or an obvious placeholder, which is not allowed in prod/stage/single-pc. ${GENERATE_SECRET_HINT}`,
             path: ['JWT_SECRET'],
         },
     )
     .refine(
         (data) =>
-            !isDeployedEnv(data.APP_ENV) ||
+            !requiresStrictSecrets(data.APP_ENV) ||
             !isPlaceholderSecret(data.COOKIE_SECRET),
         {
-            message: `COOKIE_SECRET is the .env.example value or an obvious placeholder, which is not allowed in prod/stage. ${GENERATE_SECRET_HINT}`,
+            message: `COOKIE_SECRET is the .env.example value or an obvious placeholder, which is not allowed in prod/stage/single-pc. ${GENERATE_SECRET_HINT}`,
             path: ['COOKIE_SECRET'],
         },
     )
@@ -165,13 +210,30 @@ export const envSchema = zod
     // JWTs and the signed cookies. Dev is exempt so local setups stay simple.
     .refine(
         (data) =>
-            !isDeployedEnv(data.APP_ENV) ||
+            !requiresStrictSecrets(data.APP_ENV) ||
             data.JWT_SECRET !== data.COOKIE_SECRET,
         {
-            message: `JWT_SECRET and COOKIE_SECRET must differ in prod/stage. Generate each separately with: openssl rand -base64 48`,
+            message: `JWT_SECRET and COOKIE_SECRET must differ in prod/stage/single-pc. Generate each separately with: openssl rand -base64 48`,
             path: ['COOKIE_SECRET'],
         },
     );
+
+/** `https://localhost[:port]` exactly: an origin, no path, query or credentials. */
+export function isSinglePcFrontendUrl(value: string): boolean {
+    let url: URL;
+    try {
+        url = new URL(value);
+    } catch {
+        return false;
+    }
+    return (
+        url.protocol === 'https:' &&
+        url.hostname === 'localhost' &&
+        !url.username &&
+        !url.password &&
+        url.origin === value
+    );
+}
 
 export type EnvTypes = zod.infer<typeof envSchema>;
 
@@ -197,7 +259,8 @@ export function optionalKeys<Key extends string>(
 }
 
 /**
- * Today that is DOMAIN, which only prod and stage require (#91).
+ * Today that is DOMAIN, which only prod and stage require (#91), and HOST
+ * (#358), whose default main.ts picks by APP_ENV.
  * TypedConfigService.get returns `undefined` for these instead of throwing.
  * A permissive field such as `zod.any()` would also land here; the spec
  * pins the set.

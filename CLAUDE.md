@@ -1022,6 +1022,26 @@ requestId}`. A 5xx never carries details or internals.
   MongoDB is a keyfile-auth single-node replica set on a volume, private
   network only. Deployed `HEALTH_HEAP/RSS_THRESHOLD` are 300/400 MB.
 
+**Single-PC local access** (#358, `packaging/single-pc/ARCHITECTURE.md`)
+
+- `APP_ENV=single-pc` is the single-PC production topology, not a dev mode:
+  strict secrets like prod (`requiresStrictSecrets`), `DOMAIN` blank,
+  `FRONTEND_URL` exactly `https://localhost[:port]`, `HOST` loopback
+  (default `127.0.0.1`, else `::1`), `trust proxy` `loopback`
+  (`common/http-topology.ts`). `isDeployedEnv` stays prod/stage only.
+- Cookies are Secure, host-only and `SameSite=Lax`, cleared with the same
+  attributes. `LocalAccessMiddleware` (`common/local-access`) refuses any
+  request whose Host isn't FRONTEND_URL's host or whose Origin (when sent)
+  isn't its origin: 403 `FORBIDDEN` with the normal error body (the filter
+  reports `originalUrl`). It is a no-op in every other APP_ENV.
+- Client `VITE_APP_ENV=single-pc` requires `VITE_API_URL=/v1` (relative,
+  same-origin) and no `VITE_DOMAIN`; other stages still need an absolute URL.
+- Caddy (`packaging/single-pc/caddy/Caddyfile`) binds 127.0.0.1 + ::1:1443,
+  `tls internal`, no admin API, no HTTP redirect listener, proxies `/v1/*` to
+  127.0.0.1:13000 and sends the nginx policy with `connect-src 'self'` and a
+  same-origin CSP report, no HSTS. `single-pc.db-spec.ts` covers the real
+  app; Windows/Chrome trust and LAN checks stay with #357/#362.
+
 **Scope**
 
 - The app issues no official receipts: the on-screen sale summary is marked

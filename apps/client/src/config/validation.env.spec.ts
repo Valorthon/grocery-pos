@@ -69,6 +69,46 @@ describe('client envSchema', () => {
     });
 });
 
+describe('client envSchema single-pc (#358)', () => {
+    const SINGLE_PC = {
+        VITE_APP_ENV: 'single-pc',
+        VITE_API_URL: '/v1',
+        VITE_API_TIMEOUT: '10000',
+        VITE_DOMAIN: '',
+    };
+
+    it('accepts the same-origin relative API base without a domain', () => {
+        expect(issuePaths(SINGLE_PC)).toEqual([]);
+        expect(issuePaths({ ...SINGLE_PC, VITE_DOMAIN: undefined })).toEqual(
+            [],
+        );
+    });
+
+    it.each(['https://localhost:1443/v1', '/v1/', '/api', '//evil.example/v1'])(
+        'refuses the VITE_API_URL %s',
+        (VITE_API_URL) => {
+            expect(issuePaths({ ...SINGLE_PC, VITE_API_URL })).toEqual([
+                'VITE_API_URL',
+            ]);
+        },
+    );
+
+    it('refuses a VITE_DOMAIN: the marker is host-only', () => {
+        expect(issuePaths({ ...SINGLE_PC, VITE_DOMAIN: 'localhost' })).toEqual([
+            'VITE_DOMAIN',
+        ]);
+    });
+
+    it.each(['prod', 'stage', 'dev', 'test'])(
+        'keeps requiring an absolute URL in %s',
+        (VITE_APP_ENV) => {
+            expect(
+                issuePaths({ ...BASE, VITE_APP_ENV, VITE_API_URL: '/v1' }),
+            ).toEqual(['VITE_API_URL']);
+        },
+    );
+});
+
 describe('client env: VITE_APP_ENV (#86)', () => {
     const NO_STAGE: Record<string, unknown> = { ...BASE };
     delete NO_STAGE.VITE_APP_ENV;

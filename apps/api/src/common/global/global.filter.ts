@@ -117,7 +117,13 @@ export class GlobalFilter implements ExceptionFilter {
         const req = ctx.getRequest<Request>();
         const requestId = requestIdOf(req, res);
 
-        const body = this.toResponse(exception, req.url, requestId);
+        // originalUrl: a middleware mounted on a path sees `req.url`
+        // relative to it, so a middleware's error would name `/` (#358).
+        const body = this.toResponse(
+            exception,
+            req.originalUrl ?? req.url,
+            requestId,
+        );
         this.log(exception, body, req);
 
         res.status(body.statusCode).json(body);

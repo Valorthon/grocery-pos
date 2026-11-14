@@ -6,7 +6,7 @@ import {
     MS_PER_SECOND,
     REFRESH_COOKIE_PATH,
 } from '../../../constants';
-import { isDeployedEnv } from '../../typed-config/app-env';
+import { isDeployedEnv, isSinglePcEnv } from '../../typed-config/app-env';
 
 /**
  * Milliseconds from now until `expiresAt`, never negative. Cookies that
@@ -22,14 +22,18 @@ export function msUntil(expiresAt: Date): number {
 export class CookieService {
     /**
      * prod and stage (APP_ENV) are both served over HTTPS, so their
-     * cookies are Secure (#29: stage used to get plain cookies).
+     * cookies are Secure (#29: stage used to get plain cookies). So is
+     * single-pc (#358), at `https://localhost:1443`: Secure, host-only (it
+     * has no DOMAIN) and Lax, since the API is same-origin behind its proxy.
      */
-    private readonly isDeployed: boolean;
-    private readonly isDomainSet: boolean;
+    private readonly secure: boolean;
+    private readonly sameSite: 'none' | 'lax';
 
     constructor(private config: TypedConfigService) {
-        this.isDeployed = isDeployedEnv(config.get('APP_ENV'));
-        this.isDomainSet = !!config.get('DOMAIN');
+        const appEnv = config.get('APP_ENV');
+        const isDeployed = isDeployedEnv(appEnv);
+        this.secure = isDeployed || isSinglePcEnv(appEnv);
+        this.sameSite = isDeployed && !config.get('DOMAIN') ? 'none' : 'lax';
     }
 
     createSecure(
@@ -41,8 +45,8 @@ export class CookieService {
     ) {
         res.cookie(name, payload, {
             httpOnly: true,
-            secure: this.isDeployed,
-            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.secure,
+            sameSite: this.sameSite,
             signed: true,
             maxAge,
             path: path,
@@ -53,8 +57,8 @@ export class CookieService {
     removeSecure(res: Response, name: string, path: string = '/') {
         res.clearCookie(name, {
             httpOnly: true,
-            secure: this.isDeployed,
-            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.secure,
+            sameSite: this.sameSite,
             signed: true,
             path: path,
             domain: this.config.get('DOMAIN') || undefined,
@@ -110,8 +114,8 @@ export class CookieService {
     createDummy(res: Response, sessionExpiry: Date) {
         res.cookie('dummy', 'true', {
             httpOnly: false,
-            secure: this.isDeployed,
-            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.secure,
+            sameSite: this.sameSite,
             signed: false,
             maxAge: msUntil(sessionExpiry),
             path: '/',
@@ -122,8 +126,8 @@ export class CookieService {
     removeDummy(res: Response) {
         res.clearCookie('dummy', {
             httpOnly: false,
-            secure: this.isDeployed,
-            sameSite: this.isDeployed && !this.isDomainSet ? 'none' : 'lax',
+            secure: this.secure,
+            sameSite: this.sameSite,
             signed: false,
             path: '/',
             domain: this.config.get('DOMAIN') || undefined,
