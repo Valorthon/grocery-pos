@@ -208,6 +208,10 @@ export function serviceDefinitions(paths, release) {
             arguments: ['--config', paths.mongodConfig],
             dependsOn: [],
             readiness: 'authenticated hello: isWritablePrimary',
+            // Stop through the Service Control Manager (`sc stop` /
+            // Stop-Service), which mongod handles as a clean shutdown;
+            // never TerminateProcess/taskkill.
+            stop: 'service-control-manager',
             stopTimeoutSeconds: 60,
         },
         {
@@ -255,13 +259,18 @@ function xmlEscape(text) {
         .replaceAll('"', '&quot;');
 }
 
-function quoteArgument(arg) {
-    return /[\s"]/.test(arg) ? `"${arg.replaceAll('"', '\\"')}"` : arg;
+/** Windows (MSVCRT/CommandLineToArgvW) quoting: backslashes are literal
+ *  unless they precede a quote, so double those, including the run before
+ *  the closing quote (a path ending in `\`). */
+export function quoteArgument(arg) {
+    if (arg !== '' && !/[\s"]/.test(arg)) return arg;
+    const escaped = arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1');
+    return `"${escaped}"`;
 }
 
 /**
- * WinSW 2.x XML for a `host: 'winsw'` definition: delayed bounded
- * restarts, Ctrl+C then a stop timeout (Nest's shutdown hooks run on
+ * WinSW 2.x XML for a `host: 'winsw'` definition: restarts with backoff
+ * (10 s, 30 s, then every 60 s without limit), Ctrl+C then a stop timeout (Nest's shutdown hooks run on
  * SIGINT), size-rolled logs. Runs as the service identity #362 assigns.
  */
 export function winswXml(service) {
@@ -284,7 +293,10 @@ export function winswXml(service) {
         ),
         '  <onfailure action="restart" delay="10 sec"/>',
         '  <onfailure action="restart" delay="30 sec"/>',
-        '  <onfailure action="none"/>',
+        // WinSW repeats the last action for every further failure, so the
+        // service keeps retrying once a minute (slow MongoDB recovery after
+        // a power loss can take minutes) instead of staying down.
+        '  <onfailure action="restart" delay="60 sec"/>',
         '  <resetfailure>1 hour</resetfailure>',
         `  <stoptimeout>${service.stopTimeoutSeconds} sec</stoptimeout>`,
         '  <stopparentprocessfirst>true</stopparentprocessfirst>',

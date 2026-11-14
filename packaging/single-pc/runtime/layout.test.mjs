@@ -15,10 +15,19 @@ import {
     mongodConfig,
     runtimeManifest,
     secretPattern,
+    quoteArgument,
     serviceDefinitions,
     winswXml,
 } from './layout.mjs';
-import { RefusedError, parseArgs, provision } from './provision.mjs';
+import {
+    RefusedError,
+    acquireLock,
+    parseArgs,
+    provision,
+    releaseLock,
+} from './provision.mjs';
+import { spawnSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 
 const root = join(tmpdir(), 'gpos-data');
 const paths = layout(root);
@@ -99,7 +108,7 @@ test('generated secrets match their stored format, and a damaged one does not', 
     assert.ok(Math.ceil((SECRET_FILES.mongoKeyfile.bytes * 4) / 3) <= 1024);
 });
 
-test('services start DB, API, proxy in dependency order with bounded restarts', () => {
+test('services start DB, API, proxy in dependency order with unbounded backoff restarts', () => {
     const release = join(tmpdir(), 'release', '1.0.0');
     const [mongo, api, proxy] = serviceDefinitions(paths, release);
     assert.deepEqual(
@@ -116,7 +125,11 @@ test('services start DB, API, proxy in dependency order with bounded restarts', 
         assert.ok(service.executable.startsWith(release));
     const xml = winswXml(api);
     assert.match(xml, /<depend>GroceryPOS-MongoDB<\/depend>/);
-    assert.match(xml, /<onfailure action="none"\/>/);
+    assert.doesNotMatch(xml, /<onfailure action="none"\/>/);
+    assert.match(
+        xml,
+        /<onfailure action="restart" delay="60 sec"\/>\n  <resetfailure>/,
+    );
     assert.match(xml, /<resetfailure>1 hour<\/resetfailure>/);
     assert.match(xml, /<stoptimeout>30 sec<\/stoptimeout>/);
     assert.doesNotMatch(xml, /SECRET|PASSWORD|mongodb:\/\//);
@@ -167,4 +180,92 @@ test('a foreign or incompatible data root is refused unchanged', async () => {
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
+});
+
+test('concurrent runs on an empty root create exactly one installation', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-race-'));
+    try {
+        const logs = [];
+        const runs = Array.from({ length: 6 }, () =>
+            provision(
+                {
+                    dataRoot: join(dir, 'root'),
+                    mongod: join(dir, 'missing-mongod'),
+                    api: join(dir, 'missing-api'),
+                },
+                (line) => logs.push(line),
+            ),
+        );
+        const results = await Promise.allSettled(runs);
+        assert.ok(results.every((r) => r.status === 'rejected'));
+        assert.equal(
+            logs.filter((line) => line === 'layout: new installation').length,
+            1,
+        );
+        assert.ok(
+            results.some(
+                (r) =>
+                    r.reason instanceof RefusedError &&
+                    /Another provisioning run is active/.test(r.reason.message),
+            ),
+        );
+        const install = JSON.parse(
+            await readFile(join(dir, 'root', 'state', 'install.json'), 'utf8'),
+        );
+        assert.match(install.installationId, /^[0-9a-f-]{36}$/);
+        const state = await readdir(join(dir, 'root', 'state'));
+        assert.ok(!state.some((name) => name.startsWith('provision.lock')));
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('a stale lock is taken over by exactly one of several racing runs', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-lock-'));
+    try {
+        const dead = spawnSync(process.execPath, ['-e', '']).pid;
+        const lock = join(dir, 'provision.lock');
+        await writeFile(lock, `${dead} stale`);
+        const results = await Promise.allSettled(
+            Array.from({ length: 8 }, () => acquireLock(lock)),
+        );
+        const won = results.filter((r) => r.status === 'fulfilled');
+        assert.equal(won.length, 1);
+        for (const r of results.filter((r) => r.status === 'rejected')) {
+            assert.ok(r.reason instanceof RefusedError);
+        }
+        assert.equal(await readFile(lock, 'utf8'), won[0].value);
+        await releaseLock(lock, 'someone else');
+        assert.equal(await readFile(lock, 'utf8'), won[0].value);
+        await releaseLock(lock, won[0].value);
+        assert.deepEqual(await readdir(dir), []);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('Windows argument quoting survives spaces, quotes and trailing backslashes', () => {
+    assert.equal(quoteArgument('plain'), 'plain');
+    assert.equal(quoteArgument(''), '""');
+    assert.equal(
+        quoteArgument('C:\\Program Files\\x\\'),
+        '"C:\\Program Files\\x\\\\"',
+    );
+    assert.equal(quoteArgument('a "b"'), '"a \\"b\\""');
+    assert.equal(quoteArgument('a\\"b c'), '"a\\\\\\"b c"');
+});
+
+test('CI proves the runtime against the MongoDB version the installer ships', async () => {
+    const here = new URL('.', import.meta.url);
+    const components = JSON.parse(
+        await readFile(new URL('../components.json', here), 'utf8'),
+    );
+    const ci = await readFile(
+        new URL('../../../.github/workflows/ci.yml', here),
+        'utf8',
+    );
+    const tags = [...ci.matchAll(/docker create mongo:([\w.]+)\)/g)].map(
+        (m) => m[1],
+    );
+    assert.deepEqual(tags, [components.mongodb.version]);
 });

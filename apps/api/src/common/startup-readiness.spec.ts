@@ -1,5 +1,9 @@
 import type { Connection } from 'mongoose';
-import { awaitDatabaseReady, DatabaseNotReadyError } from './startup-readiness';
+import {
+    awaitDatabaseReady,
+    connectionRetryOptions,
+    DatabaseNotReadyError,
+} from './startup-readiness';
 
 function fakeConnection(answers: unknown[], models = 2) {
     const command = jest.fn();
@@ -71,5 +75,18 @@ describe('awaitDatabaseReady (#360)', () => {
         await expect(
             awaitDatabaseReady(connection, fastClock()),
         ).rejects.toThrow('index conflict');
+    });
+});
+
+describe('connectionRetryOptions', () => {
+    it('keeps the default for cloud environments', () => {
+        expect(connectionRetryOptions(false)).toEqual({});
+    });
+
+    it('retries the initial connection for the readiness window on single-pc', () => {
+        expect(connectionRetryOptions(true)).toEqual({
+            retryAttempts: 40,
+            retryDelay: 3000,
+        });
     });
 });

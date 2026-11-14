@@ -57,3 +57,23 @@ export async function awaitDatabaseReady(
         Object.values(connection.models).map((model) => model.init()),
     );
 }
+
+/**
+ * Initial connection retries. Cloud keeps Nest's default (9 × 3 s). On
+ * single-pc the API service can start while mongod is still recovering
+ * after a power loss, so it keeps retrying for the readiness window
+ * before exiting for a service restart (#360).
+ */
+export const SINGLE_PC_CONNECT_RETRY_DELAY_MS = 3_000;
+
+export function connectionRetryOptions(
+    singlePc: boolean,
+): { retryAttempts: number; retryDelay: number } | Record<string, never> {
+    if (!singlePc) return {};
+    return {
+        retryAttempts: Math.ceil(
+            DATABASE_READY_TIMEOUT_MS / SINGLE_PC_CONNECT_RETRY_DELAY_MS,
+        ),
+        retryDelay: SINGLE_PC_CONNECT_RETRY_DELAY_MS,
+    };
+}

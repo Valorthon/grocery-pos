@@ -62,12 +62,18 @@ already taken is refused, never moved.
 `serviceDefinitions(paths, release)` gives the start order MongoDB → API →
 proxy, each depending on the previous one (stop is the reverse), with
 executable, arguments, working directory and environment. `winswXml`
-renders the API/proxy WinSW 2.x XML: automatic start, restart after 10 s
-and 30 s then stop restarting (failure count resets after 1 hour), Ctrl+C
+renders the API/proxy WinSW 2.x XML: automatic start, restart after 10 s,
+30 s, then every 60 s without limit (WinSW repeats the last action; the
+failure count resets after 1 hour), so a slow MongoDB recovery after a power
+loss cannot leave the API stopped, Ctrl+C
 then a 30 s stop timeout (Nest's shutdown hooks run on SIGINT), logs rolled
 at 10 MB × 5. MongoDB uses its own Windows service registration
 (`mongod --config <config\mongod.cfg> --install --serviceName GroceryPOS-MongoDB`),
-which shuts down cleanly on service stop; #362 sets its 60 s stop wait.
+which shuts down cleanly on service stop. Stop it only through the Service
+Control Manager (`Stop-Service GroceryPOS-MongoDB` / `sc stop`; the
+definition's `stop: 'service-control-manager'`), never `taskkill` or
+TerminateProcess, which skip the clean shutdown; #362 sets its 60 s stop
+wait.
 
 The API runs as `node --env-file=<secrets\api.env> <release>\api\dist\main.js`
 with its working directory in the release (which contains no `.env`). The
@@ -80,7 +86,9 @@ first ADMIN (#361) is created the same way:
 - **API ready:** in `APP_ENV=single-pc` the API does not listen until the
   database is a writable replica-set primary and every model's indexes are
   built (`apps/api/src/common/startup-readiness.ts`, 120 s, then it exits and
-  WinSW restarts it). After that `GET http://127.0.0.1:13000/v1/health/ready`
+  WinSW restarts it). The initial connection itself also retries for that
+  window on single-pc (40 × 3 s, `connectionRetryOptions`) instead of
+  Nest's default 9 × 3 s; cloud keeps the default. After that `GET http://127.0.0.1:13000/v1/health/ready`
   (Host-check exempt) reports the DB ping; `/v1/health/live` checks memory
   and disk. A listening port alone is not "ready".
 - **Proxy ready:** `GET https://localhost:1443/v1/health/ready`.
@@ -102,10 +110,15 @@ services are installed (or with the DB service stopped). Exit 0 ready, 1
 failure (nothing reset; re-run resumes), 2 usage, 3 refused (state left as
 found). Steps, journaled in `state\provision.json`:
 
-1. **layout:** an absent or empty data root becomes a new installation
-   (`install.json`); a non-empty root without our `install.json`, or another
-   schema, is refused. A lock refuses a concurrent run; a dead run's lock is
-   taken over.
+1. **layout:** a non-empty root without our `install.json` is refused
+   before anything is written. Then the lock (`state\provision.lock`,
+   `<pid> <token>`, created exclusively) is taken, and only under it is an
+   absent or empty root turned into a new installation (`install.json`
+   written once with `link`, never replaced) or another schema refused. A
+   concurrent run is refused. A dead run's lock is taken over by renaming
+   it aside first, so of several racing runs exactly one wins; a run that
+   moved a live lock puts it back and refuses. A run removes the lock only
+   while it still holds its own token.
 2. **secrets:** generated once. A secret missing or damaged after this stage
    completed is refused ("restore it from a backup"), never regenerated.
 3. **database:** writes `mongod.cfg`, starts a private mongod (if the port is
@@ -118,12 +131,27 @@ found). Steps, journaled in `state\provision.json`:
    the stored password and `readWrite` on `grocery`.
 4. **config:** writes `secrets\api.env` and `config\runtime.json`.
 
-A mongod the run started is shut down at the end; a killed run may leave it
+A mongod the run started is shut down at the end with the authenticated
+`shutdown` command. If root cannot authenticate, it is signalled instead:
+SIGTERM is a clean stop on POSIX, but on Windows it is TerminateProcess
+(journal recovery on next start; to be checked in #366). a killed run may leave it
 running (its pid is in `state\mongod.pid`): the next run refuses until that
 process is stopped, then resumes.
 
 `--cache-size-gb` is unset by default (MongoDB's own default). The value for
 the 4 GB target is an open #357 qualification question.
+
+## Maintenance credentials
+
+The API and any one-off maintenance command run with `secrets\api.env`,
+i.e. as `gpos_api` (`readWrite` on `grocery`). That covers the existing
+data migrations (`migrate:categories`, `migrate:stock-ledger`,
+`migrate:decode-entities`): they read and write `grocery` collections and
+build indexes, with no `collMod`, `dropIndex` on other databases or admin
+commands. They exist for legacy cloud data; a fresh single-PC installation
+needs none of them. `gpos_root` is used only by `provision.mjs`; a future
+migration that needs more than `readWrite` must get its own credential in
+a later change rather than widening `gpos_api`.
 
 ## Permissions
 
@@ -142,7 +170,8 @@ control (`icacls /inheritance:r`). #362 then grants, per service identity:
 
 Portable: `pnpm test:single-pc-proof` (layout/CLI/refusal tests).
 
-Real MongoDB (Linux; CI's `db` job extracts `mongod` from `mongo:7`):
+Real MongoDB (Linux; CI's `db` job extracts `mongod` from `mongo:7.0.48`,
+the version pinned in `components.json`, kept in step by a test):
 
 ```bash
 GPOS_TEST_MONGOD=/path/to/mongod pnpm test:single-pc-runtime
@@ -154,7 +183,8 @@ wrong-password refusal, the API user's least privilege, transaction commit
 and rollback, repeat runs with the service running and stopped (secrets
 unchanged), restart persistence, the compiled API (when `apps/api/dist`
 exists) waiting for the DB, health, the #361 command and an ADMIN login,
-refusal of lost secrets, another installation's identity and a foreign
+two concurrent fresh runs and a stale-lock race (portable, in
+`layout.test.mjs`), refusal of lost secrets, another installation's identity and a foreign
 mongod on the port, and a SIGKILLed fresh run resuming.
 
 ### Windows-only proof (not yet done)

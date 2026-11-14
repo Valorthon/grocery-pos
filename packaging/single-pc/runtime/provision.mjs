@@ -167,6 +167,9 @@ async function writeOnce(path, text) {
     }
 }
 
+const LOCK_NAMES = (name) =>
+    name === 'provision.lock' || name.startsWith('provision.lock.stale-');
+
 /** Fresh: absent, or only our (empty) layout directories from an earlier
  *  attempt that stopped before install.json existed. */
 async function isFreshRoot(root) {
@@ -175,7 +178,8 @@ async function isFreshRoot(root) {
         if (!entry.isDirectory() || !Object.hasOwn(DIRECTORIES, entry.name))
             return false;
         const inner = await readdir(join(root, entry.name));
-        if (inner.some((name) => !name.includes('.tmp-'))) return false;
+        if (inner.some((name) => !name.includes('.tmp-') && !LOCK_NAMES(name)))
+            return false;
     }
     return true;
 }
@@ -189,21 +193,50 @@ function pidAlive(pid) {
     }
 }
 
-async function acquireLock(path) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+/** The lock holds `<pid> <token>`. A stale lock (dead pid) is taken over
+ *  by renaming it to a unique name first: only one run's rename succeeds,
+ *  and a run that renamed a live lock puts it back and refuses. Ownership
+ *  is re-read after every acquisition. */
+export async function acquireLock(path) {
+    const token = `${process.pid} ${randomUUID()}`;
+    const parse = (text) => Number(String(text).split(' ')[0]);
+    for (let attempt = 0; attempt < 3; attempt++) {
         try {
-            await writeFile(path, String(process.pid), { flag: 'wx' });
-            return;
+            await writeFile(path, token, { flag: 'wx', mode: 0o600 });
+            if ((await readFile(path, 'utf8')) === token) return token;
+            throw new RefusedError('Another provisioning run is active.');
         } catch (error) {
             if (error.code !== 'EEXIST') throw error;
         }
-        const pid = Number(await readFile(path, 'utf8').catch(() => 'NaN'));
+        const seen = await readFile(path, 'utf8').catch(() => undefined);
+        if (seen === undefined) continue; // released meanwhile
+        const pid = parse(seen);
         if (Number.isSafeInteger(pid) && pid > 0 && pidAlive(pid)) {
             throw new RefusedError('Another provisioning run is active.');
         }
-        await rm(path, { force: true }); // left by an interrupted run
+        const aside = `${path}.stale-${process.pid}-${randomUUID()}`;
+        try {
+            await rename(path, aside);
+        } catch (error) {
+            if (error.code === 'ENOENT') continue; // another run took it
+            throw error;
+        }
+        const taken = await readFile(aside, 'utf8');
+        if (taken !== seen) {
+            // Raced: we moved a newer, live run's lock. Put it back.
+            await link(aside, path).catch(() => {});
+            await unlink(aside);
+            throw new RefusedError('Another provisioning run is active.');
+        }
+        await unlink(aside); // left by an interrupted run
     }
     throw new RefusedError('Could not take the provisioning lock.');
+}
+
+/** Releases only a lock this run still owns. */
+export async function releaseLock(path, token) {
+    const held = await readFile(path, 'utf8').catch(() => undefined);
+    if (held === token) await rm(path, { force: true });
 }
 
 function portInUse(port) {
@@ -315,6 +348,8 @@ async function stopMongod(child, rootClient) {
     } catch {
         // The shutdown command drops the connection; that is expected.
     }
+    // Without root we cannot send `shutdown`. SIGTERM is a clean stop on
+    // POSIX; on Windows it is TerminateProcess (README.md, #366).
     if (!rootClient) child.kill('SIGTERM');
     const timer = setTimeout(() => child.kill('SIGKILL'), 60000);
     await exited;
@@ -449,35 +484,54 @@ async function verifyAndConverge(root, install, journal, secrets, log) {
 /** Runs every stage; returns a summary without secrets. */
 export async function provision(options, log = () => {}) {
     const paths = layout(resolve(options.dataRoot));
-    let install;
-    if (await isFreshRoot(paths.root)) {
+    // Read-only refusal first, so a foreign root is left as found.
+    const fresh = await isFreshRoot(paths.root);
+    if (!fresh && !(await exists(paths.install))) {
+        throw new RefusedError(
+            'Data root is not empty and is not a Grocery POS installation.',
+        );
+    }
+    if (fresh) {
         await mkdir(paths.dirs.state, { recursive: true, mode: 0o700 });
         await restrict(paths.root, 0o700);
-        install = {
-            schema: RUNTIME_SCHEMA,
-            installationId: randomUUID(),
-            createdAt: new Date().toISOString(),
-        };
-        await writeAtomic(
-            paths.install,
-            JSON.stringify(install, null, 2) + '\n',
-            0o600,
-        );
-        log('layout: new installation');
-    } else {
+    }
+    // Everything from the freshness decision on happens under the lock, so
+    // two runs on an empty root cannot both create an installation.
+    const lockToken = await acquireLock(paths.lock);
+    let install;
+    try {
         install = await readJson(paths.install);
         if (!install) {
-            throw new RefusedError(
-                'Data root is not empty and is not a Grocery POS installation.',
+            if (!(await isFreshRoot(paths.root))) {
+                throw new RefusedError(
+                    'Data root is not empty and is not a Grocery POS installation.',
+                );
+            }
+            // writeOnce (link) never replaces an existing install.json.
+            await writeOnce(
+                paths.install,
+                JSON.stringify(
+                    {
+                        schema: RUNTIME_SCHEMA,
+                        installationId: randomUUID(),
+                        createdAt: new Date().toISOString(),
+                    },
+                    null,
+                    2,
+                ) + '\n',
             );
+            install = await readJson(paths.install);
+            log('layout: new installation');
         }
         if (install.schema !== RUNTIME_SCHEMA) {
             throw new RefusedError(
                 `Installation schema ${install.schema} is not ${RUNTIME_SCHEMA}.`,
             );
         }
+    } catch (error) {
+        await releaseLock(paths.lock, lockToken);
+        throw error;
     }
-    await acquireLock(paths.lock);
     let child;
     let root;
     try {
@@ -585,7 +639,7 @@ export async function provision(options, log = () => {}) {
     } finally {
         await stopMongod(child, root);
         await root?.close().catch(() => {});
-        await rm(paths.lock, { force: true });
+        await releaseLock(paths.lock, lockToken);
     }
 }
 
