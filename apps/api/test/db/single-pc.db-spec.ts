@@ -188,8 +188,17 @@ it.each([
 });
 
 it('accepts a same-origin request without an Origin header', async () => {
-    const res = await send('GET', '/health/live', { host: 'localhost:1443' });
-    expect(res.status).toBe(200);
+    // Wrong credentials reach the login handler: its generic 401, not
+    // the access check's 403.
+    const res = await post(
+        '/auth/login',
+        { host: 'localhost:1443' },
+        { username: 'owner', password: 'not-the-password' },
+    );
+    expect(res.status).toBe(401);
+    expect(JSON.parse(res.body)).toMatchObject({
+        error: ErrorCode.AUTH_INVALID_CREDENTIALS,
+    });
 });
 
 it('takes a same-origin CSP report through the proxy host', async () => {
