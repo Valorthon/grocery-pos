@@ -53,7 +53,8 @@ Steps:
 
 Expected: hashes match; licenses retained; upstream support covers the target.
 
-Evidence: hash output `____`, license files `____`, upstream support link and
+Evidence: pinned SHA-256 (from `components.json`) `____`, observed
+`Get-FileHash` SHA-256 `____` (per archive), license files `____`, upstream support link and
 date `____`, result `____`.
 
 ### A3. Compiled-runtime proof (existing tooling)
@@ -66,47 +67,57 @@ Expected: exit code 0 and a new evidence JSON. It covers native argon2
 (A4), authenticated transactions (A5), anonymous refusal and HTTP
 login/profile through the compiled API.
 
-Evidence: exit code `____`, evidence JSON path and SHA-256 `____`, console
-output `____`, result `____`. A failure: record the fixed failure message
-`____` and do not retry over the same output file.
+Evidence: exit code `____`, console output `____`, result `____`. On
+success only: evidence JSON path and SHA-256 `____`. A failed run writes no
+evidence file: record the fixed failure message `____` instead, and use a new
+output path for any retry.
 
 ### A4. Native password verification
 
-Steps: read the A3 evidence JSON assertions for the default native argon2
-hash, correct-password accept and wrong-password refuse, and its password
-duration.
+Steps: in the A3 evidence JSON read `assertions.defaultArgon2CorrectAndWrongPassword`
+(default native argon2 hash, correct password accepted, wrong one refused) and
+`observations.passwordProofMs`.
 
-Expected: all three assertions true; duration recorded.
+Expected: `assertions.defaultArgon2CorrectAndWrongPassword` is `true`;
+`observations.passwordProofMs` recorded.
 
-Evidence: assertion values `____`, native password duration (ms) `____`, result `____`.
+Evidence: `defaultArgon2CorrectAndWrongPassword` `____`, `passwordProofMs`
+`____`, result `____`.
 
 ### A5. Authenticated MongoDB transactions
 
-Steps: read the A3 evidence for authenticated writable replica-set primary,
-anonymous read refusal, transaction commit and rollback.
+Steps: in the A3 evidence JSON read `assertions.authenticatedPrimary`,
+`assertions.unauthorizedReadRefused`, `assertions.transactionCommit` and
+`assertions.transactionRollback`.
 
-Expected: all true.
+Expected: all four `true`.
 
-Evidence: assertion values `____`, result `____`.
+Evidence: `authenticatedPrimary` `____`, `unauthorizedReadRefused` `____`,
+`transactionCommit` `____`, `transactionRollback` `____`, result `____`.
 
-### A6. Hardware measurements (4 GB RAM target)
+### A6. Hardware identity and measurements (4 GB RAM target)
 
-The owner's 4 GB figure is a target to qualify, not a proven minimum. A3's
-memory samples alone are not a hardware measurement.
+The owner's 4 GB figure is a target to qualify, not a proven minimum. Without
+an installed package (#358–#365) only the A3 run can be measured now; workload
+timing with Chrome is B14.
 
 Steps:
 
-1. On a 4 GB PC (or a 4 GB, 2+ vCPU VM plus the expected low-end PC), start
-   the proof stack (and later the installed package) with Chrome open on the app.
-2. Record Task Manager / `Get-Counter '\Memory\Available MBytes','\Processor(_Total)\% Processor Time'`
-   at idle, during a 200-line checkout, a sales report and a stock count.
-3. Record cold start time to a working login, and disk free space before and after.
+1. Record the PC/VM identity from section 0 (RAM, CPU, storage; a VM needs
+   4 GB and 2+ vCPUs, and the expected low-end PC must also be covered).
+2. Before A3, record idle figures:
+   `Get-Counter '\Memory\Available MBytes','\Processor(_Total)\% Processor Time'`.
+3. During the A3 run, sample the same counters every few seconds
+   (`Get-Counter ... -SampleInterval 2 -Continuous > a6-samples.txt`, stopped after A3)
+   and record the peak; also record the A3 evidence's `observations`
+   (`hostRamBytes`, `freeRamBytesAtEnd`, `cpuCount`).
 
-Expected: no paging stalls or failures; timings acceptable to the owner.
+Expected: A3 completes without paging stalls or failures. These figures do not
+qualify the 4 GB target on their own.
 
-Evidence: idle available MB `____`, peak commit/available MB `____`, CPU %
-peak `____`, cold start (s) `____`, checkout time (s) `____`, report time (s)
-`____`, disk delta `____`, observations/limitations `____`, result `____`.
+Evidence: idle available MB `____`, lowest available MB during A3 `____`, CPU %
+peak `____`, samples file `____`, `observations` values `____`,
+limitations `____`, result `____`.
 
 ## Part B: later #366 package checks
 
@@ -114,18 +125,23 @@ peak `____`, cold start (s) `____`, checkout time (s) `____`, report time (s)
 for these yet; record "no tool yet" rather than improvising one. Each needs
 the installed package version `____` and Chrome version `____`.
 
-| #   | Check                           | Steps                                                                                                                      | Expected                                                 | Evidence      |
-| --- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------- |
-| B1  | Clean install                   | Fresh Windows 11 x64, no dev tools; run installer offline; first ADMIN login with temporary password, forced change.       | Services start; login works; password change required.   | `____` `____` |
-| B2  | Reboot                          | Reboot; do not log in to Windows; then open Chrome.                                                                        | Services up before login; data intact.                   | `____` `____` |
-| B3  | Offline, local API reachable    | Disconnect internet; open/close shift, search, tracked checkout, manager approval, reversal, inventory, reports, settings. | All work under existing role rules.                      | `____` `____` |
-| B4  | Real API outage/recovery        | Stop the API service mid-session; collect permitted offline cash; restart; retry a lost-response checkout.                 | Refusals as designed; queue syncs; no duplicate receipt. | `____` `____` |
-| B5  | Authenticated transactions      | On the installed DB: anonymous connection refused; a sale and a rolled-back failure behave atomically.                     | Auth required; no partial writes.                        | `____` `____` |
-| B6  | LAN refusal                     | From another LAN device, connect to the PC's IP on the app/API/DB ports.                                                   | All refused/unreachable.                                 | `____` `____` |
-| B7  | Replacement restore             | Back up/export; restore onto a second clean installation with the protected restore tool.                                  | Data and logins restored; confirmation required.         | `____` `____` |
-| B8  | Populated / interrupted upgrade | Upgrade a populated earlier package; repeat, interrupting it (power/kill); follow documented recovery.                     | Data kept; recovery documented and works.                | `____` `____` |
-| B9  | Stale browser assets            | Keep a tab open from the old version across the upgrade; reload.                                                           | Old service worker replaced; no broken app.              | `____` `____` |
-| B10 | Pending receipt preservation    | Leave queued offline cash receipts in Chrome before upgrade/repair/reinstall.                                              | Receipts preserved and later synced exactly once.        | `____` `____` |
+| #   | Check                           | Steps                                                                                                                        | Expected                                                                  | Evidence      |
+| --- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------- |
+| B1  | Clean install                   | Fresh Windows 11 x64, no dev tools; run installer offline; first ADMIN login with temporary password, forced change.         | Services start; login works; password change required.                    | `____` `____` |
+| B2  | Reboot                          | Reboot; do not log in to Windows; then open Chrome.                                                                          | Services up before login; data intact.                                    | `____` `____` |
+| B3  | Offline, local API reachable    | Disconnect internet; open/close shift, search, tracked checkout, manager approval, reversal, inventory, reports, settings.   | All work under existing role rules.                                       | `____` `____` |
+| B4  | Real API outage/recovery        | Stop the API service mid-session; collect permitted offline cash; restart; retry a lost-response checkout.                   | Refusals as designed; queue syncs; no duplicate receipt.                  | `____` `____` |
+| B5  | Authenticated transactions      | On the installed DB: anonymous connection refused; a sale and a rolled-back failure behave atomically.                       | Auth required; no partial writes.                                         | `____` `____` |
+| B6  | LAN refusal                     | From another LAN device, connect to the PC's IP on the app/API/DB ports.                                                     | All refused/unreachable.                                                  | `____` `____` |
+| B7  | Replacement restore             | Back up/export; restore onto a second clean installation with the protected restore tool.                                    | Data and logins restored; confirmation required.                          | `____` `____` |
+| B8  | Populated / interrupted upgrade | Upgrade a populated earlier package; repeat, interrupting it (power/kill); follow documented recovery.                       | Data kept; recovery documented and works.                                 | `____` `____` |
+| B9  | Stale browser assets            | Keep a tab open from the old version across the upgrade; reload.                                                             | Old service worker replaced; no broken app.                               | `____` `____` |
+| B10 | Pending receipt preservation    | Leave queued offline cash receipts in Chrome before upgrade/repair/reinstall.                                                | Receipts preserved and later synced exactly once.                         | `____` `____` |
+| B11 | Crash recovery                  | Kill the API and MongoDB processes (Task Manager, End task) mid-session, and cut power once.                                 | Services restart on their own; committed data intact; no partial sale.    | `____` `____` |
+| B12 | Repair/uninstall/reinstall      | Run repair; uninstall; reinstall the same version.                                                                           | Database, backups and settings retained; login works after each.          | `____` `____` |
+| B13 | Local HTTPS origin              | Open Chrome at `https://localhost:1443`.                                                                                     | App loads with no certificate warning.                                    | `____` `____` |
+| B14 | Workload on target hardware     | On the 4 GB PC with Chrome open: 200-line checkout, a sales report, a stock count; cold start to login; sample counters.     | Acceptable timings; no paging stalls. Record timings (s) and peak memory. | `____` `____` |
+| B15 | Documentation deliverable       | Follow the delivered install, startup/shutdown, backup media, restore, update, troubleshooting and handover docs as written. | Each procedure works as written on the target.                            | `____` `____` |
 
 Evidence columns: result PASS/FAIL, then screenshots/log file paths.
 
