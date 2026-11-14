@@ -465,6 +465,8 @@ describe('offline cash synchronization', () => {
         'iat',
         'exp',
         'exp-beyond-lease',
+        'fractional-iat',
+        'fractional-exp',
     ])('rejects %s proof', async (mode) => {
         const patch: Record<string, unknown> = {};
         if (mode === 'purpose') patch.purpose = 'login';
@@ -474,6 +476,9 @@ describe('offline cash synchronization', () => {
         if (mode === 'price') patch.price = 0;
         if (mode === 'iat') patch.iat = Math.floor(Date.now() / 1000) + 30;
         if (mode === 'exp') patch.exp = Math.floor(Date.now() / 1000) - 30;
+        if (mode === 'fractional-iat') patch.iat = Date.now() / 1000 - 0.12345;
+        if (mode === 'fractional-exp')
+            patch.exp = f.lease.expiresAt.getTime() / 1000 - 0.12345;
         if (mode === 'exp-beyond-lease')
             patch.exp = Math.floor(Date.now() / 1000) + 90000;
         f.body.lines[0]!.proof = mode === 'forged' ? 'invalid' : f.proof(patch);
@@ -641,6 +646,216 @@ describe('offline cash synchronization', () => {
             }),
         );
     });
+});
+
+describe('sub-second offline selling deadline', () => {
+    afterEach(() => jest.restoreAllMocks());
+    function boundary() {
+        const clock = jest.spyOn(Date, 'now').mockReturnValue(100900);
+        f = fixture();
+        f.lease.expiresAt = new Date(200500);
+        f.body.soldAt = new Date(199500).toISOString();
+        return clock;
+    }
+    it.each([
+        [100900, 200500],
+        [100100, 200500],
+        [100000, 200000],
+        [199999, 200000],
+        [200499, 200500],
+        [100999, 200001],
+    ])(
+        'preserves only the issuer rounding window for issuance %s / deadline %s',
+        async (issued, deadline) => {
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(issued);
+            f = fixture();
+            f.lease.expiresAt = new Date(deadline);
+            const page = await f.service.catalog(f.actor, {
+                lease: String(f.lease._id),
+            });
+            const payload = f.jwt.decode<{ iat: number; exp: number }>(
+                page.products[0].proof,
+            );
+            expect(payload.exp).toBe(Math.ceil(deadline / 1000));
+            f.body.soldAt = new Date(deadline - 1).toISOString();
+            f.body.lines[0].proof = f.proof({
+                iat: Math.floor(issued / 1000),
+                exp:
+                    Math.floor(issued / 1000) +
+                    Math.max(1, Math.floor((deadline - issued) / 1000)),
+            });
+            clock.mockReturnValue(deadline - 1);
+            await expect(f.service.sync(f.actor, f.body)).resolves.toEqual(
+                f.receipt,
+            );
+        },
+    );
+    it('signs the absolute lease deadline without flooring the remaining lifetime twice', async () => {
+        boundary();
+        const page = await f.service.catalog(f.actor, {
+            lease: String(f.lease._id),
+        });
+        expect(
+            f.jwt.decode<{ iat: number; exp: number }>(page.products[0].proof),
+        ).toMatchObject({ iat: 100, exp: 201 });
+    });
+    it.each([false, true])(
+        'accepts collected boundary cash with a catalogue proof (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            const page = await f.service.catalog(f.actor, {
+                lease: String(f.lease._id),
+            });
+            f.body.lines[0].proof = page.products[0].proof;
+            clock.mockReturnValue(admin ? 210000 : 199500);
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Verified boundary cash' },
+                    admin,
+                ),
+            ).resolves.toEqual(f.receipt);
+        },
+    );
+    it.each([false, true])(
+        'recovers immutable legacy cash inside the historical double-flooring band (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            // The actual historical issuer: floor(iat) + floor(remaining seconds).
+            const proof = f.proof({
+                iat: 100,
+                exp: 100 + Math.floor((200500 - 100900) / 1000),
+            });
+            expect(f.jwt.decode<{ exp: number }>(proof).exp).toBe(199);
+            f.body.lines[0].proof = proof;
+            clock.mockReturnValue(admin ? 210000 : 199500);
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Verified legacy boundary cash' },
+                    admin,
+                ),
+            ).resolves.toEqual(f.receipt);
+            expect(f.body.lines[0].proof).toBe(proof);
+        },
+    );
+    it.each([false, true])(
+        'preserves a legacy proof across a signing pause without extending the lease (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            f.lease.expiresAt = new Date(200000);
+            clock.mockReturnValue(100000);
+            const expiresIn = Math.max(
+                1,
+                Math.floor((f.lease.expiresAt.getTime() - Date.now()) / 1000),
+            );
+            const payload = f.jwt.decode<Record<string, unknown>>(
+                f.body.lines[0].proof,
+            );
+            delete payload.iat;
+            delete payload.exp;
+            clock.mockReturnValue(101000);
+            f.body.lines[0].proof = f.jwt.sign(payload, {
+                secret: SECRET,
+                expiresIn,
+            });
+            expect(
+                f.jwt.decode<{ iat: number; exp: number }>(
+                    f.body.lines[0].proof,
+                ),
+            ).toMatchObject({ iat: 101, exp: 201 });
+            f.body.soldAt = new Date(199999).toISOString();
+            clock.mockReturnValue(admin ? 210000 : 199999);
+            const request = {
+                ...f.body,
+                reason: 'Verified cash after legacy signing pause',
+            };
+            await expect(
+                f.service.sync(admin ? f.admin : f.actor, request, admin),
+            ).resolves.toEqual(f.receipt);
+            request.soldAt = new Date(200000).toISOString();
+            await expect(
+                f.service.sync(admin ? f.admin : f.actor, request, admin),
+            ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
+        },
+    );
+    it.each([false, true])(
+        'honors a shorter signed lifetime without giving it rounding grace (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            f.body.lines[0].proof = f.proof({ iat: 100, exp: 150 });
+            f.body.soldAt = new Date(149999).toISOString();
+            clock.mockReturnValue(admin ? 210000 : 199500);
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Verified earlier cash' },
+                    admin,
+                ),
+            ).resolves.toEqual(f.receipt);
+            f.body.soldAt = new Date(150000).toISOString();
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Verified exact signed boundary' },
+                    admin,
+                ),
+            ).resolves.toEqual(f.receipt);
+            f.body.soldAt = new Date(150001).toISOString();
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Review' },
+                    admin,
+                ),
+            ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
+        },
+    );
+    it('does not treat an impossible historical expiry as rounding loss', async () => {
+        const clock = boundary();
+        f.lease.expiresAt = new Date(200999);
+        f.body.soldAt = new Date(200998).toISOString();
+        // At this deadline every millisecond in iat=100 yields exp=200,
+        // so exp=199 is unrelated early expiry, despite being one second off.
+        f.body.lines[0].proof = f.proof({ iat: 100, exp: 199 });
+        clock.mockReturnValue(200998);
+        await expect(f.service.sync(f.actor, f.body)).rejects.toMatchObject({
+            code: ErrorCode.OFFLINE_INVALID,
+        });
+    });
+    it.each([false, true])(
+        'refuses expiry outside the historical rounding band (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            f.body.lines[0].proof = f.proof({ iat: 100, exp: 198 });
+            clock.mockReturnValue(admin ? 210000 : 199500);
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Review' },
+                    admin,
+                ),
+            ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
+            expect(f.sales.create).not.toHaveBeenCalled();
+        },
+    );
+    it.each([false, true])(
+        'rejects cash at the exact lease deadline even when JWT rounds up (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            f.body.lines[0].proof = f.proof({ iat: 100, exp: 201 });
+            f.body.soldAt = new Date(200500).toISOString();
+            clock.mockReturnValue(admin ? 210000 : 200500);
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Review' },
+                    admin,
+                ),
+            ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
+            expect(f.sales.create).not.toHaveBeenCalled();
+        },
+    );
 });
 
 describe('confidential offline cost evidence', () => {

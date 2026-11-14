@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
+import { JwtService } from '@nestjs/jwt';
 import {
     wireShapeDiff,
     OFFLINE_LEASE_SHAPE,
@@ -558,4 +559,137 @@ it('sends archived product tombstones without new proofs and accepts already-col
     expect(result.status).toBe(201);
     expect(result.body.totalAmount).toBe(8100);
     expect(await stockOf(db, product)).toBe(0);
+});
+
+describe('sub-second proof and lease deadlines', () => {
+    afterEach(() => jest.restoreAllMocks());
+    it.each([
+        { admin: false, legacy: false },
+        { admin: true, legacy: false },
+        { admin: false, legacy: true },
+        { admin: true, legacy: true },
+    ])(
+        'records boundary cash once (admin=$admin legacy=$legacy)',
+        async ({ admin: reconcile, legacy }) => {
+            const base = Math.floor(Date.now() / 1000) * 1000;
+            const issued = base + 900;
+            // Keep real-clock catalogue queries comfortably inside the lease,
+            // and the clock offset below MongoDB heartbeat staleness limits.
+            const deadline = base + 8500;
+            const clock = jest.spyOn(Date, 'now').mockReturnValue(issued);
+            await db
+                .model<OfflineLease>('OfflineLease')
+                .updateOne(
+                    { _id: lease._id },
+                    { $set: { expiresAt: new Date(deadline) } },
+                );
+            let after: string | null = null;
+            let item: OfflineCatalogPage['products'][number] | undefined;
+            do {
+                const page: { status: number; body: OfflineCatalogPage } =
+                    await read<OfflineCatalogPage>(
+                        await db.call(
+                            seller,
+                            'GET',
+                            `/offline/catalog?lease=${lease._id}${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+                        ),
+                    );
+                expect(page.status).toBe(200);
+                item = page.body.products.find((row) => row._id === product);
+                after = page.body.next;
+            } while (!item && after);
+            expect(item).toBeDefined();
+            const signer = new JwtService();
+            const payload = signer.decode<
+                Record<string, unknown> & { exp: number; iat: number }
+            >(item!.proof);
+            expect(payload.iat).toBe(Math.floor(issued / 1000));
+            expect(payload.exp).toBe(Math.ceil(deadline / 1000));
+            const proof = legacy
+                ? signer.sign(
+                      {
+                          ...payload,
+                          exp:
+                              Math.floor(issued / 1000) +
+                              Math.floor((deadline - issued) / 1000),
+                      },
+                      { secret: process.env.JWT_SECRET! },
+                  )
+                : item!.proof;
+            const request = {
+                ...body,
+                soldAt: new Date(deadline - 1).toISOString(),
+                lines: [{ ...body.lines[0], proof }],
+            };
+            if (reconcile) {
+                expect(
+                    (
+                        await db.call(
+                            admin,
+                            'POST',
+                            `/shifts/${lease.shift._id}/close`,
+                            { counts: {} },
+                        )
+                    ).status,
+                ).toBe(201);
+            }
+            clock.mockReturnValue(reconcile ? deadline + 500 : deadline - 1);
+            const path = reconcile ? '/offline/reconcile' : '/offline/sync';
+            const actor = reconcile ? admin : seller;
+            const submitted = reconcile
+                ? { ...request, reason: 'Counted boundary cash' }
+                : request;
+            const response = await read<Receipt>(
+                await db.call(
+                    actor,
+                    'POST',
+                    path,
+                    reconcile ? submitted : request,
+                ),
+            );
+            expect(response.status).toBe(201);
+            expect(response.body.totalAmount).toBe(8100);
+            expect(response.body.createdAt).toBe(request.soldAt);
+            const replay = await read<Receipt>(
+                await db.call(
+                    actor,
+                    'POST',
+                    path,
+                    reconcile ? submitted : request,
+                ),
+            );
+            expect(replay.body._id).toBe(response.body._id);
+            expect(await stockOf(db, product)).toBe(0);
+            expect(
+                await db
+                    .model<Sales>('Sales')
+                    .countDocuments({ idempotencyKey: body.idempotencyKey }),
+            ).toBe(1);
+            expect(request.lines[0].proof).toBe(proof);
+            // Neither a rounded-up JWT nor the legacy recovery band extends the lease.
+            const expired = await read<AppErrorResponse>(
+                await db.call(actor, 'POST', path, {
+                    ...submitted,
+                    idempotencyKey: randomUUID(),
+                    soldAt: new Date(deadline).toISOString(),
+                }),
+            );
+            expect(expired.status).toBe(409);
+            expect(expired.body.error).toBe(ErrorCode.OFFLINE_INVALID);
+            const unrelatedExpiry = signer.sign(
+                { ...payload, exp: Math.floor(deadline / 1000) - 2 },
+                { secret: process.env.JWT_SECRET! },
+            );
+            const invalid = await read<AppErrorResponse>(
+                await db.call(actor, 'POST', path, {
+                    ...submitted,
+                    idempotencyKey: randomUUID(),
+                    lines: [{ ...request.lines[0], proof: unrelatedExpiry }],
+                }),
+            );
+            expect(invalid.status).toBe(409);
+            expect(invalid.body.error).toBe(ErrorCode.OFFLINE_INVALID);
+            expect(await stockOf(db, product)).toBe(0);
+        },
+    );
 });

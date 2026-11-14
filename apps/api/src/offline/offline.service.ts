@@ -316,17 +316,14 @@ export class OfflineService {
                               EAN: product.EAN,
                               price: product.price,
                               unit,
+                              // JWT NumericDate has whole-second precision. Round
+                              // the absolute deadline up; sync still enforces the
+                              // exact, exclusive millisecond lease deadline.
+                              exp: Math.ceil(lease.expiresAt.getTime() / 1000),
                           },
                           {
                               secret: this.config.get('JWT_SECRET'),
                               audience: AUDIENCE,
-                              expiresIn: Math.max(
-                                  1,
-                                  Math.floor(
-                                      (lease.expiresAt.getTime() - Date.now()) /
-                                          1000,
-                                  ),
-                              ),
                           },
                       );
             products.push({
@@ -397,6 +394,24 @@ export class OfflineService {
         } catch {
             throw invalid();
         }
+        // An immutable historical proof may expire early because its issuer
+        // used floor(iat) + max(1, floor(remaining lifetime)). Reconstruct the
+        // earliest result within that signed iat second. A signing pause may
+        // increase exp, so retain the historical upper cap (lease + 1000ms).
+        // A shorter-lived proof is still valid before its own signed expiry;
+        // only expired proofs need this compatibility check. New proofs use
+        // the absolute ceiling. Every proof keeps the exact lease deadline.
+        const deadline = lease.expiresAt.getTime();
+        const issuedSecond = p.iat * 1000;
+        const lastPossibleIssue = Math.min(issuedSecond + 999, deadline - 1);
+        const legacyMin =
+            p.iat +
+            Math.max(1, Math.floor((deadline - lastPossibleIssue) / 1000));
+        const legacyMax = Math.floor(deadline / 1000) + 1;
+        const matchesExpiry =
+            p.exp <= legacyMax &&
+            (soldAt.getTime() <= p.exp * 1000 ||
+                (issuedSecond < deadline && p.exp >= legacyMin));
         if (
             p.purpose !== 'offline-price-v1' ||
             p.lease !== String(lease._id) ||
@@ -407,11 +422,10 @@ export class OfflineService {
             !Number.isSafeInteger(p.price) ||
             p.price < 1 ||
             p.price > NUMERIC_LIMITS.AMOUNT_MAX ||
-            !Number.isFinite(p.iat) ||
-            !Number.isFinite(p.exp) ||
+            !Number.isSafeInteger(p.iat) ||
+            !Number.isSafeInteger(p.exp) ||
             soldAt.getTime() < p.iat * 1000 ||
-            soldAt.getTime() > p.exp * 1000 ||
-            p.exp * 1000 > lease.expiresAt.getTime() + 1000
+            !matchesExpiry
         )
             throw invalid();
         return p;
@@ -452,7 +466,7 @@ export class OfflineService {
         if (
             !Number.isFinite(soldAt.getTime()) ||
             soldAt.getTime() < lease.issuedAt.getTime() - 1000 ||
-            soldAt.getTime() > lease.expiresAt.getTime() ||
+            soldAt.getTime() >= lease.expiresAt.getTime() ||
             soldAt.getTime() > Date.now() + 120000
         )
             throw invalid();

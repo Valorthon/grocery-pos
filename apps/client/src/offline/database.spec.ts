@@ -140,6 +140,33 @@ describe('durable offline outbox', () => {
             expect(await pendingOffline(owner)).toEqual([]);
         },
     );
+    it('queues through the last lease millisecond, refuses its exact deadline and retains collected proofs', async () => {
+        const clock = vi.spyOn(Date, 'now').mockReturnValue(100900);
+        try {
+            const saved = state();
+            saved.lease!.expiresAt = new Date(200500).toISOString();
+            await saveOfflineState(saved);
+            clock.mockReturnValue(200499);
+            const sale = entry();
+            sale.request.lines = [
+                {
+                    product: 'product',
+                    quantity: 1,
+                    proof: 'immutable-signed-price',
+                },
+            ];
+            await queueOffline(sale);
+            clock.mockReturnValue(200500);
+            await expect(queueOffline(entry('too-late'))).rejects.toThrow(
+                'expired',
+            );
+            expect(await pendingOffline(owner)).toEqual([sale]);
+            // A durable receipt is replayable after expiry without rewriting its proof.
+            expect(await queueOffline(sale)).toEqual(sale);
+        } finally {
+            clock.mockRestore();
+        }
+    });
     it('does not clear a collected receipt after quota failure', async () => {
         await saveOfflineState(state());
         const spy = vi
