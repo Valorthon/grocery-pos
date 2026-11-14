@@ -62,7 +62,13 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/installer/install.mjs',
     'tools/installer/Launch.ps1',
     'tools/installer/ExportReminder.ps1',
+    'tools/installer/BackupToUsb.ps1',
+    'tools/installer/Install.ps1',
     'notices/COMPONENTS.md',
+    // Apache-2.0 §4(a): Caddy's license text ships with it.
+    'notices/proxy/LICENSE',
+    'notices/serviceHost/LICENSE.txt',
+    'notices/mongodb/LICENSE-Community.txt',
     'VERSION.json',
 ]);
 
@@ -536,7 +542,15 @@ export async function buildBundle(options, log = () => {}) {
         );
         await rename(stage, out);
         log(`bundle: ${out}`);
-        return { out, version, files: Object.keys(files).length };
+        // Compared out of band before Install.ps1 runs (README.md).
+        const manifestSha256 = sha256(await readFile(join(out, MANIFEST)));
+        log(`bundle-manifest.json SHA-256: ${manifestSha256}`);
+        return {
+            out,
+            version,
+            files: Object.keys(files).length,
+            manifestSha256,
+        };
     } catch (error) {
         await rm(stage, { recursive: true, force: true });
         throw error;

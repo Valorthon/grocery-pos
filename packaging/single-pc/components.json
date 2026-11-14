@@ -59,7 +59,10 @@
         "bundle": {
             "archive": "zip",
             "strip": 0,
-            "map": [["caddy.exe", "caddy/caddy.exe"]],
+            "map": [
+                ["caddy.exe", "caddy/caddy.exe"],
+                ["LICENSE", "notices/proxy/LICENSE"]
+            ],
             "notices": true
         }
     },

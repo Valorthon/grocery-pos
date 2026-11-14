@@ -21,8 +21,8 @@ reboot, crash recovery and LAN checks are unproven until the #357/#366 run
 - The logic lives in Node modules: `plan.mjs` (pure, every command and
   definition) and `install.mjs` (orchestration through an injectable
   context), so most of it is tested on Linux in CI. `Install.ps1` only checks
-  elevation, verifies `node.exe` and the scripts against the manifest, and
-  starts `install.mjs`.
+  elevation and the manifest hash, copies `node.exe` and the scripts into an
+  admin-only folder, verifies them there and starts `install.mjs` from the copy.
 - The vendor installs and updates manually (#357), so an MSI's Add/Remove
   Programs entry, per-user advertising or GUI wizard brings nothing that is
   required. WiX (MS-RL) or Inno Setup (own license) would add a build tool and
@@ -59,6 +59,14 @@ node packaging/single-pc/installer/bundle.mjs --out <new folder> [--cache <dir>]
 5. `bundle-manifest.json` lists the SHA-256 of every file, and `SHA256SUMS`
    repeats it for `sha256sum -c`. The bundle is built in `<out>.partial` and
    renamed only when complete; an existing folder is never overwritten.
+6. The builder prints `bundle-manifest.json SHA-256: <hash>` (also in its
+   JSON result). The manifest travels with the files it describes, so on its
+   own it only detects corruption, not tampering. The vendor records that
+   hash outside the bundle (build log, release notes, a note kept apart from
+   the USB stick) and passes it to `Install.ps1 -ManifestSha256`, which
+   refuses any other manifest. Code signing (Authenticode on the scripts and
+   executables) is deferred; until then this out-of-band hash is the trust
+   anchor.
 
 The store PC downloads nothing: everything the installer needs is in the
 bundle.
@@ -66,10 +74,11 @@ bundle.
 ## Installing (store PC, elevated Windows PowerShell)
 
 ```powershell
-.\Install.ps1 -Mode install -AdminUsername <name> [-StoreTimezone Asia/Manila] [-BackupTime 22:00]
-.\Install.ps1 -Mode repair [-BackupTime HH:MM]
-.\Install.ps1 -Mode uninstall [-RemoveCaTrust]
-.\Install.ps1 -Mode handover-done
+# First compare by eye: (Get-FileHash .\bundle-manifest.json).Hash with the recorded hash.
+.\Install.ps1 -ManifestSha256 <hash> -Mode install -AdminUsername <name> [-StoreTimezone Asia/Manila] [-BackupTime 22:00]
+.\Install.ps1 -ManifestSha256 <hash> -Mode repair [-BackupTime HH:MM]
+.\Install.ps1 -ManifestSha256 <hash> -Mode uninstall [-RemoveCaTrust]
+.\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
 ```
 
 Exit codes: 0 done, 1 failed (nothing removed, re-run resumes), 2 usage,
@@ -83,6 +92,13 @@ Exit codes: 0 done, 1 failed (nothing removed, re-run resumes), 2 usage,
 | `%ProgramData%\Valorthon\GroceryPOS\`                     | data root (#360), plus `state\installer.json`                           |
 | `%ProgramData%\Valorthon\GroceryPOS-Handover\`            | first administrator's temporary password (SYSTEM + Administrators only) |
 
+`Install.ps1` never runs anything from the bundle folder, which may be
+user-writable (USB stick, Downloads): it checks the manifest's SHA-256
+against `-ManifestSha256`, copies `release\node` and `release\tools` into a
+fresh `%ProgramFiles%\Valorthon\GroceryPOS\installer-run-<guid>` (only
+administrators and SYSTEM can write there), refuses any unlisted file,
+verifies every hash there, runs `install.mjs` from that copy and deletes it.
+
 Steps (each idempotent; `state\installer.json` records the stages):
 
 1. **Verify** the whole bundle against its manifest.
@@ -91,7 +107,8 @@ Steps (each idempotent; `state\installer.json` records the stages):
    emulation on ARM is refused), elevated, .NET Framework ≥ 4.6.1 (WinSW
    NET461), free space (twice the release; 5 GB on the data volume,
    provisional), ports 1443/13000/27018 free unless held by our own installed
-   services, and the data root's state: new, ours (reinstall) or foreign
+   services (a listener whose executable is not under our `releases\` is
+   refused even then, `Get-NetTCPConnection`), and the data root's state: new, ours (reinstall) or foreign
    (refused). A missing Chrome is a warning. `install` with services
    already registered is refused ("use repair"); `repair` needs an existing
    installation.
@@ -103,7 +120,10 @@ Steps (each idempotent; `state\installer.json` records the stages):
    `<version>.damaged-<time>` and replaced.
 6. **Provision** (`provision()` from #360): data root, secrets (never
    regenerated), authenticated replica set, `api.env`.
-7. **Services**: any existing registration is deleted, then MongoDB
+7. **Services**: any existing registration is deleted and the installer
+   waits (60 s at most) until the Service Control Manager has actually removed
+   it (`sc delete` only marks it; registering again too early fails with
+   1072), then MongoDB
    (`mongod --install`), API and proxy (WinSW) are registered in dependency
    order. Each runs as its own virtual account `NT SERVICE\<name>`
    (`sc sidtype unrestricted`, `sc config obj=`), automatic start, with
@@ -131,12 +151,25 @@ Steps (each idempotent; `state\installer.json` records the stages):
     SYSTEM daily at the backup time (default 22:00), `StartWhenAvailable`
     (a missed run happens at next boot), 2 h limit, 3 retries 30 min apart;
     `\GroceryPOS\Weekly export reminder` shows a message to the logged-on
-    user (Users group, least privilege) every Monday 09:00.
+    user (Users group, least privilege) every Monday 09:00, pointing to the
+    "Back up to USB drive" shortcut (owner decisions 2026-11-15).
 11. **Shortcut** "Grocery POS" on the Public Desktop and the common Start
     menu: hidden `powershell.exe -File Launch.ps1`, which polls
     `https://localhost:1443/v1/health/ready` (TLS 1.2, up to 180 s) and only
     then opens Chrome (`App Paths\chrome.exe`) with `--new-window`; otherwise
     it explains what to do. It never changes a Chrome profile.
+12. **Shortcut** "Back up to USB drive" in the same two places (owner
+    decision 2026-11-15): `BackupToUsb.ps1 -DataRoot <root> -Release
+<release>` asks for elevation (the Windows UAC prompt; the person needs an
+    administrator account of this PC), lists removable drives
+    (`Win32_LogicalDisk` type 2) to pick one, runs `backup.mjs create --kind
+manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
+    export itself refuses non-removable drives), and shows a plain success
+    or failure message with the command's own reason line.
+13. **Old releases**: after a successful install or repair, `releases\`
+    keeps the current release and the newest other complete one (for
+    rollback by #364); older releases and every `*.damaged-*` and
+    `*.partial` copy are deleted.
 
 ## Repair, interrupted runs, reinstall and uninstall
 
@@ -163,7 +196,8 @@ with manifest, `SHA256SUMS`, notices and tamper detection (changed, missing,
 unexpected files); no partial bundle after a failure; preflight decisions;
 handover location; service order, virtual accounts, dependencies and
 recovery; ACL grants against the runtime README table; task definitions;
-shortcut; uninstall scope; and a full install → interrupted install →
+shortcuts; release pruning; foreign listeners; the Install.ps1 staged
+copy (static); uninstall scope; and a full install → interrupted install →
 resume → repair → damaged-release repair → uninstall → reinstall →
 handover cleanup run against a recording context, with secrets unchanged.
 PowerShell scripts get static checks only (no `pwsh` in CI).
@@ -181,7 +215,8 @@ else can read `secrets\`); start order and readiness; graceful stop (mongod
 clean shutdown in its log, Nest shutdown hooks); kill each service process
 and watch recovery; reboot before login; Chrome opens without a certificate
 warning; the shortcut as a standard (non-admin) user; non-admin daily use;
-the backup task as SYSTEM writing a verified backup; the reminder; the
+the backup task as SYSTEM writing a verified backup; the reminder; "Back up
+to USB drive" with a USB stick, without a drive and with a full drive; the
 handover folder's ACL (a standard user is denied); interrupted install
 (power off during provisioning and during copy); repair; uninstall and
 reinstall keeping records and settings; and no LAN listener
@@ -190,4 +225,5 @@ reinstall keeping records and settings; and no LAN listener
 
 Known gaps: mongod's 60 s stop wait (the runtime README) is not configurable
 through `sc`; Windows' service stop wait applies until #366 measures it.
-Old releases are left in place for the upgrade work (#364).
+`Launch.ps1` and `BackupToUsb.ps1` start through `powershell.exe
+-WindowStyle Hidden`, which still flashes a console briefly (PowerShell 5.1).

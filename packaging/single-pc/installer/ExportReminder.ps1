@@ -14,7 +14,9 @@ Add-Type -AssemblyName System.Windows.Forms
     ("Weekly reminder: copy a backup to your external USB drive.`n`n" +
         'Grocery POS makes a verified backup on this computer every day. ' +
         'A copy on an external drive protects your records if this ' +
-        'computer is lost or damaged. Keep the drive somewhere safe.'),
+        "computer is lost or damaged.`n`n" +
+        'Plug in the drive, then open "Back up to USB drive" on the desktop ' +
+        '(or in the Start menu). Keep the drive somewhere safe.'),
     'Grocery POS backup reminder',
     [System.Windows.Forms.MessageBoxButtons]::OK,
     [System.Windows.Forms.MessageBoxIcon]::Information)

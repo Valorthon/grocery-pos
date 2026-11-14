@@ -23,6 +23,10 @@ export const TASKS = Object.freeze({
     exportReminder: `${TASK_FOLDER}Weekly export reminder`,
 });
 export const SHORTCUT_NAME = `${PRODUCT}.lnk`;
+/** Owner decision 2026-11-15: guided export to a USB drive. */
+export const BACKUP_SHORTCUT_NAME = 'Back up to USB drive.lnk';
+/** Releases kept by repair: the current one and the newest other one. */
+export const KEEP_RELEASES = 2;
 export const HANDOVER_FILE = 'initial-admin-password.txt';
 export const HANDOVER_NOTE = 'READ-ME-FIRST.txt';
 export const INSTALLER_STATE_SCHEMA = 1;
@@ -67,18 +71,28 @@ export function locations(env) {
         // Outside the data root (never in backups) and never in a shared
         // folder such as C:\Users\Public: SYSTEM and Administrators only.
         handoverDir: join(programData, VENDOR_DIR, `${PRODUCT_DIR}-Handover`),
-        shortcuts: [
-            join(publicDir, 'Desktop', SHORTCUT_NAME),
-            join(
-                programData,
-                'Microsoft',
-                'Windows',
-                'Start Menu',
-                'Programs',
-                SHORTCUT_NAME,
-            ),
-        ],
+        shortcuts: shortcutPlaces(publicDir, programData, SHORTCUT_NAME),
+        backupShortcuts: shortcutPlaces(
+            publicDir,
+            programData,
+            BACKUP_SHORTCUT_NAME,
+        ),
     };
+}
+
+/** Public Desktop and the common Start menu (owner decision 2026-11-15). */
+function shortcutPlaces(publicDir, programData, name) {
+    return [
+        join(publicDir, 'Desktop', name),
+        join(
+            programData,
+            'Microsoft',
+            'Windows',
+            'Start Menu',
+            'Programs',
+            name,
+        ),
+    ];
 }
 
 /** The per-service virtual account (no password, no logon rights). */
@@ -133,7 +147,12 @@ export function evaluatePreflight(facts, mode) {
             api: SERVICES.api,
             mongo: SERVICES.mongo,
         }[name];
-        if (facts.portsBusy?.includes(port) && !installed.includes(owner)) {
+        // Our own installed service may hold its port during a repair; a
+        // listener outside our releases never may.
+        if (
+            facts.portsForeign?.includes(port) ||
+            (facts.portsBusy?.includes(port) && !installed.includes(owner))
+        ) {
             refusals.push(
                 `Port ${port} is in use by another program; free it (it is never moved).`,
             );
@@ -522,6 +541,44 @@ export function shortcutSpec(release) {
     };
 }
 
+/**
+ * "Back up to USB drive": BackupToUsb.ps1 asks for elevation, takes a
+ * verified backup (`create --kind manual`) and exports it with the #363
+ * `export` command to the removable drive the owner picks.
+ */
+export function backupShortcutSpec(paths, release) {
+    const run = powershellFile(
+        join(release, 'tools', 'installer', 'BackupToUsb.ps1'),
+        ['-DataRoot', paths.root, '-Release', release],
+    );
+    return {
+        target: run.file,
+        arguments: run.args.map(quote).join(' '),
+        workingDirectory: release,
+        description: `Back up ${PRODUCT} to a USB drive`,
+        icon: join(release, 'client', 'favicon.ico'),
+    };
+}
+
+/**
+ * Old releases a repair may delete: everything except the current one and
+ * the newest other complete release (`KEEP_RELEASES`); damaged and partial
+ * copies always go. `entries` are `{ name, mtimeMs }` in releases\.
+ */
+export function releasesToPrune(entries, current) {
+    const complete = entries
+        .filter(
+            (e) =>
+                e.name !== current && !/\.(damaged-\d+|partial)$/.test(e.name),
+        )
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const keep = new Set([
+        current,
+        ...complete.slice(0, KEEP_RELEASES - 1).map((e) => e.name),
+    ]);
+    return entries.map((e) => e.name).filter((name) => !keep.has(name));
+}
+
 /** schtasks steps; XML files are written UTF-16 by install.mjs. */
 export function taskSteps(xmlPaths) {
     return Object.entries(TASKS).map(([key, name]) => ({
@@ -555,6 +612,7 @@ export function uninstallSteps({ installedServices, shortcuts }) {
         if (!installedServices.includes(name)) continue;
         steps.push({ kind: 'stop', name });
         steps.push({ kind: 'exec', file: 'sc.exe', args: ['delete', name] });
+        steps.push({ kind: 'gone', name });
     }
     for (const path of shortcuts) steps.push({ kind: 'remove', path });
     return steps;

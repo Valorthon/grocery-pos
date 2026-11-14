@@ -41,6 +41,8 @@ import {
     MIN_FREE,
     TASKS,
     aclSteps,
+    backupShortcutSpec,
+    releasesToPrune,
     backupTaskXml,
     evaluatePreflight,
     locations,
@@ -421,6 +423,55 @@ test('preflight refuses unsupported platforms, foreign data, busy ports and low 
         evaluatePreflight({ ...okFacts, chrome: false }, 'install').warnings[0],
         /Chrome/,
     );
+    // A foreign listener is refused even while our service is installed.
+    assert.match(
+        refused(
+            {
+                dataRoot: 'ours',
+                servicesInstalled: Object.values(SERVICES),
+                portsBusy: [1443],
+                portsForeign: [1443],
+            },
+            'repair',
+        ),
+        /Port 1443 is in use/,
+    );
+});
+
+test('repair keeps the current release and the newest other one', () => {
+    assert.deepEqual(
+        releasesToPrune(
+            [
+                { name: 'v1', mtimeMs: 1 },
+                { name: 'v2', mtimeMs: 2 },
+                { name: 'v3', mtimeMs: 3 },
+                { name: 'v4', mtimeMs: 4 },
+                { name: 'v3.damaged-9', mtimeMs: 9 },
+                { name: 'v4.partial', mtimeMs: 10 },
+            ],
+            'v3',
+        ).sort(),
+        ['v1', 'v2', 'v3.damaged-9', 'v4.partial'],
+    );
+});
+
+test('the backup shortcut runs the guided USB export with the installation paths', () => {
+    const paths = layout('/pd/data');
+    const spec = backupShortcutSpec(paths, '/r');
+    assert.equal(spec.target, 'powershell.exe');
+    assert.match(
+        spec.arguments,
+        /BackupToUsb\.ps1 -DataRoot \/pd\/data -Release \/r$/,
+    );
+    assert.ok(
+        loc.backupShortcuts.every((p) =>
+            p.endsWith('Back up to USB drive.lnk'),
+        ),
+    );
+    assert.deepEqual(
+        loc.backupShortcuts.map((p) => p.split('/').slice(0, -1).join('/')),
+        loc.shortcuts.map((p) => p.split('/').slice(0, -1).join('/')),
+    );
 });
 
 const loc = locations({
@@ -624,6 +675,9 @@ function recordingContext(dir, { failProvisionOnce = false } = {}) {
             log.push(['start', name]);
             services.set(name, 'RUNNING');
         },
+        async waitServiceGone(name) {
+            log.push(['gone', name]);
+        },
         async stopService(name) {
             if (services.get(name) === 'RUNNING') log.push(['stop', name]);
             if (services.has(name)) services.set(name, 'STOPPED');
@@ -710,7 +764,8 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
     );
     assert.equal(state.complete, true);
     assert.equal(state.adminUsername, 'owner');
-    for (const path of where.shortcuts) assert.ok(await stat(path));
+    for (const path of [...where.shortcuts, ...where.backupShortcuts])
+        assert.ok(await stat(path));
     assert.equal(await classifyDataRoot(where.dataRoot), 'ours');
 
     // Install again is refused (services exist); repair stops in reverse
@@ -725,7 +780,19 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
         ctx.log.filter((e) => e[0] === 'stop').map((e) => e[1]),
         [SERVICES.proxy, SERVICES.api, SERVICES.mongo],
     );
-    assert.ok(ctx.log.some((e) => e[0] === 'sc.exe' && e[1] === 'delete'));
+    // Each deleted service is gone before it is registered again (1072).
+    const flatRepair = ctx.log.map((e) => e.join(' '));
+    for (const name of Object.values(SERVICES)) {
+        const deleted = flatRepair.indexOf(`sc.exe delete ${name}`);
+        const gone = flatRepair.indexOf(`gone ${name}`);
+        assert.ok(deleted >= 0 && gone > deleted, name);
+        const registered = flatRepair.findIndex(
+            (l) =>
+                l.includes(`--serviceName ${name}`) ||
+                l.endsWith(`${name}.exe install`),
+        );
+        assert.ok(registered > gone, `${name} registered after it is gone`);
+    }
     assert.ok(
         ctx.log.some((e) => e.includes('--password-file')),
         'reuses the handover file',
@@ -739,9 +806,8 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
         await readFile(join(release, 'caddy', 'caddy.exe'), 'utf8'),
         'caddy',
     );
-    assert.ok(
-        (await readdir(where.releasesDir)).some((n) => n.includes('.damaged-')),
-    );
+    // The damaged copy was moved aside, then pruned once repair succeeded.
+    assert.deepEqual(await readdir(where.releasesDir), ['0.0.1-test']);
 
     // Uninstall: services, tasks, shortcuts and binaries go; data stays.
     const secretsBefore = await readFile(layout(where.dataRoot).apiEnv, 'utf8');
@@ -850,7 +916,12 @@ test('installer arguments are validated per mode', () => {
 // ------------------------------------------------------------ PowerShell
 
 test('the PowerShell scripts are strict, offline and never run downloaded code', async () => {
-    for (const name of ['Install.ps1', 'Launch.ps1', 'ExportReminder.ps1']) {
+    for (const name of [
+        'Install.ps1',
+        'Launch.ps1',
+        'ExportReminder.ps1',
+        'BackupToUsb.ps1',
+    ]) {
         const text = await readFile(new URL(name, here), 'utf8');
         assert.match(text, /^#Requires -Version 5\.1/, name);
         assert.match(text, /Set-StrictMode -Version Latest/, name);
@@ -886,6 +957,29 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
         /IsInRole\(\[Security\.Principal\.WindowsBuiltInRole\]::Administrator\)/,
     );
     assert.match(install, /Get-FileHash -Algorithm SHA256/);
+    // Out-of-band manifest hash; verify and run from an admin-only copy.
+    assert.match(
+        install,
+        /\[Parameter\(Mandatory = \$true\)\]\s+\[ValidatePattern\(.\^\[0-9A-Fa-f\]\{64\}\$.\)\]\s+\[string\]\$ManifestSha256/,
+    );
+    assert.match(install, /\$env:ProgramFiles .Valorthon\\GroceryPOS./);
+    assert.match(install, /installer-run-/);
+    assert.match(install, /unlisted file/);
+    assert.match(install, /& \(Join-Path \$run 'node\\node\.exe'\)/);
+    assert.doesNotMatch(
+        install,
+        /Join-Path \$bundle .release\\node\\node\.exe./,
+    );
+    const backup = await readFile(new URL('BackupToUsb.ps1', here), 'utf8');
+    assert.match(backup, /-Verb RunAs/);
+    assert.match(backup, /DriveType = 2/);
+    assert.match(backup, /'create'.*'manual'/s);
+    assert.match(backup, /'export', '--data-root'/);
+    const reminder = await readFile(
+        new URL('ExportReminder.ps1', here),
+        'utf8',
+    );
+    assert.match(reminder, /Back up to USB drive/);
     const launch = await readFile(new URL('Launch.ps1', here), 'utf8');
     assert.match(launch, /\/v1\/health\/ready/);
     assert.match(launch, /Tls12/);

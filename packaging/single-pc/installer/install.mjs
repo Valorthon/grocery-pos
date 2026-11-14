@@ -57,6 +57,8 @@ import {
     parseTime,
     reminderTaskXml,
     serviceSteps,
+    backupShortcutSpec,
+    releasesToPrune,
     shortcutSpec,
     stopOrder,
     trustSteps,
@@ -252,6 +254,10 @@ export async function runSteps(steps, ctx) {
             await rm(step.path, { force: true });
         } else if (step.kind === 'stop') {
             await ctx.stopService(step.name);
+        } else if (step.kind === 'gone') {
+            // `sc delete` only marks the service; re-registering before the
+            // SCM removes it fails with 1072 (marked for deletion).
+            await ctx.waitServiceGone(step.name);
         } else {
             throw new Error(`Unknown step ${step.kind}.`);
         }
@@ -358,7 +364,14 @@ async function installOrRepair(options, ctx, log) {
         for (const name of stopOrder()) {
             if (facts.servicesInstalled.includes(name)) {
                 await runSteps(
-                    [{ kind: 'exec', file: 'sc.exe', args: ['delete', name] }],
+                    [
+                        {
+                            kind: 'exec',
+                            file: 'sc.exe',
+                            args: ['delete', name],
+                        },
+                        { kind: 'gone', name },
+                    ],
                     ctx,
                 );
             }
@@ -455,7 +468,25 @@ async function installOrRepair(options, ctx, log) {
 
         log('shortcut: desktop and Start menu');
         await ctx.createShortcuts(loc.shortcuts, shortcutSpec(release));
+        await ctx.createShortcuts(
+            loc.backupShortcuts,
+            backupShortcutSpec(paths, release),
+        );
         await done('shortcut');
+
+        // Disk use stays bounded: keep this release and the newest other.
+        const entries = [];
+        for (const name of await readdir(loc.releasesDir)) {
+            const info = await stat(join(loc.releasesDir, name));
+            entries.push({ name, mtimeMs: info.mtimeMs });
+        }
+        for (const name of releasesToPrune(entries, bundle.manifest.version)) {
+            await rm(join(loc.releasesDir, name), {
+                recursive: true,
+                force: true,
+            });
+            log(`release: removed old ${name}`);
+        }
 
         const state = await readState(paths);
         await writeState(paths, { ...state, complete: true });
@@ -487,7 +518,7 @@ async function uninstall(options, ctx, log) {
         await runSteps(
             uninstallSteps({
                 installedServices: facts.servicesInstalled,
-                shortcuts: loc.shortcuts,
+                shortcuts: [...loc.shortcuts, ...loc.backupShortcuts],
             }),
             ctx,
         );
@@ -671,6 +702,23 @@ export function windowsContext(env = process.env) {
                     portsBusy.push(port);
                 }
             }
+            // A busy port counts as ours only if every listener's image is
+            // under our releases folder.
+            const portsForeign = [];
+            for (const port of portsBusy) {
+                const { stdout } = await powershell(
+                    'Get-NetTCPConnection -State Listen -LocalPort $env:GPOS_PORT -ErrorAction SilentlyContinue |' +
+                        ' ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Path }',
+                    { GPOS_PORT: String(port) },
+                );
+                const owners = stdout.split(/\r?\n/).filter((l) => l.trim());
+                const ours = (path) =>
+                    path
+                        .toLowerCase()
+                        .startsWith(`${where.releasesDir.toLowerCase()}\\`);
+                if (!owners.length || !owners.every(ours))
+                    portsForeign.push(port);
+            }
             return {
                 platform: process.platform,
                 osBuild: Number(osRelease().split('.')[2]),
@@ -686,6 +734,7 @@ export function windowsContext(env = process.env) {
                 chrome: chrome.code === 0,
                 servicesInstalled,
                 portsBusy,
+                portsForeign,
                 freeBytes: {
                     program: await freeBytes(where.programDir),
                     data: await freeBytes(where.dataRoot),
@@ -700,6 +749,15 @@ export function windowsContext(env = process.env) {
             if (code !== 0 && code !== 1056) {
                 throw new Error(`Could not start ${name} (exit ${code}).`);
             }
+        },
+        async waitServiceGone(name) {
+            await boundedWait(
+                async () => (await serviceState(name)) === 'absent',
+                {
+                    timeoutMs: 60_000,
+                    intervalMs: 1000,
+                },
+            );
         },
         async stopService(name) {
             const state = await serviceState(name);
