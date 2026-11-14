@@ -176,8 +176,11 @@ run `dist/main.js`'s current all-interface listener, install services, implement
 
 No actual Windows 11 execution has been performed from this Fedora session.
 The harness and mocked policy checks are preparation, not positive platform proof.
-Keep #357 and its epic checkbox open; this implementation PR must remain draft
-and unmerged until the target proof and independent review are complete.
+The owner authorized merging #376 (squash b673486) before target proof as a
+specific exception. #357 and its epic checkbox stay open until actual Windows 11
+x64 proof and hardware qualification are recorded, using the operator runbook
+and evidence template in
+[proof/ACCEPTANCE-CHECKLIST.md](proof/ACCEPTANCE-CHECKLIST.md).
 
 Obtain a licensed clean Windows 11 x64 PC/VM on the approved build, plus replacement
 restore target and another LAN peer. For a VM use 4 GB, at least two vCPUs and
