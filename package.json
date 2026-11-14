@@ -12,7 +12,7 @@
         "lint": "pnpm -r lint",
         "typecheck": "pnpm -r typecheck",
         "test": "pnpm -r test",
-        "test:single-pc-proof": "node --test packaging/single-pc/proof/*.test.mjs packaging/single-pc/runtime/layout.test.mjs packaging/single-pc/backup/backup.test.mjs && node --check packaging/single-pc/proof/run.mjs && node --check packaging/single-pc/runtime/provision.mjs && node --check packaging/single-pc/backup/backup.mjs && node --check packaging/single-pc/backup/restore.mjs",
+        "test:single-pc-proof": "node --test packaging/single-pc/proof/*.test.mjs packaging/single-pc/runtime/layout.test.mjs packaging/single-pc/backup/backup.test.mjs packaging/single-pc/installer/installer.test.mjs && node --check packaging/single-pc/proof/run.mjs && node --check packaging/single-pc/installer/install.mjs && node --check packaging/single-pc/installer/bundle.mjs && node --check packaging/single-pc/runtime/provision.mjs && node --check packaging/single-pc/backup/backup.mjs && node --check packaging/single-pc/backup/restore.mjs",
         "test:single-pc-runtime": "node --test --test-concurrency=1 packaging/single-pc/runtime/provision.db.test.mjs",
         "test:single-pc-backup": "node --test --test-concurrency=1 packaging/single-pc/backup/backup.db.test.mjs",
         "seed": "pnpm --filter grocery-pos-api seed",

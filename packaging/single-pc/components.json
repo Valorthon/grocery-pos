@@ -6,14 +6,25 @@
         "url": "https://nodejs.org/dist/v22.23.5/node-v22.23.5-win-x64.zip",
         "sha256": "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3",
         "checksumSource": "https://nodejs.org/dist/v22.23.5/SHASUMS256.txt",
-        "license": "MIT and bundled third-party notices"
+        "license": "MIT and bundled third-party notices",
+        "bundle": {
+            "archive": "zip",
+            "strip": 1,
+            "map": [["", "node/"]]
+        }
     },
     "mongodb": {
         "version": "7.0.48",
         "url": "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-7.0.48.zip",
         "sha256": "7f2e23e8bdd794fc89179d3e683726e75949020b3e690727a2faf1859df773ac",
         "checksumSource": "https://downloads.mongodb.org/current.json",
-        "license": "SSPL-1.0"
+        "license": "SSPL-1.0",
+        "bundle": {
+            "archive": "zip",
+            "strip": 1,
+            "map": [["bin/mongod.exe", "mongodb/bin/mongod.exe"]],
+            "notices": true
+        }
     },
     "mongodbTools": {
         "version": "100.20.1",
@@ -21,7 +32,16 @@
         "sha256": "5a1a8aa2c87ca0685ffdcad403601b110d495d44afe579473b8f75ec46621c80",
         "checksumSource": "https://downloads.mongodb.org/tools/db/release.json",
         "license": "Apache-2.0",
-        "use": "mongodump/mongorestore for backups (#363); installed beside mongod.exe"
+        "use": "mongodump/mongorestore for backups (#363); installed beside mongod.exe",
+        "bundle": {
+            "archive": "zip",
+            "strip": 1,
+            "map": [
+                ["bin/mongodump.exe", "mongodb/bin/mongodump.exe"],
+                ["bin/mongorestore.exe", "mongodb/bin/mongorestore.exe"]
+            ],
+            "notices": true
+        }
     },
     "argon2": {
         "version": "0.44.0",
@@ -31,16 +51,42 @@
     "proxy": {
         "name": "Caddy",
         "version": "2.11.9",
+        "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_windows_amd64.zip",
+        "sha256": "ad93112d335ee687100c4c9f11bced16ca590377976b7fe7883882b9e797e472",
+        "checksumSource": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_checksums.txt (SHA-512, matched on 2026-11-14; SHA-256 computed from the matched archive)",
         "source": "https://github.com/caddyserver/caddy/releases/tag/v2.11.9",
         "license": "Apache-2.0 and bundled third-party notices",
-        "status": "architecture choice; artifact acquisition belongs to #362"
+        "bundle": {
+            "archive": "zip",
+            "strip": 0,
+            "map": [["caddy.exe", "caddy/caddy.exe"]],
+            "notices": true
+        }
     },
     "serviceHost": {
         "name": "WinSW",
         "version": "2.12.0",
         "variant": "NET461",
+        "url": "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW.NET461.exe",
+        "sha256": "b5066b7bbdfba1293e5d15cda3caaea88fbeab35bd5b38c41c913d492aadfc4f",
+        "checksumSource": "none published upstream; SHA-256 computed from the release asset on 2026-11-14",
         "source": "https://github.com/winsw/winsw/releases/tag/v2.12.0",
         "license": "MIT and bundled third-party notices",
-        "status": "architecture choice; artifact acquisition belongs to #362"
+        "requires": ".NET Framework 4.6.1 or later (Windows 11 ships 4.8)",
+        "bundle": {
+            "archive": "file",
+            "to": "services/WinSW.exe"
+        }
+    },
+    "serviceHostLicense": {
+        "name": "WinSW license",
+        "version": "2.12.0",
+        "url": "https://raw.githubusercontent.com/winsw/winsw/v2.12.0/LICENSE.txt",
+        "sha256": "1cdf703c10a70e5973bf3acf2a5eeabe7746237155b92db2034aeae26fdf7802",
+        "license": "MIT",
+        "bundle": {
+            "archive": "file",
+            "to": "notices/serviceHost/LICENSE.txt"
+        }
     }
 }
