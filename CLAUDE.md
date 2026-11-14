@@ -239,8 +239,10 @@ Rules:
 - Sales snapshot the server's latest-receipt unit cost. Unknown stays absent;
   only explicit integer zero means free. Do not backfill historical COGS or
   report incomplete-cost margins as complete. Reversals keep the original basis.
-- Cost snapshots are hidden from cashier receipts, sales detail responses and
-  catalogues. Procurement default endpoints require RESTOCKER/ADMIN; margin
+- Cost snapshots are hidden from cashier receipts, non-ADMIN sales detail
+  responses and catalogues. ADMIN sales detail responses may include the
+  original latest-receipt `unitCost` snapshot (`SaleLine.unitCost`); absence
+  means unknown. Procurement default endpoints require RESTOCKER/ADMIN; margin
   estimates in product list/editor are ADMIN-only and labeled latest receipt.
 - Offline cost evidence is stored server-side with an opaque signed reference.
   JWT/IndexedDB catalogue data never contains readable costs. Sync/reconciliation
@@ -248,8 +250,8 @@ Rules:
   without evidence remain unknown. Retain evidence for delayed cash uploads.
 - Low-stock restock drafts receive known latest costs asynchronously without
   overwriting user edits; unknown defaults retain the normal zero-cost review.
-- Purchase orders are the owner-deferred second phase in #123. Reporting of
-  revenue/COGS/margin and missing-cost coverage belongs to #44.
+- Purchase orders, originally deferred from #41, are implemented in #123.
+  Revenue/COGS/margin reports and missing-cost coverage are implemented in #44.
 
 **Shifts** (#2)
 
@@ -501,7 +503,7 @@ requestId}`. A 5xx never carries details or internals.
 - Current requester/approver roles and activation are checked inside the
   transaction. PIN reset/removal, role/activation edits and password changes
   invalidate pending approvals. Every approved action records the manager's
-  `approvedBy`; audit-log presentation remains #46.
+  `approvedBy`; ADMIN can inspect these actions in the Audit Log (#46).
 - Unsold basket edits remain normal register actions. Partial/per-line refunds
   remain deferred. The original configurable discount threshold proposal is
   superseded by the owner's all-discounts-admin decision for now.
@@ -1024,7 +1026,8 @@ on upstream fixes).
 - Product edits are transactional. Actual price changes append private old/new
   centavos, actor and timestamp history in the same transaction. Internal history
   and checkout conflict versions are excluded from every response, including raw
-  inventory/restock/adjustment aggregation joins; audit-log presentation is #46.
+  inventory/restock/adjustment aggregation joins. ADMIN can inspect price changes
+  in the Audit Log (#46).
 - Transactional product writes serialize checkout pricing with archival/edits.
   Offline catalog pages retain archived cursor entries as tombstones with empty
   proof; clients remove cached availability. Already-collected signed offline
@@ -1044,7 +1047,7 @@ on upstream fixes).
 - Before deploy, stop the API, back up, dry-run/apply `migrate:categories`, then
   deploy the matching API/client. Legacy enum strings map atomically to reusable
   category documents; unknown strings fail before writes and reruns are safe.
-  See README. Category reporting integration stays #44.
+  See README. Sales reports use current category assignments (#44).
 
 **Reorder planning** (#40)
 

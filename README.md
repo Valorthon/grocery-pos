@@ -273,8 +273,8 @@ logging the cashier out. Each approval expires after 60 seconds and can approve
 only the action shown. Changing the ticket, prices, reversal reason or payout
 drawer requires approval again. A checkout retry of an already recorded sale
 remains safe and needs no new approval. Unsold ticket edits remain ordinary
-register actions; partial refunds and the sensitive-action audit-log screen
-remain future work.
+register actions; partial refunds remain deferred. Admins can inspect approved
+discounts and reversals in **Audit Log** (#46).
 
 ## Parked tickets
 
@@ -371,8 +371,8 @@ run the old and new API together against this database. `pnpm seed` creates the
 same category documents and ObjectId references for development.
 
 Category data does not change signed offline price/unit proofs or completed cash
-receipts; pending offline receipts still sync/reconcile. Category reporting will
-use these references in #44.
+receipts; pending offline receipts still sync/reconcile. Sales reports use current
+category assignments through these references (#44).
 
 ## Suppliers and cost basis (#41)
 
@@ -387,7 +387,10 @@ stock and receipt details. Costs remain centavos per displayed unit (for example
 per kg); each sale captures that basis. Product-list/editor margin estimates are
 admin-only and based on the latest receipt, not FIFO or weighted average. Unknown
 cost remains unknown and historical margins are not invented. Only an explicit
-zero-cost receipt means free stock. Report coverage for unknown-cost sales is #44.
+zero-cost receipt means free stock. Sales reports show known/unknown cost coverage
+(#44). ADMIN sales details may include the original latest-receipt unit-cost
+snapshot; unknown costs remain absent. Cashier sale summaries, non-admin sales
+details and catalogues do not expose these costs.
 
 Restock drafts created from low stock load procurement-cost defaults, preserve
 user edits, and still require review of actual receipt costs. Unknown costs keep
@@ -399,8 +402,9 @@ Later sync uses that basis even if another receipt changed current cost; old
 proofs without cost evidence stay unknown. Cost evidence must not be removed
 while corresponding queued receipts could still be reconciled.
 
-Purchase orders are a separate owner-approved follow-up: #123. No user database
-migration or historical cost/supplier backfill is required by this first phase.
+Purchase orders were the owner-approved follow-up to #41 and are implemented in
+#123. Restockers and admins can manage them from **Purchase Orders**. Supplier and
+cost tracking requires no historical cost/supplier backfill.
 
 ## Sales reports and CSV (#44)
 
@@ -559,7 +563,8 @@ A product's unit cannot be changed after creation.
 Archiving stops fresh online sales and register lookups without deleting stock or
 historical records. The next offline catalogue sync removes archived products
 from cached availability; cash already collected offline remains recoverable.
-Reorder levels are editable in the same dialog (#40); audit-log presentation remains #46.
+Reorder levels are editable in the same dialog (#40). Admins can inspect price
+changes in **Audit Log** (#46).
 
 ## Reorder planning (#40)
 
