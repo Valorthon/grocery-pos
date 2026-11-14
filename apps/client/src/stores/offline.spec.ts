@@ -21,6 +21,7 @@ import {
     saveOfflineState,
 } from '@/offline/database';
 import { useOfflineStore } from './offline';
+import { seedLegacyOfflineDatabase } from '@/offline/testing/legacy-database';
 vi.mock('@/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 const USER = '0123456789abcdef01234567';
 const PRODUCT = '111111111111111111111111';
@@ -479,4 +480,159 @@ it('does not look up a receipt under a placeholder owner after logout', async ()
     const get = vi.spyOn(IDBObjectStore.prototype, 'get');
     expect(await store.hasQueued('any')).toBe(false);
     expect(get).not.toHaveBeenCalled();
+});
+
+it('persists each catalogue product once across pages instead of rewriting accumulated products', async () => {
+    const saved = (await readOfflineState(USER))!;
+    await saveOfflineState({ ...saved, products: [] });
+    const products = Array.from({ length: 10000 }, (_, i) => ({
+        ...product(),
+        _id: `product-${i}`,
+        EAN: `barcode-${i}`,
+    }));
+    vi.mocked(api.get).mockImplementation(async (_path, options) => {
+        const after = (options?.params as { after?: string }).after;
+        const offset = after ? Number(after) : 0;
+        return {
+            data: {
+                products: products.slice(offset, offset + 100),
+                next:
+                    offset + 100 < products.length
+                        ? String(offset + 100)
+                        : null,
+            },
+        };
+    });
+    const writes = vi.spyOn(IDBObjectStore.prototype, 'put');
+    const reads = vi.spyOn(IDBObjectStore.prototype, 'getAll');
+    await store.prepare(lease().shift);
+    let persistedProducts = 0;
+    for (let i = 0; i < writes.mock.calls.length; i++) {
+        const value = writes.mock.calls[i]![0] as {
+            products?: OfflineProduct[];
+        };
+        persistedProducts +=
+            (writes.mock.contexts[i] as IDBObjectStore | undefined)?.name ===
+            'catalogue'
+                ? 1
+                : (value.products?.length ?? 0);
+    }
+    expect(store.state?.products).toHaveLength(10000);
+    expect(persistedProducts).toBe(10000);
+    expect(
+        reads.mock.contexts.filter(
+            (context) => (context as IDBObjectStore).name === 'catalogue',
+        ),
+    ).toHaveLength(1);
+});
+
+it.each(['successful', 'aborted-once'])(
+    'upgrades %s legacy queued cash without changing signed proofs and syncs the exact original request',
+    async (mode) => {
+        const receipt = await store.queue(body(), items());
+        const collected = (await pendingOffline(USER))[0]!;
+        const snapshot = (await readOfflineState(USER))!;
+        store.reset();
+        closeOfflineDatabase();
+        vi.stubGlobal('indexedDB', new IDBFactory());
+        const blocked = {
+            ...collected,
+            owner: 'other-cashier',
+            blocked: 'Cash counted; needs admin',
+            request: { ...collected.request, idempotencyKey: 'other-key' },
+        };
+        await seedLegacyOfflineDatabase([snapshot], [collected, blocked]);
+        if (mode === 'aborted-once') {
+            const original = IDBObjectStore.prototype.put;
+            const writes = vi
+                .spyOn(IDBObjectStore.prototype, 'put')
+                .mockImplementation(function (
+                    this: IDBObjectStore,
+                    value: unknown,
+                    key?: IDBValidKey,
+                ) {
+                    const request = original.call(this, value, key);
+                    if (this.name === 'catalogue')
+                        request.onsuccess = () => this.transaction.abort();
+                    return request;
+                });
+            expect(await store.restore(USER, [Role.Seller])).toBeNull();
+            expect(store.error).not.toBe('');
+            writes.mockRestore();
+        }
+        expect(await store.restore(USER, [Role.Seller])).toEqual(
+            snapshot.lease!.shift,
+        );
+        expect(await pendingOffline(USER)).toEqual([collected]);
+        expect(store.pending[0]?.receipt).toEqual(receipt);
+        vi.mocked(api.post).mockClear();
+        await store.sync();
+        expect(api.post).toHaveBeenCalledWith(
+            '/offline/sync',
+            collected.request,
+        );
+        expect(await pendingOffline(USER)).toEqual([]);
+        expect(await pendingOffline()).toEqual([blocked]);
+    },
+);
+
+it('resumes an interrupted catalogue from the committed page after reopening storage', async () => {
+    const next = { ...product(), _id: 'next-product', EAN: 'other-barcode' };
+    vi.mocked(api.get)
+        .mockResolvedValueOnce({
+            data: { products: [next], next: 'resume-cursor' },
+        })
+        .mockRejectedValueOnce(failure());
+    await store.prepare(lease().shift);
+    expect((await readOfflineState(USER))?.cursor).toBe('resume-cursor');
+    closeOfflineDatabase();
+    await store.restore(USER, [Role.Seller]);
+    vi.mocked(api.get).mockClear();
+    vi.mocked(api.get).mockResolvedValueOnce({
+        data: { products: [], next: null },
+    });
+    await store.prepare(lease().shift);
+    expect(api.get).toHaveBeenCalledWith('/offline/catalog', {
+        params: { lease: LEASE, after: 'resume-cursor' },
+    });
+    expect(store.state?.products).toHaveLength(2);
+    expect(store.state?.products.find((p) => p._id === next._id)).toEqual(next);
+    expect(store.ready).toBe(true);
+});
+
+it('hides an old catalogue immediately on lease change even if the new page loses the network', async () => {
+    await store.queue(body(), items());
+    const collected = (await pendingOffline(USER))[0]!;
+    vi.mocked(api.post).mockResolvedValueOnce({
+        data: { ...lease(), _id: 'new-lease' },
+    });
+    vi.mocked(api.get).mockRejectedValueOnce(failure());
+    await store.prepare(lease().shift);
+    expect(store.ready).toBe(false);
+    expect(store.state?.products).toEqual([]);
+    expect((await readOfflineState(USER))?.products).toEqual([]);
+    expect(await pendingOffline(USER)).toEqual([collected]);
+});
+
+it('does not apply an old cashier catalogue response after logout', async () => {
+    let finish:
+        | ((value: {
+              data: { products: OfflineProduct[]; next: null };
+          }) => void)
+        | undefined;
+    vi.mocked(api.get).mockImplementationOnce(
+        () =>
+            new Promise((resolve) => {
+                finish = resolve;
+            }),
+    );
+    const work = store.prepare(lease().shift);
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+    store.reset();
+    finish!({
+        data: { products: [{ ...product(), price: 99000 }], next: null },
+    });
+    await work;
+    expect(store.state).toBeNull();
+    expect((await readOfflineState(USER))?.products[0]?.price).toBe(18000);
 });

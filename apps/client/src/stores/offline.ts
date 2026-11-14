@@ -24,6 +24,8 @@ import {
     type SaleRequest,
 } from '@grocery-pos/contracts';
 import {
+    activateOfflineLease,
+    applyOfflinePage,
     blockOffline,
     getOrCreateOfflineState,
     pendingOffline,
@@ -31,7 +33,6 @@ import {
     queueOffline,
     readOfflineState,
     removeOffline,
-    saveOfflineState,
     suspendOffline,
     type OfflineState,
 } from '@/offline/database';
@@ -139,21 +140,11 @@ export const useOfflineStore = defineStore('offline', () => {
                 })
             ).data;
             if (gen !== generation) return;
-            let saved: OfflineState = {
-                owner: id,
-                terminalId,
-                lease,
-                products:
-                    previous?.lease?._id === lease._id ? previous.products : [],
-                cursor:
-                    previous?.lease?._id === lease._id ? previous.cursor : null,
-                suspended: false,
-            };
-            const latest = await readOfflineState(id);
-            if (latest?.suspended && latest.lease?.shift._id === shift._id)
-                return;
-            await saveOfflineState(saved);
-            let cursor = saved.cursor;
+            const active = await activateOfflineLease(previous, lease);
+            if (!active || gen !== generation) return;
+            if (state.value?.lease?._id !== lease._id)
+                state.value = { ...active, products: [] };
+            let cursor = active.cursor;
             do {
                 const page = (
                     await api.get<OfflineCatalogPage>('/offline/catalog', {
@@ -164,31 +155,13 @@ export const useOfflineStore = defineStore('offline', () => {
                     })
                 ).data;
                 if (gen !== generation) return;
-                const current = await readOfflineState(id);
-                if (
-                    !current ||
-                    current.suspended ||
-                    current.lease?._id !== lease._id
-                )
-                    return;
-                const byId = new Map(current.products.map((p) => [p._id, p]));
-                for (const p of page.products) {
-                    if (p.isActive === false) byId.delete(p._id);
-                    else byId.set(p._id, p);
-                }
-                const last = page.products[page.products.length - 1];
-                saved = {
-                    ...current,
-                    products: [...byId.values()],
-                    cursor:
-                        page.next ??
-                        (last
-                            ? `${last.updatedAt}|${last._id}`
-                            : current.cursor),
-                };
-                await saveOfflineState(saved);
+                if (!(await applyOfflinePage(id, lease._id, cursor, page)))
+                    break;
                 cursor = page.next;
             } while (cursor);
+            const saved = await readOfflineState(id);
+            if (!saved || saved.suspended || saved.lease?._id !== lease._id)
+                return;
             if (gen !== generation) return;
             state.value = saved;
             connected.value = true;
@@ -452,7 +425,15 @@ export const useOfflineStore = defineStore('offline', () => {
             await api.post(`/offline/leases/${saved.lease._id}/release`, {
                 terminalId: saved.terminalId,
             });
-            if (owner.value === id) state.value = { ...saved, suspended: true };
+            if (owner.value === id)
+                state.value = {
+                    ...saved,
+                    products:
+                        state.value?.lease?._id === saved.lease._id
+                            ? state.value.products
+                            : [],
+                    suspended: true,
+                };
         }
     }
     function setConnection(value: boolean) {

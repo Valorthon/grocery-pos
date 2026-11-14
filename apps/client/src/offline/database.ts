@@ -1,4 +1,5 @@
 import type {
+    OfflineCatalogPage,
     OfflineLeaseView,
     OfflinePendingSale,
     OfflineProduct,
@@ -12,6 +13,13 @@ export interface OfflineState {
     cursor: string | null;
     suspended: boolean;
 }
+/** Persist lease/cursor separately so a page never clones the accumulated catalogue. */
+export type OfflineMetadata = Omit<OfflineState, 'products'>;
+interface CatalogueRow {
+    owner: string;
+    lease: string;
+    product: OfflineProduct;
+}
 let opening: Promise<IDBDatabase> | undefined;
 export function closeOfflineDatabase(): void {
     void opening?.then((db) => db.close()).catch(() => undefined);
@@ -20,13 +28,37 @@ export function closeOfflineDatabase(): void {
 function database(): Promise<IDBDatabase> {
     if (opening) return opening;
     opening = new Promise((resolve, reject) => {
-        const request = indexedDB.open(OFFLINE_DB, 1);
-        request.onupgradeneeded = () => {
+        const request = indexedDB.open(OFFLINE_DB, 2);
+        request.onupgradeneeded = (event) => {
             const db = request.result;
-            db.createObjectStore('state', { keyPath: 'owner' });
-            db.createObjectStore('outbox', {
-                keyPath: ['owner', 'request.idempotencyKey'],
+            const tx = request.transaction!;
+            if (event.oldVersion === 0) {
+                db.createObjectStore('state', { keyPath: 'owner' });
+                db.createObjectStore('outbox', {
+                    keyPath: ['owner', 'request.idempotencyKey'],
+                });
+            }
+            const catalogue = db.createObjectStore('catalogue', {
+                keyPath: ['owner', 'lease', 'product._id'],
             });
+            // Keep the existing outbox and every immutable receipt/proof intact.
+            // The version-change transaction commits catalogue + metadata together.
+            const rows = tx.objectStore('state').openCursor();
+            rows.onsuccess = () => {
+                const cursor = rows.result;
+                if (!cursor) return;
+                const { products, ...metadata } = cursor.value as OfflineState;
+                if (metadata.lease) {
+                    for (const product of products ?? [])
+                        catalogue.put({
+                            owner: metadata.owner,
+                            lease: metadata.lease._id,
+                            product,
+                        });
+                }
+                cursor.update(metadata);
+                cursor.continue();
+            };
         };
         request.onerror = () => {
             opening = undefined;
@@ -62,37 +94,58 @@ const done = (tx: IDBTransaction): Promise<void> =>
         tx.onerror = () =>
             reject(tx.error ?? new Error('Offline storage transaction failed'));
     });
+export async function readOfflineMetadata(
+    owner: string,
+): Promise<OfflineMetadata | undefined> {
+    const db = await database();
+    return result(
+        db.transaction('state').objectStore('state').get(owner) as IDBRequest<
+            OfflineMetadata | undefined
+        >,
+    );
+}
 export async function readOfflineState(
     owner: string,
 ): Promise<OfflineState | undefined> {
     const db = await database();
-    return result(
-        db.transaction('state').objectStore('state').get(owner) as IDBRequest<
-            OfflineState | undefined
+    const tx = db.transaction(['state', 'catalogue']);
+    const completed = done(tx);
+    const metadata = await result(
+        tx.objectStore('state').get(owner) as IDBRequest<
+            OfflineMetadata | undefined
         >,
     );
+    const rows = metadata?.lease
+        ? await result(
+              tx
+                  .objectStore('catalogue')
+                  .getAll(
+                      catalogueRange(owner, metadata.lease._id),
+                  ) as IDBRequest<CatalogueRow[]>,
+          )
+        : [];
+    await completed;
+    return metadata
+        ? { ...metadata, products: rows.map((row) => row.product) }
+        : undefined;
 }
-/** A read/write transaction serializes first preparation across browser tabs.
- * Commit the identity before issuing a lease so interrupted requests are retried
- * using the same server identity, including after a reload or lost response.
- */
+/** Commit terminal identity before issuing an interruptible server lease request. */
 export async function getOrCreateOfflineState(
     owner: string,
     newTerminalId: () => string,
-): Promise<OfflineState> {
+): Promise<OfflineMetadata> {
     const db = await database();
     const tx = db.transaction('state', 'readwrite');
     const completed = done(tx);
     const current = await result(
         tx.objectStore('state').get(owner) as IDBRequest<
-            OfflineState | undefined
+            OfflineMetadata | undefined
         >,
     );
     const state = current ?? {
         owner,
         terminalId: newTerminalId(),
         lease: null,
-        products: [],
         cursor: null,
         suspended: false,
     };
@@ -100,27 +153,152 @@ export async function getOrCreateOfflineState(
     await completed;
     return state;
 }
+/** Explicit full replacement for initial snapshots; catalogue paging uses applyOfflinePage. */
 export async function saveOfflineState(state: OfflineState): Promise<void> {
     const db = await database();
-    const tx = db.transaction('state', 'readwrite');
+    const tx = db.transaction(['state', 'catalogue'], 'readwrite');
     const completed = done(tx);
-    const current = await result(
-        tx.objectStore('state').get(state.owner) as IDBRequest<
-            OfflineState | undefined
-        >,
-    );
-    if (
-        current?.suspended &&
-        !state.suspended &&
-        current.lease?.shift._id === state.lease?.shift._id
-    ) {
-        tx.abort();
+    try {
+        const current = await result(
+            tx.objectStore('state').get(state.owner) as IDBRequest<
+                OfflineMetadata | undefined
+            >,
+        );
+        if (
+            current?.suspended &&
+            !state.suspended &&
+            current.lease?.shift._id === state.lease?.shift._id
+        ) {
+            tx.abort();
+            await completed.catch(() => undefined);
+            throw new Error(
+                'Offline selling is paused while this shift closes.',
+            );
+        }
+        const { products, ...metadata } = state;
+        tx.objectStore('catalogue').delete(ownerRange(state.owner));
+        if (state.lease)
+            for (const product of products) {
+                tx.objectStore('catalogue').put({
+                    owner: state.owner,
+                    lease: state.lease._id,
+                    product,
+                });
+            }
+        tx.objectStore('state').put(metadata);
+        await completed;
+    } catch (error) {
+        try {
+            tx.abort();
+        } catch {
+            /* Already complete or aborted. */
+        }
         await completed.catch(() => undefined);
-        throw new Error('Offline selling is paused while this shift closes.');
+        throw error;
     }
-    tx.objectStore('state').put(state);
-    await completed;
 }
+/** A lease transition and removal of its old catalogue become visible atomically.
+ * Compare the lease captured before the HTTP request so a late answer cannot
+ * replace another tab's newer lease. Same-lease refresh keeps its committed cursor.
+ */
+export async function activateOfflineLease(
+    previous: OfflineMetadata,
+    lease: OfflineLeaseView,
+): Promise<OfflineMetadata | undefined> {
+    const db = await database();
+    const tx = db.transaction(['state', 'catalogue'], 'readwrite');
+    const completed = done(tx);
+    try {
+        const current = await result(
+            tx.objectStore('state').get(previous.owner) as IDBRequest<
+                OfflineMetadata | undefined
+            >,
+        );
+        if (
+            !current ||
+            current.terminalId !== previous.terminalId ||
+            (current.lease?._id !== previous.lease?._id &&
+                current.lease?._id !== lease._id) ||
+            (current.suspended && current.lease?.shift._id === lease.shift._id)
+        ) {
+            await completed;
+            return undefined;
+        }
+        const same = current.lease?._id === lease._id;
+        const metadata: OfflineMetadata = {
+            ...current,
+            lease,
+            cursor: same ? current.cursor : null,
+            suspended: false,
+        };
+        if (!same)
+            tx.objectStore('catalogue').delete(ownerRange(previous.owner));
+        tx.objectStore('state').put(metadata);
+        await completed;
+        return metadata;
+    } catch (error) {
+        try {
+            tx.abort();
+        } catch {
+            /* Already complete or aborted. */
+        }
+        await completed.catch(() => undefined);
+        throw error;
+    }
+}
+/** Apply only this page, tombstones and its resume cursor in one transaction.
+ * Lease, suspension and request cursor are checked after acquiring the write lock.
+ */
+export async function applyOfflinePage(
+    owner: string,
+    lease: string,
+    after: string | null,
+    page: OfflineCatalogPage,
+): Promise<boolean> {
+    const db = await database();
+    const tx = db.transaction(['state', 'catalogue'], 'readwrite');
+    const completed = done(tx);
+    try {
+        const current = await result(
+            tx.objectStore('state').get(owner) as IDBRequest<
+                OfflineMetadata | undefined
+            >,
+        );
+        if (
+            !current ||
+            current.suspended ||
+            current.lease?._id !== lease ||
+            current.cursor !== after
+        ) {
+            await completed;
+            return false;
+        }
+        const catalogue = tx.objectStore('catalogue');
+        for (const product of page.products) {
+            if (product.isActive === false)
+                catalogue.delete([owner, lease, product._id]);
+            else catalogue.put({ owner, lease, product });
+        }
+        const last = page.products[page.products.length - 1];
+        const cursor =
+            page.next ??
+            (last ? `${last.updatedAt}|${last._id}` : current.cursor);
+        if (cursor !== current.cursor)
+            tx.objectStore('state').put({ ...current, cursor });
+        await completed;
+        return true;
+    } catch (error) {
+        try {
+            tx.abort();
+        } catch {
+            /* Already complete or aborted. */
+        }
+        await completed.catch(() => undefined);
+        throw error;
+    }
+}
+const catalogueRange = (owner: string, lease: string): IDBKeyRange =>
+    IDBKeyRange.bound([owner, lease], [owner, lease, []], false, true);
 /** The compound primary key groups all string receipt keys under their owner. */
 const ownerRange = (owner: string): IDBKeyRange =>
     IDBKeyRange.bound([owner], [owner, []], false, true);
@@ -163,7 +341,7 @@ export async function queueOffline(
     try {
         const state = await result(
             tx.objectStore('state').get(entry.owner) as IDBRequest<
-                OfflineState | undefined
+                OfflineMetadata | undefined
             >,
         );
         const prior = await result(
@@ -234,13 +412,13 @@ export async function blockOffline(
 /** Locks every tab out of enqueueing before releasing the server lease. */
 export async function suspendOffline(
     owner: string,
-): Promise<OfflineState | undefined> {
+): Promise<OfflineMetadata | undefined> {
     const db = await database();
     const tx = db.transaction(['state', 'outbox'], 'readwrite');
     const completed = done(tx);
     const state = await result(
         tx.objectStore('state').get(owner) as IDBRequest<
-            OfflineState | undefined
+            OfflineMetadata | undefined
         >,
     );
     const pendingCount = await result(
