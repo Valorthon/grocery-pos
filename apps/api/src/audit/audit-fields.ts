@@ -93,6 +93,17 @@ const FIELDS: Record<AuditAction, readonly string[]> = {
         'mustChangePassword',
         'source',
     ],
+    /** Backup identity and the loss overrides the operator accepted; never secrets or paths. */
+    [AuditAction.SYSTEM_DATABASE_RESTORED]: [
+        'backupId',
+        'backupCreatedAt',
+        'safetyBackupId',
+        'replacementInstallation',
+        'acceptOpenShifts',
+        'acceptNewerSales',
+        'acceptPendingOffline',
+        'source',
+    ],
 };
 /** Longest string list: PO lines are capped by the batch limit. */
 const MAX_LIST = BATCH_LIMITS.RESTOCK_LINES;

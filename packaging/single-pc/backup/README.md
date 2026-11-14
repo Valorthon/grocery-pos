@@ -69,7 +69,10 @@ A backup is written under `backups\.incomplete-<id>\` and only renamed to
 1. `mongodump` exited 0; the backup files are copied; `manifest.json` lists
    every file's size and SHA-256 and `manifest.sha256` checksums it.
 2. Checksums are re-read, then the archive is restored into a throwaway
-   standalone mongod (scratch folder, free loopback port, `--oplogReplay`).
+   standalone mongod (owner-only scratch folder, free loopback port,
+   `--oplogReplay`). It runs with `--auth`: its only user, created through
+   the localhost exception as it starts, has a random password kept in the
+   scratch folder and memory, so other local accounts cannot read the copy.
    The installation marker must match, every `grocery` collection must pass
    `validate`, and per-collection counts go into `verification.json`.
 
@@ -79,28 +82,35 @@ removes the leftovers.
 
 `backups\status.json` (`STATUS_SCHEMA` 1) is the interface #365 reads:
 
-| Field                 | Meaning                                                                                                                                                                                                                                                                                     |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lastAttempt`         | `{at, command, backupId?}` written before work starts                                                                                                                                                                                                                                       |
-| `lastSuccess`         | `{at, command, backupId, kind?}` last completed `create` or `export`                                                                                                                                                                                                                        |
-| `lastVerifiedSuccess` | `{at, backupId, kind, createdAt}` last backup that passed the test restore (create or verify)                                                                                                                                                                                               |
-| `lastFailure`         | `{at, command, code, message, backupId?}`; codes `DESTINATION_UNAVAILABLE`, `DESTINATION_SAME_DISK`, `LOW_DISK`, `DATABASE_UNAVAILABLE`, `TOOLS_UNAVAILABLE`, `DUMP_FAILED`, `VERIFY_FAILED`, `BACKUP_CORRUPT`, `BACKUP_UNVERIFIED`, `NO_VERIFIED_BACKUP`, `EXPORT_FAILED`, `BACKUP_FAILED` |
-| `consecutiveFailures` | reset by a success                                                                                                                                                                                                                                                                          |
-| `lastExport`          | `{at, backupId, destination}`                                                                                                                                                                                                                                                               |
-| `lastRestore`         | `{at, backupId, safetyBackupId}`                                                                                                                                                                                                                                                            |
+| Field                 | Meaning                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lastAttempt`         | `{at, command, backupId?}` written before work starts                                                                                                                                                                                                                                                                                                                   |
+| `lastSuccess`         | `{at, command, backupId, kind?}` last completed `create` or `export`                                                                                                                                                                                                                                                                                                    |
+| `lastVerifiedSuccess` | `{at, backupId, kind, createdAt}` last backup that passed the test restore (create or verify)                                                                                                                                                                                                                                                                           |
+| `lastFailure`         | `{at, command, code, message, backupId?}`; codes `DESTINATION_UNAVAILABLE`, `DESTINATION_SAME_DISK`, `LOW_DISK`, `DATABASE_UNAVAILABLE`, `TOOLS_UNAVAILABLE`, `DUMP_FAILED`, `VERIFY_FAILED`, `BACKUP_CORRUPT`, `BACKUP_UNVERIFIED`, `NO_VERIFIED_BACKUP`, `EXPORT_FAILED`, `DESTINATION_NOT_REMOVABLE`, `DESTINATION_UNKNOWN_MEDIA`, `STATUS_CORRUPT`, `BACKUP_FAILED` |
+| `consecutiveFailures` | reset by a success                                                                                                                                                                                                                                                                                                                                                      |
+| `lastExport`          | `{at, backupId, destination}`                                                                                                                                                                                                                                                                                                                                           |
+| `lastRestore`         | `{at, backupId, safetyBackupId}`                                                                                                                                                                                                                                                                                                                                        |
 
 `backup.mjs status` adds `backupOverdue` (no verified backup for 36 h),
 `exportReminderDue` (no export for 7 days) and the backups on disk, each
 `verified` only when its manifest checksum and verification record agree.
-Nothing infers success from a folder or file existing.
+Nothing infers success from a folder or file existing. An unreadable
+`status.json` makes `status` fail (exit 3); the next command that records
+status keeps the damaged file as `status.corrupt-<time>.json` and starts
+again with a `STATUS_CORRUPT` failure naming it, never a silent reset.
 
 ## Contents and secrets
 
 Included (`files\…` in the backup): `secrets\mongo-keyfile`,
-`mongo-root-password`, `mongo-api-password`, `jwt-secret`, `cookie-secret`,
+`mongo-root-password`, `mongo-api-password`, `jwt-secret`,
 `state\install.json`, `config\runtime.json`. Without them the database is
-unreachable (#360 has no reset path) and the JWT/cookie secrets sign sessions
-and offline cost evidence (#37), so a replacement PC needs them.
+unreachable (#360 has no reset path), and the JWT secret signs offline cost
+evidence and leases (#37), so a replacement PC needs them.
+
+`cookie-secret` is not included: it signs the session cookies only (the API
+accepts access tokens solely from cookies it signs), and every restore
+writes a new one, so no pre-restore access or refresh token works afterwards.
 
 Excluded, with reasons in each manifest: `secrets\api.env` and
 `config\mongod.cfg` (derived, rewritten for the target paths), `tls\` (the
@@ -120,16 +130,29 @@ After each successful `create` (and with `prune`), verified backups older
 than 30 days are removed, except the newest verified backup, which is kept
 however old: pruning can never leave the installation without a verified
 backup. Unverified folders are never pruned as backups; exports are never
-touched. Pre-restore safety backups follow the same rule.
+touched. A restore never prunes: its pre-restore safety backup skips
+retention, so the backup being restored (possibly the oldest) stays; the
+next ordinary `create` applies retention as usual.
 
 ## Export
 
 `export` copies the newest (or `--backup`) verified backup to
 `<to>\GroceryPOS-backup-<id>\`, re-checks every checksum at the destination
-and only then names it. A missing or unwritable destination, a full drive
-or the installation's own disk (`--allow-same-disk` overrides, for tests)
-fails visibly. `verify --from <export>` re-runs the test restore on an
-exported copy.
+and only then names it. A missing or unwritable destination or a full
+drive fails visibly. Exports go to **removable media only** (owner
+decision): the destination's volume must be on a USB, SD/MMC or FireWire
+disk (or report a Removable drive type) that is neither the installation's
+disk nor a boot/system disk. On Windows the tool asks PowerShell's Storage
+module (`Get-Volume -FilePath` → `Get-Partition` → `Get-Disk`), which
+follows drive letters, folder-mounted volumes and `subst` drives to the real
+disk; external USB hard disks that report a Fixed drive type are accepted
+by their bus. On Linux it reads `/sys/dev/block` (`removable` flag or a USB
+path). A second internal disk, the installation's disk, or anything that
+cannot be identified is refused (`DESTINATION_NOT_REMOVABLE`,
+`DESTINATION_UNKNOWN_MEDIA`, `DESTINATION_SAME_DISK`).
+`--test-allow-fixed-destination` exists for test harnesses only (CI has no
+removable drive); the installer never exposes it. `verify --from <export>`
+re-runs the test restore on an exported copy.
 
 ## Restore
 
@@ -152,10 +175,21 @@ linked from the app). Before anything changes it:
 
 It then drops the `grocery` database, restores the users, then the whole
 archive with `--oplogReplay`, checks every collection's count against the
-verification record and the installation marker, and revokes every session
-(`refreshtokens`, `stepups`, `overridegrants` emptied): everyone logs in
-again. Offline leases are kept, so delayed cash follows #37's ADMIN
-reconciliation rather than being lost. `state\restore.json` journals the
+verification record and the installation marker, and writes an
+allowlisted `SYSTEM.DATABASE_RESTORED` audit entry into the restored
+database (so it survives the restore; actor none; backup id and time,
+safety backup id, replacement installation or not, which `--accept-*`
+overrides were used, source; never secrets or paths). It then ends every
+session: `refreshtokens`, `stepups` and `overridegrants` are emptied and a
+new cookie secret is written to `secrets\cookie-secret` and `api.env`, so
+pre-restore access tokens stop working immediately and everyone logs in
+again. The JWT secret is kept, so signed offline evidence stays valid.
+
+**Offline cash after a restore needs an ADMIN.** Offline leases are kept,
+but their sessions are gone, so a terminal's queued cash sale is refused
+with "needs admin reconciliation" (`OFFLINE_RECONCILIATION_REQUIRED`) even
+after the cashier logs in again; an ADMIN reconciles it on that terminal
+with a reason (#37). It stays saved on the terminal until then. `state\restore.json` journals the
 run; an interrupted restore must be finished by re-running the same restore
 (other restores are refused until then).
 
@@ -181,21 +215,23 @@ cleared by these tools. Before a planned backup/restore: finish or park
 sales, let "Offline cash ready" queues upload, close shifts. After a restore
 the browser keeps its queue: receipts already accepted by the server before
 the backup are replays (same idempotency key) and are not posted twice;
-receipts accepted after the backup will upload again into the restored
-database under #37's rules (revoked sessions/closed shifts need explicit
-ADMIN reconciliation on that terminal). Cash recorded after the backup and
+receipts still queued upload only through explicit ADMIN reconciliation on
+that terminal (see Restore), never automatically. Cash recorded after the backup and
 already deleted from a browser queue cannot be recovered by the tools: count
 the drawer and record it manually. A lost PC loses its browser storage too.
 
 ## Verification
 
 Portable (`pnpm test:single-pc-proof`): retention never removing the only
-verified backup, status/overdue/reminder rules, strict arguments, loss
+verified backup, removable-media classification (Windows facts incl.
+subst/folder mounts onto the installation disk, USB disks reporting Fixed;
+Linux sysfs), corrupt `status.json` kept aside, status/overdue/reminder rules, strict arguments, loss
 refusals, contents list, checksum/unexpected-file corruption, status never
 trusting folder names, and the Database Tools pin.
 
 Real MongoDB (CI's `db` job extracts `mongod`, `mongodump` and
-`mongorestore` from `mongo:7.0.48`):
+`mongorestore` from `mongo:7.0.48` and fails unless its tools are the
+pinned `mongodbTools.version`, 100.20.1):
 
 ```bash
 GPOS_TEST_MONGOD=/path/to/mongod GPOS_TEST_MONGO_TOOLS=/dir/with/tools pnpm test:single-pc-backup
@@ -209,7 +245,9 @@ same disk refused), corrupt/truncated/manifest-less/missing-key/incompatible
 MongoDB/newer-app refusals with the data unchanged, low disk, runs killed
 while dumping and while test-restoring (not successes; next run cleans and
 stops the orphan mongod), in-place restore refused for each loss then
-accepted with a verified safety backup and sessions revoked, and a
+accepted with a verified safety backup, the audit entry, a rotated cookie
+secret (a pre-restore login's cookie gets 401) and the JWT secret kept, a
+backup older than 30 days restored without being pruned, and a
 replacement-PC restore onto an empty root with identical domain data and an
 ADMIN login.
 
@@ -217,6 +255,6 @@ ADMIN login.
 
 The release's `mongodump.exe`/`mongorestore.exe` (components.json
 `mongodbTools`), Task Scheduler execution as SYSTEM (#362), ACLs on
-`backups\` and exports, NTFS rename/lock behaviour, an external USB drive's
+`backups\` and exports, NTFS rename/lock behaviour, the PowerShell removable-media check (USB stick, USB hard disk, SD card, second internal disk, folder mount, `subst`), an external USB drive's
 device check, Windows paths in tool config files, and measured backup/restore
 time on the 4 GB qualification machine (#357/#366).

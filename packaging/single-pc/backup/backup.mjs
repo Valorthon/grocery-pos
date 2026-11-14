@@ -5,7 +5,7 @@
 //       [--kind scheduled|manual] [--reserve-mb <n>]
 //   node backup.mjs verify --data-root <abs> --mongod <mongod> --tools <dir> --api <api dir>
 //       [--backup <id> | --from <backup dir>]
-//   node backup.mjs export --data-root <abs> --to <dir> [--backup <id>] [--allow-same-disk]
+//   node backup.mjs export --data-root <abs> --to <removable drive folder> [--backup <id>]
 //   node backup.mjs prune  --data-root <abs>
 //   node backup.mjs status --data-root <abs>
 //
@@ -47,6 +47,7 @@ import {
     acquireLock,
     releaseLock,
 } from '../runtime/provision.mjs';
+import { destinationMedia } from './removable.mjs';
 
 export { RefusedError };
 export const EXIT = { OK: 0, FAILED: 1, USAGE: 2, REFUSED: 3 };
@@ -66,6 +67,8 @@ export const MANIFEST = 'manifest.json';
 export const MANIFEST_SUM = 'manifest.sha256';
 export const VERIFICATION = 'verification.json';
 const INCOMPLETE = '.incomplete-';
+/** The throwaway test-restore instance's only user (random password). */
+const VERIFY_USER = 'gpos_verify';
 const SCRATCH = '.verify-';
 export const ID_PATTERN =
     /^\d{8}T\d{6}Z-(scheduled|manual|pre-restore)-[0-9a-f]{6}$/;
@@ -74,16 +77,25 @@ export const EXPORT_PREFIX = 'GroceryPOS-backup-';
 /**
  * What a backup carries besides the database, and what it leaves out.
  * The secrets are required for a replacement-PC restore: the database
- * users' passwords, the replica-set keyfile, and the JWT/cookie secrets
- * that sign sessions and offline cost evidence (#37). Exported copies are
- * owner-approved plaintext (#357), so possession exposes them.
+ * users' passwords, the replica-set keyfile, and the JWT secret that
+ * signs offline cost evidence and leases (#37). The cookie secret is left
+ * out: a restore issues a new one, which ends every pre-restore session
+ * (access tokens are only accepted from cookies it signs). Exported copies
+ * are owner-approved plaintext (#357), so possession exposes them.
  */
+export const BACKED_UP_SECRETS = Object.freeze(
+    Object.keys(SECRET_FILES).filter((key) => key !== 'cookieSecret'),
+);
 export const INCLUDED_FILES = Object.freeze([
-    ...Object.values(SECRET_FILES).map(({ file }) => `secrets/${file}`),
+    ...BACKED_UP_SECRETS.map((key) => `secrets/${SECRET_FILES[key].file}`),
     'state/install.json',
     'config/runtime.json',
 ]);
 export const EXCLUDED = Object.freeze([
+    {
+        path: 'secrets/cookie-secret',
+        reason: 'signs session cookies only; a restore generates a new one so every pre-restore session ends',
+    },
     {
         path: 'secrets/api.env',
         reason: 'derived from the secrets; provisioning rewrites it',
@@ -148,7 +160,9 @@ const OPTIONS = {
     confirm: 'confirm',
 };
 const FLAGS = {
-    'allow-same-disk': 'allowSameDisk',
+    // Test harnesses only (a CI runner has no removable drive); the
+    // installer never exposes it.
+    'test-allow-fixed-destination': 'testAllowFixedDestination',
     'accept-open-shifts': 'acceptOpenShifts',
     'accept-newer-sales': 'acceptNewerSales',
     'accept-pending-offline': 'acceptPendingOffline',
@@ -217,7 +231,13 @@ export function parseOptions(args, required, allowed) {
 const ALLOWED = {
     create: ['data-root', 'mongod', 'tools', 'api', 'kind', 'reserve-mb'],
     verify: ['data-root', 'mongod', 'tools', 'api', 'backup', 'from'],
-    export: ['data-root', 'to', 'backup', 'allow-same-disk', 'reserve-mb'],
+    export: [
+        'data-root',
+        'to',
+        'backup',
+        'test-allow-fixed-destination',
+        'reserve-mb',
+    ],
     prune: ['data-root'],
     status: ['data-root'],
 };
@@ -391,8 +411,32 @@ export async function readStatus(paths) {
     }
 }
 
+/**
+ * An unreadable status file is never silently replaced: it is kept beside
+ * as `status.corrupt-<time>.json`, and the new status starts with a
+ * STATUS_CORRUPT failure naming it, so diagnostics show the lost history.
+ */
 async function updateStatus(paths, change) {
-    const status = await readStatus(paths).catch(() => emptyStatus());
+    let status;
+    try {
+        status = await readStatus(paths);
+    } catch {
+        const kept = join(
+            paths.dirs.backups,
+            `status.corrupt-${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
+        );
+        await rename(paths.backupStatus, kept);
+        status = {
+            ...emptyStatus(),
+            lastFailure: {
+                at: new Date().toISOString(),
+                command: 'status',
+                code: 'STATUS_CORRUPT',
+                message: `The backup status file was unreadable; it was kept as ${kept}.`,
+            },
+            consecutiveFailures: 1,
+        };
+    }
     const next = {
         ...status,
         ...change(status),
@@ -699,11 +743,21 @@ export async function testRestore({
     const dbPath = join(scratch, 'db');
     await mkdir(dbPath);
     const port = await freePort();
-    // For cleanup after a killed run, which may leave this mongod behind.
-    await writeFile(join(scratch, 'port'), String(port), { mode: 0o600 });
+    // Authenticated: the copy holds the whole store, so other local
+    // accounts must not read it. The first user comes from the localhost
+    // exception right after start-up; its random password lives only in
+    // the owner-only scratch folder (for cleanup after a killed run, which
+    // may leave this mongod behind) and in memory.
+    const credential = randomBytes(32).toString('base64url');
+    await writeFile(
+        join(scratch, 'port'),
+        JSON.stringify({ port, credential }),
+        { mode: 0o600 },
+    );
     const child = spawn(
         mongod,
         [
+            '--auth',
             '--dbpath',
             dbPath,
             '--bind_ip',
@@ -719,10 +773,15 @@ export async function testRestore({
     let exited = false;
     child.once('exit', () => (exited = true));
     child.once('error', () => (exited = true));
-    const uri = `mongodb://${LOOPBACK}:${port}/?directConnection=true`;
+    const anon = new driver.MongoClient(
+        `mongodb://${LOOPBACK}:${port}/?directConnection=true`,
+        { serverSelectionTimeoutMS: 2000 },
+    );
+    const uri = `mongodb://${VERIFY_USER}:${credential}@${LOOPBACK}:${port}/?authSource=admin&directConnection=true`;
     const client = new driver.MongoClient(uri, {
         serverSelectionTimeoutMS: 2000,
     });
+    const config = join(scratch, 'tool.yaml');
     try {
         await boundedWait(
             async () => {
@@ -732,7 +791,7 @@ export async function testRestore({
                         'The test-restore mongod did not start.',
                     );
                 try {
-                    await client.db('admin').command({ ping: 1 });
+                    await anon.db('admin').command({ ping: 1 });
                     return true;
                 } catch {
                     return false;
@@ -740,13 +799,27 @@ export async function testRestore({
             },
             { timeoutMs: 120000 },
         );
-        const result = await runTool(toolPath(tools, 'mongorestore'), [
-            `--uri=${uri}`,
-            `--archive=${join(dir, ARCHIVE)}`,
-            '--gzip',
-            '--oplogReplay',
-            '--stopOnError',
-        ]);
+        await anon.db('admin').command({
+            createUser: VERIFY_USER,
+            pwd: credential,
+            roles: ['root'],
+        });
+        await anon.close();
+        await writeFile(config, `uri: ${JSON.stringify(uri)}\n`, {
+            flag: 'wx',
+            mode: 0o600,
+        });
+        const result = await runTool(
+            toolPath(tools, 'mongorestore'),
+            [
+                `--config=${config}`,
+                `--archive=${join(dir, ARCHIVE)}`,
+                '--gzip',
+                '--oplogReplay',
+                '--stopOnError',
+            ],
+            { secrets: [credential] },
+        );
         if (result.code !== 0)
             throw new BackupError(
                 'VERIFY_FAILED',
@@ -792,6 +865,7 @@ export async function testRestore({
             // shutdown drops the connection
         }
         await client.close().catch(() => {});
+        await anon.close().catch(() => {});
         if (!exited) {
             const timer = setTimeout(() => child.kill('SIGKILL'), 60000);
             await new Promise((r) => (exited ? r() : child.once('exit', r)));
@@ -850,42 +924,56 @@ export async function listBackups(paths) {
  * proves (by its own reported dbPath) to be that scratch instance.
  */
 async function stopOrphan(scratch, driver) {
-    const port = Number(
-        await readFile(join(scratch, 'port'), 'utf8').catch(() => ''),
-    );
-    if (!Number.isSafeInteger(port) || port <= 0) return;
-    const client = new driver.MongoClient(
-        `mongodb://${LOOPBACK}:${port}/?directConnection=true`,
-        {
-            serverSelectionTimeoutMS: 1000,
-        },
-    );
+    let port;
+    let credential;
     try {
-        const opts = await client.db('admin').command({ getCmdLineOpts: 1 });
-        if (
-            resolve(opts.parsed?.storage?.dbPath ?? '') !==
-            resolve(join(scratch, 'db'))
-        )
-            return;
-        await client
-            .db('admin')
-            .command({ shutdown: 1, force: true })
-            .catch(() => {});
-        await boundedWait(
-            async () => {
-                try {
-                    await client.db('admin').command({ ping: 1 });
-                    return false;
-                } catch {
-                    return true;
-                }
-            },
-            { timeoutMs: 60000 },
-        );
+        ({ port, credential } = JSON.parse(
+            await readFile(join(scratch, 'port'), 'utf8'),
+        ));
     } catch {
-        // nothing listening there: nothing to stop
-    } finally {
-        await client.close().catch(() => {});
+        return;
+    }
+    if (!Number.isSafeInteger(port) || port <= 0) return;
+    // With the run's credential; if it was killed before creating that
+    // user, the localhost exception still answers anonymously.
+    for (const auth of [
+        { username: VERIFY_USER, password: credential },
+        undefined,
+    ]) {
+        const client = new driver.MongoClient(
+            `mongodb://${LOOPBACK}:${port}/?directConnection=true`,
+            { serverSelectionTimeoutMS: 1000, auth, authSource: 'admin' },
+        );
+        try {
+            const opts = await client
+                .db('admin')
+                .command({ getCmdLineOpts: 1 });
+            if (
+                resolve(opts.parsed?.storage?.dbPath ?? '') !==
+                resolve(join(scratch, 'db'))
+            )
+                return;
+            await client
+                .db('admin')
+                .command({ shutdown: 1, force: true })
+                .catch(() => {});
+            await boundedWait(
+                async () => {
+                    try {
+                        await client.db('admin').command({ ping: 1 });
+                        return false;
+                    } catch {
+                        return true;
+                    }
+                },
+                { timeoutMs: 60000 },
+            );
+            return;
+        } catch {
+            // not answering with these credentials; try the next
+        } finally {
+            await client.close().catch(() => {});
+        }
     }
 }
 
@@ -994,7 +1082,11 @@ export async function createBackup(options, log = () => {}) {
                 },
                 consecutiveFailures: 0,
             }));
-            const pruned = await pruneLocked(paths, log);
+            // A pre-restore safety backup never prunes: the backup being
+            // restored may be the oldest one (#363 review).
+            const pruned = options.skipPrune
+                ? []
+                : await pruneLocked(paths, log);
             return { ...result, pruned };
         } catch (error) {
             await recordFailure(paths, 'create', error, id);
@@ -1281,14 +1373,23 @@ export async function exportBackup(options, log = () => {}) {
                     `Export destination ${options.to} is not available. Connect the drive and retry.`,
                 );
             }
-            if (
-                !options.allowSameDisk &&
-                destInfo.dev === (await stat(paths.root)).dev
-            )
-                throw new BackupError(
-                    'DESTINATION_SAME_DISK',
-                    'The export destination is on the same disk as the installation; use an external drive.',
-                );
+            if (!options.testAllowFixedDestination) {
+                if (destInfo.dev === (await stat(paths.root)).dev)
+                    throw new BackupError(
+                        'DESTINATION_SAME_DISK',
+                        'The export destination is on the same disk as the installation; use a removable drive.',
+                    );
+                const media = await destinationMedia(options.to, paths.root);
+                if (!media.removable)
+                    throw new BackupError(
+                        media.reason === 'unknown'
+                            ? 'DESTINATION_UNKNOWN_MEDIA'
+                            : 'DESTINATION_NOT_REMOVABLE',
+                        media.reason === 'unknown'
+                            ? 'The export destination could not be identified as a removable drive.'
+                            : 'Exports go to a removable drive (USB or memory card) only; this destination is a fixed or system disk.',
+                    );
+            }
             const size = manifest.files.reduce((n, f) => n + f.size, 0);
             const { bavail, bsize } = await statfs(options.to);
             if (Number(bavail) * Number(bsize) < requiredFreeBytes(size, 0))

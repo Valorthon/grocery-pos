@@ -111,4 +111,31 @@ describe('business audit field allowlist', () => {
             }),
         ).toEqual({ lineCount: 201 });
     });
+
+    it('records a database restore by backup identity and overrides only (#363)', () => {
+        expect(
+            auditFields(AuditAction.SYSTEM_DATABASE_RESTORED, {
+                backupId: '20261114T020000Z-manual-abcdef',
+                backupCreatedAt: '2026-11-14T02:00:00.000Z',
+                safetyBackupId: null,
+                replacementInstallation: true,
+                acceptOpenShifts: false,
+                acceptNewerSales: true,
+                acceptPendingOffline: false,
+                source: 'restore.mjs',
+                from: 'D:\\GroceryPOS-backup-x',
+                rootPassword: 'secret',
+                cookieSecret: 'secret',
+            }),
+        ).toEqual({
+            backupId: '20261114T020000Z-manual-abcdef',
+            backupCreatedAt: '2026-11-14T02:00:00.000Z',
+            safetyBackupId: null,
+            replacementInstallation: true,
+            acceptOpenShifts: false,
+            acceptNewerSales: true,
+            acceptPendingOffline: false,
+            source: 'restore.mjs',
+        });
+    });
 });

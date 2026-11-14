@@ -19,6 +19,8 @@ import {
     rm,
     writeFile,
 } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { boundedWait } from '../proof/policy.mjs';
@@ -32,6 +34,7 @@ import {
 import { provision } from '../runtime/provision.mjs';
 import {
     ARCHIVE,
+    BACKED_UP_SECRETS,
     BackupError,
     EXIT,
     RefusedError,
@@ -188,7 +191,7 @@ async function seedFreshRoot(paths, dir) {
         await mkdir(paths.dirs[sub], { recursive: true, mode: 0o700 });
     }
     const files = [
-        ...Object.keys(SECRET_FILES).map((key) => [
+        ...BACKED_UP_SECRETS.map((key) => [
             `files/secrets/${SECRET_FILES[key].file}`,
             paths.secrets[key],
         ]),
@@ -208,6 +211,63 @@ async function sameFile(a, b) {
     }
 }
 
+/**
+ * The audit entry, built with the release's own compiled allowlist
+ * (`auditFields`), so it holds exactly the SYSTEM.DATABASE_RESTORED fields.
+ */
+export function auditWriter(apiDir) {
+    const api = resolve(apiDir);
+    const load = createRequire(join(api, 'package.json'));
+    let fields;
+    let action;
+    try {
+        fields = load(join(api, 'dist', 'audit', 'audit-fields.js'));
+        action = load('@grocery-pos/contracts').AuditAction
+            .SYSTEM_DATABASE_RESTORED;
+    } catch {
+        action = undefined;
+    }
+    if (!action || typeof fields?.auditFields !== 'function')
+        throw new BackupError(
+            'TOOLS_UNAVAILABLE',
+            "The release's compiled API is required to record the restore in the audit log.",
+        );
+    return (after) => ({
+        actor: null,
+        actorName: null,
+        action,
+        targetModel: 'Database',
+        targetId: null,
+        before: {},
+        after: fields.auditFields(action, after),
+        approvedBy: null,
+        ip: null,
+        userAgent: null,
+        createdAt: new Date(),
+    });
+}
+
+/**
+ * A new cookie secret ends every pre-restore session at once: the API only
+ * accepts access tokens from cookies this secret signs. The JWT secret
+ * (offline evidence, #37) is kept. Rewrites api.env's line in place.
+ */
+export async function rotateCookieSecret(paths) {
+    const spec = SECRET_FILES.cookieSecret;
+    const value = randomBytes(spec.bytes).toString(spec.encoding);
+    const env = await readFile(paths.apiEnv, 'utf8');
+    if (!/^COOKIE_SECRET=.*$/m.test(env))
+        throw new BackupError(
+            'RESTORE_FAILED',
+            'api.env has no COOKIE_SECRET line; re-run provisioning.',
+        );
+    await writeAtomic(paths.secrets.cookieSecret, value);
+    await writeAtomic(
+        paths.apiEnv,
+        env.replace(/^COOKIE_SECRET=.*$/m, `COOKIE_SECRET=${value}`),
+    );
+}
+
 export async function restore(options, log = () => {}) {
     const dir = resolve(options.from);
     const paths = layout(resolve(options.dataRoot));
@@ -224,6 +284,7 @@ export async function restore(options, log = () => {}) {
     const problems = compatibility(manifest, target);
     if (problems.length)
         throw new RefusedError(`Incompatible backup: ${problems.join('; ')}.`);
+    const auditEntry = auditWriter(options.api);
     if (await portInUse(PORTS.api))
         throw new RefusedError(
             `The API is running (port ${PORTS.api}). Stop GroceryPOS-Proxy and GroceryPOS-API before restoring.`,
@@ -245,7 +306,8 @@ export async function restore(options, log = () => {}) {
             throw new RefusedError(
                 'The backup belongs to another installation. Restore it onto an empty data root (replacement PC) instead.',
             );
-        for (const [key, { file }] of Object.entries(SECRET_FILES)) {
+        for (const key of BACKED_UP_SECRETS) {
+            const { file } = SECRET_FILES[key];
             if (
                 !(await sameFile(
                     paths.secrets[key],
@@ -314,7 +376,12 @@ export async function restore(options, log = () => {}) {
                     'restore: taking a safety backup of the current data first',
                 );
                 const safety = await createBackup(
-                    { ...options, kind: 'pre-restore', lockHeld: true },
+                    {
+                        ...options,
+                        kind: 'pre-restore',
+                        lockHeld: true,
+                        skipPrune: true,
+                    },
                     (l) => log(`safety ${l}`),
                 );
                 safetyBackupId = safety.backupId;
@@ -397,8 +464,22 @@ export async function restore(options, log = () => {}) {
                     );
             }
             await checkInstallationDatabase(root, install);
+            // Recorded in the restored database, so it survives the restore.
+            await db.collection('audits').insertOne(
+                auditEntry({
+                    backupId: manifest.backupId,
+                    backupCreatedAt: manifest.createdAt,
+                    safetyBackupId: safetyBackupId ?? null,
+                    replacementInstallation: fresh,
+                    acceptOpenShifts: options.acceptOpenShifts === true,
+                    acceptNewerSales: options.acceptNewerSales === true,
+                    acceptPendingOffline: options.acceptPendingOffline === true,
+                    source: 'restore.mjs',
+                }),
+            );
             for (const name of SESSION_COLLECTIONS)
                 await db.collection(name).deleteMany({});
+            await rotateCookieSecret(paths);
             const completedAt = new Date().toISOString();
             const summary = {
                 backupId: manifest.backupId,

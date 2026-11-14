@@ -196,7 +196,11 @@ jobs:
                   docker cp "$id:/usr/bin/mongorestore" "$RUNNER_TEMP/mongorestore"
                   docker rm "$id"
                   "$RUNNER_TEMP/mongod" --version | head -1
-                  "$RUNNER_TEMP/mongodump" --version | head -1
+                  # The image's bundled tools must be the version components.json pins.
+                  tools=$("$RUNNER_TEMP/mongodump" --version | sed -n 's/^mongodump version: //p')
+                  pinned=$(node -p "require('./packaging/single-pc/components.json').mongodbTools.version")
+                  echo "mongodump $tools (pinned $pinned)"
+                  test "$tools" = "$pinned"
 
             - name: Build API (compiled single-PC runtime checks)
               run: pnpm --filter grocery-pos-api build

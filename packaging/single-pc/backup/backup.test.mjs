@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { layout, releaseLayout } from '../runtime/layout.mjs';
+import { classifyLinux, classifyWindows } from './removable.mjs';
 import {
     ARCHIVE,
     BackupError,
@@ -23,6 +24,7 @@ import {
     RETENTION_DAYS,
     backupId,
     backupStatus,
+    exportBackup,
     checkBackup,
     compatibility,
     emptyStatus,
@@ -125,12 +127,14 @@ test('backups carry the secrets a replacement PC needs and say what they leave o
         'mongo-root-password',
         'mongo-api-password',
         'jwt-secret',
-        'cookie-secret',
     ])
         assert.ok(INCLUDED_FILES.includes(`secrets/${file}`), file);
+    // Rotated on restore instead, so pre-restore sessions end.
+    assert.ok(!INCLUDED_FILES.includes('secrets/cookie-secret'));
     assert.ok(INCLUDED_FILES.includes('state/install.json'));
     for (const path of [
         'secrets/api.env',
+        'secrets/cookie-secret',
         'tls/',
         'database/',
         'browser storage',
@@ -188,8 +192,8 @@ test('argument parsing is strict and paths are absolute', () => {
             root,
             '--to',
             root,
-            '--allow-same-disk',
-        ]).allowSameDisk,
+            '--test-allow-fixed-destination',
+        ]).testAllowFixedDestination,
         true,
     );
     assert.throws(
@@ -364,4 +368,104 @@ test('the release ships the pinned MongoDB Database Tools beside mongod', async 
     );
     assert.match(ci, /pnpm test:single-pc-backup/);
     assert.match(ci, /\/usr\/bin\/mongodump/);
+    // CI asserts the extracted tools are the pinned version.
+    assert.match(ci, /mongodbTools\.version/);
+});
+
+test('exports go to removable media only, never the installation or system disk', () => {
+    const usb = { driveType: 'Fixed', busType: 'USB', diskNumber: 1 };
+    const root = { driveType: 'Fixed', busType: 'NVMe', diskNumber: 0 };
+    // External USB disks often report a Fixed drive type; the bus decides.
+    assert.deepEqual(classifyWindows(usb, root), {
+        removable: true,
+        reason: 'removable',
+    });
+    assert.equal(
+        classifyWindows(
+            { driveType: 'Removable', busType: 'SD', diskNumber: 2 },
+            root,
+        ).removable,
+        true,
+    );
+    // A second internal disk, or a folder mount/subst onto one, is refused.
+    assert.equal(
+        classifyWindows(
+            { driveType: 'Fixed', busType: 'SATA', diskNumber: 1 },
+            root,
+        ).reason,
+        'fixed',
+    );
+    // subst/folder mounts resolve to the installation's own disk.
+    assert.equal(
+        classifyWindows({ ...usb, diskNumber: 0 }, root).reason,
+        'same-disk',
+    );
+    assert.equal(
+        classifyWindows({ ...usb, isBoot: true }, root).reason,
+        'system-disk',
+    );
+    assert.equal(classifyWindows(undefined, root).reason, 'unknown');
+    assert.equal(
+        classifyLinux(
+            { disk: '/sys/x/usb1/sdb', usb: true },
+            { disk: '/sys/sda' },
+        ).removable,
+        true,
+    );
+    assert.equal(
+        classifyLinux(
+            { disk: '/sys/sdc', removableFlag: true },
+            { disk: '/sys/sda' },
+        ).removable,
+        true,
+    );
+    assert.equal(
+        classifyLinux({ disk: '/sys/sdb' }, { disk: '/sys/sda' }).reason,
+        'fixed',
+    );
+    assert.equal(
+        classifyLinux({ disk: '/sys/sda', usb: true }, { disk: '/sys/sda' })
+            .reason,
+        'same-disk',
+    );
+    assert.equal(classifyLinux(undefined, {}).reason, 'unknown');
+});
+
+test('an unreadable status file is kept aside and reported, never silently reset', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-status-'));
+    try {
+        const paths = layout(join(dir, 'root'));
+        await mkdir(paths.dirs.state, { recursive: true });
+        await mkdir(paths.dirs.backups, { recursive: true });
+        await writeFile(
+            paths.install,
+            JSON.stringify({ schema: 1, installationId: 'i' }),
+        );
+        await writeFile(paths.backupStatus, '{ not json');
+        await assert.rejects(
+            backupStatus({ dataRoot: paths.root }),
+            /unreadable/,
+        );
+        // A command that records status keeps the damaged file beside.
+        await assert.rejects(
+            exportBackup({ dataRoot: paths.root, to: join(dir, 'none') }),
+            (e) => e.code === 'NO_VERIFIED_BACKUP',
+        );
+        const names = await readdir(paths.dirs.backups);
+        const kept = names.find((n) => n.startsWith('status.corrupt-'));
+        assert.ok(kept, names.join());
+        assert.equal(
+            await readFile(join(paths.dirs.backups, kept), 'utf8'),
+            '{ not json',
+        );
+        const status = await backupStatus({ dataRoot: paths.root });
+        assert.ok(
+            ['STATUS_CORRUPT', 'NO_VERIFIED_BACKUP'].includes(
+                status.lastFailure.code,
+            ),
+        );
+        assert.ok(status.consecutiveFailures >= 1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });

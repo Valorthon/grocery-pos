@@ -328,6 +328,33 @@ it('requires reconciliation after cashier deactivation or session revocation', a
         ).status,
     ).toBe(201);
 });
+it('requires admin reconciliation for a queued sale after a single-PC restore revokes sessions (#363)', async () => {
+    // restore.mjs keeps offline leases but empties these collections
+    // (SESSION_COLLECTIONS), so the lease's session family is gone.
+    for (const name of ['refreshtokens', 'stepups', 'overridegrants'])
+        await db
+            .model<RefreshToken>('RefreshToken')
+            .db.collection(name)
+            .deleteMany({});
+    expect(
+        await db
+            .model<OfflineLease>('OfflineLease')
+            .countDocuments({ _id: lease._id, active: true }),
+    ).toBe(1);
+    const blocked = await read<AppErrorResponse>(
+        await db.call(seller, 'POST', '/offline/sync', body),
+    );
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toBe(ErrorCode.OFFLINE_RECONCILIATION_REQUIRED);
+    expect(
+        (
+            await db.call(admin, 'POST', '/offline/reconcile', {
+                ...body,
+                reason: 'Collected before the database restore',
+            })
+        ).status,
+    ).toBe(201);
+});
 it('rejects a fabricated proof, wrong owner, changed product and invalid timestamp without stock writes', async () => {
     expect(
         (

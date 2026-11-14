@@ -124,7 +124,7 @@ async function stopService(child) {
     await once(child, 'exit');
 }
 
-function http(path, { method = 'GET', body } = {}) {
+function http(path, { method = 'GET', body, cookie } = {}) {
     return new Promise((resolve, reject) => {
         const req = request(
             {
@@ -136,13 +136,22 @@ function http(path, { method = 'GET', body } = {}) {
                     Host: 'localhost:1443',
                     Origin: ORIGIN,
                     ...(body ? { 'Content-Type': 'application/json' } : {}),
+                    ...(cookie ? { Cookie: cookie } : {}),
                 },
                 timeout: 5000,
             },
             (res) => {
                 let text = '';
                 res.on('data', (d) => (text += d));
-                res.on('end', () => resolve({ status: res.statusCode, text }));
+                res.on('end', () =>
+                    resolve({
+                        status: res.statusCode,
+                        text,
+                        cookie: (res.headers['set-cookie'] ?? [])
+                            .map((c) => c.split(';')[0])
+                            .join('; '),
+                    }),
+                );
             },
         );
         req.on('error', reject);
@@ -204,7 +213,17 @@ async function digest(client) {
     for (const name of DOMAIN) {
         const docs = await db
             .collection(name)
-            .find({})
+            // Restore and login events are written after a restore, on
+            // purpose; compare the store data itself.
+            .find(
+                name === 'audits'
+                    ? {
+                          action: {
+                              $nin: ['SYSTEM.DATABASE_RESTORED', 'AUTH.LOGIN'],
+                          },
+                      }
+                    : {},
+            )
             .sort({ _id: 1 })
             .toArray();
         out[name] = createHash('sha256')
@@ -425,7 +444,7 @@ describe(
                 paths.root,
                 '--to',
                 exportDir,
-                '--allow-same-disk',
+                '--test-allow-fixed-destination',
             );
             assert.equal(result.code, 0, result.stderr);
             exported = JSON.parse(
@@ -561,11 +580,13 @@ describe(
             const scratchPort = async () => {
                 for (const n of await readdir(paths.dirs.backups)) {
                     if (!n.startsWith('.verify-')) continue;
-                    const port = Number(
-                        await readFile(
-                            join(paths.dirs.backups, n, 'port'),
-                            'utf8',
-                        ).catch(() => 0),
+                    // {port, credential}: the instance requires auth.
+                    const port = await readFile(
+                        join(paths.dirs.backups, n, 'port'),
+                        'utf8',
+                    ).then(
+                        (t) => JSON.parse(t).port,
+                        () => 0,
                     );
                     if (port && (await listening(port))) return port;
                 }
@@ -642,6 +663,27 @@ describe(
             } finally {
                 await client.close();
             }
+            // A signed-in session from before the restore.
+            let oldCookie;
+            if (compiledApi)
+                await withApi(paths, async () => {
+                    const login = await http('/v1/auth/login', {
+                        method: 'POST',
+                        body: { username: 'owner', password: ownerPassword },
+                    });
+                    assert.ok([200, 201].includes(login.status), login.text);
+                    oldCookie = login.cookie;
+                    assert.equal(
+                        (await http('/v1/users/profile', { cookie: oldCookie }))
+                            .status,
+                        200,
+                    );
+                });
+            const jwtBefore = await readFile(paths.secrets.jwtSecret, 'utf8');
+            const cookieBefore = await readFile(
+                paths.secrets.cookieSecret,
+                'utf8',
+            );
             let result = await restoreRun(
                 paths.root,
                 exported,
@@ -685,6 +727,31 @@ describe(
                     0,
                     'sessions revoked',
                 );
+                // Leases are kept, but none has a live session family any
+                // more: their queued cash needs ADMIN reconciliation (#37;
+                // apps/api/test/db/offline.db-spec.ts proves the API side).
+                assert.ok(
+                    (await db.collection('offlineleases').countDocuments({})) >
+                        0,
+                );
+                const [audit] = await db
+                    .collection('audits')
+                    .find({ action: 'SYSTEM.DATABASE_RESTORED' })
+                    .toArray();
+                assert.equal(audit.actor, null);
+                assert.equal(audit.targetModel, 'Database');
+                assert.deepEqual(audit.after, {
+                    backupId: id,
+                    backupCreatedAt: JSON.parse(
+                        await readFile(join(exported, 'manifest.json'), 'utf8'),
+                    ).createdAt,
+                    safetyBackupId: summary.safetyBackupId,
+                    replacementInstallation: false,
+                    acceptOpenShifts: true,
+                    acceptNewerSales: true,
+                    acceptPendingOffline: true,
+                    source: 'restore.mjs',
+                });
                 const a = await db
                     .collection('probe_sales')
                     .find()
@@ -704,6 +771,34 @@ describe(
             } finally {
                 await after.close();
             }
+            // Sessions end: a new cookie secret, the offline JWT secret kept.
+            assert.equal(
+                await readFile(paths.secrets.jwtSecret, 'utf8'),
+                jwtBefore,
+            );
+            const cookieAfter = (
+                await readFile(paths.secrets.cookieSecret, 'utf8')
+            ).trim();
+            assert.notEqual(cookieAfter, cookieBefore.trim());
+            assert.ok(
+                (await readFile(paths.apiEnv, 'utf8')).includes(
+                    `COOKIE_SECRET=${cookieAfter}\n`,
+                ),
+            );
+            if (compiledApi)
+                await withApi(paths, async () => {
+                    assert.equal(
+                        (await http('/v1/users/profile', { cookie: oldCookie }))
+                            .status,
+                        401,
+                        'a pre-restore access token no longer works',
+                    );
+                    const login = await http('/v1/auth/login', {
+                        method: 'POST',
+                        body: { username: 'owner', password: ownerPassword },
+                    });
+                    assert.ok([200, 201].includes(login.status), login.text);
+                });
             const status = JSON.parse(
                 (await backup('status', paths.root)).stdout,
             );
@@ -716,6 +811,51 @@ describe(
                 true,
                 'the safety backup is verified',
             );
+        });
+
+        test('restoring a backup older than 30 days never prunes it', async () => {
+            const oldId = '20250101T000000Z-manual-0a0b0c';
+            const old = join(paths.dirs.backups, oldId);
+            await cp(exported, old, { recursive: true });
+            await rewriteManifest(old, (m) => {
+                m.backupId = oldId;
+                m.createdAt = '2025-01-01T00:00:00.000Z';
+            });
+            const verification = JSON.parse(
+                await readFile(join(old, 'verification.json'), 'utf8'),
+            );
+            await writeFile(
+                join(old, 'verification.json'),
+                JSON.stringify({ ...verification, backupId: oldId }),
+            );
+            let status = JSON.parse(
+                (await backup('status', paths.root)).stdout,
+            );
+            assert.ok(
+                status.backups.filter((b) => b.verified).length > 1 &&
+                    status.backups.find((b) => b.backupId === oldId)?.verified,
+                'not the newest verified backup, so retention would choose it',
+            );
+            const result = await restoreRun(
+                paths.root,
+                old,
+                '--confirm',
+                oldId,
+                '--accept-newer-sales',
+                '--accept-open-shifts',
+                '--accept-pending-offline',
+            );
+            assert.equal(result.code, 0, result.stderr);
+            assert.ok(existsSync(join(old, 'database.archive.gz')));
+            status = JSON.parse((await backup('status', paths.root)).stdout);
+            assert.equal(
+                status.backups.find((b) => b.backupId === oldId)?.verified,
+                true,
+            );
+            // An ordinary create afterwards applies retention to it as usual.
+            const create = await backup('create', paths.root);
+            assert.equal(create.code, 0, create.stderr);
+            assert.ok(!existsSync(old));
         });
 
         test('a replacement PC restores onto an empty data root and the restored owner can log in', async () => {
