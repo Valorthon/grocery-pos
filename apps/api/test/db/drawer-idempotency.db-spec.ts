@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
 import {
     AuditAction,
+    type CurrentShiftResponse,
     DrawerMovementType,
     ErrorCode,
     Role,
@@ -115,9 +116,11 @@ it('replays after close without charging a later shift or exposing closing finan
     expect(JSON.stringify(retry.body)).not.toMatch(
         /expectedCash|overShort|zRead|countedCash/,
     );
-    const current = await read(await db.call(seller, 'GET', '/shifts/current'));
-    expect(current.body.shift?._id).toBe(next);
-    expect(current.body.shift?.movements).toEqual([]);
+    const current = (await (
+        await db.call(seller, 'GET', '/shifts/current')
+    ).json()) as CurrentShiftResponse;
+    expect(current.shift?._id).toBe(next);
+    expect(current.shift?.movements).toEqual([]);
     const lateNew = await send({ ...body, idempotencyKey: randomUUID() });
     expect(lateNew.status).toBe(409);
     expect(lateNew.body.error).toBe(ErrorCode.SHIFT_NOT_OPEN);
