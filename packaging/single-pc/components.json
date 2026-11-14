@@ -15,6 +15,14 @@
         "checksumSource": "https://downloads.mongodb.org/current.json",
         "license": "SSPL-1.0"
     },
+    "mongodbTools": {
+        "version": "100.20.1",
+        "url": "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-windows-x86_64-100.20.1.zip",
+        "sha256": "5a1a8aa2c87ca0685ffdcad403601b110d495d44afe579473b8f75ec46621c80",
+        "checksumSource": "https://downloads.mongodb.org/tools/db/release.json",
+        "license": "Apache-2.0",
+        "use": "mongodump/mongorestore for backups (#363); installed beside mongod.exe"
+    },
     "argon2": {
         "version": "0.44.0",
         "source": "https://github.com/ranisalt/node-argon2/tree/v0.44.0",

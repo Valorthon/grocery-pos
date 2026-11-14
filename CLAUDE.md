@@ -524,7 +524,10 @@ requestId}`. A 5xx never carries details or internals.
   cash in/drop, purchase-order create/edit/send/cancel/receive (#123),
   handled successful/failed credential logins, and step-up re-auths
   (`AUTH_REAUTH`/`AUTH_REAUTH_FAILED`, actor and target the user, `name`
-  only, never the password, #310). Replays do not
+  only, never the password, #310), and single-PC database restores
+  (`SYSTEM.DATABASE_RESTORED`, actor null, written by `restore.mjs` after the
+  restore so it survives; backup id/time, safety backup, overrides, #363).
+  Replays do not
   duplicate completed-sale events. Existing history is not backfilled or invented.
 - Where state is transactional, the audit entry shares that transaction; opening
   shifts, drawer movements and own-password writes also use a transaction so an
@@ -1181,6 +1184,26 @@ on upstream fixes).
   `from`/`to`. The Low stock at tile has an ⓘ with the shared
   `INVENTORY_HELP.reorderLevel` text via `StatTile`'s `help` prop; tile ⓘ
   triggers carry `-my-3` so every label row is one text line tall (#271).
+
+**Single-PC backups** (#363, owner decisions 2026-11-14)
+
+- `packaging/single-pc/backup/`: `backup.mjs` create/verify/export/prune/status
+  and the separate protected `restore.mjs`. Backups are daily (#362 schedules)
+  `mongodump --oplog` snapshots, counted only after checksums and an
+  authenticated throwaway test restore pass. `backups\status.json` is the
+  status interface (#365); success is never inferred from files. Overdue
+  after 36 h without a verified backup; weekly export reminder.
+- Retention is 30 days but never prunes the newest verified backup or a
+  restore's source (the pre-restore safety backup skips pruning).
+- Exports are unencrypted (no recovery password), removable drives only
+  (USB/SD/MMC/1394; never the installation, a system or an internal disk) and
+  never deleted. Backups carry the secrets except `cookie-secret`.
+- Restore needs `--confirm <backup id>`, a verified compatible backup and the
+  API stopped; it refuses open shifts, active offline leases and newer sales
+  unless each `--accept-*` flag is given, takes a verified safety backup,
+  revokes sessions and rotates `cookie-secret` (JWT secret kept for offline
+  evidence), and writes `SYSTEM.DATABASE_RESTORED`. Kept offline leases have
+  no session, so their queued cash needs ADMIN reconciliation (#37).
 
 **Store settings** (#47, owner decision 2026-11-05)
 

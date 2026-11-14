@@ -34,6 +34,12 @@ export enum AuditAction {
      * installation (#361). No actor: nobody was signed in.
      */
     SYSTEM_INITIAL_ADMIN_CREATED = 'SYSTEM.INITIAL_ADMIN_CREATED',
+    /**
+     * The protected single-PC restore tool replaced the store database with
+     * a verified backup (#363). No actor; written after the restore so it
+     * survives it.
+     */
+    SYSTEM_DATABASE_RESTORED = 'SYSTEM.DATABASE_RESTORED',
 }
 /** Audit Log screen labels, one per action. */
 export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
@@ -65,6 +71,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
     [AuditAction.PURCHASE_ORDER_CANCELLED]: 'Purchase order cancelled',
     [AuditAction.PURCHASE_ORDER_RECEIVED]: 'Purchase order received',
     [AuditAction.SYSTEM_INITIAL_ADMIN_CREATED]: 'Initial administrator created',
+    [AuditAction.SYSTEM_DATABASE_RESTORED]: 'Database restored from backup',
 };
 export const AUDIT_LIMITS = { USER_AGENT: 512, IP: 64 } as const;
 export type AuditValue = string | number | boolean | null | string[];

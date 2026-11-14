@@ -155,6 +155,12 @@ definitions/WinSW XML and the idempotent `provision.mjs`; in `APP_ENV=single-pc`
 the API listens only after the DB is a writable primary with its indexes built.
 Verified on Linux with a real mongod; Windows service/ACL execution is pending.
 
+Implemented (#363): [backup/](backup/README.md) `backup.mjs` (create with
+`mongodump --oplog` and a test restore, verify, export, prune, status) and the
+separate `restore.mjs` (confirmed, loss-refusing, safety backup first, also onto
+an empty replacement root). `backups\status.json` is the interface #365 reads;
+#362 schedules `create` daily. Verified on Linux with real MongoDB/Database Tools.
+
 Release manifest interface: schema/version, Git commit, platform/architecture,
 exact component pins/checksums/notices, client/API/contracts compatibility,
 data/migration version, backup compatibility, packaged command entry points and
