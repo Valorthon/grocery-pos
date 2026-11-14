@@ -1,12 +1,20 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, type INestApplication } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { TypedConfigService } from '../typed-config/typed-config.service';
-import { localAccessCheck, LocalAccessMiddleware } from './local-access';
+import {
+    localAccessCheck,
+    localAccessMiddleware,
+    useLocalAccess,
+} from './local-access';
 
 const FRONTEND = 'https://localhost:1443';
 
-function req(headers: Record<string, string>): Request {
-    return { headers } as unknown as Request;
+function req(
+    headers: Record<string, string>,
+    method = 'POST',
+    url = '/v1/auth/login',
+): Request {
+    return { headers, method, url, originalUrl: url } as unknown as Request;
 }
 
 describe('localAccessCheck (#358)', () => {
@@ -40,44 +48,73 @@ describe('localAccessCheck (#358)', () => {
             'Unexpected origin.',
         );
     });
-});
 
-describe('LocalAccessMiddleware', () => {
-    function middleware(env: Record<string, string>) {
-        return new LocalAccessMiddleware({
-            get: (key: string) => env[key],
-        } as unknown as TypedConfigService);
-    }
-    const res = {} as Response;
-
-    it('throws a 403 for a foreign host in single-pc', () => {
-        const next = jest.fn();
-        expect(() =>
-            middleware({ APP_ENV: 'single-pc', FRONTEND_URL: FRONTEND }).use(
-                req({ host: 'evil.example' }),
-                res,
-                next,
-            ),
-        ).toThrow(ForbiddenException);
-        expect(next).not.toHaveBeenCalled();
+    it.each([
+        ['GET', '/v1/health/live'],
+        ['HEAD', '/v1/health/ready'],
+        ['GET', '/v1/health'],
+    ])('lets %s %s through from any host', (method, url) => {
+        expect(check(req({ host: '127.0.0.1:13000' }, method, url))).toBeNull();
     });
 
-    it('passes the proxy host in single-pc', () => {
+    it.each([
+        ['POST', '/v1/health/live'],
+        ['GET', '/v1/healthy'],
+        ['GET', '/v1/users'],
+    ])('still checks %s %s', (method, url) => {
+        expect(check(req({ host: '127.0.0.1:13000' }, method, url))).toBe(
+            'Unexpected host.',
+        );
+    });
+});
+
+describe('localAccessMiddleware', () => {
+    const res = {} as Response;
+
+    it('passes a ForbiddenException on for a refusal', () => {
         const next = jest.fn();
-        middleware({ APP_ENV: 'single-pc', FRONTEND_URL: FRONTEND }).use(
+        localAccessMiddleware(FRONTEND)(req({ host: 'evil' }), res, next);
+        expect(next).toHaveBeenCalledWith(expect.any(ForbiddenException));
+    });
+
+    it('calls next() plainly for the proxy host', () => {
+        const next = jest.fn();
+        localAccessMiddleware(FRONTEND)(
             req({ host: 'localhost:1443' }),
             res,
             next,
         );
-        expect(next).toHaveBeenCalled();
+        expect(next).toHaveBeenCalledWith(undefined);
+    });
+});
+
+describe('useLocalAccess', () => {
+    function app(env: Record<string, string> | null) {
+        const use = jest.fn();
+        const get = jest.fn(() => {
+            if (!env) throw new Error('no provider');
+            return {
+                get: (key: string) => env[key],
+            } as unknown as TypedConfigService;
+        });
+        return { app: { use, get } as unknown as INestApplication, use };
+    }
+
+    it('installs the check in single-pc', () => {
+        const a = app({ APP_ENV: 'single-pc', FRONTEND_URL: FRONTEND });
+        useLocalAccess(a.app);
+        expect(a.use).toHaveBeenCalledTimes(1);
     });
 
-    it.each(['prod', 'stage', 'dev', 'test'])('does nothing in %s', (env) => {
-        const next = jest.fn();
-        middleware({
-            APP_ENV: env,
-            FRONTEND_URL: 'https://pos.example.com',
-        }).use(req({ host: 'api.example.com', origin: 'x' }), res, next);
-        expect(next).toHaveBeenCalled();
+    it.each(['prod', 'stage', 'dev', 'test'])('installs nothing in %s', (e) => {
+        const a = app({ APP_ENV: e, FRONTEND_URL: 'https://pos.example.com' });
+        useLocalAccess(a.app);
+        expect(a.use).not.toHaveBeenCalled();
+    });
+
+    it('installs nothing without a config service', () => {
+        const a = app(null);
+        useLocalAccess(a.app);
+        expect(a.use).not.toHaveBeenCalled();
     });
 });

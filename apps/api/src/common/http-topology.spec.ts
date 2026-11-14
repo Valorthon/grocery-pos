@@ -37,8 +37,8 @@ describe('trustProxySetting', () => {
         expect(trustProxySetting('stage')).toBe(1);
     });
 
-    it('trusts only a loopback proxy in single-pc', () => {
-        expect(trustProxySetting('single-pc')).toBe('loopback');
+    it('trusts no proxy in single-pc: req.ip is the socket peer', () => {
+        expect(trustProxySetting('single-pc')).toBeUndefined();
     });
 
     it('trusts nothing in dev and test', () => {

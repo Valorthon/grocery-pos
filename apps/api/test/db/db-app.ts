@@ -10,11 +10,11 @@
  * token without reading the database.
  */
 import { createHmac, randomUUID } from 'node:crypto';
-import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { INestApplication, VersioningType } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import mongoose, { Connection, Model, Types } from 'mongoose';
@@ -26,6 +26,7 @@ import {
 import { AppModule } from '../../src/app.module';
 import { Role } from '../../src/auth/types';
 import { useBodyParsers } from '../../src/common/body-parsers';
+import { applyTrustProxy } from '../../src/common/http-topology';
 import { createValidationPipe } from '../../src/common/pipes/validation.pipe';
 import { DB_PREFIX, uriWithDb } from './db-uri';
 
@@ -107,17 +108,19 @@ export async function bootDbApp(): Promise<DbApp> {
     const moduleRef = await Test.createTestingModule({
         imports: [AppModule],
     }).compile();
-    const app = moduleRef.createNestApplication({
+    const app = moduleRef.createNestApplication<NestExpressApplication>({
         logger: ['error'],
         bodyParser: false,
     });
     useBodyParsers(app);
+    // As main.ts: single-pc, dev and test trust no proxy (#358).
+    applyTrustProxy(app, process.env.APP_ENV ?? '');
     app.useGlobalPipes(createValidationPipe());
     app.use(cookieParser(COOKIE_SECRET));
     app.enableVersioning({ defaultVersion: '1', type: VersioningType.URI });
     await app.listen(0, '127.0.0.1');
 
-    const server = app.getHttpServer() as Server;
+    const server = app.getHttpServer();
     const { port } = server.address() as AddressInfo;
     const base = `http://127.0.0.1:${port}/v1`;
     const jwt = app.get(JwtService);

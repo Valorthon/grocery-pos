@@ -29,7 +29,6 @@ import { HealthModule } from './health/health.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RateLimitModule } from './auth/rate-limit/rate-limit';
 import { RequestIdModule } from './common/request-id/request-id';
-import { LocalAccessModule } from './common/local-access/local-access';
 import { OfflineModule } from './offline/offline.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 
@@ -43,8 +42,6 @@ import { CspReportModule } from './csp-report/csp-report.module';
         SupplierModule,
         // First, so the correlation id is set before any other middleware.
         RequestIdModule,
-        // single-pc only: refuses a foreign Host/Origin (#358).
-        LocalAccessModule,
         TypedConfigModule,
         MongooseModule.forRootAsync({
             imports: [TypedConfigModule],

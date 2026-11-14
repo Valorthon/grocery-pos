@@ -1,3 +1,4 @@
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { isDeployedEnv, isSinglePcEnv } from './typed-config/app-env';
 
 /**
@@ -27,13 +28,20 @@ export function listenHost(appEnv: string, host: string | undefined): string {
  *   real client to X-Forwarded-For. Trusting that one hop makes `req.ip`
  *   the client (the login/refresh rate limits key on it); trusting more
  *   (or `true`) would let a client pick its own IP.
- * - single-pc: the proxy runs on loopback beside the API, so only a
- *   loopback peer is trusted; a forwarded header from anything else is
- *   ignored (the API binds loopback anyway).
- * - dev/test have no proxy: undefined, the header is ignored.
+ * - single-pc, dev and test: undefined, X-Forwarded-For is ignored and
+ *   `req.ip` is the socket peer. In single-pc every peer is loopback (the
+ *   local proxy or any local process), so trusting loopback would let any
+ *   local process pick its own rate-limit bucket and audit IP (#358).
  */
-export function trustProxySetting(appEnv: string): number | string | undefined {
-    if (isDeployedEnv(appEnv)) return 1;
-    if (isSinglePcEnv(appEnv)) return 'loopback';
-    return undefined;
+export function trustProxySetting(appEnv: string): number | undefined {
+    return isDeployedEnv(appEnv) ? 1 : undefined;
+}
+
+/** Applies `trustProxySetting` (main.ts and the DB suite's app). */
+export function applyTrustProxy(
+    app: NestExpressApplication,
+    appEnv: string,
+): void {
+    const trustProxy = trustProxySetting(appEnv);
+    if (trustProxy !== undefined) app.set('trust proxy', trustProxy);
 }

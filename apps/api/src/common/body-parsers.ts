@@ -2,6 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { json, urlencoded } from 'body-parser';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { useCspReportLimit } from '../csp-report/csp-report.throttle';
+import { useLocalAccess } from './local-access/local-access';
 
 /**
  * The shape GlobalFilter reads off a body-parser failure: its status,
@@ -72,9 +73,12 @@ export function withSafeErrors(parser: RequestHandler): RequestHandler {
  * `bodyParser: false`, then call this before `listen`/`init`.
  *
  * First, anything that must see a request before its body is read: the
- * CSP report route's per-IP rate limit, so a refused body counts (#108).
+ * single-pc Host/Origin check (#358), so a refused request's body is never
+ * parsed, then the CSP report route's per-IP rate limit, so a refused body
+ * counts (#108).
  */
 export function useBodyParsers(app: INestApplication): void {
+    useLocalAccess(app);
     useCspReportLimit(app);
     // Signed price proofs make the existing 200-line sale cap larger than 100kb.
     // Scope the bounded exception to offline uploads; all other routes keep Nest defaults.

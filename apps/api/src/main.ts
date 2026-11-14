@@ -7,7 +7,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { createValidationPipe } from './common/pipes/validation.pipe';
 import { corsOptions } from './common/cors';
-import { listenHost, trustProxySetting } from './common/http-topology';
+import { applyTrustProxy, listenHost } from './common/http-topology';
 import { useBodyParsers } from './common/body-parsers';
 
 async function bootstrap() {
@@ -38,12 +38,9 @@ async function bootstrap() {
     // gets the CORS headers, so the client can read the error.
     useBodyParsers(app);
 
-    // prod/stage trust their one cloud proxy hop, single-pc its loopback
-    // proxy, dev/test nothing (see trustProxySetting, #358).
-    const trustProxy = trustProxySetting(config.get('APP_ENV'));
-    if (trustProxy !== undefined) {
-        app.set('trust proxy', trustProxy);
-    }
+    // prod/stage trust their one cloud proxy hop; single-pc, dev and test
+    // trust none (see trustProxySetting, #358).
+    applyTrustProxy(app, config.get('APP_ENV'));
 
     app.enableShutdownHooks();
 

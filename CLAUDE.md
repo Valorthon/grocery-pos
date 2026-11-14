@@ -1027,13 +1027,16 @@ requestId}`. A 5xx never carries details or internals.
 - `APP_ENV=single-pc` is the single-PC production topology, not a dev mode:
   strict secrets like prod (`requiresStrictSecrets`), `DOMAIN` blank,
   `FRONTEND_URL` exactly `https://localhost[:port]`, `HOST` loopback
-  (default `127.0.0.1`, else `::1`), `trust proxy` `loopback`
-  (`common/http-topology.ts`). `isDeployedEnv` stays prod/stage only.
+  (default `127.0.0.1`, else `::1`), no `trust proxy` (`req.ip` is the
+  socket peer; `common/http-topology.ts`, `applyTrustProxy`). `isDeployedEnv` stays prod/stage only.
 - Cookies are Secure, host-only and `SameSite=Lax`, cleared with the same
-  attributes. `LocalAccessMiddleware` (`common/local-access`) refuses any
-  request whose Host isn't FRONTEND_URL's host or whose Origin (when sent)
-  isn't its origin: 403 `FORBIDDEN` with the normal error body (the filter
-  reports `originalUrl`). It is a no-op in every other APP_ENV.
+  attributes; Lax is no CSRF defence between localhost ports, the Origin
+  check is. `useLocalAccess` (`common/local-access`, first in
+  `useBodyParsers`, before any body is read) refuses any request whose Host
+  isn't FRONTEND_URL's host or whose Origin (when sent) isn't its origin:
+  403 `FORBIDDEN` with the normal error body (the filter reports
+  `originalUrl`). GET/HEAD `/v1/health*` are exempt. Not installed in any
+  other APP_ENV.
 - Client `VITE_APP_ENV=single-pc` requires `VITE_API_URL=/v1` (relative,
   same-origin) and no `VITE_DOMAIN`; other stages still need an absolute URL.
 - Caddy (`packaging/single-pc/caddy/Caddyfile`) binds 127.0.0.1 + ::1:1443,

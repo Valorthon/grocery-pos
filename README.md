@@ -113,10 +113,11 @@ forwards `/v1/*` to the API.
 
 - API: `APP_ENV=single-pc`, `PORT=13000`, `FRONTEND_URL=https://localhost:1443`,
   `DOMAIN` blank. It listens on `127.0.0.1` (`HOST` may be `::1`, nothing
-  else), trusts only a loopback proxy, uses prod's strict secret rules and
+  else), trusts no proxy (`req.ip` is the socket peer), uses prod's strict secret rules and
   sets Secure, host-only, `SameSite=Lax` cookies. Every request must carry
   `Host: localhost:1443`, and an `Origin` must be `https://localhost:1443`,
-  or it gets a 403; diagnostics go through the proxy or send that Host.
+  or it gets a 403 before its body is read. GET/HEAD `/v1/health*` are
+  exempt, so diagnostics may call `127.0.0.1:13000` directly.
 - Client build: `VITE_APP_ENV=single-pc VITE_API_URL=/v1` (same-origin,
   relative) and no `VITE_DOMAIN`.
 - Cloud and staging (`prod`/`stage`) are unchanged.

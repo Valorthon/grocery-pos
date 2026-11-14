@@ -9,7 +9,7 @@
  */
 import { request } from 'node:http';
 import * as argon from 'argon2';
-import { ErrorCode, Role } from '@grocery-pos/contracts';
+import { AuditAction, ErrorCode, Role } from '@grocery-pos/contracts';
 import type { DbApp } from './db-app';
 
 Object.assign(process.env, {
@@ -63,7 +63,13 @@ function send(
     body?: unknown,
 ): Promise<Reply> {
     const url = new URL(`${base}${path}`);
-    const payload = body === undefined ? undefined : JSON.stringify(body);
+    // A string is sent as is (malformed JSON included).
+    const payload =
+        body === undefined
+            ? undefined
+            : typeof body === 'string'
+              ? body
+              : JSON.stringify(body);
     return new Promise((resolve, reject) => {
         const req = request(
             {
@@ -215,4 +221,54 @@ it('takes a same-origin CSP report through the proxy host', async () => {
         },
     );
     expect(res.status).toBe(204);
+});
+
+it('refuses a foreign request before parsing its body', async () => {
+    // Parsed first, this would be a 400 body-parser error.
+    const res = await post(
+        '/auth/login',
+        { host: 'localhost:1443', origin: 'https://evil.example' },
+        '{"username": ',
+    );
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toMatchObject({ error: ErrorCode.FORBIDDEN });
+});
+
+it('answers health probes on the API port directly, and nothing else', async () => {
+    const direct = { host: '127.0.0.1:13000' };
+    const live = await send('GET', '/health/live', direct);
+    // The handler answered: 200, or 503 if the heap check trips late in
+    // the in-band run. Either way a terminus body, never the 403.
+    expect([200, 503]).toContain(live.status);
+    expect(JSON.parse(live.body)).toHaveProperty('status');
+
+    const other = await send('GET', '/settings/today', direct);
+    expect(other.status).toBe(403);
+});
+
+// Last: it spends this file's login IP budget.
+it('ignores a spoofed X-Forwarded-For for the rate limit and audit IP', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 25; i++) {
+        const res = await post(
+            '/auth/login',
+            {
+                ...PROXY_HEADERS,
+                'x-forwarded-for': `203.0.113.${i + 1}`,
+            },
+            { username: `spoof${i}`, password: 'wrong-password-1' },
+        );
+        statuses.push(res.status);
+    }
+    // One IP bucket (the socket peer), so the 20-per-minute limit trips
+    // although every request named a different client.
+    expect(statuses).toContain(429);
+    expect(statuses.filter((s) => s === 401).length).toBeLessThanOrEqual(20);
+
+    const failed = await db
+        .model('AuditLog')
+        .find({ action: AuditAction.AUTH_LOGIN_FAILED })
+        .lean<{ ip: string | null }[]>();
+    expect(failed.length).toBeGreaterThan(0);
+    for (const entry of failed) expect(entry.ip).toMatch(/127\.0\.0\.1$/);
 });
