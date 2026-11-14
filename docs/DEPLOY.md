@@ -65,6 +65,10 @@ Railway deprecated config-as-code, refuses it for new services, and stops
 reading those files on 2026-12-01. Every service builds from the repo root,
 because both images need `packages/contracts`.
 
+The private `.railway` workspace typechecks the file against the pinned SDK
+and lints it through the normal recursive gates. `pnpm format:check` covers this
+folder too. These commands do not contact Railway or apply infrastructure.
+
 Railway does not read the file during a deploy; apply a change by hand from
 the repo root, after `railway link` to the project:
 

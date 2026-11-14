@@ -1,6 +1,7 @@
 packages:
     - 'apps/*'
     - 'packages/*'
+    - '.railway'
 
 allowBuilds:
     '@nestjs/core': true

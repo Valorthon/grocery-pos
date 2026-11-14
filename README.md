@@ -488,6 +488,11 @@ jest src/sales`, `pnpm --filter grocery-pos-client exec vitest run src/stores`).
 `git push` runs a pre-push hook (`.husky/pre-push`): the contracts build,
 lint and typecheck. Tests and the build run in CI.
 
+The private `@grocery-pos/infrastructure` workspace owns `.railway/*.ts`.
+The recursive lint/typecheck commands above and CI validate it against the pinned
+Railway SDK; formatting includes `.railway` too. These checks are static and do
+not run Railway plan/apply or manage deployed variables.
+
 ### Real-database tests
 
 `pnpm test` mocks the Mongoose models, so it cannot show what only MongoDB
