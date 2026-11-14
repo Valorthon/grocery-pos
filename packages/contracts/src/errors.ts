@@ -110,6 +110,14 @@ export enum ErrorCode {
      * never a 401, so the client does not refresh and replay.
      */
     USER_REAUTH_REQUIRED = 'USER_008',
+    /**
+     * The account must change its temporary password first (#361): every
+     * route but the profile and `PATCH /users/me/password` is refused. A
+     * 403, never a 401.
+     */
+    USER_PASSWORD_CHANGE_REQUIRED = 'USER_009',
+    /** A required password change reused the temporary password (#361). */
+    USER_PASSWORD_UNCHANGED = 'USER_010',
 
     /**
      * Too many attempts on a rate-limited route (login, refresh, password

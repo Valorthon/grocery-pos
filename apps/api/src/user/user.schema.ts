@@ -48,6 +48,13 @@ export class User {
     isActive!: boolean;
 
     /**
+     * Set only on the bootstrap ADMIN (#361) until they replace the
+     * temporary password; absent (false) on every other account.
+     */
+    @Prop({ type: Boolean })
+    mustChangePassword?: boolean;
+
+    /**
      * Write-lock counter, bumped on every active ADMIN by a transaction that
      * may remove an admin, so concurrent ones write-conflict (issue #3).
      * Carries no meaning of its own.

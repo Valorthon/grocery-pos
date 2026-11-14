@@ -19,7 +19,12 @@ import { StepUpService } from '../auth/step-up/step-up.service';
 import { runInTransaction } from '../common/utils/db';
 import { prefixRegex } from '../common/utils/regex';
 import type { AuthUser } from '../auth/types';
-import { ErrorCode, ForbiddenError, NotFoundError } from '../common/errors';
+import {
+    ErrorCode,
+    ForbiddenError,
+    NotFoundError,
+    ValidationError,
+} from '../common/errors';
 import {
     assertCanGrant,
     assertCanUpdate,
@@ -75,6 +80,8 @@ class UserInfo {
     roles!: Role[];
     _id!: Types.ObjectId;
     isActive!: boolean;
+    /** Only on the bootstrap ADMIN until the temporary password is changed (#361). */
+    mustChangePassword?: true;
 }
 
 @Injectable()
@@ -197,6 +204,10 @@ export class UserService implements OnModuleInit {
                     const set: Record<string, unknown> = { ...fields };
                     if (password !== undefined) {
                         set.passwordHash = await argon.hash(password);
+                        // Owner decision (#361): a reset password is
+                        // temporary; the user must change it at next login.
+                        // (Resetting your own is refused by the policy.)
+                        set.mustChangePassword = true;
                     }
                     const invalidatesApproval =
                         password !== undefined ||
@@ -400,7 +411,7 @@ export class UserService implements OnModuleInit {
     ): Promise<void> {
         const user = await this.model
             .findById(actor.userId)
-            .select('passwordHash isActive')
+            .select('passwordHash isActive mustChangePassword')
             .lean();
 
         if (!user || !user.isActive) {
@@ -417,6 +428,14 @@ export class UserService implements OnModuleInit {
             );
         }
 
+        // A required change (#361) must actually replace the temporary
+        // password.
+        if (user.mustChangePassword && dto.newPassword === dto.currentPassword)
+            throw new ValidationError(
+                ErrorCode.USER_PASSWORD_UNCHANGED,
+                'Choose a new password, not the temporary one',
+            );
+
         // Matching on the old hash makes a concurrent change of the same
         // password lose instead of silently overwriting the winner.
         await runInTransaction(async (session) => {
@@ -427,6 +446,7 @@ export class UserService implements OnModuleInit {
                         passwordHash: await argon.hash(dto.newPassword),
                         overridePinVersion: randomUUID(),
                     },
+                    $unset: { mustChangePassword: 1 },
                 },
                 { runValidators: true, session },
             );
@@ -499,6 +519,9 @@ export class UserService implements OnModuleInit {
             roles: user.roles,
             _id: user._id,
             isActive: user.isActive,
+            ...(user.mustChangePassword
+                ? { mustChangePassword: true as const }
+                : {}),
         };
     }
 }

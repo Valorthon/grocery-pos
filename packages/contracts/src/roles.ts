@@ -85,6 +85,12 @@ export interface JWTPayload {
      * existed.
      */
     sid?: string;
+    /**
+     * Set while the account still has its temporary bootstrap password
+     * (#361): only the profile and the own password change are allowed.
+     * Absent otherwise.
+     */
+    mustChangePassword?: true;
 }
 
 export type AuthUser = JWTPayload;

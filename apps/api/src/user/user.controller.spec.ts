@@ -23,4 +23,24 @@ describe('UserController.getProfile', () => {
             roles: [Role.Seller],
         });
     });
+
+    it('adds mustChangePassword only while it is set (#361)', () => {
+        const controller = new UserController(
+            {} as UserService,
+            {} as RefreshTokenService,
+        );
+        expect(
+            controller.getProfile({
+                userId: '507f1f77bcf86cd799439011',
+                username: 'owner',
+                roles: [Role.Admin],
+                mustChangePassword: true,
+            }),
+        ).toEqual({
+            userId: '507f1f77bcf86cd799439011',
+            username: 'owner',
+            roles: [Role.Admin],
+            mustChangePassword: true,
+        });
+    });
 });

@@ -16,9 +16,15 @@ import { LOGIN_ERRORS, loginErrorMessage } from './login-error';
 const auth = vi.hoisted(() => ({
     login: vi.fn(),
     logout: vi.fn(),
-    user: null as { username: string; roles: string[] } | null,
+    user: null as {
+        username: string;
+        roles: string[];
+        mustChangePassword?: boolean;
+    } | null,
 }));
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => auth }));
+// The required password change dialog (#361) is never submitted here.
+vi.mock('@/axios', () => ({ default: { patch: vi.fn() } }));
 
 const Stub = defineComponent({ render: () => h('div') });
 
@@ -245,6 +251,44 @@ describe('Login page (#21)', () => {
             expect(errorBox(host)).toBeNull();
             expect(router.currentRoute.value.name).not.toBe('Login');
         });
+
+        // #361: the bootstrap ADMIN's temporary password.
+        // Also after an ADMIN reset another user's password (owner decision).
+        it.each([
+            ['the bootstrap ADMIN', [Role.Admin]],
+            ['a cashier after an admin reset', [Role.Seller]],
+        ])(
+            'asks %s for a new password instead of going home',
+            async (_who, roles) => {
+                auth.login.mockImplementation(() => {
+                    auth.user = {
+                        username: 'owner',
+                        roles,
+                        mustChangePassword: true,
+                    };
+                    return Promise.resolve({});
+                });
+                const host = await mount();
+
+                await submit(host, 'owner', 'temporary-pass');
+
+                expect(router.currentRoute.value.name).toBe('Login');
+                expect(input(host, 'password').value).toBe('');
+                const dialog = document.querySelector('[role="dialog"]');
+                expect(dialog?.textContent).toContain(
+                    'Change your temporary password',
+                );
+                // No close button; the secondary action logs out.
+                expect(
+                    dialog?.querySelector(
+                        '[data-testid="change-password-cancel"]',
+                    )?.textContent,
+                ).toContain('Log out');
+                expect(
+                    dialog?.querySelector('button[aria-label="Close"]'),
+                ).toBeNull();
+            },
+        );
     });
 });
 

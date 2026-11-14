@@ -6,7 +6,7 @@ import {
     GetUsersDto,
     UpdateBulkDto,
 } from './types/user.dto';
-import { Roles } from '../auth/auth.decorator';
+import { AllowPasswordChangePending, Roles } from '../auth/auth.decorator';
 import {
     ASSIGNABLE_ROLES,
     type Paginated,
@@ -31,6 +31,7 @@ export class UserController {
     // list, never an empty @Roles()). A session with no roles, or only
     // legacy/unassignable ones, gets 403 here; that is intended.
     @Roles(...ASSIGNABLE_ROLES)
+    @AllowPasswordChangePending()
     @Get('/profile')
     getProfile(@CurrentUser() user: AuthUser): ProfileView {
         return {
@@ -38,6 +39,9 @@ export class UserController {
             userId: user.userId,
             username: user.username,
             roles: user.roles,
+            ...(user.mustChangePassword
+                ? { mustChangePassword: true as const }
+                : {}),
         };
     }
 
@@ -58,6 +62,7 @@ export class UserController {
      * access token expires.
      */
     @Roles(...ASSIGNABLE_ROLES)
+    @AllowPasswordChangePending()
     @PasswordChangeRateLimit()
     @Patch('/me/password')
     async changeOwnPassword(

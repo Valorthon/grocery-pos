@@ -2,11 +2,18 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { Role } from '../types';
-import { ADMIN_BYPASS_KEY, IS_PUBLIC_KEY, ROLES_KEY } from '../auth.decorator';
+import {
+    ADMIN_BYPASS_KEY,
+    ALLOW_PASSWORD_CHANGE_PENDING_KEY,
+    IS_PUBLIC_KEY,
+    ROLES_KEY,
+} from '../auth.decorator';
+import { ErrorCode, ForbiddenError } from '../../common/errors';
 
 interface RequestWithUser {
     user?: {
         roles: Role[];
+        mustChangePassword?: boolean;
     };
 }
 
@@ -28,6 +35,20 @@ export class RoleGuard implements CanActivate {
         const user = request.user;
 
         if (!user) return false;
+
+        // The bootstrap ADMIN's temporary password (#361): nothing but the
+        // profile and the own password change until it is replaced.
+        if (
+            user.mustChangePassword &&
+            !this.reflector.getAllAndOverride<boolean>(
+                ALLOW_PASSWORD_CHANGE_PENDING_KEY,
+                targets,
+            )
+        )
+            throw new ForbiddenError(
+                ErrorCode.USER_PASSWORD_CHANGE_REQUIRED,
+                'Change your temporary password first',
+            );
 
         const requiredRoles: Role[] =
             this.reflector.getAllAndOverride(ROLES_KEY, targets) ?? [];

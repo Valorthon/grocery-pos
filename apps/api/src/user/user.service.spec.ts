@@ -202,6 +202,8 @@ describe('UserService', () => {
 
             const row = model.byId(cashier._id)!;
             expect(row).not.toHaveProperty('password');
+            // #361 owner decision: a reset password must be changed at next login.
+            expect(row).toMatchObject({ mustChangePassword: true });
             await expect(
                 argon.verify(row.passwordHash, 'new-secret'),
             ).resolves.toBe(true);
@@ -542,6 +544,47 @@ describe('UserService', () => {
             await expect(
                 argon.verify(model.byId(cashier._id)!.passwordHash, 'old-pw'),
             ).resolves.toBe(true);
+        });
+
+        // #361: the bootstrap ADMIN's temporary password.
+        describe('while a change is required', () => {
+            beforeEach(() => {
+                Object.assign(model.byId(cashier._id)!, {
+                    mustChangePassword: true,
+                });
+            });
+
+            it('reports the flag at login', async () => {
+                await expect(
+                    service.checkCredentials('cashier', 'old-pw'),
+                ).resolves.toMatchObject({ mustChangePassword: true });
+            });
+
+            it('refuses reusing the temporary password with 400', async () => {
+                await expect(
+                    rejection(
+                        service.changeOwnPassword(as(cashier), {
+                            currentPassword: 'old-pw',
+                            newPassword: 'old-pw',
+                        }),
+                    ),
+                ).resolves.toEqual({
+                    status: 400,
+                    code: ErrorCode.USER_PASSWORD_UNCHANGED,
+                });
+            });
+
+            it('clears the flag with the change', async () => {
+                await service.changeOwnPassword(as(cashier), {
+                    currentPassword: 'old-pw',
+                    newPassword: 'new-pw',
+                });
+                const info = await service.checkCredentials(
+                    'cashier',
+                    'new-pw',
+                );
+                expect(info).not.toHaveProperty('mustChangePassword');
+            });
         });
     });
 });

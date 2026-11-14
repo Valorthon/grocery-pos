@@ -16,6 +16,7 @@ type FoundRefresh = Omit<RefreshToken, 'user'> & {
         name: string;
         roles: Role[];
         isActive: boolean;
+        mustChangePassword?: boolean;
     } | null;
 };
 
@@ -89,7 +90,10 @@ export class RefreshTokenService {
     ): Promise<{ refreshId: string; jwtPayload: JWTPayload; expiry: Date }> {
         const found = await this.model
             .findById(refreshId)
-            .populate({ path: 'user', select: 'name roles isActive' })
+            .populate({
+                path: 'user',
+                select: 'name roles isActive mustChangePassword',
+            })
             .lean<FoundRefresh>();
 
         if (!found) throw loginAgain(ErrorCode.AUTH_INVALID_TOKEN);
@@ -142,6 +146,9 @@ export class RefreshTokenService {
                 username: user.name,
                 roles: user.roles,
                 sid: next.sid,
+                ...(user.mustChangePassword
+                    ? { mustChangePassword: true as const }
+                    : {}),
             },
         };
     }

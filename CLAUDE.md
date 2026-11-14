@@ -486,6 +486,10 @@ requestId}`. A 5xx never carries details or internals.
 - Deactivating a user, changing their roles, or resetting or changing a password
   revokes that user's sessions. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.
+- An ADMIN's reset of another user's password is temporary (#361, owner
+  decision 2026-11-14): it sets `mustChangePassword`, so that user gets
+  the same restriction and required change dialog at next login as the
+  bootstrap ADMIN. Their own change clears it.
 
 **Manager approvals** (#34)
 
@@ -537,6 +541,27 @@ requestId}`. A 5xx never carries details or internals.
 - Append-only guards reject model/document update, delete, replace, save-existing
   and bulk-write operations. This is application/model-level immutability, not
   protection against a privileged direct MongoDB administrator.
+
+**First administrator** (#361, owner decisions 2026-11-14)
+
+- A fresh installation's first account comes only from the compiled
+  operator command `dist/bootstrap/initial-admin.cli.js` (`src/bootstrap/`),
+  never an HTTP route or `seed.ts`. It creates one active ADMIN-only user
+  (no SELLER, no PIN), the `systembootstrap` marker and an allowlisted
+  `SYSTEM.INITIAL_ADMIN_CREATED` audit entry (actor null, `source`) in one
+  transaction; any existing marker or user refuses it unchanged.
+- The password is a unique temporary one per store, read from a new
+  generated file, an owner-only file or stdin; never an argument, printed
+  or shared. `mustChangePassword` (user, JWT claim, optional profile field)
+  limits the account to `@AllowPasswordChangePending()` routes (profile,
+  own password change) with 403 `USER_PASSWORD_CHANGE_REQUIRED`; the change
+  must differ (400 `USER_PASSWORD_UNCHANGED`) and clears the flag. The
+  client keeps the account on Login with the required change dialog
+  (wording owner-approved). An ADMIN password reset sets the same flag.
+- `--password-stdin` refuses a terminal (it would echo). On Windows the
+  file mode does nothing: the command warns, and keeping the file in an
+  installer-restricted directory is a #362 packaging requirement. Errors
+  redact `DATABASE_URL` and any `mongodb(+srv)://` credentials.
 
 **Sessions** (#21)
 
