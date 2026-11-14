@@ -36,6 +36,19 @@ function offending(pattern: RegExp): string[] {
         .map(([file]) => file);
 }
 
+/** Read the alignment binding independently of other cell attributes. */
+function hasDraftTableBinding(
+    attrs: string,
+    binding: 'tdActions' | 'thNum',
+): boolean {
+    const template = document.createElement('template');
+    template.innerHTML = `<div${attrs}></div>`;
+    return (
+        template.content.firstElementChild?.getAttribute(':class') ===
+        `draftTable.${binding}`
+    );
+}
+
 describe('layout drift (#26)', () => {
     it('reads the sources', () => {
         expect(Object.keys(sources).length).toBeGreaterThan(50);
@@ -358,21 +371,60 @@ describe('row actions drift (#311)', () => {
         expect(users.length).toBeGreaterThanOrEqual(4);
         for (const [f, text] of users) {
             const cells = [
-                ...text.matchAll(/<td([^>]*)>\s*<DraftRowActions\b/g),
+                ...text.matchAll(
+                    /<td\b((?:"[^"]*"|'[^']*'|[^'">])*)>\s*<DraftRowActions\b/g,
+                ),
             ].map((m) => m[1]);
             const all = text.match(/<DraftRowActions\b/g)?.length ?? 0;
             expect({ f, cells: cells.length }).toEqual({ f, cells: all });
             for (const attrs of cells)
-                expect({ f, attrs }).toEqual({
+                expect({
                     f,
-                    attrs: ' :class="draftTable.tdActions"',
+                    aligned: hasDraftTableBinding(attrs, 'tdActions'),
+                }).toEqual({
+                    f,
+                    aligned: true,
                 });
+            const headers = [
+                ...text.matchAll(
+                    /<th\b((?:"[^"]*"|'[^']*'|[^'">])*)>\s*Actions\s*</g,
+                ),
+            ];
             expect({
                 f,
-                th: /:class="draftTable\.thNum"\s*>\s*Actions\s*</.test(text),
+                th: headers.some(([, attrs]) =>
+                    hasDraftTableBinding(attrs, 'thNum'),
+                ),
             }).toEqual({ f, th: true });
         }
     });
+
+    it.each(['tdActions', 'thNum'] as const)(
+        'accepts unrelated attributes and ordering around draftTable.%s (#344)',
+        (binding) => {
+            for (const attrs of [
+                ` :class="draftTable.${binding}" aria-label="Actions > options"`,
+                ` data-testid="actions" :class="draftTable.${binding}"`,
+                ` aria-label="Actions" :class='draftTable.${binding}' data-row="1"`,
+            ]) {
+                expect(hasDraftTableBinding(attrs, binding), attrs).toBe(true);
+            }
+        },
+    );
+
+    it.each(['tdActions', 'thNum'] as const)(
+        'rejects absent or changed draftTable.%s alignment (#344)',
+        (binding) => {
+            for (const attrs of [
+                ' aria-label="Actions"',
+                ' :class="draftTable.td" data-testid="actions"',
+                ` class="draftTable.${binding}"`,
+                ` aria-label=':class="draftTable.${binding}"'`,
+            ]) {
+                expect(hasDraftTableBinding(attrs, binding), attrs).toBe(false);
+            }
+        },
+    );
 
     it('has no RowOpenButton left', () => {
         expect(offending(/RowOpenButton/)).toEqual([]);
