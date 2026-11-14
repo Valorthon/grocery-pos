@@ -112,7 +112,7 @@ export default defineRailway((ctx) => {
     });
 
     return project('grocery-pos', {
-        variables: { managed: false },
+        // Omitting service env/variables keeps deployed values unmanaged.
         resources: [mongo, api, client, mongoVolume],
     });
 });

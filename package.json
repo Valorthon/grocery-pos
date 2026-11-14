@@ -14,8 +14,8 @@
         "test": "pnpm -r test",
         "seed": "pnpm --filter grocery-pos-api seed",
         "migrate:decode-entities": "pnpm --filter grocery-pos-api migrate:decode-entities",
-        "format": "prettier --write \"{apps,packages,scripts}/**/*.{ts,mjs,vue,css,html,json,md}\" \"*.{json,md,yml,yaml}\" \".github/**/*.{yml,yaml}\"",
-        "format:check": "prettier --check \"{apps,packages,scripts}/**/*.{ts,mjs,vue,css,html,json,md}\" \"*.{json,md,yml,yaml}\" \".github/**/*.{yml,yaml}\"",
+        "format": "prettier --write \"{apps,packages,scripts}/**/*.{ts,mjs,vue,css,html,json,md}\" \"*.{json,md,yml,yaml}\" \".github/**/*.{yml,yaml}\" \".railway/**/*.{ts,mjs,json}\"",
+        "format:check": "prettier --check \"{apps,packages,scripts}/**/*.{ts,mjs,vue,css,html,json,md}\" \"*.{json,md,yml,yaml}\" \".github/**/*.{yml,yaml}\" \".railway/**/*.{ts,mjs,json}\"",
         "licenses:check": "node --test scripts/license-policy.test.mjs && node scripts/check-licenses.mjs",
         "prepare": "husky",
         "migrate:categories": "pnpm --filter grocery-pos-api migrate:categories",
@@ -45,6 +45,10 @@
             "prettier --write"
         ],
         "**/*.mjs": [
+            "prettier --write"
+        ],
+        ".railway/**/*.ts": [
+            "pnpm --filter @grocery-pos/infrastructure exec eslint --fix",
             "prettier --write"
         ]
     },
