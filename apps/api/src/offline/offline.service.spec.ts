@@ -779,6 +779,38 @@ describe('sub-second offline selling deadline', () => {
             ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
         },
     );
+    it.each([false, true])(
+        'honors a shorter signed lifetime without giving it rounding grace (admin=%s)',
+        async (admin) => {
+            const clock = boundary();
+            f.body.lines[0].proof = f.proof({ iat: 100, exp: 150 });
+            f.body.soldAt = new Date(149999).toISOString();
+            clock.mockReturnValue(admin ? 210000 : 199500);
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Verified earlier cash' },
+                    admin,
+                ),
+            ).resolves.toEqual(f.receipt);
+            f.body.soldAt = new Date(150000).toISOString();
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Verified exact signed boundary' },
+                    admin,
+                ),
+            ).resolves.toEqual(f.receipt);
+            f.body.soldAt = new Date(150001).toISOString();
+            await expect(
+                f.service.sync(
+                    admin ? f.admin : f.actor,
+                    { ...f.body, reason: 'Review' },
+                    admin,
+                ),
+            ).rejects.toMatchObject({ code: ErrorCode.OFFLINE_INVALID });
+        },
+    );
     it('does not treat an impossible historical expiry as rounding loss', async () => {
         const clock = boundary();
         f.lease.expiresAt = new Date(200999);

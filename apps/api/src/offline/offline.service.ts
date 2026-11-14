@@ -398,8 +398,9 @@ export class OfflineService {
         // used floor(iat) + max(1, floor(remaining lifetime)). Reconstruct the
         // earliest result within that signed iat second. A signing pause may
         // increase exp, so retain the historical upper cap (lease + 1000ms).
-        // New proofs use the absolute ceiling; no lease time is added.
-        // Every proof remains bounded by the exact, exclusive lease deadline.
+        // A shorter-lived proof is still valid before its own signed expiry;
+        // only expired proofs need this compatibility check. New proofs use
+        // the absolute ceiling. Every proof keeps the exact lease deadline.
         const deadline = lease.expiresAt.getTime();
         const issuedSecond = p.iat * 1000;
         const lastPossibleIssue = Math.min(issuedSecond + 999, deadline - 1);
@@ -408,10 +409,9 @@ export class OfflineService {
             Math.max(1, Math.floor((deadline - lastPossibleIssue) / 1000));
         const legacyMax = Math.floor(deadline / 1000) + 1;
         const matchesExpiry =
-            p.exp === Math.ceil(deadline / 1000) ||
-            (issuedSecond < deadline &&
-                p.exp >= legacyMin &&
-                p.exp <= legacyMax);
+            p.exp <= legacyMax &&
+            (soldAt.getTime() <= p.exp * 1000 ||
+                (issuedSecond < deadline && p.exp >= legacyMin));
         if (
             p.purpose !== 'offline-price-v1' ||
             p.lease !== String(lease._id) ||

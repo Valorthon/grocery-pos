@@ -573,7 +573,9 @@ describe('sub-second proof and lease deadlines', () => {
         async ({ admin: reconcile, legacy }) => {
             const base = Math.floor(Date.now() / 1000) * 1000;
             const issued = base + 900;
-            const deadline = base + 2500;
+            // Keep real-clock catalogue queries comfortably inside the lease,
+            // and the clock offset below MongoDB heartbeat staleness limits.
+            const deadline = base + 8500;
             const clock = jest.spyOn(Date, 'now').mockReturnValue(issued);
             await db
                 .model<OfflineLease>('OfflineLease')
