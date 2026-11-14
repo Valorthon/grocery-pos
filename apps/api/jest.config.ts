@@ -17,7 +17,7 @@ const config: Config = {
     coverageReporters: ['text-summary', 'lcov'],
     // Ratchet (#28): raise when coverage rises; never lower.
     coverageThreshold: {
-        global: { statements: 97, branches: 85, functions: 96, lines: 97 },
+        global: { statements: 97, branches: 85.4, functions: 96, lines: 97 },
     },
     ...(process.env.CI ? {} : { maxWorkers: '25%' }),
 };
