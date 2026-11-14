@@ -27,6 +27,7 @@ import {
     blockOffline,
     getOrCreateOfflineState,
     pendingOffline,
+    queuedOffline,
     queueOffline,
     readOfflineState,
     removeOffline,
@@ -266,9 +267,8 @@ export const useOfflineStore = defineStore('offline', () => {
             }));
     }
     async function hasQueued(key: string): Promise<boolean> {
-        return (await pendingOffline(owner.value ?? '__none__')).some(
-            (e) => e.request.idempotencyKey === key,
-        );
+        const id = owner.value;
+        return id !== null && !!(await queuedOffline(id, key));
     }
     async function queue(
         body: SaleRequest,
@@ -277,9 +277,7 @@ export const useOfflineStore = defineStore('offline', () => {
         const gen = generation;
         const id = owner.value;
         if (!id) throw new Error('Log in again before selling.');
-        const existing = (await pendingOffline(id)).find(
-            (e) => e.request.idempotencyKey === body.idempotencyKey,
-        );
+        const existing = await queuedOffline(id, body.idempotencyKey);
         if (existing) {
             if (gen !== generation)
                 throw new Error(

@@ -121,18 +121,37 @@ export async function saveOfflineState(state: OfflineState): Promise<void> {
     tx.objectStore('state').put(state);
     await completed;
 }
+/** The compound primary key groups all string receipt keys under their owner. */
+const ownerRange = (owner: string): IDBKeyRange =>
+    IDBKeyRange.bound([owner], [owner, []], false, true);
+
+export async function queuedOffline(
+    owner: string,
+    key: string,
+): Promise<OfflinePendingSale | undefined> {
+    const db = await database();
+    return result(
+        db
+            .transaction('outbox')
+            .objectStore('outbox')
+            .get([owner, key]) as IDBRequest<OfflinePendingSale | undefined>,
+    );
+}
 export async function pendingOffline(
     owner?: string,
 ): Promise<OfflinePendingSale[]> {
     const db = await database();
     const entries = await result(
-        db.transaction('outbox').objectStore('outbox').getAll() as IDBRequest<
-            OfflinePendingSale[]
-        >,
+        db
+            .transaction('outbox')
+            .objectStore('outbox')
+            .getAll(
+                owner === undefined ? undefined : ownerRange(owner),
+            ) as IDBRequest<OfflinePendingSale[]>,
     );
-    return entries
-        .filter((entry) => !owner || entry.owner === owner)
-        .sort((a, b) => a.request.soldAt.localeCompare(b.request.soldAt));
+    return entries.sort((a, b) =>
+        a.request.soldAt.localeCompare(b.request.soldAt),
+    );
 }
 /** Atomic duplicate detection + durable cash receipt, before clearing any basket. */
 export async function queueOffline(
@@ -224,10 +243,10 @@ export async function suspendOffline(
             OfflineState | undefined
         >,
     );
-    const entries = await result(
-        tx.objectStore('outbox').getAll() as IDBRequest<OfflinePendingSale[]>,
+    const pendingCount = await result(
+        tx.objectStore('outbox').count(ownerRange(owner)),
     );
-    if (entries.some((entry) => entry.owner === owner)) {
+    if (pendingCount > 0) {
         tx.abort();
         await completed.catch(() => undefined);
         throw new Error(
