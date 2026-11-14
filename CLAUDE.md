@@ -1205,6 +1205,45 @@ on upstream fixes).
   evidence), and writes `SYSTEM.DATABASE_RESTORED`. Kept offline leases have
   no session, so their queued cash needs ADMIN reconciliation (#37).
 
+**Single-PC installer** (#362, `packaging/single-pc/installer/README.md`; owner decisions 2026-11-15)
+
+- `bundle.mjs` (vendor build machine, online) builds the offline bundle:
+  pinned `components.json` archives verified by SHA-256 (cache tampering
+  refused), mapped onto `releaseLayout` by `zip.mjs` (Caddy's LICENSE
+  shipped), API via `pnpm deploy --prod --legacy` hoisted (Windows x64
+  prebuilds only), client with `VITE_APP_ENV=single-pc`, tools, notices, a
+  per-file `bundle-manifest.json` and `SHA256SUMS`. It prints the
+  manifest's SHA-256, which the vendor records out of band; signing is
+  deferred. The store downloads nothing.
+- `Install.ps1 -ManifestSha256 <hash>` (PowerShell 5.1, elevated) refuses
+  another manifest, copies node\ and tools\ into a fresh admin-only
+  `%ProgramFiles%\Valorthon\GroceryPOS\installer-run-<guid>`, refuses
+  unlisted files, verifies there and runs `install.mjs` with its verified
+  manifest copy and hash (never the bundle's manifest; release files are
+  re-verified at the destination)
+  (install|repair|uninstall|handover-done) from the copy, never from the
+  bundle folder. Logic is in `plan.mjs` (pure) and `install.mjs`
+  (injectable context); no MSI/Inno tooling. Preflight refuses before any
+  write, including a foreign listener on our port during repair.
+- Services in order MongoDB → API → proxy under `NT SERVICE\<name>`
+  virtual accounts with the runtime README ACLs, SCM recovery 10/30/60 s.
+  Re-registration waits (bounded) until a deleted service is gone. Caddy's
+  root goes in the machine Root store. First ADMIN via the #361 command
+  into `%ProgramData%\Valorthon\GroceryPOS-Handover` (SYSTEM +
+  Administrators only), deleted only by `handover-done`. Daily backup task
+  as SYSTEM at 22:00 (`create --kind scheduled`, runs at next boot if
+  missed); weekly reminder Monday 09:00 for the logged-on user, pointing to
+  "Back up to USB drive". Shortcuts on the Public Desktop and common Start
+  menu: "Grocery POS" runs `Launch.ps1` (waits for `/v1/health/ready`,
+  then Chrome); "Back up to USB drive" runs `BackupToUsb.ps1` (UAC elevation, pick a drive the export accepts via `usb-drives.mjs` +
+  `removable.mjs`, USB disks/SSDs included, `create --kind manual` then
+  `export`, plain success/failure messages).
+- Install/repair keep the current release and the newest other one in
+  `releases\`; older, `*.damaged-*` and `*.partial` copies are deleted.
+  Uninstall removes services, tasks, shortcuts and releases only; data root,
+  secrets, TLS, backups, handover, CA trust (unless `-RemoveCaTrust`) and
+  Chrome profiles stay. Windows execution is unproven until #357/#366.
+
 **Store settings** (#47, owner decision 2026-11-05)
 
 - Currency remains PHP only; existing centavos are never relabelled as another currency.
