@@ -248,6 +248,157 @@ describe('Purchase orders page (#123)', () => {
         );
     });
 
+    it('ignores a low-stock cost answer after saving its draft (#336)', async () => {
+        usePurchaseOrderPrefillStore().prepare([
+            {
+                product: {
+                    _id: 'p1',
+                    name: 'soap',
+                    EAN: '1',
+                    reorderQuantity: 3,
+                },
+            },
+        ] as InventoryRow[]);
+        await mount();
+        await choose('Supplier', 's1');
+        const created = order(PurchaseOrderStatus.DRAFT);
+        created.lines[0]!.expectedCost = 0;
+        created.expectedTotal = 0;
+        api.post.mockResolvedValueOnce({ data: created });
+        await press('Save draft');
+        expect(api.post).toHaveBeenCalledWith('/purchase-orders', {
+            supplier: 's1',
+            lines: [{ product: 'p1', orderedQty: 3, expectedCost: 0 }],
+        });
+        costs({ data: [{ product: 'p1', lastCost: 1200 }] });
+        await flush();
+        expect(input('Expected unit cost (₱/pc) for soap').value).toBe('0.00');
+        expect(document.body.textContent).not.toContain(
+            'Save the draft before marking it as sent.',
+        );
+        const send = [...document.querySelectorAll('button')].find(
+            (b) => b.textContent?.trim() === 'Mark as sent',
+        )!;
+        expect(send.disabled).toBe(false);
+    });
+
+    it('ignores a low-stock cost answer while its draft save is pending (#336)', async () => {
+        usePurchaseOrderPrefillStore().prepare([
+            {
+                product: {
+                    _id: 'p1',
+                    name: 'soap',
+                    EAN: '1',
+                    reorderQuantity: 3,
+                },
+            },
+        ] as InventoryRow[]);
+        await mount();
+        await choose('Supplier', 's1');
+        let finishSave!: (value: { data: PurchaseOrderView }) => void;
+        api.post.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    finishSave = resolve;
+                }),
+        );
+        await press('Save draft');
+        costs({ data: [{ product: 'p1', lastCost: 1200 }] });
+        await flush();
+        expect(input('Expected unit cost (₱/pc) for soap').value).toBe('0.00');
+        const created = order(PurchaseOrderStatus.DRAFT);
+        created.lines[0]!.expectedCost = 0;
+        finishSave({ data: created });
+        await flush();
+        expect(input('Expected unit cost (₱/pc) for soap').value).toBe('0.00');
+    });
+
+    it('ignores a low-stock cost answer after opening another order (#336)', async () => {
+        usePurchaseOrderPrefillStore().prepare([
+            {
+                product: {
+                    _id: 'p1',
+                    name: 'soap',
+                    EAN: '1',
+                    reorderQuantity: 3,
+                },
+            },
+        ] as InventoryRow[]);
+        const another = order(PurchaseOrderStatus.DRAFT);
+        another._id = 'po2';
+        another.lines[0]!.expectedCost = 0;
+        const base = api.get.getMockImplementation()!;
+        api.get.mockImplementation((url: string): Promise<unknown> =>
+            url === '/purchase-orders'
+                ? Promise.resolve({ data: { data: [another], totalItems: 1 } })
+                : (base(url) as Promise<unknown>),
+        );
+        await mount();
+        await press('Back to list');
+        await press('Discard');
+        await press('Open');
+        costs({ data: [{ product: 'p1', lastCost: 1200 }] });
+        await flush();
+        expect(input('Expected unit cost (₱/pc) for soap').value).toBe('0.00');
+        expect(document.body.textContent).not.toContain(
+            'Save the draft before marking it as sent.',
+        );
+    });
+
+    it('keeps an explicitly edited cost even when it returns to zero (#336)', async () => {
+        usePurchaseOrderPrefillStore().prepare([
+            {
+                product: {
+                    _id: 'p1',
+                    name: 'soap',
+                    EAN: '1',
+                    reorderQuantity: 3,
+                },
+            },
+        ] as InventoryRow[]);
+        await mount();
+        const cost = input('Expected unit cost (₱/pc) for soap');
+        for (const value of ['5', '0.00']) {
+            cost.value = value;
+            cost.dispatchEvent(new Event('input'));
+            await flush();
+        }
+        costs({ data: [{ product: 'p1', lastCost: 1200 }] });
+        await flush();
+        expect(cost.value).toBe('0.00');
+    });
+
+    it('does not apply the old default to a replacement line for the same product (#336)', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            usePurchaseOrderPrefillStore().prepare([
+                {
+                    product: {
+                        _id: 'p9',
+                        name: 'milk',
+                        EAN: '4800000000099',
+                        unit: UnitOfMeasure.L,
+                        reorderQuantity: 1500,
+                    },
+                },
+            ] as InventoryRow[]);
+            await mount();
+            const originalCosts = costs;
+            document
+                .querySelector<HTMLButtonElement>('[aria-label="Remove milk"]')!
+                .click();
+            await flush();
+            await addMilk('1.5', '0.00');
+            originalCosts({ data: [{ product: 'p9', lastCost: 1200 }] });
+            await flush();
+            expect(input('Expected unit cost (₱/L) for milk').value).toBe(
+                '0.00',
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('opens an order from its row by click, Enter or Space (#234)', async () => {
         const receiveShown = () =>
             [...document.querySelectorAll('button')].some(
