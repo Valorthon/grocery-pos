@@ -7,6 +7,7 @@ import {
     IsNotEmpty,
     IsOptional,
     IsString,
+    IsUUID,
     Max,
     MaxLength,
     Min,
@@ -88,6 +89,18 @@ export class CloseShiftDto implements CloseShiftRequest {
 
 /** Body of `POST /shifts/current/drawer`. */
 export class DrawerMovementDto implements DrawerMovementRequest {
+    @IsMongoId()
+    @Transform(({ value }: { value: unknown }) =>
+        typeof value === 'string' ? value.trim().toLowerCase() : value,
+    )
+    shiftId!: string;
+
+    @IsUUID()
+    @Transform(({ value }: { value: unknown }) =>
+        typeof value === 'string' ? value.trim().toLowerCase() : value,
+    )
+    idempotencyKey!: string;
+
     @IsNotEmpty()
     @IsIn(CASHIER_DRAWER_MOVEMENTS)
     type!: CashierDrawerMovement;

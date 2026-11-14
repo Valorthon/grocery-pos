@@ -1,3 +1,4 @@
+import { drawerRequest } from './db-app';
 import * as argon from 'argon2';
 import { Types } from 'mongoose';
 import {
@@ -214,6 +215,7 @@ it('audits shift drawer and close operations once in their transactions', async 
     expect(
         (
             await db.call(who, 'POST', '/shifts/current/drawer', {
+                ...(await drawerRequest(db, who)),
                 type: 'CASH_IN',
                 amount: 100,
                 reason: 'audit in',
@@ -223,6 +225,7 @@ it('audits shift drawer and close operations once in their transactions', async 
     expect(
         (
             await db.call(who, 'POST', '/shifts/current/drawer', {
+                ...(await drawerRequest(db, who)),
                 type: 'CASH_DROP',
                 amount: 50,
                 reason: 'audit drop',
@@ -460,6 +463,7 @@ it('rolls back a drawer change if its audit cannot be recorded', async () => {
         .spyOn(db.app.get(AuditService), 'record')
         .mockRejectedValueOnce(new Error('audit unavailable'));
     const response = await db.call(who, 'POST', '/shifts/current/drawer', {
+        ...(await drawerRequest(db, who)),
         type: 'CASH_IN',
         amount: 100,
         reason: 'not committed',

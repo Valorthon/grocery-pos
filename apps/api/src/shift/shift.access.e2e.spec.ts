@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 /**
  * Who may do what with shifts, over real HTTP (issue #2). The real
  * ShiftController and ShiftService run behind the real guards, filter and
@@ -85,7 +86,13 @@ describe('Shift routes (e2e)', () => {
             [
                 'POST',
                 '/shifts/current/drawer',
-                { type: DrawerMovementType.CASH_IN, amount: 100, reason: 'x' },
+                {
+                    shiftId: new Types.ObjectId().toString(),
+                    idempotencyKey: randomUUID(),
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                },
             ],
             ['POST', '/shifts/current/close', { counts: FLOAT_COUNTS }],
             ['GET', '/shifts/last-closed'],
@@ -226,6 +233,12 @@ describe('Shift routes (e2e)', () => {
             const who = caller(Role.Seller);
             await open(who);
             await harness.call(who, 'POST', '/shifts/current/drawer', {
+                shiftId: String(
+                    shifts.rows.find(
+                        (row) => String(row.cashier) === who.userId,
+                    )!._id,
+                ),
+                idempotencyKey: randomUUID(),
                 type: DrawerMovementType.CASH_DROP,
                 amount: 30_000,
                 reason: 'to safe',
@@ -315,6 +328,42 @@ describe('Shift routes (e2e)', () => {
                 'a fractional amount',
                 { type: DrawerMovementType.CASH_IN, amount: 1.5, reason: 'x' },
             ],
+            [
+                'no retry key',
+                {
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                    idempotencyKey: undefined,
+                },
+            ],
+            [
+                'an invalid retry key',
+                {
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                    idempotencyKey: 'bad',
+                },
+            ],
+            [
+                'no original shift',
+                {
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                    shiftId: undefined,
+                },
+            ],
+            [
+                'an invalid original shift',
+                {
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                    shiftId: 'bad',
+                },
+            ],
         ])('refuses a drawer movement with %s', async (_, body) => {
             const who = caller(Role.Seller);
             await open(who);
@@ -323,7 +372,15 @@ describe('Shift routes (e2e)', () => {
                 who,
                 'POST',
                 '/shifts/current/drawer',
-                body,
+                {
+                    shiftId: String(
+                        shifts.rows.find(
+                            (row) => String(row.cashier) === who.userId,
+                        )!._id,
+                    ),
+                    idempotencyKey: randomUUID(),
+                    ...body,
+                },
             );
 
             expect(res.status).toBe(400);
@@ -387,7 +444,13 @@ describe('Shift routes (e2e)', () => {
                 admin,
                 'POST',
                 '/shifts/current/drawer',
-                { type: DrawerMovementType.CASH_IN, amount: 100, reason: 'x' },
+                {
+                    shiftId: new Types.ObjectId().toString(),
+                    idempotencyKey: randomUUID(),
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                },
             );
             const close = await harness.call(
                 admin,

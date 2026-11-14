@@ -117,6 +117,10 @@ export interface CloseShiftRequest {
 
 /** `POST /shifts/current/drawer`: a cash in or cash drop, in centavos. */
 export interface DrawerMovementRequest {
+    /** Bind the physical movement to its original drawer, including retries. */
+    shiftId: string;
+    /** UUID. Same shift/key/body replays; a changed body is a 409. */
+    idempotencyKey: string;
     type: CashierDrawerMovement;
     amount: number;
     reason: string;

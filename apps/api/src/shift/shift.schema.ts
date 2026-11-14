@@ -16,6 +16,13 @@ const centavos = (field: string) => ({
 /** Cash in, a cash drop, or a void/refund payout, on one shift's drawer. */
 @Schema({ _id: false })
 export class DrawerMovement {
+    /** Internal retry evidence; explicit view mappers never expose it. */
+    @Prop({ type: String })
+    idempotencyKey?: string;
+
+    @Prop({ type: String })
+    requestHash?: string;
+
     @Prop({
         required: true,
         enum: Object.values(DrawerMovementType),
