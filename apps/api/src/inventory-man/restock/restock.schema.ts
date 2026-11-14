@@ -27,7 +27,6 @@ export class Restock {
         type: mongoose.Schema.ObjectId,
         ref: User.name,
         required: true,
-        index: true,
     })
     restockedBy!: User | Types.ObjectId;
 
@@ -46,6 +45,10 @@ export class Restock {
 }
 
 export const RestockSchema = SchemaFactory.createForClass(Restock);
+// History pages and dashboard activity share descending date order (#339).
+RestockSchema.index({ createdAt: -1 });
+RestockSchema.index({ restockedBy: 1, createdAt: -1 });
+RestockSchema.index({ purchaseOrder: 1, createdAt: -1 });
 
 /** A restock read with `restockedBy` populated by name (null once deleted). */
 export type RestockRowDoc = Omit<Restock, 'restockedBy' | 'supplier'> & {
