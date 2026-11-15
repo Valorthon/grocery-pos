@@ -26,6 +26,15 @@
 // can exist there; running them on live data is exactly what #364 forbids.
 // LEGACY_NOT_APPLICABLE records that decision for the release manifest.
 
+import { APP_DATABASE } from '../runtime/layout.mjs';
+
+/** contracts DATA_VERSION_COLLECTION / DATA_VERSION_ID. */
+export const DATA_VERSION_COLLECTION = 'systemdataversion';
+export const DATA_VERSION_ID = 'data';
+/** One record per applied migration, in the app database (a restore of
+ *  the pre-upgrade backup takes it back with the data it describes). */
+export const MIGRATION_COLLECTION = 'systemmigrations';
+
 export const DATA_VERSION = 1;
 /** The oldest data version this release can upgrade from. */
 export const MIN_UPGRADE_FROM = 1;
@@ -90,4 +99,112 @@ export function dataCompatibility(
         })),
         legacyMigrationsNotApplicable: [...LEGACY_NOT_APPLICABLE],
     };
+}
+
+// ------------------------------------------------------------ runner
+
+export async function readDataVersion(root) {
+    const marker = await root
+        .db(APP_DATABASE)
+        .collection(DATA_VERSION_COLLECTION)
+        .findOne({ _id: DATA_VERSION_ID });
+    return {
+        dataVersion: marker ? marker.dataVersion : 1,
+        state: marker ? marker.state : 'ready',
+    };
+}
+
+export async function setMarker(root, fields, history) {
+    await root
+        .db(APP_DATABASE)
+        .collection(DATA_VERSION_COLLECTION)
+        .updateOne(
+            { _id: DATA_VERSION_ID },
+            {
+                $set: { ...fields, updatedAt: new Date() },
+                ...(history ? { $push: { history } } : {}),
+            },
+            { upsert: true },
+        );
+}
+
+/**
+ * Runs the pending migrations against the app database, recording each
+ * (`systemmigrations`) and the data version marker. Idempotent: a recorded
+ * migration is skipped, an interrupted one runs again from its start (the
+ * registry's contract), and the marker reaches `ready` only at the end.
+ */
+export async function runMigrations(
+    root,
+    plan,
+    { onDataChange, log = () => {} } = {},
+) {
+    const db = root.db(APP_DATABASE);
+    const records = db.collection(MIGRATION_COLLECTION);
+    const applied = [];
+    if (plan.migrations.length === 0 && plan.from === plan.to) return applied;
+    // On a resume, the highest version already reached (not the start).
+    let reached = plan.from;
+    for (const m of plan.migrations)
+        if (await records.findOne({ _id: m.id, state: 'done' }))
+            reached = Math.max(reached, m.to);
+    await setMarker(root, {
+        dataVersion: reached,
+        state: 'migrating',
+        target: plan.to,
+        release: plan.release,
+    });
+    for (const m of plan.migrations) {
+        const done = await records.findOne({ _id: m.id, state: 'done' });
+        if (done) {
+            log(`migrate: ${m.id} already applied`);
+            continue;
+        }
+        if (m.changesData !== false) await onDataChange?.(m);
+        await records.updateOne(
+            { _id: m.id },
+            {
+                $set: {
+                    from: m.from,
+                    to: m.to,
+                    state: 'running',
+                    startedAt: new Date(),
+                    release: plan.release,
+                },
+            },
+            { upsert: true },
+        );
+        const started = Date.now();
+        log(`migrate: ${m.id} (${m.from} → ${m.to})`);
+        await m.up(db, { log });
+        await records.updateOne(
+            { _id: m.id },
+            {
+                $set: {
+                    state: 'done',
+                    completedAt: new Date(),
+                    durationMs: Date.now() - started,
+                },
+            },
+        );
+        await setMarker(root, {
+            dataVersion: m.to,
+            state: 'migrating',
+            target: plan.to,
+            release: plan.release,
+        });
+        applied.push(m.id);
+    }
+    await setMarker(
+        root,
+        { dataVersion: plan.to, state: 'ready', release: plan.release },
+        {
+            from: plan.from,
+            to: plan.to,
+            release: plan.release,
+            at: new Date(),
+            migrations: plan.migrations.map((m) => m.id),
+        },
+    );
+    return applied;
 }

@@ -1283,9 +1283,21 @@ on upstream fixes).
   (restore.mjs, refuses later sales unless accepted). `repair` with
   another version is refused.
 - Stale tabs: the single-pc client sends `WIRE_VERSION` in
-  `x-wire-version`; another value is 409 `CLIENT_OUTDATED` before the body
-  is read, and the outbox keeps such receipts queued (not blocked). Bump
+  `x-wire-version` (refresh too). Another value, a duplicate or none
+  (no single-pc install predates #364) is 409 `CLIENT_OUTDATED` before the
+  body is read; health probes and CSP reports are exempt. The client shows
+  the owner-approved dialog ("Grocery POS was updated" / "Reload to
+  continue.", only Reload; `ClientOutdatedDialog`), keeping basket and
+  outbox; the outbox keeps such receipts queued (not blocked). Bump
   `WIRE_VERSION` on an incompatible wire change. Cloud sends no header.
+  The procedure still closes Chrome tabs before upgrading.
+- Backups record their data version; restore refuses newer, mid-migration
+  or below-floor data and migrates older data forward with the registry
+  (an upgrade rollback restores to the previous version, no migration).
+  Releases' verified manifests live in `state\releases\<version>.json`; a
+  rollback re-verifies the previous release against it and refuses,
+  leaving it in place, if it changed. No backup-gate override; pre-upgrade
+  backups keep the normal 30-day retention (owner decisions 2026-11-15).
 
 **Store settings** (#47, owner decision 2026-11-05)
 

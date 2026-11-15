@@ -58,6 +58,13 @@ $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Stop-Refused 'run Windows PowerShell as an administrator.'
 }
+# Mode-specific options are refused elsewhere, never silently ignored.
+if (($RestoreBackup -or $AcceptNewerSales) -and $Mode -ne 'upgrade-rollback') {
+    Stop-Refused '-RestoreBackup and -AcceptNewerSales only go with -Mode upgrade-rollback.'
+}
+if ($AcceptNewerSales -and -not $RestoreBackup) {
+    Stop-Refused '-AcceptNewerSales only goes with -RestoreBackup.'
+}
 
 $bundle = $PSScriptRoot
 $manifestPath = Join-Path $bundle 'bundle-manifest.json'

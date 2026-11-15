@@ -25,8 +25,10 @@ staging are unchanged.
 4. `-Mode upgrade-status` prints the journal (`state\upgrade.json`):
    stages done, the pre-upgrade backup id, migrations applied, timings.
 
-Browsers: the owner reloads open Grocery POS tabs after the upgrade (see
-"Stale browser tabs").
+Browsers: close every Grocery POS tab in Chrome before step 3 (after the
+registers show no pending offline cash), and open it again with the
+shortcut afterwards. A tab left open gets the reload dialog (see "Stale
+browser tabs").
 
 ## What the tool does
 
@@ -86,16 +88,42 @@ API's `node_modules`). The bundle manifest's `data` block
 
 A tab left open across an upgrade keeps the previous release's code in
 memory. The single-pc client sends contracts' `WIRE_VERSION` in
-`x-wire-version` on every API request; the single-pc API refuses another
-value with 409 `CLIENT_OUTDATED` ("Grocery POS was updated on this PC.
-Reload the page to continue.") before reading the body. The offline outbox
-treats that refusal as retryable: queued cash receipts stay in IndexedDB
-(never blocked, never deleted) and the reloaded page uploads them once.
-Navigation is network-first in the service worker, so a reload gets the new
-`index.html`; the new worker replaces the old shell cache when it
-activates. IndexedDB and localStorage are never cleared. A release that
-changes the wire contract incompatibly bumps `WIRE_VERSION`. The cloud
-client sends no new header.
+`x-wire-version` on every API request, refresh included. The single-pc API
+refuses any other value, a duplicated header or none at all (no single-pc
+installation predates #364) with 409 `CLIENT_OUTDATED` before reading the
+body; only health probes and the browser's CSP reports are exempt. The
+client then shows a dialog (owner decision 2026-11-15): "Grocery POS was
+updated" / "Reload to continue." with a single Reload button (no Cancel,
+Escape does nothing). The reload keeps the basket (localStorage) and every
+queued offline cash sale (IndexedDB): the outbox treats `CLIENT_OUTDATED`
+as retry-later, never blocked or deleted, and the reloaded page uploads it
+once. Navigation is network-first in the service worker, so a reload gets
+the new `index.html`; the new worker replaces the old shell cache when it
+activates. A release that changes the wire contract incompatibly bumps
+`WIRE_VERSION`. The cloud client sends no new header. Closing tabs before
+an upgrade is still the procedure (checklist B9/B10).
+
+## Restoring a backup after an upgrade
+
+Backups record their data version (`versions.data`; none recorded means 1).
+`restore.mjs` refuses a backup with newer data than the release restoring
+it, one taken while an upgrade was migrating, or one below the release's
+upgrade floor. A backup with older data is restored and then taken forward
+with the release's own migrations (the same runner and records as an
+upgrade), so its API can start; the restore summary lists them. An upgrade
+rollback (`--restore-backup`) restores to the previous release's version
+and never migrates.
+
+## The previous release
+
+Every install, repair and upgrade records the placed release's verified
+manifest in `state\releases\<version>.json`. Preflight refuses an upgrade
+when the installed release does not match its record, and a rollback
+re-verifies the previous release against it before touching any service:
+if it changed (a stray file, an antivirus quarantine), the rollback is
+refused and the release is left where it is (never moved aside; there is
+no copy to restore it from). Fix it (repair from its own bundle) or finish
+the upgrade.
 
 ## Verification
 
@@ -103,6 +131,11 @@ Portable (`pnpm test:single-pc-proof`, `upgrade.test.mjs`): registry rules,
 every preflight refusal, recovery plan, arguments, the manifest's data block
 and shipped tools, repair refusing another version, Install.ps1 modes
 (static).
+
+Also: a damaged installed release refused at preflight, damaged during an
+upgrade with the rollback refusing and leaving it in place, then rolled
+back once fixed; an older-data backup restored after an upgrade and
+migrated forward (its API starts), and a newer-data backup refused.
 
 Real MongoDB on Linux (`pnpm test:single-pc-upgrade`, needs
 `GPOS_TEST_MONGOD`, `GPOS_TEST_MONGO_TOOLS` and a built API): a populated

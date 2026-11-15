@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WIRE_VERSION, WIRE_VERSION_HEADER } from '@grocery-pos/contracts';
+import {
+    ErrorCode,
+    WIRE_VERSION,
+    WIRE_VERSION_HEADER,
+} from '@grocery-pos/contracts';
 import axios, {
     AxiosError,
     AxiosHeaders,
@@ -48,8 +52,47 @@ describe('single-pc API base (#358)', () => {
         expect(post).toHaveBeenCalledWith(
             '/v1/auth/refresh',
             {},
-            expect.objectContaining({ withCredentials: true }),
+            expect.objectContaining({
+                withCredentials: true,
+                headers: { [WIRE_VERSION_HEADER]: String(WIRE_VERSION) },
+            }),
         );
+    });
+
+    it('opens the reload dialog when the upgraded API refuses this build', async () => {
+        const { clientOutdated } = await import('./utils/client-outdated');
+        clientOutdated.value = false;
+        const adapter = api.defaults.adapter;
+        api.defaults.adapter = (config) =>
+            Promise.reject(
+                new AxiosError(
+                    '409',
+                    AxiosError.ERR_BAD_REQUEST,
+                    config,
+                    null,
+                    {
+                        status: 409,
+                        statusText: '409',
+                        data: {
+                            statusCode: 409,
+                            error: ErrorCode.CLIENT_OUTDATED,
+                            message:
+                                'Grocery POS was updated. Reload to continue.',
+                        },
+                        headers: new AxiosHeaders(),
+                        config,
+                    },
+                ),
+            );
+        try {
+            await expect(api.get('/settings/today')).rejects.toBeInstanceOf(
+                AxiosError,
+            );
+            expect(clientOutdated.value).toBe(true);
+        } finally {
+            api.defaults.adapter = adapter;
+            clientOutdated.value = false;
+        }
     });
 
     it('clears the session marker host-only when the session is over', async () => {

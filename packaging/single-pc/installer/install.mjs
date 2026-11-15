@@ -185,7 +185,12 @@ export async function readBundle(
     const releaseBytes = Object.keys(manifest.files).length
         ? await sizeOf(join(dir, 'release'))
         : 0;
-    return { dir, manifest, releaseBytes };
+    return {
+        dir,
+        manifest,
+        releaseBytes,
+        manifestSha256: String(manifestSha256).toLowerCase(),
+    };
 }
 
 async function sizeOf(dir) {
@@ -213,6 +218,13 @@ export async function placeRelease(bundle, releasesDir, log, now = new Date()) {
         if (!problems.length) {
             log(`release: ${bundle.manifest.version} already in place`);
             return target;
+        }
+        // An installed release re-registered by a rollback (#364) has no
+        // source to copy from: refuse and leave it exactly where it is.
+        if (bundle.installed) {
+            throw new RefusedError(
+                `The installed release ${bundle.manifest.version} no longer matches its recorded manifest (${problems.slice(0, 3).join('; ')}); it was left in place.`,
+            );
         }
         const aside = `${target}.damaged-${now.getTime()}`;
         log(
@@ -268,6 +280,41 @@ async function writeState(paths, state) {
         mode: 0o600,
     });
     await rename(`${path}.tmp`, path);
+}
+
+/** state\releases\<version>.json: a placed release's verified manifest. */
+export function releaseRecordPath(paths, version) {
+    return join(paths.dirs.state, 'releases', `${version}.json`);
+}
+
+async function writeReleaseRecord(paths, bundle) {
+    const path = releaseRecordPath(paths, bundle.manifest.version);
+    await mkdir(dirname(path), { recursive: true });
+    const record = {
+        version: bundle.manifest.version,
+        manifestSha256: bundle.manifestSha256 ?? null,
+        data: bundle.manifest.data ?? null,
+        files: Object.fromEntries(
+            Object.entries(bundle.manifest.files).filter(([f]) =>
+                f.startsWith('release/'),
+            ),
+        ),
+    };
+    await writeFile(`${path}.tmp`, JSON.stringify(record) + '\n', {
+        mode: 0o600,
+    });
+    await rename(`${path}.tmp`, path);
+}
+
+/** The recorded manifest of an installed release, or undefined. */
+export async function readReleaseRecord(paths, version) {
+    try {
+        return JSON.parse(
+            await readFile(releaseRecordPath(paths, version), 'utf8'),
+        );
+    } catch {
+        return undefined;
+    }
 }
 
 // ------------------------------------------------------------ steps
@@ -418,6 +465,10 @@ async function installOrRepair(options, ctx, log) {
                 ? { storeTimezone: options.storeTimezone }
                 : {}),
         });
+        // The release's own verified manifest, kept for later rollbacks
+        // (#364): an upgrade re-verifies the previous release against it.
+        // After provisioning, so the data root is already ours.
+        if (!bundle.installed) await writeReleaseRecord(paths, bundle);
         await done('release');
         await done('provision');
 
@@ -562,6 +613,9 @@ async function installOrRepair(options, ctx, log) {
         for (const name of releasesToPrune(entries, bundle.manifest.version)) {
             await rm(join(loc.releasesDir, name), {
                 recursive: true,
+                force: true,
+            });
+            await rm(releaseRecordPath(layout(loc.dataRoot), name), {
                 force: true,
             });
             log(`release: removed old ${name}`);

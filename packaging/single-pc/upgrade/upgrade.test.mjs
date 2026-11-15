@@ -383,4 +383,43 @@ test('Install.ps1 runs the bundle-verified upgrade tool for the upgrade modes', 
     assert.match(ps, /\$Mode -eq 'upgrade'\) \{\s*\n\s*# The manifest bytes/);
     // Still no download or execution from the bundle folder.
     assert.doesNotMatch(ps, /Invoke-WebRequest|Start-BitsTransfer|iex\b/i);
+    // Restore options only go with upgrade-rollback.
+    assert.match(
+        ps,
+        /\(\$RestoreBackup -or \$AcceptNewerSales\) -and \$Mode -ne 'upgrade-rollback'[\s\S]*?Stop-Refused/,
+    );
+    assert.match(ps, /\$AcceptNewerSales -and -not \$RestoreBackup/);
+});
+
+test('a restore checks the backup data version against the release', async () => {
+    const { compatibility } = await import('../backup/backup.mjs');
+    const manifest = (data, dataState) => ({
+        schema: 1,
+        versions: { mongodb: '7.0.48', app: '1.0.0', data, dataState },
+    });
+    const target = {
+        mongodb: '7.0.48',
+        app: '1.0.0',
+        dataVersion: 2,
+        minDataVersion: 1,
+    };
+    assert.deepEqual(compatibility(manifest(2, 'ready'), target), []);
+    // Older data is migrated forward by restore.mjs; pre-#364 backups are 1.
+    assert.deepEqual(compatibility(manifest(1, 'ready'), target), []);
+    assert.deepEqual(compatibility(manifest(), target), []);
+    assert.match(
+        compatibility(manifest(3, 'ready'), target).join(),
+        /data version 3, newer than this release's 2/,
+    );
+    assert.match(
+        compatibility(manifest(2, 'migrating'), target).join(),
+        /while an upgrade was migrating/,
+    );
+    assert.match(
+        compatibility(manifest(1, 'ready'), {
+            ...target,
+            minDataVersion: 2,
+        }).join(),
+        /migrates from 2 only/,
+    );
 });

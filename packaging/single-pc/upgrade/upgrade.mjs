@@ -42,8 +42,9 @@ import {
     statusSummary,
 } from '../backup/backup.mjs';
 import { lossChecks, restore } from '../backup/restore.mjs';
-import { hashTree } from '../installer/bundle.mjs';
+import { verifyTree } from '../installer/bundle.mjs';
 import {
+    readReleaseRecord,
     placeRelease,
     readBundle,
     runInstaller,
@@ -55,7 +56,21 @@ import {
     MIGRATIONS,
     pendingMigrations,
     validateRegistry,
+    DATA_VERSION_COLLECTION,
+    DATA_VERSION_ID,
+    MIGRATION_COLLECTION,
+    readDataVersion,
+    runMigrations,
+    setMarker,
 } from './migrations.mjs';
+
+export {
+    DATA_VERSION_COLLECTION,
+    DATA_VERSION_ID,
+    MIGRATION_COLLECTION,
+    readDataVersion,
+    runMigrations,
+};
 
 export const EXIT = { OK: 0, FAILED: 1, USAGE: 2, REFUSED: 3 };
 export const JOURNAL_SCHEMA = 1;
@@ -69,12 +84,6 @@ export const STAGES = Object.freeze([
     'switch',
     'ready',
 ]);
-/** contracts DATA_VERSION_COLLECTION / DATA_VERSION_ID. */
-export const DATA_VERSION_COLLECTION = 'systemdataversion';
-export const DATA_VERSION_ID = 'data';
-/** One record per applied migration, in the app database (a restore of
- *  the pre-upgrade backup takes it back with the data it describes). */
-export const MIGRATION_COLLECTION = 'systemmigrations';
 /** Diagnostics checks that must be OK before an upgrade counts as done. */
 export const READINESS_CHECKS = Object.freeze([
     'versions',
@@ -310,17 +319,6 @@ async function withRoot(paths, apiDir, fn) {
     }
 }
 
-export async function readDataVersion(root) {
-    const marker = await root
-        .db(APP_DATABASE)
-        .collection(DATA_VERSION_COLLECTION)
-        .findOne({ _id: DATA_VERSION_ID });
-    return {
-        dataVersion: marker ? marker.dataVersion : 1,
-        state: marker ? marker.state : 'ready',
-    };
-}
-
 async function databaseFacts(root) {
     const fcv = await root
         .db('admin')
@@ -331,102 +329,16 @@ async function databaseFacts(root) {
     };
 }
 
-async function setMarker(root, fields, history) {
-    await root
-        .db(APP_DATABASE)
-        .collection(DATA_VERSION_COLLECTION)
-        .updateOne(
-            { _id: DATA_VERSION_ID },
-            {
-                $set: { ...fields, updatedAt: new Date() },
-                ...(history ? { $push: { history } } : {}),
-            },
-            { upsert: true },
-        );
-}
-
-/**
- * Runs the pending migrations against the app database, recording each
- * (`systemmigrations`) and the data version marker. Idempotent: a recorded
- * migration is skipped, an interrupted one runs again from its start (the
- * registry's contract), and the marker reaches `ready` only at the end.
- */
-export async function runMigrations(
-    root,
-    plan,
-    { onDataChange, log = () => {} } = {},
-) {
-    const db = root.db(APP_DATABASE);
-    const records = db.collection(MIGRATION_COLLECTION);
-    const applied = [];
-    if (plan.migrations.length === 0 && plan.from === plan.to) return applied;
-    await setMarker(root, {
-        dataVersion: plan.from,
-        state: 'migrating',
-        target: plan.to,
-        release: plan.release,
-    });
-    for (const m of plan.migrations) {
-        const done = await records.findOne({ _id: m.id, state: 'done' });
-        if (done) {
-            log(`migrate: ${m.id} already applied`);
-            continue;
-        }
-        if (m.changesData !== false) await onDataChange?.(m);
-        await records.updateOne(
-            { _id: m.id },
-            {
-                $set: {
-                    from: m.from,
-                    to: m.to,
-                    state: 'running',
-                    startedAt: new Date(),
-                    release: plan.release,
-                },
-            },
-            { upsert: true },
-        );
-        const started = Date.now();
-        log(`migrate: ${m.id} (${m.from} → ${m.to})`);
-        await m.up(db, { log });
-        await records.updateOne(
-            { _id: m.id },
-            {
-                $set: {
-                    state: 'done',
-                    completedAt: new Date(),
-                    durationMs: Date.now() - started,
-                },
-            },
-        );
-        await setMarker(root, {
-            dataVersion: m.to,
-            state: 'migrating',
-            target: plan.to,
-            release: plan.release,
-        });
-        applied.push(m.id);
-    }
-    await setMarker(
-        root,
-        { dataVersion: plan.to, state: 'ready', release: plan.release },
-        {
-            from: plan.from,
-            to: plan.to,
-            release: plan.release,
-            at: new Date(),
-            migrations: plan.migrations.map((m) => m.id),
-        },
-    );
-    return applied;
-}
-
 // ------------------------------------------------------------ the run
 
 /** The previous release as a bundle the installer re-registers (rollback). */
 function previousBundle(journal) {
     return {
-        dir: dirname(journal.from.release),
+        // Already installed: placeRelease only re-verifies it, and refuses
+        // (leaving it in place) if it changed; there is nothing to copy.
+        installed: true,
+        dir: journal.from.release,
+        manifestSha256: journal.from.manifestSha256,
         manifest: {
             version: journal.from.version,
             files: journal.from.files,
@@ -457,6 +369,17 @@ function describe(info, version) {
 }
 
 async function binaryRollback(paths, journal, ctx, log) {
+    // Before any service is touched: the previous release must still be
+    // exactly its recorded manifest.
+    const damaged = await verifyTree(
+        journal.from.release,
+        journal.from.files,
+        'release/',
+    );
+    if (damaged.length)
+        throw new RefusedError(
+            `The previous release ${journal.from.version} no longer matches its recorded manifest (${damaged.slice(0, 3).join('; ')}); it was left in place. Re-run the upgrade to finish it, or repair ${journal.from.version} from its bundle.`,
+        );
     if (journal.markerTouched && !journal.dataChanged) {
         // Only steps that changed no data ran (or none yet): the previous
         // release's data version is still right, and its API's gate needs
@@ -572,6 +495,23 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                     'An interrupted restore must be finished first.',
                 );
             const fromInfo = await releaseInfo(state.release);
+            // The installed release must match its own recorded manifest:
+            // it is what a rollback re-registers (never a copy of whatever
+            // happens to be on disk now).
+            const record = await readReleaseRecord(paths, state.version);
+            if (!record?.files)
+                throw new RefusedError(
+                    `The installed release ${state.version} has no recorded manifest; run a repair with its bundle first.`,
+                );
+            const damaged = await verifyTree(
+                state.release,
+                record.files,
+                'release/',
+            );
+            if (damaged.length)
+                throw new RefusedError(
+                    `The installed release ${state.version} does not match its recorded manifest (${damaged.slice(0, 3).join('; ')}); repair it with its bundle before upgrading.`,
+                );
             const from = describe(fromInfo, state.version);
             const apiDir = ctx.apiDir(state.release);
             const db = await withRoot(paths, apiDir, async (root) => ({
@@ -610,11 +550,8 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                     dataVersion: from.data.dataVersion,
                     dataInfo: fromInfo.data ?? null,
                     // Re-verified before a binary rollback re-registers it.
-                    files: Object.fromEntries(
-                        Object.entries(await hashTree(state.release)).map(
-                            ([k, v]) => [`release/${k}`, v],
-                        ),
-                    ),
+                    files: record.files,
+                    manifestSha256: record.manifestSha256,
                 },
                 to: {
                     version: to.version,
@@ -900,6 +837,10 @@ export async function runRollback(options, ctx, log = () => {}) {
                     confirm: options.restoreBackup,
                     ...bin,
                     acceptNewerSales: options.acceptNewerSales === true,
+                    // Back to the previous release's data version, never forward.
+                    dataVersion: journal.from.dataVersion,
+                    minDataVersion: journal.from.dataVersion,
+                    migrations: [],
                 },
                 (l) => log(`  ${l}`),
             );

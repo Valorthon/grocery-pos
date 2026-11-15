@@ -87,7 +87,10 @@ describe('localAccessMiddleware', () => {
     it('calls next() plainly for the proxy host', () => {
         const next = jest.fn();
         localAccessMiddleware(FRONTEND)(
-            req({ host: 'localhost:1443' }),
+            req({
+                host: 'localhost:1443',
+                [WIRE_VERSION_HEADER]: String(WIRE_VERSION),
+            }),
             res,
             next,
         );
@@ -99,22 +102,58 @@ describe('stale clients after an upgrade (#364)', () => {
     const res = {} as Response;
     const host = { host: 'localhost:1443' };
 
-    it('passes the current wire version and requests without the header', () => {
+    it('passes only the current wire version', () => {
         expect(
             isOutdatedClient(
                 req({ ...host, [WIRE_VERSION_HEADER]: String(WIRE_VERSION) }),
             ),
         ).toBe(false);
-        expect(isOutdatedClient(req(host))).toBe(false);
+        // No single-pc client predates the header: missing is outdated.
+        expect(isOutdatedClient(req(host))).toBe(true);
+        // A duplicated header (Node gives an array or a joined value).
+        const twice = req(host);
+        (twice.headers as Record<string, unknown>)[WIRE_VERSION_HEADER] = [
+            String(WIRE_VERSION),
+            String(WIRE_VERSION),
+        ];
+        expect(isOutdatedClient(twice)).toBe(true);
+        expect(
+            isOutdatedClient(
+                req({
+                    ...host,
+                    [WIRE_VERSION_HEADER]: `${WIRE_VERSION}, ${WIRE_VERSION}`,
+                }),
+            ),
+        ).toBe(true);
     });
 
-    it.each(['0', String(WIRE_VERSION + 1), '', 'x'])(
+    it('exempts health probes and the browser CSP reports', () => {
+        expect(isOutdatedClient(req(host, 'GET', '/v1/health/ready'))).toBe(
+            false,
+        );
+        expect(isOutdatedClient(req(host, 'HEAD', '/v1/health/live'))).toBe(
+            false,
+        );
+        expect(isOutdatedClient(req(host, 'POST', '/v1/csp-report'))).toBe(
+            false,
+        );
+        expect(isOutdatedClient(req(host, 'POST', '/v1/health/ready'))).toBe(
+            true,
+        );
+        expect(isOutdatedClient(req(host, 'POST', '/v1/offline/sync'))).toBe(
+            true,
+        );
+    });
+
+    it.each(['0', String(WIRE_VERSION + 1), '', 'x', undefined])(
         'refuses wire version %j with 409 CLIENT_OUTDATED before the body',
         (sent) => {
             const next = jest.fn();
             localAccessMiddleware(FRONTEND)(
                 req(
-                    { ...host, [WIRE_VERSION_HEADER]: sent },
+                    sent === undefined
+                        ? host
+                        : { ...host, [WIRE_VERSION_HEADER]: sent },
                     'POST',
                     '/v1/offline/sync',
                 ),

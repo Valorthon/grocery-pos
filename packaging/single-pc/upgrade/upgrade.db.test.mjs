@@ -17,6 +17,7 @@ import { afterEach, describe, test } from 'node:test';
 import { boundedWait } from '../proof/policy.mjs';
 import { SERVICES, layout } from '../runtime/layout.mjs';
 import { createBackup, readRootPassword, rootUri } from '../backup/backup.mjs';
+import { restore } from '../backup/restore.mjs';
 import { runInstaller } from '../installer/install.mjs';
 import {
     readJournal,
@@ -476,6 +477,109 @@ await runUpgrade(${JSON.stringify(b)}, ctx);
             dataVersion: 1,
             state: 'ready',
         });
+    });
+
+    test('a damaged installed release is refused before the upgrade; damaged during it, the rollback refuses and leaves it in place', async () => {
+        const { b, ctx, paths } = await installation({
+            fault: async (stage, when) => {
+                if (stage === 'place' && when === 'before') {
+                    // Damage the previous release after preflight (e.g. AV).
+                    await writeFile(
+                        join(ctx.locations.releasesDir, '1.0.0-a', 'stray.txt'),
+                        'x',
+                    );
+                    throw new Error('copy failed');
+                }
+            },
+        });
+        const oldRelease = join(ctx.locations.releasesDir, '1.0.0-a');
+        const main = join(oldRelease, 'api', 'dist', 'main.js');
+        const original = await readFile(main, 'utf8');
+        // Before: the installed release must match its own recorded manifest.
+        await writeFile(main, original + '\n// tampered');
+        const saved = ctx.fault;
+        ctx.fault = undefined;
+        await assert.rejects(
+            runUpgrade(b, ctx),
+            (e) =>
+                e.name === 'RefusedError' &&
+                /does not match its recorded manifest/.test(e.message),
+        );
+        assert.equal(await readJournal(paths), undefined);
+        await writeFile(main, original);
+        ctx.fault = saved;
+        // During: the rollback refuses without moving the release aside.
+        await assert.rejects(
+            runUpgrade(b, ctx),
+            /copy failed.*Rolling back also failed.*no longer matches its recorded manifest.*left in place/s,
+        );
+        assert.equal((await readJournal(paths)).state, 'rollback-failed');
+        assert.deepEqual((await readdir(ctx.locations.releasesDir)).sort(), [
+            '1.0.0-a',
+        ]);
+        assert.equal(await readFile(main, 'utf8'), original);
+        // Once the stray file is gone, the rollback completes.
+        await rm(join(oldRelease, 'stray.txt'));
+        assert.equal((await runRollback({}, ctx)).state, 'rolled-back');
+        assert.equal(await health(), 200);
+    });
+
+    test('restoring an older-data backup migrates it forward; a newer-data backup is refused', async () => {
+        const { b, ctx, paths } = await installation();
+        const old = (
+            await readdir(paths.dirs.backups, { withFileTypes: true })
+        ).find((e) => e.isDirectory() && /-scheduled-/.test(e.name)).name;
+        assert.equal((await runUpgrade(b, ctx)).state, 'complete');
+        const newer = await createBackup({
+            dataRoot: paths.root,
+            mongod: MONGOD,
+            tools: TOOLS,
+            api: repoApi,
+            kind: 'manual',
+        });
+        await ctx.stopService(SERVICES.api);
+        const bin = { mongod: MONGOD, tools: TOOLS, api: repoApi };
+        // This release (data version 2) restoring last week's v1 backup.
+        const result = await restore(
+            {
+                dataRoot: paths.root,
+                from: join(paths.dirs.backups, old),
+                confirm: old,
+                ...bin,
+                dataVersion: 2,
+                migrations: testMigrations(),
+                acceptNewerSales: true,
+            },
+            () => {},
+        );
+        assert.deepEqual(result.migrated, ['test-flag-sales']);
+        assert.deepEqual(await snapshot(paths), {
+            sales: SALES,
+            migrated: SALES,
+            marker: { dataVersion: 2, state: 'ready' },
+            migrations: ['test-flag-sales:done'],
+        });
+        await ctx.startService(SERVICES.api);
+        await ctx.waitReady(SERVICES.api);
+        assert.equal(await health(), 200);
+        await ctx.stopService(SERVICES.api);
+        // A release of data version 1 cannot run the v2 backup.
+        await assert.rejects(
+            restore(
+                {
+                    dataRoot: paths.root,
+                    from: join(paths.dirs.backups, newer.backupId),
+                    confirm: newer.backupId,
+                    ...bin,
+                    dataVersion: 1,
+                    migrations: [],
+                },
+                () => {},
+            ),
+            (e) =>
+                e.name === 'RefusedError' &&
+                /data version 2, newer than this release's 1/.test(e.message),
+        );
     });
 
     test('the real compiled API refuses to start on another data version', async () => {

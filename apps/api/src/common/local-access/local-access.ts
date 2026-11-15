@@ -48,20 +48,30 @@ export function localAccessCheck(frontendUrl: string): LocalAccessCheck {
 }
 
 export const CLIENT_OUTDATED_MESSAGE =
-    'Grocery POS was updated on this PC. Reload the page to continue.';
+    'Grocery POS was updated. Reload to continue.';
+
+/**
+ * Requests that are not a client build's: the browser's own CSP reports
+ * (sent without our headers). Health probes are exempt separately.
+ */
+function isCspReport(req: Request): boolean {
+    return (
+        req.method === 'POST' &&
+        /^\/v1\/csp-report(\/|$|\?)/.test(req.originalUrl ?? req.url)
+    );
+}
 
 /**
  * A stale browser tab after an upgrade (#364): the single-pc client sends
- * its build's `WIRE_VERSION` in `WIRE_VERSION_HEADER`; a different value is
- * refused. A request without the header (local tools, health probes, the
- * browser's own CSP reports) is not a client build and passes.
+ * its build's `WIRE_VERSION` in `WIRE_VERSION_HEADER`. A different value,
+ * a duplicated header or none at all is refused: every single-pc client
+ * sends it (no single-pc installation predates #364), so a missing header
+ * is an older build. Health probes and CSP reports are exempt.
  */
 export function isOutdatedClient(req: Request): boolean {
+    if (isHealthProbe(req) || isCspReport(req)) return false;
     const sent = req.headers[WIRE_VERSION_HEADER];
-    if (sent === undefined) return false;
-    return (
-        (Array.isArray(sent) ? sent.join(',') : sent) !== String(WIRE_VERSION)
-    );
+    return sent !== String(WIRE_VERSION);
 }
 
 /**
@@ -75,7 +85,7 @@ export function localAccessMiddleware(frontendUrl: string): RequestHandler {
     return (req: Request, _res: Response, next: NextFunction) => {
         const refusal = check(req);
         if (refusal) return next(new ForbiddenException(refusal));
-        if (!isHealthProbe(req) && isOutdatedClient(req))
+        if (isOutdatedClient(req))
             return next(
                 new ConflictError(
                     ErrorCode.CLIENT_OUTDATED,
