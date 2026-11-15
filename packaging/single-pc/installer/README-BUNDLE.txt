@@ -17,5 +17,6 @@ Vendor use only. Nothing is downloaded at the store.
 
 Uninstall keeps the data (C:\ProgramData\Valorthon\GroceryPOS), backups,
 secrets, the local certificate and every Chrome profile. See
-packaging/single-pc/installer/README.md in the source for details, and
-release\notices\ for licenses and source locations.
+packaging/single-pc/operations/INSTALL.md in the source for the full
+procedure (installer/README.md for details), release\help\HANDOVER.md for the
+owner's guide, and release\notices\ for licenses and source locations.

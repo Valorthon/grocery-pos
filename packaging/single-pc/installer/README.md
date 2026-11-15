@@ -52,7 +52,8 @@ node packaging/single-pc/installer/bundle.mjs --out <new folder> [--cache <dir>]
    linker (real folders, no symlinks), plus `apps/api/dist`. Native addons
    must be Windows x64 prebuilds (argon2); other platforms' prebuilds are
    removed.
-4. The packaging scripts (no tests), `Caddyfile`, `notices\COMPONENTS.md`
+4. The packaging scripts (no tests), `Caddyfile`, `help\RECOVERY.md`,
+   `help\HANDOVER.md` (the owner guide, #366), `notices\COMPONENTS.md`
    (versions, licenses, sources, archive hashes, the MongoDB SSPL source
    location), `api-dependencies.json`, `client-dependencies.json` and
    `VERSION.json` are added.
@@ -250,7 +251,7 @@ handover folder's ACL (a standard user is denied); interrupted install
 (power off during provisioning and during copy); repair; uninstall and
 reinstall keeping records and settings; and no LAN listener
 (`Get-NetTCPConnection`, a second PC). Record them with the
-[../proof/ACCEPTANCE-CHECKLIST.md](../proof/ACCEPTANCE-CHECKLIST.md) terms.
+[../acceptance/RUNBOOK.md](../acceptance/RUNBOOK.md) terms.
 
 Known gaps: mongod's 60 s stop wait (the runtime README) is not configurable
 through `sc`; Windows' service stop wait applies until #366 measures it.

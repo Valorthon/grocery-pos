@@ -196,5 +196,5 @@ boot before login, graceful stop and restart policy, mongod Windows service
 shutdown, actual listeners (`Get-NetTCPConnection`), `node --env-file` with
 Windows paths, Caddy's TLS state under `tls\`, and recovery after an
 interrupted run on NTFS. Record them in
-[../proof/ACCEPTANCE-CHECKLIST.md](../proof/ACCEPTANCE-CHECKLIST.md) terms on
+[../acceptance/RUNBOOK.md](../acceptance/RUNBOOK.md) terms on
 an eligible Windows 11 x64 target (#357/#366).
