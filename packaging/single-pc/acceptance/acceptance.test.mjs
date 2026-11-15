@@ -102,21 +102,22 @@ test('services: running, automatic, virtual account, dependency order', () => {
     ]);
 });
 
-test('handover ACL: only SYSTEM and Administrators, nothing inherited', () => {
-    assert.equal(
-        evaluateHandoverAcl(
-            HANDOVER_ACL,
-            'C:\\ProgramData\\Valorthon\\GroceryPOS-Handover',
-        ).status,
-        'pass',
-    );
-    const inherited = evaluateHandoverAcl(
-        `${HANDOVER_ACL.split('\n')[0]}\n   BUILTIN\\Users:(I)(RX)\n`,
-        'C:\\ProgramData\\Valorthon\\GroceryPOS-Handover',
-    );
+test('handover ACL uses well-known SIDs regardless of localized account names', () => {
+    const rules = [
+        { Sid: 'S-1-5-18', Name: 'NT-AUTORITÄT\\SYSTEM', Inherited: false },
+        {
+            Sid: 'S-1-5-32-544',
+            Name: 'BUILTIN\\Administratoren',
+            Inherited: false,
+        },
+    ];
+    assert.equal(evaluateHandoverAcl({ Rules: rules }).status, 'pass');
+    const inherited = evaluateHandoverAcl({
+        Rules: [...rules, { Sid: 'S-1-5-32-545', Inherited: true }],
+    });
     assert.equal(inherited.status, 'fail');
     assert.equal(inherited.problems.length, 2);
-    assert.equal(evaluateHandoverAcl('').status, 'fail');
+    assert.equal(evaluateHandoverAcl({}).status, 'fail');
 });
 
 test('upgrade window: 30 minutes from the journal', () => {
@@ -214,6 +215,15 @@ function fakeContext(overrides = {}) {
             if (joined.includes('Get-NetTCPConnection'))
                 return out(JSON.stringify(GOOD_LISTENERS));
             if (joined.includes('Invoke-WebRequest')) return out('200\r\n');
+            if (joined.includes('Get-Acl'))
+                return out(
+                    JSON.stringify({
+                        Rules: [
+                            { Sid: 'S-1-5-18', Inherited: false },
+                            { Sid: 'S-1-5-32-544', Inherited: false },
+                        ],
+                    }),
+                );
             if (cmd === 'icacls')
                 return out(
                     HANDOVER_ACL.replace(

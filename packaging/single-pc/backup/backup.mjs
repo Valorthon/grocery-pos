@@ -17,7 +17,6 @@ import { createReadStream } from 'node:fs';
 import {
     chmod,
     copyFile,
-    lstat,
     mkdir,
     readdir,
     readFile,
@@ -1441,66 +1440,33 @@ export async function verifyBackup(options, log = () => {}) {
     });
 }
 
-/**
- * A `<root>-Verify` left by a killed verification is removed only when it
- * is a plain folder holding nothing but our scratch folders and each
- * scratch mongod was stopped (or none ran); otherwise it is refused.
- */
-export async function clearVerifyLeftover(work, driver, log = () => {}) {
-    let entries;
-    try {
-        const info = await lstat(work);
-        if (info.isSymbolicLink() || !info.isDirectory())
-            throw new Error('link');
-        entries = await readdir(work);
-    } catch (error) {
-        if (error.code === 'ENOENT') return 'none';
-        throw new RefusedError(
-            `${work} is not a folder this tool made. Restart the PC, then delete ${work} and verify again.`,
-        );
-    }
-    if (entries.some((n) => !n.startsWith(SCRATCH)))
-        throw new RefusedError(
-            `${work} holds files this tool did not make. Restart the PC, then delete ${work} and verify again.`,
-        );
-    for (const name of entries) {
-        const stopped = await stopOrphan(join(work, name), driver);
-        if (!['stopped', 'none'].includes(stopped))
-            throw new RefusedError(
-                `A test database from an earlier verification could not be stopped (${stopped}). Restart the PC, then delete ${work} and verify again.`,
-            );
-        log(`cleanup: leftover verification mongod ${stopped}`);
-    }
-    await rm(work, { recursive: true, force: true });
-    return entries.length ? 'cleaned' : 'removed';
-}
-
 /** `<root>-Verify`, beside the data root (never inside it). */
 export function verifyWorkDir(root) {
     return `${resolve(root)}-Verify`;
 }
 
-async function verifyExportWithoutInstallation(paths, options, log) {
-    const work = verifyWorkDir(paths.root);
-    const driver = mongoDriver(options.api);
-    // A folder left by a killed verification: stop its scratch mongod
-    // (identity-checked, as for backups) and remove it, if it is ours.
-    await clearVerifyLeftover(work, driver, log);
-    // Created here, never a folder someone else prepared, and never two
-    // verifications at once (mustBeNew).
+/** Atomically reserves the work folder. Existing folders are never touched:
+ *  another verifier may still own them, even before it writes scratch metadata. */
+export async function reserveVerifyWork(work, ctx = {}) {
     try {
-        await secureFolder(work, {}, { mustBeNew: true });
+        await secureFolder(work, ctx, { mustBeNew: true });
     } catch (error) {
         if (
             error instanceof RefusedError &&
             /already exists/.test(error.message)
         )
             throw new RefusedError(
-                `${work} already exists (another verification is running). Wait for it, or restart the PC, then delete ${work} and verify again.`,
+                `${work} already exists (a verification is running or stopped). Do not delete it while a check is running. Restart the PC, then as an administrator delete ${work} and verify again.`,
             );
         throw error;
     }
-    await assertAdminOnly(work);
+    await assertAdminOnly(work, ctx);
+}
+
+async function verifyExportWithoutInstallation(paths, options, log) {
+    const work = verifyWorkDir(paths.root);
+    const driver = mongoDriver(options.api);
+    await reserveVerifyWork(work);
     try {
         const { manifest } = await checkBackup(options.from, {
             requireVerified: false,

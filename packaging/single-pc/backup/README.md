@@ -265,3 +265,13 @@ The release's `mongodump.exe`/`mongorestore.exe` (components.json
 `backups\` and exports, NTFS rename/lock behaviour, the PowerShell removable-media check (USB stick, USB hard disk, SD card, second internal disk, folder mount, `subst`), an external USB drive's
 device check, Windows paths in tool config files, and measured backup/restore
 time on the 4 GB qualification machine (#357/#366).
+
+### Interrupted export verification
+
+An export check on a replacement PC reserves
+`C:\ProgramData\Valorthon\GroceryPOS-Verify` atomically. A second check
+refuses while that folder exists and leaves it untouched. If a check was
+killed, restart the PC to stop its test database, then as an administrator
+delete only `GroceryPOS-Verify` and retry. Never delete `GroceryPOS` itself.
+The folder contains a scratch copy of the store and stays protected until
+removed. See RECOVERY.md, "Checking a USB backup stopped part-way".

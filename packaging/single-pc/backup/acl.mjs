@@ -42,7 +42,8 @@ export function aclQuery(path) {
             '-NonInteractive',
             '-Command',
             `$a = Get-Acl -LiteralPath '${literal}'; $s = [System.Security.Principal.SecurityIdentifier]; ` +
-                `[pscustomobject]@{ Owner = $a.GetOwner($s).Value; Sids = @($a.GetAccessRules($true, $true, $s) | ForEach-Object { $_.IdentityReference.Value }) } | ConvertTo-Json -Compress`,
+                `$rules = @($a.GetAccessRules($true, $true, $s)); ` +
+                `[pscustomobject]@{ Owner = $a.GetOwner($s).Value; Sids = @($rules | ForEach-Object { $_.IdentityReference.Value }); Rules = @($rules | ForEach-Object { [pscustomobject]@{ Sid = $_.IdentityReference.Value; Rights = [int]$_.FileSystemRights; Allow = ($_.AccessControlType -eq 'Allow'); InheritOnly = (($_.PropagationFlags -band 2) -ne 0) } }) } | ConvertTo-Json -Depth 4 -Compress`,
         ],
     ];
 }
@@ -70,6 +71,7 @@ function context(ctx = {}) {
         platform: ctx.platform ?? process.platform,
         exec: ctx.exec ?? realExec,
         lstat: ctx.lstat ?? lstat,
+        mkdir: ctx.mkdir ?? mkdir,
     };
 }
 
@@ -104,20 +106,42 @@ export async function assertPlainFolder(path, ctx) {
  */
 export async function secureParent(parent, ctx) {
     const c = context(ctx);
-    const found = await existing(c, parent);
-    if (!found) {
-        await mkdir(parent, { recursive: true, mode: 0o755 });
-        if (c.platform === 'win32')
-            for (const step of secureFolderSteps(parent)) c.exec(...step);
+    let created = false;
+    try {
+        // Never recursively accept a folder or junction a racing user made.
+        await c.mkdir(parent, { mode: 0o755 });
+        created = true;
+    } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
     }
     await assertPlainFolder(parent, c);
-    if (c.platform === 'win32') {
-        const problems = aclProblems(facts(c, parent), { checkAces: false });
-        if (problems.length)
-            throw new RefusedError(
-                `${parent} is ${problems.join(', ')}, not by Administrators. Ask your vendor; nothing was changed.`,
-            );
+    if (c.platform !== 'win32') return;
+    if (created) for (const step of secureFolderSteps(parent)) c.exec(...step);
+    const info = facts(c, parent);
+    const problems = aclProblems(info, { checkAces: false });
+    // Read-only access is harmless here and may be inherited from ProgramData.
+    // Creating/deleting children, changing permissions or taking ownership is not.
+    // Inherit-only mutation grants are unsafe too: newly created children inherit
+    // them before restriction. Only CREATOR OWNER is safe for our admin creator.
+    const mutationRights = 0x500d0156;
+    if (Array.isArray(info.Rules)) {
+        for (const rule of info.Rules)
+            if (
+                !ADMIN_SIDS.includes(rule.Sid) &&
+                rule.Allow &&
+                !(rule.Sid === 'S-1-3-0' && rule.InheritOnly) &&
+                (rule.Rights & mutationRights) !== 0
+            )
+                problems.push(`grants mutation rights to ${rule.Sid}`);
+    } else {
+        // Fail closed when an older/incomplete facts provider omits rights.
+        for (const sid of [].concat(info.Sids ?? []))
+            if (!ADMIN_SIDS.includes(sid)) problems.push(`grants ${sid}`);
     }
+    if (problems.length)
+        throw new RefusedError(
+            `${parent} is ${problems.join(', ')}, not a protected administrator-owned parent. Ask your vendor; no child was created.`,
+        );
 }
 
 /**

@@ -604,6 +604,82 @@ test('a fresh restore makes the root and secrets admin-only before copying secre
         assert.ok(!existsSync(hostileParent.paths.root));
         assert.ok(!hostileParent.calls.some((c) => c.startsWith('icacls')));
 
+        // An admin-owned parent must not let Users replace/delete its children.
+        const unsafeParent = await run({
+            prepare: ({ parent }) => mkdir(parent),
+            acl: {
+                Valorthon: {
+                    ...ADMIN,
+                    Rules: [
+                        {
+                            Sid: 'S-1-1-0',
+                            Allow: true,
+                            Rights: 0x40,
+                            InheritOnly: false,
+                        },
+                    ],
+                },
+            },
+        });
+        assert.match(unsafeParent.error.message, /mutation rights to S-1-1-0/);
+        assert.ok(!existsSync(unsafeParent.paths.root));
+        const inheritedMutation = await run({
+            prepare: ({ parent }) => mkdir(parent),
+            acl: {
+                Valorthon: {
+                    ...ADMIN,
+                    Rules: [
+                        {
+                            Sid: 'S-1-5-32-545',
+                            Allow: true,
+                            Rights: 0x1f01ff,
+                            InheritOnly: true,
+                        },
+                    ],
+                },
+            },
+        });
+        assert.match(
+            inheritedMutation.error.message,
+            /mutation rights to S-1-5-32-545/,
+        );
+        assert.ok(!existsSync(inheritedMutation.paths.root));
+        const creatorOwner = await run({
+            prepare: ({ parent }) => mkdir(parent),
+            acl: {
+                Valorthon: {
+                    ...ADMIN,
+                    Rules: [
+                        {
+                            Sid: 'S-1-3-0',
+                            Allow: true,
+                            Rights: 0x1f01ff,
+                            InheritOnly: true,
+                        },
+                    ],
+                },
+            },
+        });
+        assert.ok(creatorOwner.ok, creatorOwner.error?.message);
+        const readableParent = await run({
+            prepare: ({ parent }) => mkdir(parent),
+            acl: {
+                Valorthon: {
+                    ...ADMIN,
+                    Sids: [...ADMIN.Sids, 'S-1-5-32-545'],
+                    Rules: [
+                        {
+                            Sid: 'S-1-5-32-545',
+                            Allow: true,
+                            Rights: 0x1200a9,
+                            InheritOnly: false,
+                        },
+                    ],
+                },
+            },
+        });
+        assert.ok(readableParent.ok, readableParent.error?.message);
+
         // A pre-created root owned by a standard user: refused, untouched.
         const hostileRoot = await run({
             prepare: ({ paths }) => mkdir(paths.root, { recursive: true }),
@@ -668,29 +744,56 @@ test('a fresh restore makes the root and secrets admin-only before copying secre
     }
 });
 
-test('a killed export verification leaves a folder that the next run clears only if it is ours (#366)', async () => {
-    const { clearVerifyLeftover } = await import('./backup.mjs');
+test('export verification reserves one work folder and never removes another run (#366)', async () => {
+    const { reserveVerifyWork } = await import('./backup.mjs');
     const dir = await mkdtemp(join(tmpdir(), 'gpos-verify-left-'));
-    const driver = { MongoClient: class {} };
+    const work = join(dir, 'Valorthon', 'GroceryPOS-Verify');
     try {
-        assert.equal(
-            await clearVerifyLeftover(join(dir, 'absent'), driver),
-            'none',
-        );
-        // Ours: only scratch folders, no mongod recorded -> removed.
-        const ours = join(dir, 'GroceryPOS-Verify');
-        await mkdir(join(ours, '.verify-x-1'), { recursive: true });
-        assert.equal(await clearVerifyLeftover(ours, driver), 'cleaned');
-        assert.ok(!existsSync(ours));
-        // Anything else in it: refused with the restart advice, kept.
-        const foreign = join(dir, 'Other-Verify');
-        await mkdir(foreign);
-        await writeFile(join(foreign, 'notes.txt'), 'x');
+        await reserveVerifyWork(work);
+        // Even an empty live run is exclusive: a second run cannot remove it.
+        await assert.rejects(reserveVerifyWork(work), /Restart the PC/);
+        assert.ok(existsSync(work));
+        // No scratch metadata is read and no mongod shutdown is attempted.
+        const scratch = join(work, '.verify-live');
+        await mkdir(scratch);
+        await writeFile(join(scratch, 'port'), 'untrusted metadata');
         await assert.rejects(
-            clearVerifyLeftover(foreign, driver),
-            /Restart the PC, then delete .*Other-Verify/,
+            reserveVerifyWork(work),
+            /Do not delete it while a check is running/,
         );
-        assert.ok(existsSync(join(foreign, 'notes.txt')));
+        assert.equal(
+            await readFile(join(scratch, 'port'), 'utf8'),
+            'untrusted metadata',
+        );
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('a raced parent is inspected before any ACL operation (#366)', async () => {
+    const { secureParent } = await import('./acl.mjs');
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-parent-race-'));
+    const parent = join(dir, 'Valorthon');
+    const calls = [];
+    try {
+        await assert.rejects(
+            secureParent(parent, {
+                platform: 'win32',
+                mkdir: async (path) => {
+                    await mkdir(path);
+                    throw Object.assign(new Error('raced'), { code: 'EEXIST' });
+                },
+                exec: (file) => {
+                    calls.push(file);
+                    return JSON.stringify({
+                        Owner: 'S-1-5-21-hostile',
+                        Sids: [],
+                    });
+                },
+            }),
+            /owned by S-1-5-21-hostile/,
+        );
+        assert.deepEqual(calls, ['powershell.exe']);
     } finally {
         await rm(dir, { recursive: true, force: true });
     }

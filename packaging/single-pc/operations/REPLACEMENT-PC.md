@@ -78,3 +78,13 @@ the installed release. It refuses open shifts, active offline leases and
 newer sales unless `-AcceptOpenShifts`, `-AcceptPendingOffline` or
 `-AcceptNewerSales` is given, and takes a safety backup first. Then start the
 services again (or restart the PC).
+
+### Interrupted export verification
+
+An export check on a replacement PC reserves
+`C:\ProgramData\Valorthon\GroceryPOS-Verify` atomically. A second check
+refuses while that folder exists and leaves it untouched. If a check was
+killed, restart the PC to stop its test database, then as an administrator
+delete only `GroceryPOS-Verify` and retry. Never delete `GroceryPOS` itself.
+The folder contains a scratch copy of the store and stays protected until
+removed. See RECOVERY.md, "Checking a USB backup stopped part-way".

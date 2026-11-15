@@ -222,25 +222,24 @@ export function evaluateServices(rows) {
 /** B16: the handover folder and its file have no inherited entries and
  *  grant only SYSTEM and Administrators. Other paths are recorded for the
  *  operator to compare with the runtime README table. */
-export function evaluateHandoverAcl(icaclsText, target = '') {
-    // icacls prints "<target> <first entry>", then one entry per line.
-    const entries = String(icaclsText)
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .map((l) =>
-            target && l.toLowerCase().startsWith(target.toLowerCase())
-                ? l.slice(target.length).trim()
-                : l,
-        )
-        .filter((l) => /:\(/.test(l));
+export function evaluateHandoverAcl(facts) {
+    const entries = [].concat(facts?.Rules ?? []);
     const problems = [];
     if (!entries.length) problems.push('no ACL entries read');
     for (const entry of entries) {
-        if (/\(I\)/.test(entry)) problems.push(`inherited: ${entry}`);
-        if (!/^(NT AUTHORITY\\SYSTEM|BUILTIN\\Administrators):/i.test(entry))
-            problems.push(`unexpected: ${entry}`);
+        if (entry.Inherited) problems.push(`inherited: ${entry.Sid}`);
+        if (!['S-1-5-18', 'S-1-5-32-544'].includes(entry.Sid))
+            problems.push(`unexpected: ${entry.Sid}`);
     }
     return { status: problems.length ? 'fail' : 'pass', problems };
+}
+
+function handoverAclQuery(path) {
+    const literal = path.replace(/'/g, "''");
+    return ps(
+        `$a = Get-Acl -LiteralPath '${literal}'; $s = [System.Security.Principal.SecurityIdentifier]; ` +
+            `[pscustomobject]@{ Rules = @($a.GetAccessRules($true, $true, $s) | ForEach-Object { [pscustomobject]@{ Sid = $_.IdentityReference.Value; Inherited = $_.IsInherited } }) } | ConvertTo-Json -Depth 4 -Compress`,
+    );
 }
 
 /** #364: the upgrade journal's total time against the 30-minute target. */
@@ -466,19 +465,19 @@ export async function runChecks(ctx, options) {
 
     results.push(
         await check('acl-handover', ['B16'], ['#361', '#362'], () => {
-            const r = ctx.run('icacls', [loc.handoverDir]);
+            const r = ctx.run(...handoverAclQuery(loc.handoverDir));
             if (r.code !== 0)
                 return {
                     status: 'manual',
                     note: 'Handover folder absent (handover-done already run?); record that instead.',
                 };
-            const folder = evaluateHandoverAcl(r.stdout, loc.handoverDir);
+            const folder = evaluateHandoverAcl(JSON.parse(r.stdout));
             const file = join(loc.handoverDir, HANDOVER_FILE);
-            const f = ctx.run('icacls', [file]);
+            const f = ctx.run(...handoverAclQuery(file));
             const problems = [...folder.problems];
             if (f.code === 0)
                 problems.push(
-                    ...evaluateHandoverAcl(f.stdout, file).problems.map(
+                    ...evaluateHandoverAcl(JSON.parse(f.stdout)).problems.map(
                         (p) => `file ${p}`,
                     ),
                 );

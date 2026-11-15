@@ -326,8 +326,11 @@ Administrators only (plus the service grants after install).
 `-Mode restore-verify` on the fresh PC must leave no
 `C:\ProgramData\Valorthon\GroceryPOS` and no `…-Verify` folder behind;
 kill one `-Mode restore-verify` during its test restore (Task Manager, end
-`node.exe`) and run it again: it stops the leftover test database and
-succeeds.
+`node.exe`) and run it again: it refuses and keeps the folder untouched.
+Restart the PC, then as an administrator delete only
+`C:\ProgramData\Valorthon\GroceryPOS-Verify` and retry: verification
+succeeds. Also launch a second check while the first is still running: it
+refuses, never stops the first check's database or removes its files.
 
 Expected: the tampered and extra-file copies are refused (exit 3, "does not
 match the bundle manifest" / "unlisted file") with nothing changed; missing
@@ -367,10 +370,21 @@ Evidence: screenshots `____`. Result (PASS/FAIL): `____`
 
 ### B10. Pending receipt preservation
 
-Steps, part 1 (lifecycle): queue offline cash receipts (B4 method) and do
-not let them upload; then perform an upgrade, a repair and a reinstall in
-turn (stop the API again before each so the queue stays); bring the API
-back.
+Steps, part 1 (lifecycle):
+
+1. Queue offline cash receipts (B4 method) and keep them pending. Attempt
+   an upgrade: it must refuse the open shift/active offline lease before
+   changing the release, and the pending count and receipt numbers stay.
+2. Restore the API, upload the receipts, release offline mode and close all
+   shifts. Upgrade normally; verify each original receipt exists exactly
+   once, with no receipt left pending.
+3. Separately queue new offline receipts. In Chrome DevTools enable
+   request blocking for `*/v1/*`, then repair and uninstall/reinstall the
+   same release (B12), retaining Chrome's profile and site data. Keep the
+   blocking rule enabled while services restart, so a successful upload
+   cannot clear the queue before inspection. After each operation, inspect
+   the pending receipt numbers in IndexedDB/outbox. Remove the blocking rule
+   and verify each receipt uploads exactly once.
 
 Steps, part 2 (restore with queued receipts, #363/#37): on a test register
 with an open shift and "Offline cash ready":
@@ -398,7 +412,9 @@ with an open shift and "Offline cash ready":
    record any cash sale that no longer exists anywhere by hand
    (backup README "Browser data").
 
-Expected: part 1: receipts stay in Chrome and upload exactly once. Part 2:
+Expected: part 1: upgrade refusal preserves the queue; after synchronization
+and shift close the upgrade succeeds. Repair/reinstall keep Chrome receipts,
+which upload exactly once. Part 2:
 each `-Accept…` refusal shown; R2 survives the restore in Chrome, needs
 ADMIN reconciliation with a reason, appears once; no duplicate receipt; the
 restore audit entry `SYSTEM.DATABASE_RESTORED` lists the accepted overrides
