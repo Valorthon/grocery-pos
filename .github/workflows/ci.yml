@@ -211,6 +211,9 @@ jobs:
             - name: Single-PC backup and restore on real MongoDB
               run: GPOS_TEST_MONGOD="$RUNNER_TEMP/mongod" GPOS_TEST_MONGO_TOOLS="$RUNNER_TEMP" pnpm test:single-pc-backup
 
+            - name: Single-PC diagnostics on real MongoDB
+              run: GPOS_TEST_MONGOD="$RUNNER_TEMP/mongod" pnpm test:single-pc-diagnostics
+
             - name: MongoDB logs on failure
               if: failure()
               run: docker logs mongodb 2>&1 | tail -200

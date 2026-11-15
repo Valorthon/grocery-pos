@@ -66,6 +66,7 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/installer/usb-drives.mjs',
     'tools/backup/removable.mjs',
     'tools/installer/Install.ps1',
+    'tools/diagnostics/diagnose.mjs',
     'notices/COMPONENTS.md',
     // Apache-2.0 §4(a): Caddy's license text ships with it.
     'notices/proxy/LICENSE',
@@ -75,7 +76,12 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 /** Packaging scripts shipped as maintenance tools (tests excluded). */
-export const TOOL_DIRS = Object.freeze(['runtime', 'backup', 'installer']);
+export const TOOL_DIRS = Object.freeze([
+    'runtime',
+    'backup',
+    'installer',
+    'diagnostics',
+]);
 
 export function sha256(buffer) {
     return createHash('sha256').update(buffer).digest('hex');

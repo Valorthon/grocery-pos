@@ -1244,6 +1244,16 @@ on upstream fixes).
   secrets, TLS, backups, handover, CA trust (unless `-RemoveCaTrust`) and
   Chrome profiles stay. Windows execution is unproven until #357/#366.
 
+**Single-PC diagnostics** (#365, `packaging/single-pc/diagnostics/`)
+
+- `diagnose.mjs check` is a local read-only report with plain recovery steps
+  (RECOVERY.md): versions, services, loopback-only listeners, unauthenticated
+  MongoDB `hello`, API `/v1/health/live|ready` direct, Caddy over verified
+  TLS, disk, backups only via `readStatus`/`statusSummary`, clock, redacted
+  last log errors. It never reads `secrets\`, writes nothing, uploads nothing
+  and grants no role. `rotate-logs` (root, maintenance) rotates and prunes
+  mongod.log. No support export file until the owner decides its content.
+
 **Store settings** (#47, owner decision 2026-11-05)
 
 - Currency remains PHP only; existing centavos are never relabelled as another currency.
