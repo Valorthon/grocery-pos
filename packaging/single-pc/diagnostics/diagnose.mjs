@@ -3,7 +3,11 @@
 // telemetry, never reads secrets\ and grants no application role.
 //
 //   node diagnose.mjs check --data-root <abs> [--release <abs>] [--json]
+//   node diagnose.mjs export --data-root <abs> --to <folder> [--release <abs>]
 //   node diagnose.mjs rotate-logs --data-root <abs> --api <release\api> [--keep N]
+//
+// `export` writes one support file (the check report plus recent redacted
+// log lines) into a folder the owner picks; see README.md "Support export".
 //
 // `check` exits 0 when everything is OK, 1 when something needs attention
 // (warn or fail), 2 on a usage error. `rotate-logs` is a maintenance
@@ -11,7 +15,16 @@
 // See README.md and RECOVERY.md.
 import { execFile } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
-import { readFile, readdir, rm, stat, statfs } from 'node:fs/promises';
+import {
+    mkdir,
+    open,
+    readFile,
+    readdir,
+    rm,
+    stat,
+    statfs,
+    writeFile,
+} from 'node:fs/promises';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { createRequire } from 'node:module';
@@ -39,16 +52,53 @@ export const ERRORS_PER_SOURCE = 5;
 /** mongod.log above this asks for `rotate-logs`. */
 export const MONGOD_LOG_WARN_BYTES = 100 * 1024 ** 2;
 export const ROTATED_LOGS_KEPT = 5;
+/** Lines kept per log file in a support export. */
+export const EXPORT_LINES_PER_FILE = 200;
+export const REPORT_SCHEMA = 1;
+/** The JSON report's top-level keys and status values (#364/#366 rely on them). */
+export const REPORT_KEYS = Object.freeze([
+    'schema',
+    'generatedAt',
+    'overall',
+    'guide',
+    'checks',
+    'notObserved',
+]);
+export const STATUSES = Object.freeze([
+    'ok',
+    'info',
+    'unknown',
+    'warn',
+    'fail',
+]);
+export const CHECK_IDS = Object.freeze([
+    'versions',
+    'services',
+    'ports',
+    'database',
+    'api',
+    'proxy',
+    'disk',
+    'backups',
+    'clock',
+    'logs',
+]);
+/** The recovery guide inside a release (bundle.mjs ships it). */
+export function guidePath(release) {
+    return join(release, 'help', 'RECOVERY.md');
+}
 const DAY_MS = 24 * 3600 * 1000;
 
 // ------------------------------------------------------------ redaction
 
 const REDACTIONS = [
+    // Cookie headers: every value to the end of the line, not only the first.
+    [/\b((?:set-)?cookie\b["']?\s*[=:]\s*).*/gi, '$1[redacted]'],
     // Connection strings with credentials.
     [/(mongodb(?:\+srv)?:\/\/)[^@\s/]+@/gi, '$1[redacted]@'],
     // key=value / key: value / "key":"value" for secret-ish keys.
     [
-        /(["']?\b(?:password|passwd|pwd|secret|token|cookie|set-cookie|authorization|pin|api[-_]?key|jwt[-_]?secret|cookie[-_]?secret|database[-_]?url)\b["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+        /(["']?\b(?:password|passwd|pwd|secret|token|authorization|pin|api[-_]?key|jwt[-_]?secret|cookie[-_]?secret|database[-_]?url|refresh[-_]?token)\b["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)/gi,
         '$1[redacted]',
     ],
     [/\bBearer\s+[A-Za-z0-9._~+/-]+=*/g, 'Bearer [redacted]'],
@@ -58,6 +108,20 @@ const REDACTIONS = [
     // Request ids (UUIDs, 36 characters) stay readable.
     [/[A-Za-z0-9+_-]{40,}={0,2}/g, '[redacted]'],
     [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[email]'],
+    // User names: name-like keys (a duplicate-key message quotes the name)
+    // and every quoted string (user text in error messages).
+    [
+        /(\b(?:user(?:name)?|name|cashier|actor|approvedBy|by|ctx)\b["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;})]+)/gi,
+        '$1[user]',
+    ],
+    [/"[^"\n]*[A-Za-z][^"\n]*"/g, '"[text]"'],
+    // IP addresses (IPv4, IPv6 incl. ::1 and mapped forms).
+    [/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[ip]'],
+    [/(?<![\w:])(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}(?![\w:])/gi, '[ip]'],
+    [
+        /(?<![\w:])(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?::?\[ip\])?(?![\w:])/gi,
+        '[ip]',
+    ],
     // Windows profile folder names are personal.
     [/(\\Users\\)[^\\\s"']+/gi, '$1<user>'],
     [/(\/home\/)[^/\s"']+/g, '$1<user>'],
@@ -398,11 +462,28 @@ export async function checkProxy(ctx, paths, now) {
             rootInfo = { unreadable: true };
         }
     }
+    if (!pem) {
+        // Without the local root nothing can be verified: only check that
+        // the port answers, and never talk HTTPS to an unverified peer.
+        const open = await ctx.tcp('localhost', PORTS.proxy);
+        return result(
+            'proxy',
+            'Browser address (https://localhost:1443)',
+            open ? 'unknown' : 'fail',
+            open
+                ? 'The port answers, but its certificate was not checked (unverified; run the check as administrator for a full check).'
+                : 'The secure local address does not answer.',
+            {
+                details: { tls: 'unverified', portOpen: open, root: null },
+                steps: open ? [] : GUIDANCE.proxy,
+            },
+        );
+    }
     const res = await ctx.https(`${ORIGIN}/v1/health/ready`, pem);
     const details = {
         status: res.status ?? null,
         error: res.error ?? null,
-        tlsVerified: Boolean(pem) && !res.error,
+        tls: res.error ? 'failed' : 'verified',
         root: rootInfo,
     };
     if (res.error) {
@@ -421,15 +502,6 @@ export async function checkProxy(ctx, paths, now) {
             'fail',
             `The secure local address answered ${res.status}.`,
             { details, steps: GUIDANCE.proxy },
-        );
-    }
-    if (!pem) {
-        return result(
-            'proxy',
-            'Browser address (https://localhost:1443)',
-            'unknown',
-            'It answers, but its certificate could not be checked (run this check as administrator).',
-            { details },
         );
     }
     const daysLeft = rootInfo?.validTo
@@ -622,29 +694,55 @@ export async function checkClock(ctx, paths, now) {
     );
 }
 
-/** Error lines from the end of each log, redacted. */
-export function errorLines(text, limit = ERRORS_PER_SOURCE) {
-    const lines = text.split(/\r?\n/).filter(Boolean);
-    const errors = lines.filter((line) => {
-        if (line.startsWith('{')) {
-            try {
-                return ['E', 'F'].includes(JSON.parse(line).s);
-            } catch {
-                return false;
-            }
+/**
+ * One log line, reduced and redacted. mongod's JSON lines keep only time,
+ * severity, component, id and message (`attr` carries client addresses,
+ * user names and query shapes and is dropped).
+ */
+export function logLine(line) {
+    if (line.startsWith('{')) {
+        try {
+            const entry = JSON.parse(line);
+            return redact(
+                [entry.t?.$date, entry.s, entry.c, entry.id, entry.msg]
+                    .filter((v) => v !== undefined)
+                    .join(' '),
+            );
+        } catch {
+            return '[unreadable log line]';
         }
-        return /\b(ERROR|FATAL|error|fatal|Error)\b/.test(line);
-    });
-    return errors.slice(-limit).map(redact);
+    }
+    return redact(line);
 }
 
-export async function checkLogs(ctx, paths) {
+function isError(line) {
+    if (line.startsWith('{')) {
+        try {
+            return ['E', 'F'].includes(JSON.parse(line).s);
+        } catch {
+            return false;
+        }
+    }
+    return /\b(ERROR|FATAL|error|fatal|Error)\b/.test(line);
+}
+
+function splitLines(text) {
+    return text.split(/\r?\n/).filter(Boolean);
+}
+
+/** Error lines from the end of each log, reduced and redacted. */
+export function errorLines(text, limit = ERRORS_PER_SOURCE) {
+    return splitLines(text).filter(isError).slice(-limit).map(logLine);
+}
+
+/** The log files of each source (database, application, proxy). */
+async function logSources(ctx, paths) {
     const sources = [['database', [paths.mongodLog]]];
     for (const [name, dir] of [
         ['application', paths.apiLogs],
         ['proxy', paths.proxyLogs],
     ]) {
-        const files = (await ctx.list(dir)) ?? [];
+        const files = ((await ctx.list(dir)) ?? []).sort();
         sources.push([
             name,
             files
@@ -652,6 +750,11 @@ export async function checkLogs(ctx, paths) {
                 .map((f) => join(dir, f)),
         ]);
     }
+    return sources;
+}
+
+export async function checkLogs(ctx, paths) {
+    const sources = await logSources(ctx, paths);
     const details = {};
     let mongodBytes = 0;
     for (const [name, files] of sources) {
@@ -716,9 +819,10 @@ export async function diagnose(options, ctx = realContext()) {
         'ok',
     );
     return {
-        schema: 1,
+        schema: REPORT_SCHEMA,
         generatedAt: now.toISOString(),
         overall,
+        guide: release ? guidePath(release) : null,
         checks,
         notObserved: [
             'Pending offline cash receipts live in each browser; a shift cannot close until they are synchronized, so check the register screen instead.',
@@ -754,7 +858,12 @@ export function renderText(report) {
     out.push(
         report.overall === 'ok' || report.overall === 'info'
             ? 'Everything checked is OK.'
-            : 'Something needs attention: follow the steps above (RECOVERY.md has the details).',
+            : 'Something needs attention: follow the steps above.',
+    );
+    out.push(
+        report.guide
+            ? `Recovery guide: ${report.guide} (Start menu: "Grocery POS help").`
+            : 'Recovery guide: Start menu, "Grocery POS help".',
     );
     return out.join('\n') + '\n';
 }
@@ -788,16 +897,14 @@ function tcp(host, port) {
 
 function httpGet(url, { ca } = {}) {
     const secure = url.startsWith('https:');
+    if (secure && !ca) return Promise.resolve({ error: 'NO_CA' });
     return new Promise((done) => {
         const req = (secure ? httpsRequest : httpRequest)(
             url,
             {
                 timeout: 5000,
-                ...(secure
-                    ? ca
-                        ? { ca }
-                        : { rejectUnauthorized: false }
-                    : {}),
+                // HTTPS only with the local root; never unverified.
+                ...(secure ? { ca } : {}),
             },
             (res) => {
                 res.resume();
@@ -850,6 +957,42 @@ function decodeV6(hex) {
     return full.match(/.{4}/g).join(':');
 }
 
+/** The last `bytes` of a file, reading only that part (logs can be GBs). */
+export async function tailFile(path, bytes) {
+    let handle;
+    try {
+        handle = await open(path, 'r');
+        const { size } = await handle.stat();
+        const length = Math.min(size, bytes);
+        const buffer = Buffer.alloc(length);
+        await handle.read(buffer, 0, length, size - length);
+        let text = buffer.toString('utf8');
+        // Drop the partial first line of a cut tail.
+        if (length < size) text = text.slice(text.indexOf('\n') + 1);
+        return { size, text };
+    } catch {
+        return null;
+    } finally {
+        await handle?.close();
+    }
+}
+
+/** Get-Service Status names (a locale-independent enum) to sc.exe's. */
+export function serviceStateFromStatus(text) {
+    const map = {
+        Running: 'RUNNING',
+        Stopped: 'STOPPED',
+        StartPending: 'START_PENDING',
+        StopPending: 'STOP_PENDING',
+        Paused: 'PAUSED',
+        PausePending: 'PAUSE_PENDING',
+        ContinuePending: 'CONTINUE_PENDING',
+    };
+    const value = text.trim();
+    if (value === '') return 'absent';
+    return map[value] ?? 'UNKNOWN';
+}
+
 export function realContext() {
     const windows = process.platform === 'win32';
     return {
@@ -857,18 +1000,7 @@ export function realContext() {
         readText: (path) => readFile(path, 'utf8'),
         list: (dir) => readdir(dir).catch(() => null),
         async tail(path, bytes) {
-            try {
-                const info = await stat(path);
-                const buffer = await readFile(path);
-                return {
-                    size: info.size,
-                    text: buffer
-                        .subarray(Math.max(0, buffer.length - bytes))
-                        .toString('utf8'),
-                };
-            } catch {
-                return null;
-            }
+            return tailFile(path, bytes);
         },
         tcp,
         http: (url) => httpGet(url),
@@ -877,15 +1009,15 @@ export function realContext() {
             if (!windows) return null;
             const out = {};
             for (const name of Object.values(SERVICES)) {
-                const { code, stdout } = await execCapture('sc.exe', [
-                    'query',
-                    name,
+                // The Status enum name is not localized (sc.exe's text may be).
+                const { code, stdout } = await execCapture('powershell.exe', [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    `$s = Get-Service -Name '${name}' -ErrorAction SilentlyContinue; if ($s) { [string]$s.Status }`,
                 ]);
                 out[name] =
-                    code === 1060
-                        ? 'absent'
-                        : (/STATE\s+:\s+\d+\s+(\w+)/.exec(stdout)?.[1] ??
-                          'UNKNOWN');
+                    code === 0 ? serviceStateFromStatus(stdout) : 'UNKNOWN';
             }
             return out;
         },
@@ -961,9 +1093,16 @@ export async function rotateLogs(options) {
     const { MongoClient } = createRequire(
         join(resolve(options.api), 'package.json'),
     )('mongoose').mongo;
-    const password = (
-        await readFile(paths.secrets.mongoRootPassword, 'utf8')
-    ).trim();
+    let password;
+    try {
+        password = (
+            await readFile(paths.secrets.mongoRootPassword, 'utf8')
+        ).trim();
+    } catch {
+        throw new RotateError(
+            'the database password could not be read (run as administrator or SYSTEM)',
+        );
+    }
     const client = new MongoClient(
         `mongodb://${LOOPBACK}:${PORTS.mongo}/?directConnection=true`,
         {
@@ -975,6 +1114,8 @@ export async function rotateLogs(options) {
     try {
         await client.connect();
         await client.db('admin').command({ logRotate: 'server' });
+    } catch (error) {
+        throw new RotateError(rotateReason(error));
     } finally {
         await client.close();
     }
@@ -989,13 +1130,93 @@ export async function rotateLogs(options) {
     return { kept: rotated.slice(0, keep), removed };
 }
 
+export class RotateError extends Error {}
+
+/** A fixed reason per failure class; never the driver's own message. */
+export function rotateReason(error) {
+    const name = error?.name ?? '';
+    if (
+        error?.code === 18 ||
+        /Authentication/i.test(error?.message ?? '') ||
+        error?.codeName === 'AuthenticationFailed'
+    )
+        return 'the database refused the maintenance sign-in (credentials)';
+    if (/ServerSelection|NetworkError|Timeout/.test(name))
+        return 'the database is not running';
+    if (error?.code === 13 || error?.codeName === 'Unauthorized')
+        return 'the maintenance account may not rotate logs';
+    return `the database refused (${error?.codeName ?? (name || 'Error')})`;
+}
+
+// ------------------------------------------------------------ support export
+
+/** Exactly what a support export contains (README "Support export"). */
+export const EXPORT_INCLUDES = Object.freeze([
+    'The full check report shown by "Check Grocery POS" (versions, services, ports, database/application/address state, disk space, backup status, clock, recent error lines).',
+    `The last ${EXPORT_LINES_PER_FILE} lines of each log file (database, application, proxy), redacted.`,
+    'Removed from every line: secrets, passwords, tokens, cookies, connection strings, e-mail addresses, user names, quoted text and IP addresses; database log lines keep only time, severity, component, id and message.',
+    'Not included: database contents, sales or customer data, backups, secrets, certificates or configuration files.',
+]);
+
+function isInside(child, parent) {
+    const rel = resolve(child).toLowerCase();
+    const base = resolve(parent).toLowerCase();
+    return (
+        rel === base ||
+        rel.startsWith(`${base}/`) ||
+        rel.startsWith(`${base}\\`)
+    );
+}
+
+export async function supportExport(options, ctx = realContext()) {
+    const paths = layout(resolve(options.dataRoot));
+    const to = resolve(options.to);
+    if (isInside(to, paths.root))
+        throw new Error(
+            'Choose a folder outside the Grocery POS data folder (for example a USB drive).',
+        );
+    const info = await stat(to).catch(() => null);
+    if (!info?.isDirectory())
+        throw new Error('The chosen folder does not exist.');
+    const report = await diagnose(options, ctx);
+    const logs = {};
+    for (const [name, files] of await logSources(ctx, paths)) {
+        logs[name] = [];
+        for (const file of files) {
+            const tail = await ctx.tail(file, LOG_TAIL_BYTES);
+            if (!tail) continue;
+            logs[name].push(
+                ...splitLines(tail.text)
+                    .slice(-EXPORT_LINES_PER_FILE)
+                    .map(logLine),
+            );
+        }
+    }
+    const content = {
+        schema: 1,
+        kind: 'grocery-pos-support-export',
+        createdAt: report.generatedAt,
+        includes: EXPORT_INCLUDES,
+        report,
+        logs,
+    };
+    const stamp = report.generatedAt.replace(/[:.]/g, '-');
+    const file = join(to, `GroceryPOS-support-${stamp}.json`);
+    await mkdir(to, { recursive: true });
+    await writeFile(file, JSON.stringify(content, null, 2) + '\n', {
+        flag: 'wx',
+        mode: 0o600,
+    });
+    return file;
+}
+
 // ------------------------------------------------------------ cli
 
 export function parseArgs(args) {
     const [command, ...rest] = args;
-    if (!['check', 'rotate-logs'].includes(command))
+    if (!['check', 'export', 'rotate-logs'].includes(command))
         throw new Error(
-            'Usage: diagnose.mjs check|rotate-logs --data-root <abs> …',
+            'Usage: diagnose.mjs check|export|rotate-logs --data-root <abs> …',
         );
     const options = { command };
     const names = {
@@ -1003,6 +1224,7 @@ export function parseArgs(args) {
         '--release': 'release',
         '--api': 'api',
         '--keep': 'keep',
+        '--to': 'to',
     };
     for (let i = 0; i < rest.length; i++) {
         const arg = rest[i];
@@ -1018,6 +1240,10 @@ export function parseArgs(args) {
         i++;
     }
     if (!options.dataRoot) throw new Error('--data-root is required.');
+    if (command === 'export' && !options.to)
+        throw new Error('--to is required.');
+    if (command !== 'export' && options.to)
+        throw new Error('--to is only for export.');
     if (command === 'rotate-logs') {
         if (!options.api) throw new Error('--api is required.');
         if (!Number.isInteger(options.keep ?? 1) || (options.keep ?? 1) < 1)
@@ -1043,7 +1269,23 @@ async function main() {
             return EXIT.OK;
         } catch (error) {
             process.stderr.write(
-                `Failed (${error.name ?? 'Error'}): could not rotate the database log.\n`,
+                error instanceof RotateError
+                    ? `Failed: could not rotate the database log: ${error.message}.\n`
+                    : `Failed (${error.name ?? 'Error'}): could not rotate the database log.\n`,
+            );
+            return EXIT.ATTENTION;
+        }
+    }
+    if (options.command === 'export') {
+        try {
+            const file = await supportExport(options);
+            process.stdout.write(
+                `Support file saved: ${file}\nIt contains the check report and redacted recent log lines only. Give it to your vendor; nothing was sent anywhere.\n`,
+            );
+            return EXIT.OK;
+        } catch (error) {
+            process.stderr.write(
+                `Failed: ${error.code === 'EEXIST' ? 'a support file with this name already exists' : error.code ? `the file could not be written (${error.code})` : error.message}\n`,
             );
             return EXIT.ATTENTION;
         }

@@ -1,13 +1,31 @@
 // Portable diagnostics checks (#365) with a fake context: every failure
 // maps to plain steps, redaction holds, backups come from status.json.
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import {
+    mkdir,
+    mkdtemp,
+    open,
+    readFile,
+    readdir,
+    rm,
+    writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { SERVICES, layout } from '../runtime/layout.mjs';
 import {
+    CHECK_IDS,
+    EXPORT_INCLUDES,
     GUIDANCE,
+    REPORT_KEYS,
+    STATUSES,
+    logLine,
+    rotateReason,
+    serviceStateFromStatus,
+    supportExport,
+    tailFile,
     diagnose,
     errorLines,
     parseArgs,
@@ -136,7 +154,7 @@ describe('diagnose', () => {
             byId(report, 'services').summary,
             /GroceryPOS-API \(STOPPED\)/,
         );
-        assert.equal(byId(report, 'proxy').status, 'fail');
+        assert.equal(byId(report, 'proxy').details.tls, 'unverified');
         assert.equal(report.overall, 'fail');
     });
 
@@ -336,5 +354,248 @@ describe('redaction and logs', () => {
         assert.throws(() => parseArgs(['rotate-logs', '--data-root', '/x']));
         assert.throws(() => parseArgs(['upload', '--data-root', '/x']));
         assert.throws(() => parseArgs(['check']));
+    });
+});
+
+describe('review fixes and owner decisions (#365)', () => {
+    test('tail reads only the end of a huge (sparse) file', async () => {
+        const file = join(root, 'huge.log');
+        const handle = await open(file, 'w');
+        await handle.truncate(3 * 1024 ** 3); // 3 GB sparse, beyond readFile's limit
+        await handle.write('partial\n{"s":"E","msg":"last"}\n', 3 * 1024 ** 3);
+        await handle.close();
+        const tail = await tailFile(file, 1024);
+        assert.ok(tail.size > 3 * 1024 ** 3);
+        assert.match(tail.text, /"msg":"last"/);
+        assert.equal(errorLines(tail.text).length, 1);
+        await rm(file);
+    });
+
+    test('without the local root the proxy is unverified, never HTTPS', async () => {
+        let httpsCalls = 0;
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({ https: async () => (httpsCalls++, { status: 200 }) }),
+        );
+        const proxy = byId(report, 'proxy');
+        assert.equal(httpsCalls, 0);
+        assert.equal(proxy.status, 'unknown');
+        assert.equal(proxy.details.tls, 'unverified');
+        assert.match(proxy.summary, /unverified/);
+        assert.doesNotMatch(JSON.stringify(report), /"verified"/);
+    });
+
+    test('with the local root the proxy is verified', async (t) => {
+        let pem;
+        try {
+            pem = execFileSync(
+                'openssl',
+                [
+                    'req',
+                    '-x509',
+                    '-newkey',
+                    'ec',
+                    '-pkeyopt',
+                    'ec_paramgen_curve:P-256',
+                    '-nodes',
+                    '-keyout',
+                    '/dev/null',
+                    '-subj',
+                    '/CN=test',
+                    '-days',
+                    '3650',
+                ],
+                { stdio: ['ignore', 'pipe', 'ignore'] },
+            ).toString();
+        } catch {
+            t.skip('openssl not available');
+            return;
+        }
+        let ca;
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({
+                readText: async (p) =>
+                    p.endsWith('root.crt') ? pem : readFile(p, 'utf8'),
+                https: async (_u, given) => ((ca = given), { status: 200 }),
+            }),
+        );
+        assert.equal(ca, pem);
+        assert.equal(byId(report, 'proxy').status, 'ok');
+        assert.equal(byId(report, 'proxy').details.tls, 'verified');
+    });
+
+    test('redaction: every cookie value, IPs, user names, mongod attr', () => {
+        const line = redact(
+            'WARN [abc] Cookie: a=1; refresh=shortvalue; marker=1 from 192.168.1.20 and fe80::1 and ::ffff:10.0.0.1 and 2001:db8:0:0:0:0:0:1',
+        );
+        for (const bad of [
+            'shortvalue',
+            'marker=1',
+            '192.168.1.20',
+            'fe80::1',
+            '10.0.0.1',
+            '2001:db8',
+        ])
+            assert.ok(!line.includes(bad), `${bad} in ${line}`);
+        const ips = redact(
+            'from 192.168.1.20 and fe80::1 and ::ffff:10.0.0.1 and 2001:db8:0:0:0:0:0:1 at 12:30:45',
+        );
+        for (const bad of ['192.168', 'fe80', 'ffff', '10.0.0.1', '2001'])
+            assert.ok(!ips.includes(bad), `${bad} in ${ips}`);
+        assert.match(ips, /12:30:45/);
+        const dup = redact(
+            '[3f2b8c1e-9d4a-4c1b-8f2e-1a2b3c4d5e6f] POST /v1/users -> 400 DB_DUPLICATE_KEY: MongoServerError: E11000 dup key: { name: "maria" } user=juan by: pedro',
+        );
+        for (const bad of ['maria', 'juan', 'pedro'])
+            assert.ok(!dup.includes(bad), `${bad} in ${dup}`);
+        assert.match(dup, /3f2b8c1e-9d4a-4c1b-8f2e-1a2b3c4d5e6f/);
+        assert.match(dup, /POST \/v1\/users -> 400 DB_DUPLICATE_KEY/);
+        const mongo = logLine(
+            JSON.stringify({
+                t: { $date: '2026-11-15T00:00:00Z' },
+                s: 'I',
+                c: 'ACCESS',
+                id: 20250,
+                msg: 'Auth ok',
+                attr: { user: 'gpos_api', remote: '127.0.0.1:5000' },
+            }),
+        );
+        assert.equal(mongo, '2026-11-15T00:00:00Z I ACCESS 20250 Auth ok');
+    });
+
+    test('service states are read from the locale-independent enum', () => {
+        assert.equal(serviceStateFromStatus('Running\r\n'), 'RUNNING');
+        assert.equal(serviceStateFromStatus('Stopped'), 'STOPPED');
+        assert.equal(serviceStateFromStatus(''), 'absent');
+        assert.equal(serviceStateFromStatus('Läuft'), 'UNKNOWN');
+    });
+
+    test('rotate-logs failures name their cause', () => {
+        assert.match(
+            rotateReason({ name: 'MongoServerSelectionError' }),
+            /not running/,
+        );
+        assert.match(
+            rotateReason({
+                name: 'MongoServerError',
+                code: 18,
+                codeName: 'AuthenticationFailed',
+            }),
+            /credentials/,
+        );
+        assert.match(
+            rotateReason({
+                name: 'MongoServerError',
+                code: 13,
+                codeName: 'Unauthorized',
+            }),
+            /may not/,
+        );
+    });
+
+    test('JSON report keys, check ids and status values are pinned', async () => {
+        const report = await diagnose({ dataRoot: root }, healthy());
+        assert.deepEqual(Object.keys(report), [...REPORT_KEYS]);
+        assert.deepEqual(
+            report.checks.map((c) => c.id),
+            [...CHECK_IDS],
+        );
+        assert.deepEqual(
+            [...STATUSES],
+            ['ok', 'info', 'unknown', 'warn', 'fail'],
+        );
+        for (const c of report.checks) {
+            assert.ok(STATUSES.includes(c.status));
+            assert.deepEqual(Object.keys(c).slice(0, 5), [
+                'id',
+                'title',
+                'status',
+                'summary',
+                'steps',
+            ]);
+        }
+        assert.equal(report.guide, join(release, 'help', 'RECOVERY.md'));
+        assert.match(renderText(report), /Recovery guide: .*RECOVERY\.md/);
+    });
+
+    test('support export: report + redacted log lines, nothing else', async () => {
+        const out = await mkdtemp(join(tmpdir(), 'gpos-usb-'));
+        try {
+            const file = await supportExport(
+                { dataRoot: root, to: out },
+                healthy({
+                    tail: async (p) =>
+                        p.endsWith('mongod.log')
+                            ? {
+                                  size: 10,
+                                  text:
+                                      JSON.stringify({
+                                          s: 'E',
+                                          c: 'NET',
+                                          id: 1,
+                                          msg: 'boom',
+                                          attr: { remote: '10.1.2.3:4' },
+                                      }) + '\n',
+                              }
+                            : {
+                                  size: 10,
+                                  text: 'ERROR password=hunter2 Cookie: s=abc; t=def owner@example.com 10.0.0.5\nok\n',
+                              },
+                }),
+            );
+            assert.deepEqual(await readdir(out), [file.split(/[\\/]/).pop()]);
+            const text = await readFile(file, 'utf8');
+            for (const bad of [
+                'hunter2',
+                's=abc',
+                't=def',
+                'owner@example.com',
+                '10.0.0.5',
+                '10.1.2.3',
+                'owner-name',
+            ])
+                assert.ok(!text.includes(bad), bad);
+            const content = JSON.parse(text);
+            assert.deepEqual(Object.keys(content), [
+                'schema',
+                'kind',
+                'createdAt',
+                'includes',
+                'report',
+                'logs',
+            ]);
+            assert.deepEqual(content.includes, [...EXPORT_INCLUDES]);
+            assert.deepEqual(Object.keys(content.logs), [
+                'database',
+                'application',
+                'proxy',
+            ]);
+            assert.match(content.logs.database[0], /boom/);
+            await assert.rejects(
+                supportExport(
+                    { dataRoot: root, to: layout(root).dirs.backups },
+                    healthy(),
+                ),
+                /outside/,
+            );
+            await assert.rejects(
+                supportExport(
+                    { dataRoot: root, to: join(out, 'missing') },
+                    healthy(),
+                ),
+                /does not exist/,
+            );
+        } finally {
+            await rm(out, { recursive: true, force: true });
+        }
+        assert.deepEqual(
+            parseArgs(['export', '--data-root', '/x', '--to', '/y']),
+            { command: 'export', dataRoot: '/x', to: '/y' },
+        );
+        assert.throws(() => parseArgs(['export', '--data-root', '/x']));
+        assert.throws(() =>
+            parseArgs(['check', '--data-root', '/x', '--to', '/y']),
+        );
     });
 });

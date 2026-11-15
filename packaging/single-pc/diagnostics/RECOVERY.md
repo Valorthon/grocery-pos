@@ -1,7 +1,12 @@
 # Grocery POS: what to do when something goes wrong
 
-For the store owner and the vendor. Start with the check: it tells you which
-section applies.
+For the store owner and the vendor. Start with **"Check Grocery POS"** on the
+desktop or in the Start menu (answer Yes to the administrator prompt for a
+full check): it tells you which section applies. This guide is in the Start
+menu as **"Grocery POS help"**. "Save support file…" in the check saves a file
+for your vendor (no sales data, passwords or names) to a folder you choose.
+
+The vendor can run the same check from a command prompt:
 
 ```text
 "%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>\node\node.exe" ^

@@ -21,10 +21,17 @@ export const TASK_FOLDER = '\\GroceryPOS\\';
 export const TASKS = Object.freeze({
     backup: `${TASK_FOLDER}Daily backup`,
     exportReminder: `${TASK_FOLDER}Weekly export reminder`,
+    // Owner decision 2026-11-15 (#365): nightly, right after the backup.
+    logRotation: `${TASK_FOLDER}Nightly log rotation`,
 });
+/** Minutes after the backup start that log rotation runs (#365). */
+export const LOG_ROTATION_DELAY_MINUTES = 30;
 export const SHORTCUT_NAME = `${PRODUCT}.lnk`;
 /** Owner decision 2026-11-15: guided export to a USB drive. */
 export const BACKUP_SHORTCUT_NAME = 'Back up to USB drive.lnk';
+/** Owner decisions 2026-11-15 (#365): health check and recovery guide. */
+export const CHECK_SHORTCUT_NAME = `Check ${PRODUCT}.lnk`;
+export const HELP_SHORTCUT_NAME = `${PRODUCT} help.lnk`;
 /** Releases kept by repair: the current one and the newest other one. */
 export const KEEP_RELEASES = 2;
 export const HANDOVER_FILE = 'initial-admin-password.txt';
@@ -77,7 +84,35 @@ export function locations(env) {
             programData,
             BACKUP_SHORTCUT_NAME,
         ),
+        checkShortcuts: shortcutPlaces(
+            publicDir,
+            programData,
+            CHECK_SHORTCUT_NAME,
+        ),
+        // The guide: common Start menu only (owner decision 2026-11-15).
+        helpShortcuts: [startMenu(programData, HELP_SHORTCUT_NAME)],
     };
+}
+
+function startMenu(programData, name) {
+    return join(
+        programData,
+        'Microsoft',
+        'Windows',
+        'Start Menu',
+        'Programs',
+        name,
+    );
+}
+
+/** Every shortcut the installer creates (uninstall removes them all). */
+export function allShortcuts(loc) {
+    return [
+        ...loc.shortcuts,
+        ...loc.backupShortcuts,
+        ...loc.checkShortcuts,
+        ...loc.helpShortcuts,
+    ];
 }
 
 /** Public Desktop and the common Start menu (owner decision 2026-11-15). */
@@ -472,6 +507,62 @@ export function backupTaskXml(paths, release, time = DEFAULT_BACKUP_TIME) {
     });
 }
 
+/** `HH:MM` plus minutes, wrapping past midnight. */
+export function addMinutes(time, minutes) {
+    const [h, m] = parseTime(time).split(':').map(Number);
+    const total = (((h * 60 + m + minutes) % 1440) + 1440) % 1440;
+    return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** The nightly mongod log rotation (#365 `rotate-logs`, keeps 5). */
+export function logRotationCommand(paths, release) {
+    const bin = releaseLayout(release);
+    return {
+        file: bin.node,
+        args: [
+            join(release, 'tools', 'diagnostics', 'diagnose.mjs'),
+            'rotate-logs',
+            '--data-root',
+            paths.root,
+            '--api',
+            bin.api,
+        ],
+        workingDirectory: release,
+    };
+}
+
+/**
+ * Nightly log rotation as SYSTEM (it reads the MongoDB root password),
+ * `LOG_ROTATION_DELAY_MINUTES` after the daily backup starts. It only
+ * rotates and prunes mongod.log files.
+ */
+export function logRotationTaskXml(
+    paths,
+    release,
+    backupTime = DEFAULT_BACKUP_TIME,
+) {
+    return taskXml({
+        description:
+            'Grocery POS: nightly database log rotation (diagnose.mjs rotate-logs).',
+        trigger: [
+            '<CalendarTrigger>',
+            `  <StartBoundary>2026-01-01T${addMinutes(backupTime, LOG_ROTATION_DELAY_MINUTES)}:00</StartBoundary>`,
+            '  <Enabled>true</Enabled>',
+            '  <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>',
+            '</CalendarTrigger>',
+        ],
+        principal: [
+            '<UserId>S-1-5-18</UserId>',
+            '<RunLevel>HighestAvailable</RunLevel>',
+        ],
+        settings: [
+            '<ExecutionTimeLimit>PT10M</ExecutionTimeLimit>',
+            '<Priority>7</Priority>',
+        ],
+        action: logRotationCommand(paths, release),
+    });
+}
+
 /** Weekly reminder shown to whoever is logged on (no elevation). */
 export function reminderTaskXml(release, reminder = DEFAULT_REMINDER) {
     const days = [
@@ -556,6 +647,37 @@ export function backupShortcutSpec(paths, release) {
         arguments: run.args.map(quote).join(' '),
         workingDirectory: release,
         description: `Back up ${PRODUCT} to a USB drive`,
+        icon: join(release, 'client', 'favicon.ico'),
+    };
+}
+
+/**
+ * "Check Grocery POS": CheckHealth.ps1 asks for elevation (a standard
+ * account may decline and gets a partial check), runs `diagnose.mjs
+ * check`, shows the result with recovery steps, points to the guide and
+ * offers the owner-made support export (#365).
+ */
+export function checkShortcutSpec(paths, release) {
+    const run = powershellFile(
+        join(release, 'tools', 'installer', 'CheckHealth.ps1'),
+        ['-DataRoot', paths.root, '-Release', release],
+    );
+    return {
+        target: run.file,
+        arguments: run.args.map(quote).join(' '),
+        workingDirectory: release,
+        description: `Check ${PRODUCT} and show what to do`,
+        icon: join(release, 'client', 'favicon.ico'),
+    };
+}
+
+/** "Grocery POS help": the recovery guide in Notepad (plain text). */
+export function helpShortcutSpec(release) {
+    return {
+        target: 'notepad.exe',
+        arguments: quote(join(release, 'help', 'RECOVERY.md')),
+        workingDirectory: release,
+        description: `${PRODUCT}: what to do when something goes wrong`,
         icon: join(release, 'client', 'favicon.ico'),
     };
 }

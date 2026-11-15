@@ -6,7 +6,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { chmod, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+    chmod,
+    mkdtemp,
+    readFile,
+    readdir,
+    rm,
+    writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -156,6 +163,47 @@ describe(
             const { byId } = await check(root);
             assert.equal(byId('database').status, 'fail');
             assert.ok(byId('database').steps.length > 0);
+            const rotate = await run([
+                cli,
+                'rotate-logs',
+                '--data-root',
+                root,
+                '--api',
+                apiDir,
+            ]);
+            assert.equal(rotate.code, 1);
+            assert.match(rotate.stderr, /the database is not running/);
+        });
+
+        test('support export from the real installation is redacted', async () => {
+            const out = await mkdtemp(join(tmpdir(), 'gpos-diag-usb-'));
+            try {
+                const r = await run([
+                    cli,
+                    'export',
+                    '--data-root',
+                    root,
+                    '--api',
+                    apiDir,
+                    '--to',
+                    out,
+                ]);
+                assert.equal(r.code, 0, r.stderr);
+                const [file] = await readdir(out);
+                const text = await readFile(join(out, file), 'utf8');
+                const content = JSON.parse(text);
+                assert.ok(content.logs.database.length > 0);
+                assert.doesNotMatch(text, /\b127\.0\.0\.1\b/);
+                const secrets = await Promise.all(
+                    Object.values(paths.secrets).map((p) =>
+                        readFile(p, 'utf8'),
+                    ),
+                );
+                for (const value of secrets)
+                    assert.ok(!text.includes(value.trim().slice(0, 20)));
+            } finally {
+                await rm(out, { recursive: true, force: true });
+            }
         });
     },
 );

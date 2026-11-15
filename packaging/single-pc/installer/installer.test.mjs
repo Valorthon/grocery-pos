@@ -42,6 +42,11 @@ import {
     TASKS,
     aclSteps,
     backupShortcutSpec,
+    addMinutes,
+    allShortcuts,
+    checkShortcutSpec,
+    helpShortcutSpec,
+    logRotationTaskXml,
     releasesToPrune,
     backupTaskXml,
     evaluatePreflight,
@@ -784,8 +789,7 @@ test('install, repair, uninstall and reinstall keep data, secrets and the releas
     );
     assert.equal(state.complete, true);
     assert.equal(state.adminUsername, 'owner');
-    for (const path of [...where.shortcuts, ...where.backupShortcuts])
-        assert.ok(await stat(path));
+    for (const path of allShortcuts(where)) assert.ok(await stat(path));
     assert.equal(await classifyDataRoot(where.dataRoot), 'ours');
 
     // Install again is refused (services exist); repair stops in reverse
@@ -1011,6 +1015,7 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
         'Launch.ps1',
         'ExportReminder.ps1',
         'BackupToUsb.ps1',
+        'CheckHealth.ps1',
     ]) {
         const text = await readFile(new URL(name, here), 'utf8');
         assert.match(text, /^#Requires -Version 5\.1/, name);
@@ -1146,4 +1151,74 @@ test('backup failures shown to the owner never carry secrets or connection strin
     for (const line of text.split('\n').filter(Boolean)) {
         assert.match(line, /^(Refused: |Failed )/);
     }
+});
+
+// ------------------------------------------------------------ diagnostics (#365)
+
+test('"Check Grocery POS" and "Grocery POS help" shortcuts (owner decisions 2026-11-15)', async () => {
+    const paths = layout('/pd/data');
+    const check = checkShortcutSpec(paths, '/r');
+    assert.equal(check.target, 'powershell.exe');
+    assert.match(
+        check.arguments,
+        /CheckHealth\.ps1 -DataRoot \/pd\/data -Release \/r$/,
+    );
+    assert.deepEqual(
+        loc.checkShortcuts.map((p) => p.split('/').pop()),
+        ['Check Grocery POS.lnk', 'Check Grocery POS.lnk'],
+    );
+    // Public Desktop + common Start menu, like the other shortcuts.
+    assert.deepEqual(
+        loc.checkShortcuts.map((p) => p.split('/').slice(0, -1).join('/')),
+        loc.shortcuts.map((p) => p.split('/').slice(0, -1).join('/')),
+    );
+    const help = helpShortcutSpec('/r');
+    assert.equal(help.target, 'notepad.exe');
+    assert.equal(help.arguments, '/r/help/RECOVERY.md');
+    // Start menu only.
+    assert.equal(loc.helpShortcuts.length, 1);
+    assert.match(
+        loc.helpShortcuts[0],
+        /Start Menu\/Programs\/Grocery POS help\.lnk$/,
+    );
+    assert.equal(allShortcuts(loc).length, 7);
+    const steps = uninstallSteps({
+        installedServices: [],
+        shortcuts: allShortcuts(loc),
+    });
+    assert.deepEqual(
+        steps.filter((s) => s.kind === 'remove').map((s) => s.path),
+        allShortcuts(loc),
+    );
+    const ps = await readFile(new URL('CheckHealth.ps1', here), 'utf8');
+    assert.match(ps, /-Verb RunAs/);
+    assert.match(ps, /'check', '--data-root'/);
+    assert.match(ps, /'export', '--data-root'/);
+    assert.match(ps, /FolderBrowserDialog/);
+    assert.match(ps, /help\\RECOVERY\.md/);
+});
+
+test('nightly log rotation runs as SYSTEM right after the backup and only rotates logs', () => {
+    const paths = layout('/pd/data');
+    assert.equal(addMinutes('22:00', 30), '22:30');
+    assert.equal(addMinutes('23:45', 30), '00:15');
+    const xml = logRotationTaskXml(paths, '/r', '21:30');
+    assert.match(xml, /<UserId>S-1-5-18<\/UserId>/);
+    assert.match(xml, /T22:00:00<\/StartBoundary>/);
+    assert.match(xml, /<DaysInterval>1<\/DaysInterval>/);
+    assert.match(xml, /<StartWhenAvailable>true<\/StartWhenAvailable>/);
+    assert.match(xml, /<Command>\/r\/node\/node\.exe<\/Command>/);
+    assert.match(
+        xml,
+        /diagnostics\/diagnose\.mjs rotate-logs --data-root \/pd\/data --api \/r\/api<\/Arguments>/,
+    );
+    assert.match(logRotationTaskXml(paths, '/r'), /T22:30:00<\/StartBoundary>/);
+    assert.equal(TASKS.logRotation, '\\GroceryPOS\\Nightly log rotation');
+    const steps = uninstallSteps({ installedServices: [], shortcuts: [] });
+    assert.ok(
+        steps.some(
+            (s) =>
+                s.file === 'schtasks.exe' && s.args.includes(TASKS.logRotation),
+        ),
+    );
 });
