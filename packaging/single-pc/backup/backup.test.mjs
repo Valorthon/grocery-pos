@@ -10,6 +10,7 @@ import {
     rm,
     writeFile,
 } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -516,6 +517,8 @@ test('the export CLI refuses a fixed destination unless the test harness allows 
 test('a fresh restore makes the root and secrets admin-only before copying secrets (#366)', async () => {
     const { secureFreshRoot, secureFolderSteps, aclProblems } =
         await import('./restore.mjs');
+    const { symlink } = await import('node:fs/promises');
+    const { writeFileSync } = await import('node:fs');
     assert.deepEqual(secureFolderSteps('C:\\r')[0], [
         'icacls',
         ['C:\\r', '/setowner', '*S-1-5-32-544'],
@@ -529,51 +532,165 @@ test('a fresh restore makes the root and secrets admin-only before copying secre
         aclProblems({ Owner: 'S-1-5-21-1-2-3-1001', Sids: ['S-1-1-0'] }),
         ['owned by S-1-5-21-1-2-3-1001', 'grants S-1-1-0'],
     );
+    const ADMIN = { Owner: 'S-1-5-32-544', Sids: ['S-1-5-18', 'S-1-5-32-544'] };
+    const USER = {
+        Owner: 'S-1-5-21-1-2-3-1001',
+        Sids: ['S-1-5-21-1-2-3-1001'],
+    };
     const dir = await mkdtemp(join(tmpdir(), 'gpos-secure-'));
     let n = 0;
-    const run = async (owner, sids, rootExisted) => {
+    // Recorded Windows answers: Get-Acl facts per path (default admin-only),
+    // icacls succeeds; `onIcacls` lets a test act between the steps.
+    const run = async ({ prepare, acl = {}, onIcacls } = {}) => {
+        const base = join(dir, `case-${n++}`);
+        const parent = join(base, 'Valorthon');
+        const paths = layout(join(parent, 'GroceryPOS'));
+        await mkdir(base);
+        await prepare?.({ base, parent, paths });
         const calls = [];
-        const paths = layout(join(dir, `root-${n++}`));
         const exec = (file, args) => {
             calls.push([file, ...args].join(' '));
-            return file === 'powershell.exe'
-                ? JSON.stringify({ Owner: owner, Sids: sids })
-                : '';
+            if (file === 'icacls') {
+                onIcacls?.(args, paths);
+                return '';
+            }
+            const path = Object.keys(acl).find((k) =>
+                args.at(-1).includes(`/${k}'`),
+            );
+            return JSON.stringify(path ? acl[path] : ADMIN);
         };
         try {
-            await secureFreshRoot(paths, {
-                platform: 'win32',
-                exec,
-                rootExisted,
-            });
-            return { calls, ok: true };
+            await secureFreshRoot(paths, { platform: 'win32', exec });
+            return { calls, paths, parent, ok: true };
         } catch (error) {
-            return { calls, error };
+            return { calls, paths, parent, error };
         }
     };
     try {
-        const good = await run('S-1-5-32-544', ['S-1-5-18', 'S-1-5-32-544']);
+        // Parent and root absent: both created; parent, root and secrets
+        // each get owner + inheritance removed, then are checked.
+        const good = await run();
         assert.ok(good.ok, good.error?.message);
-        // Owner and inheritance on the root, then on secrets, then checked.
-        assert.equal(
-            good.calls.filter((c) => c.includes('/setowner')).length,
-            2,
-        );
+        for (const path of [
+            good.parent,
+            good.paths.root,
+            good.paths.dirs.secrets,
+        ])
+            assert.ok(
+                good.calls.includes(`icacls ${path} /setowner *S-1-5-32-544`),
+                path,
+            );
         assert.equal(
             good.calls.filter((c) => c.includes('/inheritance:r')).length,
-            2,
+            3,
         );
-        assert.ok(good.calls.at(-1).startsWith('powershell.exe'));
+
+        // An existing parent owned by a standard user: refused, nothing made.
+        const ownedParent = await run({
+            prepare: ({ parent }) => mkdir(parent),
+            acl: {},
+        });
+        assert.ok(ownedParent.ok); // admin-owned parent is fine
+        const hostileParent = await run({
+            prepare: async ({ parent }) => {
+                await mkdir(parent);
+            },
+            acl: { Valorthon: USER },
+        });
+        assert.match(
+            hostileParent.error.message,
+            /Valorthon is owned by S-1-5-21/,
+        );
+        assert.ok(!existsSync(hostileParent.paths.root));
+        assert.ok(!hostileParent.calls.some((c) => c.startsWith('icacls')));
+
         // A pre-created root owned by a standard user: refused, untouched.
-        const hostile = await run('S-1-5-21-1-2-3-1001', [], true);
-        assert.match(hostile.error.message, /already exists and is owned by/);
-        assert.ok(!hostile.calls.some((c) => c.startsWith('icacls')));
+        const hostileRoot = await run({
+            prepare: ({ paths }) => mkdir(paths.root, { recursive: true }),
+            acl: { GroceryPOS: USER },
+        });
+        assert.match(
+            hostileRoot.error.message,
+            /already exists and is owned by/,
+        );
+        assert.ok(
+            !hostileRoot.calls.some((c) =>
+                c.startsWith(`icacls ${hostileRoot.paths.root} `),
+            ),
+        );
+
+        // The root is a junction/link to another folder: refused.
+        const junction = await run({
+            prepare: async ({ base, parent, paths }) => {
+                await mkdir(parent);
+                await mkdir(join(base, 'elsewhere'));
+                await symlink(join(base, 'elsewhere'), paths.root, 'junction');
+            },
+        });
+        assert.match(junction.error.message, /link or junction/);
+        assert.ok(
+            !existsSync(join(dir, `case-${n - 1}`, 'elsewhere', 'secrets')),
+        );
+
+        // A secrets link planted inside an existing empty-looking root.
+        const plantedSecrets = await run({
+            prepare: async ({ base, paths }) => {
+                await mkdir(paths.root, { recursive: true });
+                await mkdir(join(base, 'loot'));
+                await symlink(
+                    join(base, 'loot'),
+                    paths.dirs.secrets,
+                    'junction',
+                );
+            },
+        });
+        assert.match(plantedSecrets.error.message, /link or junction/);
+
+        // Something appears in the root while it is being secured.
+        const raced = await run({
+            onIcacls: (args, paths) => {
+                if (args[0] === paths.dirs.secrets && args[1] === '/setowner')
+                    writeFileSync(join(paths.root, 'planted'), 'x');
+            },
+        });
+        assert.match(raced.error.message, /unexpected entries \(planted\)/);
+
         // A grant that survives restriction: refused before any secret.
-        const leaky = await run('S-1-5-32-544', ['S-1-5-32-545']);
+        const leaky = await run({
+            acl: { secrets: { Owner: 'S-1-5-32-544', Sids: ['S-1-5-32-545'] } },
+        });
         assert.match(
             leaky.error.message,
             /not admin-only \(grants S-1-5-32-545\)/,
         );
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('a killed export verification leaves a folder that the next run clears only if it is ours (#366)', async () => {
+    const { clearVerifyLeftover } = await import('./backup.mjs');
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-verify-left-'));
+    const driver = { MongoClient: class {} };
+    try {
+        assert.equal(
+            await clearVerifyLeftover(join(dir, 'absent'), driver),
+            'none',
+        );
+        // Ours: only scratch folders, no mongod recorded -> removed.
+        const ours = join(dir, 'GroceryPOS-Verify');
+        await mkdir(join(ours, '.verify-x-1'), { recursive: true });
+        assert.equal(await clearVerifyLeftover(ours, driver), 'cleaned');
+        assert.ok(!existsSync(ours));
+        // Anything else in it: refused with the restart advice, kept.
+        const foreign = join(dir, 'Other-Verify');
+        await mkdir(foreign);
+        await writeFile(join(foreign, 'notes.txt'), 'x');
+        await assert.rejects(
+            clearVerifyLeftover(foreign, driver),
+            /Restart the PC, then delete .*Other-Verify/,
+        );
+        assert.ok(existsSync(join(foreign, 'notes.txt')));
     } finally {
         await rm(dir, { recursive: true, force: true });
     }

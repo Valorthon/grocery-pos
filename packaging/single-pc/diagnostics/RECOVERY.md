@@ -165,3 +165,17 @@ and the API refuses to start on purpose, so half-migrated data is never used.
    safety backup it already took and finishes the migration.
 3. Start the services (or restart the PC), run the check, then make a backup
    and a USB export.
+
+## Checking a USB backup stopped part-way (vendor)
+
+Signs: `Install.ps1 -Mode restore-verify` (or `backup.mjs verify --from`) was
+closed, killed or lost power; the next run says
+`…\GroceryPOS-Verify already exists` or "Restart the PC, then delete …".
+
+1. Run the same check again first: it stops the test database the earlier
+   run left (only if it can prove it is that run's) and removes the folder
+   by itself.
+2. If it still refuses, restart the PC (that stops any leftover test
+   database), then as an administrator delete
+   `C:\ProgramData\Valorthon\GroceryPOS-Verify` and run the check again.
+   Never delete `C:\ProgramData\Valorthon\GroceryPOS` itself.

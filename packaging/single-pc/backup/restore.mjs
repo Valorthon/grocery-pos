@@ -8,7 +8,7 @@
 //       [--accept-open-shifts] [--accept-newer-sales] [--accept-pending-offline]
 //
 // Exit codes: 0 restored, 1 failure, 2 usage, 3 refused (nothing changed).
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { connect as netConnect } from 'node:net';
 import {
     chmod,
@@ -17,7 +17,6 @@ import {
     readdir,
     readFile,
     rm,
-    stat,
     writeFile,
 } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -33,6 +32,7 @@ import {
     layout,
 } from '../runtime/layout.mjs';
 import { provision } from '../runtime/provision.mjs';
+import { assertAdminOnly, assertOnly, secureFolder } from './acl.mjs';
 import {
     DATA_VERSION,
     MIGRATIONS,
@@ -110,10 +110,6 @@ function portInUse(port) {
         });
         socket.once('error', () => done(false));
     });
-}
-
-async function exists(path) {
-    return Boolean(await stat(path).catch(() => undefined));
 }
 
 async function isEmptyOrAbsent(root) {
@@ -196,104 +192,29 @@ async function stopMongod(child, root) {
     clearTimeout(timer);
 }
 
-/** Well-known SIDs: SYSTEM and BUILTIN\Administrators. */
-export const ADMIN_SIDS = Object.freeze(['S-1-5-18', 'S-1-5-32-544']);
-
-/**
- * Windows commands that make a folder admin-only before any secret is
- * copied into it (#366): owner Administrators, inheritance removed, only
- * SYSTEM and Administrators granted.
- */
-export function secureFolderSteps(path) {
-    return [
-        ['icacls', [path, '/setowner', '*S-1-5-32-544']],
-        [
-            'icacls',
-            [
-                path,
-                '/inheritance:r',
-                '/grant:r',
-                '*S-1-5-18:(OI)(CI)F',
-                '*S-1-5-32-544:(OI)(CI)F',
-            ],
-        ],
-    ];
-}
-
-/** PowerShell that prints a folder's owner SID and every ACE's SID. */
-export function aclQuery(path) {
-    const literal = path.replace(/'/g, "''");
-    return [
-        'powershell.exe',
-        [
-            '-NoProfile',
-            '-NonInteractive',
-            '-Command',
-            `$a = Get-Acl -LiteralPath '${literal}'; $s = [System.Security.Principal.SecurityIdentifier]; ` +
-                `[pscustomobject]@{ Owner = $a.GetOwner($s).Value; Sids = @($a.GetAccessRules($true, $true, $s) | ForEach-Object { $_.IdentityReference.Value }) } | ConvertTo-Json -Compress`,
-        ],
-    ];
-}
-
-/** Problems with a folder's ACL facts (`{Owner, Sids}`), else []. */
-export function aclProblems(facts, { checkAces = true } = {}) {
-    const problems = [];
-    if (!ADMIN_SIDS.includes(facts?.Owner))
-        problems.push(`owned by ${facts?.Owner ?? 'unknown'}`);
-    if (checkAces)
-        for (const sid of [].concat(facts?.Sids ?? []))
-            if (!ADMIN_SIDS.includes(sid)) problems.push(`grants ${sid}`);
-    return problems;
-}
-
-const realExec = (file, args) =>
-    execFileSync(file, args, {
-        encoding: 'utf8',
-        windowsHide: true,
-        timeout: 30000,
-    });
+export { ADMIN_SIDS, aclProblems, secureFolderSteps } from './acl.mjs';
 
 /**
  * Creates (or takes) the fresh data root and its secrets folder and makes
- * both admin-only before secrets are copied. A root that already exists
- * must be owned by SYSTEM or Administrators, else nothing is changed; after
- * restricting, any remaining non-admin entry refuses the restore.
+ * both admin-only before secrets are copied (#366): the parent must be
+ * admin-owned (or is created and secured here), an existing root must be an
+ * admin-owned plain folder, neither may be a junction or link, and the root
+ * must hold only the secrets folder this run created. Any non-admin entry
+ * left after restricting refuses the restore.
  */
-export async function secureFreshRoot(
-    paths,
-    { platform = process.platform, exec = realExec, rootExisted } = {},
-) {
-    const facts = (path) => JSON.parse(exec(...aclQuery(path)));
-    if (platform === 'win32' && rootExisted) {
-        const problems = aclProblems(facts(paths.root), { checkAces: false });
-        if (problems.length)
-            throw new RefusedError(
-                `The empty data root ${paths.root} already exists and is ${problems.join(', ')}. Delete it and restore again.`,
-            );
-    }
-    await mkdir(paths.root, { recursive: true, mode: 0o700 });
-    if (platform === 'win32') {
-        for (const step of secureFolderSteps(paths.root)) exec(...step);
-    }
-    await mkdir(paths.dirs.secrets, { recursive: true, mode: 0o700 });
-    if (platform === 'win32') {
-        for (const step of secureFolderSteps(paths.dirs.secrets)) exec(...step);
-        for (const path of [paths.root, paths.dirs.secrets]) {
-            const problems = aclProblems(facts(path));
-            if (problems.length)
-                throw new RefusedError(
-                    `${path} is not admin-only (${problems.join(', ')}); no secret was copied.`,
-                );
-        }
-    } else {
-        await chmod(paths.root, 0o700);
-        await chmod(paths.dirs.secrets, 0o700);
-    }
+export async function secureFreshRoot(paths, ctx = {}) {
+    await secureFolder(paths.root, ctx);
+    await assertOnly(paths.root, ['secrets']);
+    await secureFolder(paths.dirs.secrets, ctx);
+    for (const path of [paths.root, paths.dirs.secrets])
+        await assertAdminOnly(path, ctx);
+    await assertOnly(paths.root, ['secrets']);
+    await assertOnly(paths.dirs.secrets, []);
 }
 
 /** Places the backup's secrets and identity on a fresh data root. */
-async function seedFreshRoot(paths, dir, rootExisted) {
-    await secureFreshRoot(paths, { rootExisted });
+async function seedFreshRoot(paths, dir) {
+    await secureFreshRoot(paths);
     for (const sub of ['state', 'config']) {
         await mkdir(paths.dirs[sub], { recursive: true, mode: 0o700 });
     }
@@ -403,12 +324,11 @@ export async function restore(options, log = () => {}) {
         );
 
     const fresh = await isEmptyOrAbsent(paths.root);
-    const rootExisted = fresh && (await exists(paths.root));
     if (fresh) {
         log(
             `restore ${manifest.backupId}: new installation from the backup's identity and secrets`,
         );
-        await seedFreshRoot(paths, dir, rootExisted);
+        await seedFreshRoot(paths, dir);
         await provision(
             { dataRoot: paths.root, mongod: options.mongod, api: options.api },
             (l) => log(`provision ${l}`),

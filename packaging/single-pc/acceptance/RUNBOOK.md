@@ -313,20 +313,28 @@ drive"); on a second clean PC follow
 `release\mongodb\bin\mongorestore.exe`, and separately add an extra file
 under `release\api\`; run `-Mode restore` from each copy. Also try
 `-Mode restore` without `-Confirm` and with a relative `-From`. Hostile
-root: as a **standard user**, create an empty
-`C:\ProgramData\Valorthon\GroceryPOS` folder (and, separately, one that
-grants `Everyone` access) before the restore; `-Mode restore` must refuse
-("already exists and is owned by…" / "not admin-only") without copying any
-secret; delete the folder as an administrator, then restore. After the real
-restore, `icacls` on the data root and `secrets\` shows owner
-Administrators, no inherited entries, SYSTEM and Administrators only (plus
-the service grants after install). `-Mode restore-verify` on the fresh PC
-must leave no `C:\ProgramData\Valorthon\GroceryPOS` and no `…-Verify`
-folder behind.
+folders, one at a time, each removed by an administrator afterwards:
+(a) as a **standard user**, create an empty
+`C:\ProgramData\Valorthon\GroceryPOS`; (b) as an administrator, create it
+and grant `Everyone` full control (`icacls <path> /grant *S-1-1-0:(OI)(CI)F`);
+(c) as a standard user, create `C:\ProgramData\Valorthon` itself (on a PC
+where it does not exist yet); (d) as an administrator, make
+`C:\ProgramData\Valorthon\GroceryPOS` a junction to another folder
+(`mklink /J`). After the real restore, `icacls` on the data root and
+`secrets\` shows owner Administrators, no inherited entries, SYSTEM and
+Administrators only (plus the service grants after install).
+`-Mode restore-verify` on the fresh PC must leave no
+`C:\ProgramData\Valorthon\GroceryPOS` and no `…-Verify` folder behind;
+kill one `-Mode restore-verify` during its test restore (Task Manager, end
+`node.exe`) and run it again: it stops the leftover test database and
+succeeds.
 
 Expected: the tampered and extra-file copies are refused (exit 3, "does not
 match the bundle manifest" / "unlisted file") with nothing changed; missing
-`-Confirm` and a relative `-From` are refused; the real restore needs
+`-Confirm` and a relative `-From` are refused; hostile folders are refused
+before any secret is copied: (a) "already exists and is owned by S-1-5-21-…",
+(b) "is not admin-only (grants S-1-1-0)", (c) "C:\ProgramData\Valorthon is
+owned by …", (d) "is a link or junction"; the real restore needs
 `-Confirm`; data and logins restored; everyone must log in again; harness
 `backup-status` passes after the first new backup.
 
@@ -375,10 +383,10 @@ with an open shift and "Offline cash ready":
 3. Start the API and let only R1 upload (stop it again right after R1
    shows as synced; pending count 1). R1 is now a server sale made after
    the backup.
-4. With the services stopped, restore the backup with `Install.ps1 -Mode
-restore -From <full path> -Confirm <id>`: it must refuse open shifts,
-   active offline leases and newer sales; re-run with `-AcceptOpenShifts
--AcceptPendingOffline -AcceptNewerSales`.
+4. With the services stopped, restore the backup with
+   `Install.ps1 -Mode restore -From <full path> -Confirm <id>`: it must
+   refuse open shifts, active offline leases and newer sales; re-run with
+   `-AcceptOpenShifts -AcceptPendingOffline -AcceptNewerSales`.
 5. Start the services; in Chrome on the same register log in again (all
    sessions ended): R2 stays queued and is refused with "needs admin
    reconciliation", never uploaded automatically and never deleted.

@@ -11,12 +11,13 @@
 //
 // Exit codes: 0 ok, 1 failure (recorded in backups\status.json), 2 usage,
 // 3 refused (nothing changed). Output never carries secrets.
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import {
     chmod,
     copyFile,
+    lstat,
     mkdir,
     readdir,
     readFile,
@@ -48,6 +49,7 @@ import {
     releaseLock,
 } from '../runtime/provision.mjs';
 import { destinationMedia } from './removable.mjs';
+import { assertAdminOnly, secureFolder } from './acl.mjs';
 import { readDataVersion } from '../upgrade/migrations.mjs';
 
 export { RefusedError };
@@ -833,7 +835,7 @@ export async function testRestore({
             if (attempt >= 3)
                 throw new BackupError(
                     'VERIFY_FAILED',
-                    'The test-restore mongod did not start.',
+                    `The test-restore mongod did not start after 3 attempts (see ${join(scratch, 'mongod.log')} while it runs; the folder is removed afterwards).`,
                 );
             await start();
         }
@@ -1439,6 +1441,40 @@ export async function verifyBackup(options, log = () => {}) {
     });
 }
 
+/**
+ * A `<root>-Verify` left by a killed verification is removed only when it
+ * is a plain folder holding nothing but our scratch folders and each
+ * scratch mongod was stopped (or none ran); otherwise it is refused.
+ */
+export async function clearVerifyLeftover(work, driver, log = () => {}) {
+    let entries;
+    try {
+        const info = await lstat(work);
+        if (info.isSymbolicLink() || !info.isDirectory())
+            throw new Error('link');
+        entries = await readdir(work);
+    } catch (error) {
+        if (error.code === 'ENOENT') return 'none';
+        throw new RefusedError(
+            `${work} is not a folder this tool made. Restart the PC, then delete ${work} and verify again.`,
+        );
+    }
+    if (entries.some((n) => !n.startsWith(SCRATCH)))
+        throw new RefusedError(
+            `${work} holds files this tool did not make. Restart the PC, then delete ${work} and verify again.`,
+        );
+    for (const name of entries) {
+        const stopped = await stopOrphan(join(work, name), driver);
+        if (!['stopped', 'none'].includes(stopped))
+            throw new RefusedError(
+                `A test database from an earlier verification could not be stopped (${stopped}). Restart the PC, then delete ${work} and verify again.`,
+            );
+        log(`cleanup: leftover verification mongod ${stopped}`);
+    }
+    await rm(work, { recursive: true, force: true });
+    return entries.length ? 'cleaned' : 'removed';
+}
+
 /** `<root>-Verify`, beside the data root (never inside it). */
 export function verifyWorkDir(root) {
     return `${resolve(root)}-Verify`;
@@ -1446,37 +1482,25 @@ export function verifyWorkDir(root) {
 
 async function verifyExportWithoutInstallation(paths, options, log) {
     const work = verifyWorkDir(paths.root);
-    // Created here or refused: never a folder someone else prepared, and
-    // never two verifications at once.
+    const driver = mongoDriver(options.api);
+    // A folder left by a killed verification: stop its scratch mongod
+    // (identity-checked, as for backups) and remove it, if it is ours.
+    await clearVerifyLeftover(work, driver, log);
+    // Created here, never a folder someone else prepared, and never two
+    // verifications at once (mustBeNew).
     try {
-        await mkdir(dirname(work), { recursive: true });
-        await mkdir(work, { mode: 0o700 });
+        await secureFolder(work, {}, { mustBeNew: true });
     } catch (error) {
-        if (error.code === 'EEXIST')
+        if (
+            error instanceof RefusedError &&
+            /already exists/.test(error.message)
+        )
             throw new RefusedError(
-                `${work} already exists (another verification is running, or one stopped). Delete it and verify again.`,
+                `${work} already exists (another verification is running). Wait for it, or restart the PC, then delete ${work} and verify again.`,
             );
         throw error;
     }
-    if (windows)
-        execFileSync('icacls', [work, '/setowner', '*S-1-5-32-544'], {
-            stdio: 'ignore',
-            windowsHide: true,
-            timeout: 30000,
-        });
-    if (windows)
-        execFileSync(
-            'icacls',
-            [
-                work,
-                '/inheritance:r',
-                '/grant:r',
-                '*S-1-5-18:(OI)(CI)F',
-                '*S-1-5-32-544:(OI)(CI)F',
-            ],
-            { stdio: 'ignore', windowsHide: true, timeout: 30000 },
-        );
-    else await chmod(work, 0o700);
+    await assertAdminOnly(work);
     try {
         const { manifest } = await checkBackup(options.from, {
             requireVerified: false,
@@ -1488,7 +1512,7 @@ async function verifyExportWithoutInstallation(paths, options, log) {
             manifest,
             mongod: options.mongod,
             tools: options.tools,
-            driver: mongoDriver(options.api),
+            driver,
         });
         return {
             backupId: manifest.backupId,
