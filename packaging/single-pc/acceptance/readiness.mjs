@@ -34,7 +34,7 @@ export const REQUIRED_DOCS = Object.freeze({
         '30-minute',
         'upgrade-status',
     ],
-    'operations/REPLACEMENT-PC.md': ['restore.mjs', '--confirm', 'export'],
+    'operations/REPLACEMENT-PC.md': ['-Mode restore', '-Confirm', 'export'],
     'operations/HANDOVER.md': [
         'Back up to USB drive',
         'Check Grocery POS',

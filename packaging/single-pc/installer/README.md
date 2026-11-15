@@ -80,7 +80,16 @@ bundle.
 .\Install.ps1 -ManifestSha256 <hash> -Mode repair [-BackupTime HH:MM]
 .\Install.ps1 -ManifestSha256 <hash> -Mode uninstall [-RemoveCaTrust]
 .\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
+.\Install.ps1 -ManifestSha256 <hash> -Mode restore-verify -From <full path of a backup folder>
+.\Install.ps1 -ManifestSha256 <hash> -Mode restore -From <full path> -Confirm <backup id> [-AcceptOpenShifts] [-AcceptNewerSales] [-AcceptPendingOffline]
 ```
+
+`restore` and `restore-verify` (#366) run `backup\restore.mjs` and
+`backup.mjs verify` on the data root `%ProgramData%\Valorthon\GroceryPOS`
+with `node`, `mongod`, the Database Tools and the API driver from the same
+verified admin-only copy as every other mode (the copy also holds the
+release's `mongodb\` and `api\`, each file hashed). `-From` must be a full
+path; `-Confirm` and the `-Accept…` flags go with `restore` only.
 
 Exit codes: 0 done, 1 failed (nothing removed, re-run resumes), 2 usage,
 3 refused (nothing changed).
@@ -171,6 +180,8 @@ Steps (each idempotent; `state\installer.json` records the stages):
     "Grocery POS help" (common Start menu, the release's
     `help\RECOVERY.md` in Notepad) are created with the others (owner
     decisions 2026-11-15, see [../diagnostics/](../diagnostics/README.md)).
+    "Grocery POS owner guide" (common Start menu, next to the help entry,
+    the release's `help\HANDOVER.md` in Notepad; owner decision, #366).
 11. **Shortcut** "Grocery POS" on the Public Desktop and the common Start
     menu: hidden `powershell.exe -File Launch.ps1`, which polls
     `https://localhost:1443/v1/health/ready` (TLS 1.2, up to 180 s) and only

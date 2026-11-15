@@ -383,12 +383,16 @@ test('Install.ps1 runs the bundle-verified upgrade tool for the upgrade modes', 
     assert.match(ps, /\$Mode -eq 'upgrade'\) \{\s*\n\s*# The manifest bytes/);
     // Still no download or execution from the bundle folder.
     assert.doesNotMatch(ps, /Invoke-WebRequest|Start-BitsTransfer|iex\b/i);
-    // Restore options only go with upgrade-rollback.
+    // -RestoreBackup only goes with upgrade-rollback; -AcceptNewerSales
+    // with a rollback restore or -Mode restore (#366).
     assert.match(
         ps,
-        /\(\$RestoreBackup -or \$AcceptNewerSales\) -and \$Mode -ne 'upgrade-rollback'[\s\S]*?Stop-Refused/,
+        /\$RestoreBackup -and \$Mode -ne 'upgrade-rollback'\) \{\s*\n\s*Stop-Refused/,
     );
-    assert.match(ps, /\$AcceptNewerSales -and -not \$RestoreBackup/);
+    assert.match(
+        ps,
+        /\$AcceptNewerSales -and -not \(\$Mode -eq 'restore' -or \(\$Mode -eq 'upgrade-rollback' -and \$RestoreBackup\)\)/,
+    );
 });
 
 test('a restore checks the backup data version against the release', async () => {

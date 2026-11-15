@@ -301,14 +301,22 @@ Evidence: harness `____`, remote output `____`. Result (PASS/FAIL): `____`
 
 Steps: on PC 1 make test sales, a backup and a USB export ("Back up to USB
 drive"); on a second clean PC follow
-[../operations/REPLACEMENT-PC.md](../operations/REPLACEMENT-PC.md) exactly;
-record the restore duration.
+[../operations/REPLACEMENT-PC.md](../operations/REPLACEMENT-PC.md) exactly
+(`Install.ps1 -Mode restore-verify`, then `-Mode restore -From <full path>
+-Confirm <id>`); record the restore duration. Before the real restore, on a
+**copy** of the bundle, change one byte of
+`release\mongodb\bin\mongorestore.exe`, and separately add an extra file
+under `release\api\`; run `-Mode restore` from each copy. Also try
+`-Mode restore` without `-Confirm` and with a relative `-From`.
 
-Expected: `--confirm` required; data and logins restored; everyone must log
-in again; harness `backup-status` passes after the first new backup.
+Expected: the tampered and extra-file copies are refused (exit 3, "does not
+match the bundle manifest" / "unlisted file") with nothing changed; missing
+`-Confirm` and a relative `-From` are refused; the real restore needs
+`-Confirm`; data and logins restored; everyone must log in again; harness
+`backup-status` passes after the first new backup.
 
-Evidence: restore output `____`, duration (min) `____`, screenshots `____`.
-Result (PASS/FAIL): `____`
+Evidence: refusal outputs `____`, restore output `____`, duration (min)
+`____`, screenshots `____`. Result (PASS/FAIL): `____`
 
 ### B8. Populated and interrupted upgrade
 
@@ -493,6 +501,9 @@ Evidence: check outputs `____`. Result (PASS/FAIL): `____`
 Steps: "Check Grocery POS": accept elevation (full check), decline it
 (partial check that says what it could not see); "Save support file…" to a
 USB stick; "Grocery POS help" opens the guide; repeat as a standard user.
+
+Also open **Grocery POS owner guide** (Start menu, next to the help
+entry): Notepad shows `help\HANDOVER.md`; uninstall removes the entry.
 
 Expected: as diagnostics README; the support file holds no sales data,
 passwords or names; a brief console flash is a known gap.

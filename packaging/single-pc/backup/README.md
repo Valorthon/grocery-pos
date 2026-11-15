@@ -196,8 +196,14 @@ run; an interrupted restore must be finished by re-running the same restore
 
 ### Replacement PC
 
-1. Install the same or a newer release on the replacement (#362), without
-   provisioning the data root, or point `--data-root` at an empty folder.
+The operator procedure is
+[../operations/REPLACEMENT-PC.md](../operations/REPLACEMENT-PC.md): on
+Windows run it through `Install.ps1 -Mode restore` (#366), which runs
+`restore.mjs` with node, mongod, the tools and the API driver from its
+verified admin-only copy, never from the bundle folder.
+
+1. Start from an empty data root (restore before installing; an installed
+   PC has another installation id and refuses the backup).
 2. Run `restore.mjs --from <drive>\GroceryPOS-backup-<id> --confirm <id> …`.
    On an empty data root it places the backup's identity and secrets,
    provisions (#360), and restores. The store's users and passwords come

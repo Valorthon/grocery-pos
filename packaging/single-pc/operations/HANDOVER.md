@@ -1,9 +1,8 @@
 # Grocery POS: owner handover guide
 
 For the store owner, at the end of the vendor's installation or maintenance
-period. Keep a printed copy with the PC; it is also on the PC as
-`help\HANDOVER.md` in the installed release folder
-(`C:\Program Files\Valorthon\GroceryPOS\releases\<version>\`).
+period. Keep a printed copy with the PC; it is also in the Start menu as
+**Grocery POS owner guide**.
 
 ## Your credentials belong to the owner
 
@@ -18,12 +17,13 @@ period. Keep a printed copy with the PC; it is also on the PC as
 
 ## Shortcuts on the desktop and in the Start menu
 
-| Shortcut                 | What it does                                                         |
-| ------------------------ | -------------------------------------------------------------------- |
-| **Grocery POS**          | Waits until the system is ready, then opens it in Chrome.            |
-| **Back up to USB drive** | Makes a fresh backup and copies it to a USB drive or SD card.        |
-| **Check Grocery POS**    | Checks the system and tells you what to do if something is wrong.    |
-| **Grocery POS help**     | Opens the "what to do when something goes wrong" guide (Start menu). |
+| Shortcut                    | What it does                                                         |
+| --------------------------- | -------------------------------------------------------------------- |
+| **Grocery POS**             | Waits until the system is ready, then opens it in Chrome.            |
+| **Back up to USB drive**    | Makes a fresh backup and copies it to a USB drive or SD card.        |
+| **Check Grocery POS**       | Checks the system and tells you what to do if something is wrong.    |
+| **Grocery POS help**        | Opens the "what to do when something goes wrong" guide (Start menu). |
+| **Grocery POS owner guide** | Opens this guide (Start menu).                                       |
 
 Always open the app with the **Grocery POS** shortcut. The address is
 `https://localhost:1443`. Never click through a certificate warning; run

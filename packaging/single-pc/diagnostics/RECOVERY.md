@@ -159,9 +159,9 @@ release (its forward migration), the data-version marker stays `migrating`
 and the API refuses to start on purpose, so half-migrated data is never used.
 
 1. Do not start the services by hand and do not run a different restore.
-2. As an administrator, re-run the same restore: the same `--from` folder,
-   the same `--confirm <backup id>` and the same `--accept-*` flags as the
-   first time. It resumes from its journal (`state\restore.json`), keeps the
+2. As an administrator, re-run the same restore: the same
+   `Install.ps1 -Mode restore` command with the same `-From` folder, the same
+   `-Confirm <backup id>` and the same `-Accept…` flags as the first time. It resumes from its journal (`state\restore.json`), keeps the
    safety backup it already took and finishes the migration.
 3. Start the services (or restart the PC), run the check, then make a backup
    and a USB export.

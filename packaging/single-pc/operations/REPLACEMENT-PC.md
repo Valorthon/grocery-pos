@@ -38,18 +38,23 @@ its own (a reinstall) and keeps the restored users.
 
 1. Copy the bundle folder and the export folder to the PC (for example
    `C:\GroceryPOS-Setup` and `C:\GroceryPOS-Restore\GroceryPOS-backup-<id>`).
-   In an elevated Windows PowerShell compare
-   `(Get-FileHash C:\GroceryPOS-Setup\bundle-manifest.json).Hash` with the
-   recorded hash, and run nothing from the bundle until it matches.
-2. Verify the export, then restore it onto the empty data root with the
-   bundle's own release tools (from `C:\GroceryPOS-Setup\release`):
+2. Open Windows PowerShell **as administrator** in the bundle folder and
+   check the export (optional but recommended), then restore it onto the
+   empty data root. Always give `-From` as a full path:
 
-    ```text
-    node\node.exe tools\backup\backup.mjs verify --data-root "C:\ProgramData\Valorthon\GroceryPOS" --mongod mongodb\bin\mongod.exe --tools mongodb\bin --api api --from C:\GroceryPOS-Restore\GroceryPOS-backup-<id>
-    node\node.exe tools\backup\restore.mjs --data-root "C:\ProgramData\Valorthon\GroceryPOS" --from C:\GroceryPOS-Restore\GroceryPOS-backup-<id> --confirm <id> --mongod mongodb\bin\mongod.exe --tools mongodb\bin --api api
+    ```powershell
+    powershell -ExecutionPolicy Bypass -File .\Install.ps1 -ManifestSha256 <hash> -Mode restore-verify -From C:\GroceryPOS-Restore\GroceryPOS-backup-<id>
+    powershell -ExecutionPolicy Bypass -File .\Install.ps1 -ManifestSha256 <hash> -Mode restore -From C:\GroceryPOS-Restore\GroceryPOS-backup-<id> -Confirm <id>
     ```
 
-    `--confirm` must repeat the backup id exactly. The tool places the
+    Nothing runs from the bundle folder (it may be a user-writable USB stick
+    or Downloads folder): `Install.ps1` refuses a manifest that is not the
+    recorded hash, copies `node`, `tools`, `mongodb` and `api` into a fresh
+    admin-only folder under Program Files, refuses any unlisted or changed
+    file there, and runs `restore.mjs` (or `backup.mjs verify`) with
+    `mongod`, the Database Tools and the API driver from that copy. The data
+    root is always `C:\ProgramData\Valorthon\GroceryPOS`.
+    `-Confirm` must repeat the backup id exactly. The tool places the
     backup's identity and secrets, provisions the database, restores, and
     takes older data forward to this release. If it stops part-way, re-run
     the same command (RECOVERY.md "A restore stopped part-way").
@@ -64,8 +69,10 @@ its own (a reinstall) and keeps the restored users.
 5. Run **Check Grocery POS**, then make a backup and a new USB export.
 6. Record the restore duration for the owner.
 
-To restore an older backup onto the **same** PC (data damaged), use the
-same `restore.mjs` command with the services `GroceryPOS-Proxy` and
-`GroceryPOS-API` stopped; it refuses open shifts, active offline leases and
-newer sales unless the matching `--accept-*` flag is given, and takes a
-safety backup first.
+To restore an older backup onto the **same** PC (data damaged), stop
+`GroceryPOS-Proxy` and `GroceryPOS-API` (`Stop-Service GroceryPOS-Proxy,
+GroceryPOS-API`) and run the same `-Mode restore` command with the bundle of
+the installed release. It refuses open shifts, active offline leases and
+newer sales unless `-AcceptOpenShifts`, `-AcceptPendingOffline` or
+`-AcceptNewerSales` is given, and takes a safety backup first. Then start the
+services again (or restart the PC).

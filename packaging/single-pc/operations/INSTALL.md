@@ -66,7 +66,7 @@ it differs from what you see (B15).
     ```
 
 4. Walk the owner through [HANDOVER.md](HANDOVER.md) (it is also on the PC
-   as `help\HANDOVER.md` in the release folder).
+   in the Start menu as **Grocery POS owner guide**).
 5. Make the first backup and USB export together ("Back up to USB drive").
 6. Keep the bundle folder (or the USB stick) for repairs, and delete the copy
    in `C:\GroceryPOS-Setup` if the owner prefers; the installation does not

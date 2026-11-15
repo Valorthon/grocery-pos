@@ -27,6 +27,14 @@
     .\Install.ps1 -ManifestSha256 <hash> -Mode upgrade-rollback -RestoreBackup <pre-upgrade backup id>
 .EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode upgrade-status
+.EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode restore-verify -From D:\GroceryPOS-backup-<id>
+.EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode restore -From D:\GroceryPOS-backup-<id> -Confirm <id>
+.NOTES
+    restore and restore-verify (#366) run backup\restore.mjs and backup.mjs
+    verify with node, mongod, the Database Tools and the API driver all from
+    the verified admin-only copy, never from the bundle folder.
 #>
 [CmdletBinding()]
 param(
@@ -34,7 +42,8 @@ param(
     [ValidatePattern('^[0-9A-Fa-f]{64}$')]
     [string]$ManifestSha256,
     [ValidateSet('install', 'repair', 'uninstall', 'handover-done',
-        'upgrade', 'upgrade-rollback', 'upgrade-status')]
+        'upgrade', 'upgrade-rollback', 'upgrade-status',
+        'restore', 'restore-verify')]
     [string]$Mode = 'install',
     [string]$AdminUsername,
     [string]$StoreTimezone,
@@ -42,7 +51,12 @@ param(
     [switch]$RemoveCaTrust,
     [ValidatePattern('^[0-9A-Za-z-]{1,80}$')]
     [string]$RestoreBackup,
-    [switch]$AcceptNewerSales
+    [switch]$AcceptNewerSales,
+    [string]$From,
+    [ValidatePattern('^[0-9A-Za-z-]{1,80}$')]
+    [string]$Confirm,
+    [switch]$AcceptOpenShifts,
+    [switch]$AcceptPendingOffline
 )
 
 Set-StrictMode -Version Latest
@@ -59,11 +73,23 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     Stop-Refused 'run Windows PowerShell as an administrator.'
 }
 # Mode-specific options are refused elsewhere, never silently ignored.
-if (($RestoreBackup -or $AcceptNewerSales) -and $Mode -ne 'upgrade-rollback') {
-    Stop-Refused '-RestoreBackup and -AcceptNewerSales only go with -Mode upgrade-rollback.'
+$restoreMode = ($Mode -eq 'restore' -or $Mode -eq 'restore-verify')
+if ($RestoreBackup -and $Mode -ne 'upgrade-rollback') {
+    Stop-Refused '-RestoreBackup only goes with -Mode upgrade-rollback.'
 }
-if ($AcceptNewerSales -and -not $RestoreBackup) {
-    Stop-Refused '-AcceptNewerSales only goes with -RestoreBackup.'
+if ($AcceptNewerSales -and -not ($Mode -eq 'restore' -or ($Mode -eq 'upgrade-rollback' -and $RestoreBackup))) {
+    Stop-Refused '-AcceptNewerSales only goes with -Mode restore or -Mode upgrade-rollback -RestoreBackup.'
+}
+if (($From -and -not $restoreMode) -or (($Confirm -or $AcceptOpenShifts -or $AcceptPendingOffline) -and $Mode -ne 'restore')) {
+    Stop-Refused '-From only goes with -Mode restore or restore-verify; -Confirm, -AcceptOpenShifts and -AcceptPendingOffline only with -Mode restore.'
+}
+if ($restoreMode) {
+    if (-not $From) { Stop-Refused "-Mode $Mode needs -From <backup folder>." }
+    if ($Mode -eq 'restore' -and -not $Confirm) { Stop-Refused '-Mode restore needs -Confirm <backup id>.' }
+    # Absolute only: nothing depends on the current directory.
+    if (-not [System.IO.Path]::IsPathRooted($From)) { Stop-Refused '-From must be a full path (for example D:\GroceryPOS-backup-<id>).' }
+    $From = [System.IO.Path]::GetFullPath($From)
+    if (-not (Test-Path -LiteralPath $From -PathType Container)) { Stop-Refused "-From $From is not a folder." }
 }
 
 $bundle = $PSScriptRoot
@@ -81,10 +107,14 @@ if ($manifestHash -ne $ManifestSha256.ToLowerInvariant()) {
 }
 $manifest = [System.Text.Encoding]::UTF8.GetString($manifestBytes) | ConvertFrom-Json
 
-# Expected files of the code that runs: release/node/** and release/tools/**.
+# Expected files of the code that runs: release/node/** and release/tools/**;
+# a restore also runs mongod, the Database Tools and the API's driver.
+$parts = @('node', 'tools')
+if ($restoreMode) { $parts += @('mongodb', 'api') }
+$partPattern = '^release/(' + ($parts -join '|') + ')/(.+)$'
 $expected = @{}
 foreach ($entry in $manifest.files.PSObject.Properties) {
-    if ($entry.Name -match '^release/(node|tools)/(.+)$') {
+    if ($entry.Name -match $partPattern) {
         $expected[$entry.Name.Substring('release/'.Length)] = $entry.Value
     }
 }
@@ -100,7 +130,7 @@ $run = Join-Path $programDir ('installer-run-' + [guid]::NewGuid().ToString('N')
 New-Item -ItemType Directory -Path $run -Force | Out-Null
 $code = 1
 try {
-    foreach ($part in 'node', 'tools') {
+    foreach ($part in $parts) {
         Copy-Item -LiteralPath (Join-Path $bundle "release\$part") -Destination $run -Recurse
     }
     $seen = 0
@@ -122,7 +152,25 @@ try {
     # Upgrades (#364) run the new bundle's upgrade tool from the same
     # verified copy; it re-verifies the whole release itself.
     $upgradeCommands = @{ 'upgrade' = 'upgrade'; 'upgrade-rollback' = 'rollback'; 'upgrade-status' = 'status' }
-    if ($upgradeCommands.ContainsKey($Mode)) {
+    if ($restoreMode) {
+        foreach ($needed in 'tools/backup/restore.mjs', 'tools/backup/backup.mjs', 'mongodb/bin/mongod.exe',
+            'mongodb/bin/mongorestore.exe', 'api/package.json') {
+            if (-not $expected.ContainsKey($needed)) { throw "REFUSED:this bundle has no release/$needed." }
+        }
+        $dataRoot = Join-Path $env:ProgramData 'Valorthon\GroceryPOS'
+        $runtime = @('--mongod', (Join-Path $run 'mongodb\bin\mongod.exe'),
+            '--tools', (Join-Path $run 'mongodb\bin'), '--api', (Join-Path $run 'api'))
+        if ($Mode -eq 'restore') {
+            $nodeArgs = @((Join-Path $run 'tools\backup\restore.mjs'), '--data-root', $dataRoot,
+                '--from', $From, '--confirm', $Confirm) + $runtime
+            if ($AcceptOpenShifts) { $nodeArgs += '--accept-open-shifts' }
+            if ($AcceptNewerSales) { $nodeArgs += '--accept-newer-sales' }
+            if ($AcceptPendingOffline) { $nodeArgs += '--accept-pending-offline' }
+        } else {
+            $nodeArgs = @((Join-Path $run 'tools\backup\backup.mjs'), 'verify', '--data-root', $dataRoot) +
+                $runtime + @('--from', $From)
+        }
+    } elseif ($upgradeCommands.ContainsKey($Mode)) {
         if (-not $expected.ContainsKey('tools/upgrade/upgrade.mjs')) {
             throw 'REFUSED:this bundle has no upgrade tool.'
         }
