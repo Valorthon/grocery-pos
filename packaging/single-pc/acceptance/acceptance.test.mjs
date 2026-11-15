@@ -420,6 +420,18 @@ test('readiness: runbook problems name missing scenarios and recorded results', 
     assert.ok(!problems.some((p) => p.includes('recorded')));
     const filled = readiness.runbookProblems('Result (PASS/FAIL): PASS\n');
     assert.ok(filled.some((p) => p.includes('recorded PASS/FAIL')));
+    for (const line of [
+        'Result (PASS/FAIL): `PASS`',
+        'Result (PASS/FAIL): `fail`',
+        'Result (PASS/FAIL): **PASS**',
+        '| B1  | Clean install | `PASS` |',
+    ])
+        assert.ok(
+            readiness
+                .runbookProblems(line)
+                .some((p) => p.includes('recorded PASS/FAIL')),
+            line,
+        );
 });
 
 test('readiness: components need a license, a pinned hash and https', () => {

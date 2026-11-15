@@ -18,8 +18,10 @@ Windows order below is not yet performed (RUNBOOK B7).
 - The owner's USB drive with a `GroceryPOS-backup-<id>` folder (the newest
   export). An export carries the store's data **and its secrets**, without a
   password: keep it as safe as the PC itself.
-- The verified bundle of the **same or a newer** release than the one that
-  made the backup (an older release refuses newer data).
+- The verified bundle (and its recorded manifest hash) of the **same or a
+  newer** release than the one that made the backup (an older release
+  refuses newer data). A same-PC restore (end of this page) needs the bundle
+  of the installed release too: every restore runs through `Install.ps1`.
 
 ## What is lost
 

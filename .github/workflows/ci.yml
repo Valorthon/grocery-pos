@@ -62,8 +62,14 @@ jobs:
                         - 'package.json'
                         - '**/package.json'
                       # Single-PC packaging (#366), components.json included.
+                      # The bundle builds the API and client from source too.
                       packaging:
                         - 'packaging/single-pc/**'
+                        - 'apps/**'
+                        - 'packages/**'
+                        - 'pnpm-lock.yaml'
+                        - 'pnpm-workspace.yaml'
+                        - '**/package.json'
 
     verify:
         name: Verify
@@ -266,6 +272,7 @@ jobs:
                       | tee "$RUNNER_TEMP/bundle.log"
                   hash=$(tail -n 1 "$RUNNER_TEMP/bundle.log" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).manifestSha256))')
                   echo "MANIFEST_SHA256=$hash" >> "$GITHUB_ENV"
+                  echo "Single-PC bundle \`bundle-manifest.json\` SHA-256: \`$hash\`" >> "$GITHUB_STEP_SUMMARY"
 
             - name: Verify bundle
               run: |

@@ -512,3 +512,69 @@ test('the export CLI refuses a fixed destination unless the test harness allows 
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('a fresh restore makes the root and secrets admin-only before copying secrets (#366)', async () => {
+    const { secureFreshRoot, secureFolderSteps, aclProblems } =
+        await import('./restore.mjs');
+    assert.deepEqual(secureFolderSteps('C:\\r')[0], [
+        'icacls',
+        ['C:\\r', '/setowner', '*S-1-5-32-544'],
+    ]);
+    assert.ok(secureFolderSteps('C:\\r')[1][1].includes('/inheritance:r'));
+    assert.deepEqual(
+        aclProblems({ Owner: 'S-1-5-32-544', Sids: ['S-1-5-18'] }),
+        [],
+    );
+    assert.deepEqual(
+        aclProblems({ Owner: 'S-1-5-21-1-2-3-1001', Sids: ['S-1-1-0'] }),
+        ['owned by S-1-5-21-1-2-3-1001', 'grants S-1-1-0'],
+    );
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-secure-'));
+    let n = 0;
+    const run = async (owner, sids, rootExisted) => {
+        const calls = [];
+        const paths = layout(join(dir, `root-${n++}`));
+        const exec = (file, args) => {
+            calls.push([file, ...args].join(' '));
+            return file === 'powershell.exe'
+                ? JSON.stringify({ Owner: owner, Sids: sids })
+                : '';
+        };
+        try {
+            await secureFreshRoot(paths, {
+                platform: 'win32',
+                exec,
+                rootExisted,
+            });
+            return { calls, ok: true };
+        } catch (error) {
+            return { calls, error };
+        }
+    };
+    try {
+        const good = await run('S-1-5-32-544', ['S-1-5-18', 'S-1-5-32-544']);
+        assert.ok(good.ok, good.error?.message);
+        // Owner and inheritance on the root, then on secrets, then checked.
+        assert.equal(
+            good.calls.filter((c) => c.includes('/setowner')).length,
+            2,
+        );
+        assert.equal(
+            good.calls.filter((c) => c.includes('/inheritance:r')).length,
+            2,
+        );
+        assert.ok(good.calls.at(-1).startsWith('powershell.exe'));
+        // A pre-created root owned by a standard user: refused, untouched.
+        const hostile = await run('S-1-5-21-1-2-3-1001', [], true);
+        assert.match(hostile.error.message, /already exists and is owned by/);
+        assert.ok(!hostile.calls.some((c) => c.startsWith('icacls')));
+        // A grant that survives restriction: refused before any secret.
+        const leaky = await run('S-1-5-32-544', ['S-1-5-32-545']);
+        assert.match(
+            leaky.error.message,
+            /not admin-only \(grants S-1-5-32-545\)/,
+        );
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});

@@ -94,7 +94,7 @@ export function runbookProblems(text) {
     for (const { id } of MANUAL)
         if (!SCENARIOS.includes(id))
             problems.push(`harness: manual ${id} not a runbook scenario`);
-    if (/(Result[^\n|]*?:\s*|\|\s*)(PASS|FAIL)\b(?!\/)/.test(text)) {
+    if (/(Result[^\n|]*?:\s*|\|\s*)\**`?\**(PASS|FAIL)\b(?!\/)/i.test(text)) {
         // A filled result in the template means someone committed evidence.
         problems.push(
             'runbook: contains a recorded PASS/FAIL result; keep the template blank',

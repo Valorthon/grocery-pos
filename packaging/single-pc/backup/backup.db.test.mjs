@@ -26,6 +26,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
+import { waitPortsFree } from '../runtime/ports-helper.test.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { DB_USERS, ORIGIN, PORTS, layout } from '../runtime/layout.mjs';
 
@@ -123,6 +124,7 @@ async function stopService(child) {
     if (!child || child.exitCode !== null) return;
     child.kill('SIGTERM');
     await once(child, 'exit');
+    await waitPortsFree([PORTS.mongo]);
 }
 
 function http(path, { method = 'GET', body, cookie } = {}) {
@@ -272,6 +274,7 @@ describe(
         let ownerPassword;
 
         before(async () => {
+            await waitPortsFree();
             dir = await mkdtemp(join(tmpdir(), 'gpos-backup-db-'));
             paths = layout(join(dir, 'source'));
             exportDir = join(dir, 'usb');
@@ -329,6 +332,8 @@ describe(
             await stopService(service);
             await rm(dir, { recursive: true, force: true });
         });
+        // Registered after the cleanup above, so it runs once services stopped.
+        after(() => waitPortsFree());
 
         test('a backup taken under concurrent transactional writes restores one consistent point in time', async () => {
             const client = await apiClient(paths);
@@ -601,31 +606,55 @@ describe(
                 return 0;
             };
             let orphanPort = 0;
+            // A run that finishes before the kill lands (a fast machine) is
+            // a legitimate success: it moves the baseline and the phase is
+            // tried again, at most three times (#366 flake hardening).
+            let baseline = status0.lastVerifiedSuccess;
+            let verifiedCount = 1;
             for (const phase of ['dump', 'verify']) {
-                const killed = run([backupCli, 'create', ...bin(paths.root)]);
-                await boundedWait(
-                    async () =>
-                        phase === 'dump'
-                            ? (await readdir(paths.dirs.backups)).some((n) =>
-                                  n.startsWith('.incomplete-'),
-                              )
-                            : (orphanPort = await scratchPort()) > 0,
-                    { intervalMs: 5 },
-                );
-                killed.child.kill('SIGKILL');
-                await killed.done;
-                status = JSON.parse(
-                    (await backup('status', paths.root)).stdout,
-                );
-                assert.deepEqual(
-                    status.lastVerifiedSuccess,
-                    status0.lastVerifiedSuccess,
-                    `killed in ${phase}: not a success`,
-                );
-                assert.equal(
-                    status.backups.filter((b) => b.verified).length,
-                    1,
-                );
+                let landed = false;
+                for (let attempt = 0; attempt < 3 && !landed; attempt++) {
+                    const killed = run([
+                        backupCli,
+                        'create',
+                        ...bin(paths.root),
+                    ]);
+                    let finished = false;
+                    killed.done.then(() => (finished = true));
+                    await boundedWait(
+                        async () =>
+                            finished ||
+                            (phase === 'dump'
+                                ? (await readdir(paths.dirs.backups)).some(
+                                      (n) => n.startsWith('.incomplete-'),
+                                  )
+                                : (orphanPort = await scratchPort()) > 0),
+                        { intervalMs: 5, timeoutMs: 120000 },
+                    );
+                    if (!finished) killed.child.kill('SIGKILL');
+                    const end = await killed.done;
+                    status = JSON.parse(
+                        (await backup('status', paths.root)).stdout,
+                    );
+                    if (end.code === 0) {
+                        baseline = status.lastVerifiedSuccess;
+                        verifiedCount = status.backups.filter(
+                            (b) => b.verified,
+                        ).length;
+                        continue;
+                    }
+                    landed = true;
+                    assert.deepEqual(
+                        status.lastVerifiedSuccess,
+                        baseline,
+                        `killed in ${phase}: not a success`,
+                    );
+                    assert.equal(
+                        status.backups.filter((b) => b.verified).length,
+                        verifiedCount,
+                    );
+                }
+                assert.ok(landed, `could not kill a run during ${phase}`);
             }
             assert.equal(
                 await listening(orphanPort),
@@ -642,7 +671,10 @@ describe(
                 'the leftover test mongod was stopped',
             );
             status = JSON.parse((await backup('status', paths.root)).stdout);
-            assert.equal(status.backups.filter((b) => b.verified).length, 2);
+            assert.equal(
+                status.backups.filter((b) => b.verified).length,
+                verifiedCount + 1,
+            );
             assert.equal(status.consecutiveFailures, 0);
             const left = (await readdir(paths.dirs.backups)).filter((n) =>
                 n.startsWith('.'),
@@ -896,6 +928,17 @@ describe(
             service = undefined;
 
             const target = layout(join(dir, 'replacement'));
+            // #366: the export is checked first on the fresh PC; that
+            // creates neither the data root nor anything left beside it.
+            const checked = await backup(
+                'verify',
+                target.root,
+                '--from',
+                exported,
+            );
+            assert.equal(checked.code, 0, checked.stderr);
+            assert.ok(!existsSync(target.root));
+            assert.ok(!existsSync(`${target.root}-Verify`));
             const result = await restoreRun(
                 target.root,
                 exported,

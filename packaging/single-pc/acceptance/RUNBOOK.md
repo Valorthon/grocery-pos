@@ -77,10 +77,15 @@ No scenario here may run against a customer's PC or customer data
 
 ## Harness
 
-On the target, after B1, from an elevated Windows PowerShell in a copy of the
-source's `packaging\single-pc\` folder (the harness imports `..\runtime` and
-`..\installer`; it runs with the installed release's own `node.exe`, so no
-developer tooling is needed):
+On the target, after B1, copy the source's `packaging\single-pc\` folder
+into an **admin-only** folder (for example
+`C:\Program Files\Valorthon\GroceryPOS-Acceptance\`, which standard users
+cannot write; never run it elevated from a USB stick, Downloads or the
+Desktop), compare `Get-FileHash` of `acceptance\acceptance.mjs` with the
+commit's file, and run it from there in an elevated Windows PowerShell (the
+harness imports `..\runtime` and `..\installer`; it runs with the installed
+release's own `node.exe`, so no developer tooling is needed). Delete the
+folder after the run:
 
 ```powershell
 .\acceptance\Acceptance.ps1 -Out <evidence folder>\checks-<n>.json -Commit <40 hex> `
@@ -307,7 +312,17 @@ drive"); on a second clean PC follow
 **copy** of the bundle, change one byte of
 `release\mongodb\bin\mongorestore.exe`, and separately add an extra file
 under `release\api\`; run `-Mode restore` from each copy. Also try
-`-Mode restore` without `-Confirm` and with a relative `-From`.
+`-Mode restore` without `-Confirm` and with a relative `-From`. Hostile
+root: as a **standard user**, create an empty
+`C:\ProgramData\Valorthon\GroceryPOS` folder (and, separately, one that
+grants `Everyone` access) before the restore; `-Mode restore` must refuse
+("already exists and is owned by…" / "not admin-only") without copying any
+secret; delete the folder as an administrator, then restore. After the real
+restore, `icacls` on the data root and `secrets\` shows owner
+Administrators, no inherited entries, SYSTEM and Administrators only (plus
+the service grants after install). `-Mode restore-verify` on the fresh PC
+must leave no `C:\ProgramData\Valorthon\GroceryPOS` and no `…-Verify`
+folder behind.
 
 Expected: the tampered and extra-file copies are refused (exit 3, "does not
 match the bundle manifest" / "unlisted file") with nothing changed; missing
@@ -344,14 +359,45 @@ Evidence: screenshots `____`. Result (PASS/FAIL): `____`
 
 ### B10. Pending receipt preservation
 
-Steps: queue offline cash receipts (B4 method) and do not let them upload;
-then perform an upgrade, a repair and a reinstall in turn (stop the API
-again before each so the queue stays); bring the API back.
+Steps, part 1 (lifecycle): queue offline cash receipts (B4 method) and do
+not let them upload; then perform an upgrade, a repair and a reinstall in
+turn (stop the API again before each so the queue stays); bring the API
+back.
 
-Expected: receipts stay in Chrome and upload exactly once afterwards (after
-a restore they need ADMIN reconciliation, #363).
+Steps, part 2 (restore with queued receipts, #363/#37): on a test register
+with an open shift and "Offline cash ready":
 
-Evidence: queue counts before/after `____`, Sales list `____`.
+1. Make a backup (`backup.mjs create --kind manual`, or "Back up to USB
+   drive"), note its id.
+2. Stop the API (`Stop-Service GroceryPOS-Proxy, GroceryPOS-API`) and record
+   two offline cash sales: R1 and R2. Note their receipt numbers and the
+   register's pending count (2).
+3. Start the API and let only R1 upload (stop it again right after R1
+   shows as synced; pending count 1). R1 is now a server sale made after
+   the backup.
+4. With the services stopped, restore the backup with `Install.ps1 -Mode
+restore -From <full path> -Confirm <id>`: it must refuse open shifts,
+   active offline leases and newer sales; re-run with `-AcceptOpenShifts
+-AcceptPendingOffline -AcceptNewerSales`.
+5. Start the services; in Chrome on the same register log in again (all
+   sessions ended): R2 stays queued and is refused with "needs admin
+   reconciliation", never uploaded automatically and never deleted.
+6. As an ADMIN on that register, reconcile R2 with a reason. Then reload
+   and check the queue is empty.
+7. Sales list: R2 appears exactly once; R1 is gone with the restore (it was
+   recorded after the backup) unless its receipt was still queued, in which
+   case it is reconciled like R2, also exactly once. Count the drawer and
+   record any cash sale that no longer exists anywhere by hand
+   (backup README "Browser data").
+
+Expected: part 1: receipts stay in Chrome and upload exactly once. Part 2:
+each `-Accept…` refusal shown; R2 survives the restore in Chrome, needs
+ADMIN reconciliation with a reason, appears once; no duplicate receipt; the
+restore audit entry `SYSTEM.DATABASE_RESTORED` lists the accepted overrides
+(Audit Log).
+
+Evidence: queue counts per step `____`, refusal outputs `____`, Sales list
+before/after `____`, Audit Log screenshot `____`.
 Result (PASS/FAIL): `____`
 
 ### B11. Crash recovery

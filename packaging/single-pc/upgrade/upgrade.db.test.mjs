@@ -13,7 +13,8 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
+import { waitPortsFree } from '../runtime/ports-helper.test.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { SERVICES, layout } from '../runtime/layout.mjs';
 import { createBackup, readRootPassword, rootUri } from '../backup/backup.mjs';
@@ -46,6 +47,8 @@ const { MongoClient } = createRequire(join(repoApi, 'package.json'))(
 
 const SALES = 40;
 const cleanups = [];
+beforeEach(() => waitPortsFree());
+
 afterEach(async () => {
     for (const fn of cleanups.splice(0).reverse()) await fn().catch(() => {});
 });

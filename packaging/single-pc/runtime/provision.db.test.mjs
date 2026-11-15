@@ -22,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
+import { waitPortsFree } from './ports-helper.test.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { DB_USERS, ORIGIN, PORTS, layout } from './layout.mjs';
 
@@ -157,6 +158,7 @@ describe(
         let service;
 
         before(async () => {
+            await waitPortsFree();
             dir = await mkdtemp(join(tmpdir(), 'gpos-runtime-db-'));
             root = join(dir, 'GroceryPOS');
             paths = layout(root);
@@ -165,6 +167,8 @@ describe(
             await stopService(service);
             await rm(dir, { recursive: true, force: true });
         });
+        // Registered after the cleanup above, so it runs once services stopped.
+        after(() => waitPortsFree());
 
         test('fresh initialization creates owner-only secrets and a complete journal', async () => {
             const { code, stdout, stderr } = await run(provisionArgs(root))
