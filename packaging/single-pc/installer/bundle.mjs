@@ -66,6 +66,10 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/installer/usb-drives.mjs',
     'tools/backup/removable.mjs',
     'tools/installer/Install.ps1',
+    'tools/diagnostics/diagnose.mjs',
+    'tools/installer/CheckHealth.ps1',
+    // The recovery guide ("Grocery POS help", #365).
+    'help/RECOVERY.md',
     'notices/COMPONENTS.md',
     // Apache-2.0 §4(a): Caddy's license text ships with it.
     'notices/proxy/LICENSE',
@@ -75,7 +79,12 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
 ]);
 
 /** Packaging scripts shipped as maintenance tools (tests excluded). */
-export const TOOL_DIRS = Object.freeze(['runtime', 'backup', 'installer']);
+export const TOOL_DIRS = Object.freeze([
+    'runtime',
+    'backup',
+    'installer',
+    'diagnostics',
+]);
 
 export function sha256(buffer) {
     return createHash('sha256').update(buffer).digest('hex');
@@ -285,6 +294,10 @@ export async function copyTools(release) {
     await cp(
         join(SINGLE_PC, 'proof', 'policy.mjs'),
         join(release, 'tools', 'proof', 'policy.mjs'),
+    );
+    await cp(
+        join(SINGLE_PC, 'diagnostics', 'RECOVERY.md'),
+        join(release, 'help', 'RECOVERY.md'),
     );
     await cp(
         join(SINGLE_PC, 'caddy', 'Caddyfile'),

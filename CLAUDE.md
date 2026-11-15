@@ -1244,6 +1244,26 @@ on upstream fixes).
   secrets, TLS, backups, handover, CA trust (unless `-RemoveCaTrust`) and
   Chrome profiles stay. Windows execution is unproven until #357/#366.
 
+**Single-PC diagnostics** (#365, `packaging/single-pc/diagnostics/`)
+
+- `diagnose.mjs check` is a local read-only report with plain recovery steps
+  (RECOVERY.md): versions, services, loopback-only listeners, unauthenticated
+  MongoDB `hello`, API `/v1/health/live|ready` direct, Caddy over verified
+  TLS, disk, backups only via `readStatus`/`statusSummary`, clock, redacted
+  last log errors. It never reads `secrets\`, writes nothing, uploads nothing
+  and grants no role. No HTTPS without the local root (TCP probe,
+  `unknown`, "unverified"). JSON keys/check ids/statuses are pinned.
+- Owner decisions 2026-11-15: "Check Grocery POS" shortcut (Public Desktop +
+  common Start menu, `CheckHealth.ps1`, elevation, partial if declined) with
+  "Open help" and "Save support file…"; `export --to <folder>` writes one
+  `GroceryPOS-support-<time>.json` (check report + last 200 redacted lines per
+  log; cookies, secrets, tokens, connection strings, e-mails, user names,
+  quoted text and IPs removed; no DB contents, sales or secrets) where the
+  owner chooses, never inside the data root, never uploaded. RECOVERY.md
+  ships as `release\help\RECOVERY.md` with a "Grocery POS help" Start menu
+  entry. The installer's `\GroceryPOS\Nightly log rotation` task (SYSTEM,
+  backup time + 30 min) runs `rotate-logs` (keeps 5 rotated mongod logs).
+
 **Store settings** (#47, owner decision 2026-11-05)
 
 - Currency remains PHP only; existing centavos are never relabelled as another currency.

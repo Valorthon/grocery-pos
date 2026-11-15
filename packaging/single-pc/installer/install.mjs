@@ -56,6 +56,10 @@ import {
     locations,
     parseTime,
     reminderTaskXml,
+    logRotationTaskXml,
+    checkShortcutSpec,
+    helpShortcutSpec,
+    allShortcuts,
     serviceSteps,
     backupShortcutSpec,
     releasesToPrune,
@@ -464,6 +468,7 @@ async function installOrRepair(options, ctx, log) {
         const xmlPaths = {
             backup: join(taskDir, 'daily-backup.xml'),
             exportReminder: join(taskDir, 'weekly-export-reminder.xml'),
+            logRotation: join(taskDir, 'nightly-log-rotation.xml'),
         };
         await writeFile(
             xmlPaths.backup,
@@ -480,6 +485,18 @@ async function installOrRepair(options, ctx, log) {
         await writeFile(
             xmlPaths.exportReminder,
             utf16(reminderTaskXml(release)),
+        );
+        await writeFile(
+            xmlPaths.logRotation,
+            utf16(
+                logRotationTaskXml(
+                    paths,
+                    release,
+                    options.backupTime ??
+                        previous?.backupTime ??
+                        DEFAULT_BACKUP_TIME,
+                ),
+            ),
         );
         for (const [key, name] of Object.entries(TASKS)) {
             await runSteps(
@@ -508,6 +525,11 @@ async function installOrRepair(options, ctx, log) {
             loc.backupShortcuts,
             backupShortcutSpec(paths, release),
         );
+        await ctx.createShortcuts(
+            loc.checkShortcuts,
+            checkShortcutSpec(paths, release),
+        );
+        await ctx.createShortcuts(loc.helpShortcuts, helpShortcutSpec(release));
         await done('shortcut');
 
         // Disk use stays bounded: keep this release and the newest other.
@@ -554,7 +576,7 @@ async function uninstall(options, ctx, log) {
         await runSteps(
             uninstallSteps({
                 installedServices: facts.servicesInstalled,
-                shortcuts: [...loc.shortcuts, ...loc.backupShortcuts],
+                shortcuts: allShortcuts(loc),
             }),
             ctx,
         );

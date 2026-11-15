@@ -158,7 +158,18 @@ Steps (each idempotent; `state\installer.json` records the stages):
     (a missed run happens at next boot), 2 h limit, 3 retries 30 min apart;
     `\GroceryPOS\Weekly export reminder` shows a message to the logged-on
     user (Users group, least privilege) every Monday 09:00, pointing to the
-    "Back up to USB drive" shortcut (owner decisions 2026-11-15).
+    "Back up to USB drive" shortcut (owner decisions 2026-11-15);
+    `\GroceryPOS\Nightly log rotation` runs `diagnose.mjs rotate-logs` as
+    SYSTEM 30 minutes after the backup time (default 22:30),
+    `StartWhenAvailable`, 10 min limit: it rotates `mongod.log` and keeps
+    the newest 5 rotated files, nothing else (owner decision 2026-11-15,
+    #365).
+    Shortcuts "Check Grocery POS" (Public Desktop + common Start menu,
+    `CheckHealth.ps1`: elevation prompt, partial check if declined, the
+    plain-language result, "Open help" and "Save support file…") and
+    "Grocery POS help" (common Start menu, the release's
+    `help\RECOVERY.md` in Notepad) are created with the others (owner
+    decisions 2026-11-15, see [../diagnostics/](../diagnostics/README.md)).
 11. **Shortcut** "Grocery POS" on the Public Desktop and the common Start
     menu: hidden `powershell.exe -File Launch.ps1`, which polls
     `https://localhost:1443/v1/health/ready` (TLS 1.2, up to 180 s) and only
