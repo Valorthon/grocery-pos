@@ -48,6 +48,7 @@ import {
     releaseLock,
 } from '../runtime/provision.mjs';
 import { destinationMedia } from './removable.mjs';
+import { assertAdminOnly, secureFolder } from './acl.mjs';
 import { readDataVersion } from '../upgrade/migrations.mjs';
 
 export { RefusedError };
@@ -758,69 +759,89 @@ export async function testRestore({
     await privateDir(scratch);
     const dbPath = join(scratch, 'db');
     await mkdir(dbPath);
-    const port = await freePort();
     // Authenticated: the copy holds the whole store, so other local
     // accounts must not read it. The first user comes from the localhost
     // exception right after start-up; its random password lives only in
     // the owner-only scratch folder (for cleanup after a killed run, which
     // may leave this mongod behind) and in memory.
     const credential = randomBytes(32).toString('base64url');
-    await writeFile(
-        join(scratch, 'port'),
-        JSON.stringify({ port, credential }),
-        { mode: 0o600 },
-    );
-    const child = spawn(
-        mongod,
-        [
-            '--auth',
-            '--dbpath',
-            dbPath,
-            '--bind_ip',
-            LOOPBACK,
-            '--port',
-            String(port),
-            '--quiet',
-            '--logpath',
-            join(scratch, 'mongod.log'),
-        ],
-        { stdio: 'ignore', windowsHide: true },
-    );
-    if (child.pid)
+    let port;
+    let child;
+    let exited = false;
+    // The free port is probed, then mongod binds it: another process may
+    // take it in between, so a mongod that exits at start-up is retried on
+    // a new port (#366).
+    const start = async () => {
+        port = await freePort();
         await writeFile(
             join(scratch, 'port'),
-            JSON.stringify({ port, credential, pid: child.pid }),
+            JSON.stringify({ port, credential }),
             { mode: 0o600 },
         );
-    let exited = false;
-    child.once('exit', () => (exited = true));
-    child.once('error', () => (exited = true));
-    const anon = new driver.MongoClient(
-        `mongodb://${LOOPBACK}:${port}/?directConnection=true`,
-        { serverSelectionTimeoutMS: 2000 },
-    );
-    const uri = `mongodb://${VERIFY_USER}:${credential}@${LOOPBACK}:${port}/?authSource=admin&directConnection=true`;
-    const client = new driver.MongoClient(uri, {
-        serverSelectionTimeoutMS: 2000,
-    });
+        exited = false;
+        child = spawn(
+            mongod,
+            [
+                '--auth',
+                '--dbpath',
+                dbPath,
+                '--bind_ip',
+                LOOPBACK,
+                '--port',
+                String(port),
+                '--quiet',
+                '--logpath',
+                join(scratch, 'mongod.log'),
+            ],
+            { stdio: 'ignore', windowsHide: true },
+        );
+        child.once('exit', () => (exited = true));
+        child.once('error', () => (exited = true));
+        if (child.pid)
+            await writeFile(
+                join(scratch, 'port'),
+                JSON.stringify({ port, credential, pid: child.pid }),
+                { mode: 0o600 },
+            );
+    };
+    await start();
+    let anon;
+    let client;
+    let uri;
     const config = join(scratch, 'tool.yaml');
     try {
-        await boundedWait(
-            async () => {
-                if (exited)
-                    throw new BackupError(
-                        'VERIFY_FAILED',
-                        'The test-restore mongod did not start.',
-                    );
-                try {
-                    await anon.db('admin').command({ ping: 1 });
-                    return true;
-                } catch {
-                    return false;
-                }
-            },
-            { timeoutMs: 120000 },
-        );
+        for (let attempt = 1; ; attempt++) {
+            anon = new driver.MongoClient(
+                `mongodb://${LOOPBACK}:${port}/?directConnection=true`,
+                { serverSelectionTimeoutMS: 2000 },
+            );
+            let up = false;
+            await boundedWait(
+                async () => {
+                    if (exited) return true;
+                    try {
+                        await anon.db('admin').command({ ping: 1 });
+                        up = true;
+                        return true;
+                    } catch {
+                        return false;
+                    }
+                },
+                { timeoutMs: 120000 },
+            );
+            if (up) break;
+            await anon.close().catch(() => {});
+            if (attempt >= 3)
+                throw new BackupError(
+                    'VERIFY_FAILED',
+                    `The test-restore mongod did not start after 3 attempts (see ${join(scratch, 'mongod.log')} while it runs; the folder is removed afterwards).`,
+                );
+            await start();
+        }
+        uri = `mongodb://${VERIFY_USER}:${credential}@${LOOPBACK}:${port}/?authSource=admin&directConnection=true`;
+        client = new driver.MongoClient(uri, {
+            serverSelectionTimeoutMS: 2000,
+        });
         await anon.db('admin').command({
             createUser: VERIFY_USER,
             pwd: credential,
@@ -882,12 +903,14 @@ export async function testRestore({
         };
     } finally {
         try {
-            await client.db('admin').command({ shutdown: 1, force: true });
+            await client?.db('admin').command({ shutdown: 1, force: true });
         } catch {
             // shutdown drops the connection
         }
-        await client.close().catch(() => {});
-        await anon.close().catch(() => {});
+        await client?.close().catch(() => {});
+        await anon?.close().catch(() => {});
+        // Never signed in (it did not come up): nothing to shut down cleanly.
+        if (!client && !exited) child.kill('SIGKILL');
         if (!exited) {
             const timer = setTimeout(() => child.kill('SIGKILL'), 60000);
             await new Promise((r) => (exited ? r() : child.once('exit', r)));
@@ -1363,6 +1386,12 @@ async function dumpAndVerify(
 /** Re-verifies a stored or exported backup (checksums + test restore). */
 export async function verifyBackup(options, log = () => {}) {
     const paths = layout(resolve(options.dataRoot));
+    // An export checked before a replacement-PC restore (#366): the data
+    // root does not exist yet and must not be created (the restore needs it
+    // empty), so the lock and the scratch mongod live in a sibling work
+    // folder that is removed afterwards.
+    if (options.from && !(await stat(paths.install).catch(() => undefined)))
+        return verifyExportWithoutInstallation(paths, options, log);
     return withLock(paths, async () => {
         const dir =
             options.from ??
@@ -1377,9 +1406,7 @@ export async function verifyBackup(options, log = () => {}) {
             log(`verify ${manifest.backupId}: checksums match; test restore`);
             const verification = await testRestore({
                 dir,
-                scratchParent: options.from
-                    ? paths.dirs.backups
-                    : paths.dirs.backups,
+                scratchParent: paths.dirs.backups,
                 manifest,
                 mongod: options.mongod,
                 tools: options.tools,
@@ -1411,6 +1438,56 @@ export async function verifyBackup(options, log = () => {}) {
             throw error;
         }
     });
+}
+
+/** `<root>-Verify`, beside the data root (never inside it). */
+export function verifyWorkDir(root) {
+    return `${resolve(root)}-Verify`;
+}
+
+/** Atomically reserves the work folder. Existing folders are never touched:
+ *  another verifier may still own them, even before it writes scratch metadata. */
+export async function reserveVerifyWork(work, ctx = {}) {
+    try {
+        await secureFolder(work, ctx, { mustBeNew: true });
+    } catch (error) {
+        if (
+            error instanceof RefusedError &&
+            /already exists/.test(error.message)
+        )
+            throw new RefusedError(
+                `${work} already exists (a verification is running or stopped). Do not delete it while a check is running. Restart the PC, then as an administrator delete ${work} and verify again.`,
+            );
+        throw error;
+    }
+    await assertAdminOnly(work, ctx);
+}
+
+async function verifyExportWithoutInstallation(paths, options, log) {
+    const work = verifyWorkDir(paths.root);
+    const driver = mongoDriver(options.api);
+    await reserveVerifyWork(work);
+    try {
+        const { manifest } = await checkBackup(options.from, {
+            requireVerified: false,
+        });
+        log(`verify ${manifest.backupId}: checksums match; test restore`);
+        const verification = await testRestore({
+            dir: options.from,
+            scratchParent: work,
+            manifest,
+            mongod: options.mongod,
+            tools: options.tools,
+            driver,
+        });
+        return {
+            backupId: manifest.backupId,
+            verifiedAt: verification.verifiedAt,
+            collections: verification.collections,
+        };
+    } finally {
+        await rm(work, { recursive: true, force: true });
+    }
 }
 
 async function latestVerified(paths) {

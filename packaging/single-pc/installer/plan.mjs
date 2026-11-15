@@ -32,6 +32,8 @@ export const BACKUP_SHORTCUT_NAME = 'Back up to USB drive.lnk';
 /** Owner decisions 2026-11-15 (#365): health check and recovery guide. */
 export const CHECK_SHORTCUT_NAME = `Check ${PRODUCT}.lnk`;
 export const HELP_SHORTCUT_NAME = `${PRODUCT} help.lnk`;
+/** The owner's handover guide (owner decision on #366). */
+export const OWNER_GUIDE_SHORTCUT_NAME = `${PRODUCT} owner guide.lnk`;
 /** Releases kept by repair: the current one and the newest other one. */
 export const KEEP_RELEASES = 2;
 export const HANDOVER_FILE = 'initial-admin-password.txt';
@@ -91,6 +93,10 @@ export function locations(env) {
         ),
         // The guide: common Start menu only (owner decision 2026-11-15).
         helpShortcuts: [startMenu(programData, HELP_SHORTCUT_NAME)],
+        // Next to it, common Start menu only (owner decision, #366).
+        ownerGuideShortcuts: [
+            startMenu(programData, OWNER_GUIDE_SHORTCUT_NAME),
+        ],
     };
 }
 
@@ -112,6 +118,7 @@ export function allShortcuts(loc) {
         ...loc.backupShortcuts,
         ...loc.checkShortcuts,
         ...loc.helpShortcuts,
+        ...loc.ownerGuideShortcuts,
     ];
 }
 
@@ -678,6 +685,17 @@ export function helpShortcutSpec(release) {
         arguments: quote(join(release, 'help', 'RECOVERY.md')),
         workingDirectory: release,
         description: `${PRODUCT}: what to do when something goes wrong`,
+        icon: join(release, 'client', 'favicon.ico'),
+    };
+}
+
+/** "Grocery POS owner guide": the handover guide in Notepad (#366). */
+export function ownerGuideShortcutSpec(release) {
+    return {
+        target: 'notepad.exe',
+        arguments: quote(join(release, 'help', 'HANDOVER.md')),
+        workingDirectory: release,
+        description: `${PRODUCT}: owner guide`,
         icon: join(release, 'client', 'favicon.ico'),
     };
 }

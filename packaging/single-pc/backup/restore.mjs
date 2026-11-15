@@ -32,6 +32,7 @@ import {
     layout,
 } from '../runtime/layout.mjs';
 import { provision } from '../runtime/provision.mjs';
+import { assertAdminOnly, assertOnly, secureFolder } from './acl.mjs';
 import {
     DATA_VERSION,
     MIGRATIONS,
@@ -191,10 +192,30 @@ async function stopMongod(child, root) {
     clearTimeout(timer);
 }
 
+export { ADMIN_SIDS, aclProblems, secureFolderSteps } from './acl.mjs';
+
+/**
+ * Creates (or takes) the fresh data root and its secrets folder and makes
+ * both admin-only before secrets are copied (#366): the parent must be
+ * admin-owned (or is created and secured here), an existing root must be an
+ * admin-owned plain folder, neither may be a junction or link, and the root
+ * must hold only the secrets folder this run created. Any non-admin entry
+ * left after restricting refuses the restore.
+ */
+export async function secureFreshRoot(paths, ctx = {}) {
+    await secureFolder(paths.root, ctx);
+    await assertOnly(paths.root, ['secrets']);
+    await secureFolder(paths.dirs.secrets, ctx);
+    for (const path of [paths.root, paths.dirs.secrets])
+        await assertAdminOnly(path, ctx);
+    await assertOnly(paths.root, ['secrets']);
+    await assertOnly(paths.dirs.secrets, []);
+}
+
 /** Places the backup's secrets and identity on a fresh data root. */
 async function seedFreshRoot(paths, dir) {
-    await mkdir(paths.root, { recursive: true, mode: 0o700 });
-    for (const sub of ['secrets', 'state', 'config']) {
+    await secureFreshRoot(paths);
+    for (const sub of ['state', 'config']) {
         await mkdir(paths.dirs[sub], { recursive: true, mode: 0o700 });
     }
     const files = [

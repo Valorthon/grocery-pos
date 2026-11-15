@@ -27,6 +27,7 @@ jobs:
         outputs:
             deps: ${{ steps.filter.outputs.deps }}
             docker: ${{ steps.filter.outputs.docker }}
+            packaging: ${{ steps.filter.outputs.packaging }}
         steps:
             - name: Checkout Code
               uses: actions/checkout@v5
@@ -59,6 +60,15 @@ jobs:
                         - 'pnpm-lock.yaml'
                         - 'pnpm-workspace.yaml'
                         - 'package.json'
+                        - '**/package.json'
+                      # Single-PC packaging (#366), components.json included.
+                      # The bundle builds the API and client from source too.
+                      packaging:
+                        - 'packaging/single-pc/**'
+                        - 'apps/**'
+                        - 'packages/**'
+                        - 'pnpm-lock.yaml'
+                        - 'pnpm-workspace.yaml'
                         - '**/package.json'
 
     verify:
@@ -220,6 +230,55 @@ jobs:
             - name: MongoDB logs on failure
               if: failure()
               run: docker logs mongodb 2>&1 | tail -200
+
+    # #366: a real single-PC bundle from the pinned components (downloads
+    # cached by components.json hash), verified by readiness --bundle
+    # against the manifest hash the build printed. Not Windows proof.
+    bundle:
+        name: Single-PC bundle
+        needs: changes
+        if: needs.changes.outputs.packaging == 'true'
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout Code
+              uses: actions/checkout@v5
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v5
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v5
+              with:
+                  node-version: '22.x'
+                  cache: 'pnpm'
+
+            - name: Install Dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Cache pinned component downloads
+              uses: actions/cache@v4
+              with:
+                  path: ${{ runner.temp }}/gpos-cache
+                  key: single-pc-components-${{ hashFiles('packaging/single-pc/components.json') }}
+
+            # bundle.mjs refuses any archive, cached or downloaded, whose
+            # SHA-256 is not the pinned one.
+            - name: Build bundle
+              run: |
+                  node packaging/single-pc/installer/bundle.mjs \
+                      --out "$RUNNER_TEMP/bundle" --cache "$RUNNER_TEMP/gpos-cache" \
+                      | tee "$RUNNER_TEMP/bundle.log"
+                  hash=$(tail -n 1 "$RUNNER_TEMP/bundle.log" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).manifestSha256))')
+                  echo "MANIFEST_SHA256=$hash" >> "$GITHUB_ENV"
+                  echo "Single-PC bundle \`bundle-manifest.json\` SHA-256: \`$hash\`" >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Verify bundle
+              run: |
+                  node packaging/single-pc/acceptance/readiness.mjs \
+                      --bundle "$RUNNER_TEMP/bundle" --manifest-sha256 "$MANIFEST_SHA256"
+                  (cd "$RUNNER_TEMP/bundle" && sha256sum -c --quiet SHA256SUMS)
 
     docker:
         name: Docker images (build only)

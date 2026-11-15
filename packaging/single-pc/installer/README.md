@@ -52,7 +52,8 @@ node packaging/single-pc/installer/bundle.mjs --out <new folder> [--cache <dir>]
    linker (real folders, no symlinks), plus `apps/api/dist`. Native addons
    must be Windows x64 prebuilds (argon2); other platforms' prebuilds are
    removed.
-4. The packaging scripts (no tests), `Caddyfile`, `notices\COMPONENTS.md`
+4. The packaging scripts (no tests), `Caddyfile`, `help\RECOVERY.md`,
+   `help\HANDOVER.md` (the owner guide, #366), `notices\COMPONENTS.md`
    (versions, licenses, sources, archive hashes, the MongoDB SSPL source
    location), `api-dependencies.json`, `client-dependencies.json` and
    `VERSION.json` are added.
@@ -79,7 +80,16 @@ bundle.
 .\Install.ps1 -ManifestSha256 <hash> -Mode repair [-BackupTime HH:MM]
 .\Install.ps1 -ManifestSha256 <hash> -Mode uninstall [-RemoveCaTrust]
 .\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
+.\Install.ps1 -ManifestSha256 <hash> -Mode restore-verify -From <full path of a backup folder>
+.\Install.ps1 -ManifestSha256 <hash> -Mode restore -From <full path> -Confirm <backup id> [-AcceptOpenShifts] [-AcceptNewerSales] [-AcceptPendingOffline]
 ```
+
+`restore` and `restore-verify` (#366) run `backup\restore.mjs` and
+`backup.mjs verify` on the data root `%ProgramData%\Valorthon\GroceryPOS`
+with `node`, `mongod`, the Database Tools and the API driver from the same
+verified admin-only copy as every other mode (the copy also holds the
+release's `mongodb\` and `api\`, each file hashed). `-From` must be a full
+path; `-Confirm` and the `-Accept…` flags go with `restore` only.
 
 Exit codes: 0 done, 1 failed (nothing removed, re-run resumes), 2 usage,
 3 refused (nothing changed).
@@ -170,6 +180,8 @@ Steps (each idempotent; `state\installer.json` records the stages):
     "Grocery POS help" (common Start menu, the release's
     `help\RECOVERY.md` in Notepad) are created with the others (owner
     decisions 2026-11-15, see [../diagnostics/](../diagnostics/README.md)).
+    "Grocery POS owner guide" (common Start menu, next to the help entry,
+    the release's `help\HANDOVER.md` in Notepad; owner decision, #366).
 11. **Shortcut** "Grocery POS" on the Public Desktop and the common Start
     menu: hidden `powershell.exe -File Launch.ps1`, which polls
     `https://localhost:1443/v1/health/ready` (TLS 1.2, up to 180 s) and only
@@ -250,7 +262,7 @@ handover folder's ACL (a standard user is denied); interrupted install
 (power off during provisioning and during copy); repair; uninstall and
 reinstall keeping records and settings; and no LAN listener
 (`Get-NetTCPConnection`, a second PC). Record them with the
-[../proof/ACCEPTANCE-CHECKLIST.md](../proof/ACCEPTANCE-CHECKLIST.md) terms.
+[../acceptance/RUNBOOK.md](../acceptance/RUNBOOK.md) terms.
 
 Known gaps: mongod's 60 s stop wait (the runtime README) is not configurable
 through `sc`; Windows' service stop wait applies until #366 measures it.

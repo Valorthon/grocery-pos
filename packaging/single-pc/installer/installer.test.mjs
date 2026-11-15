@@ -46,6 +46,7 @@ import {
     allShortcuts,
     checkShortcutSpec,
     helpShortcutSpec,
+    ownerGuideShortcutSpec,
     logRotationTaskXml,
     releasesToPrune,
     backupTaskXml,
@@ -1181,7 +1182,15 @@ test('"Check Grocery POS" and "Grocery POS help" shortcuts (owner decisions 2026
         loc.helpShortcuts[0],
         /Start Menu\/Programs\/Grocery POS help\.lnk$/,
     );
-    assert.equal(allShortcuts(loc).length, 7);
+    const guide = ownerGuideShortcutSpec('/r');
+    assert.equal(guide.target, 'notepad.exe');
+    assert.equal(guide.arguments, '/r/help/HANDOVER.md');
+    assert.equal(loc.ownerGuideShortcuts.length, 1);
+    assert.match(
+        loc.ownerGuideShortcuts[0],
+        /Start Menu\/Programs\/Grocery POS owner guide\.lnk$/,
+    );
+    assert.equal(allShortcuts(loc).length, 8);
     const steps = uninstallSteps({
         installedServices: [],
         shortcuts: allShortcuts(loc),
@@ -1221,4 +1230,50 @@ test('nightly log rotation runs as SYSTEM right after the backup and only rotate
                 s.file === 'schtasks.exe' && s.args.includes(TASKS.logRotation),
         ),
     );
+});
+
+test('Install.ps1 restore modes run only from the verified admin-only copy (#366)', async () => {
+    const ps = await readFile(new URL('Install.ps1', here), 'utf8');
+    for (const mode of ['restore', 'restore-verify'])
+        assert.match(ps, new RegExp(`'${mode}'`));
+    // mongod, the Database Tools and the API driver are copied and hashed
+    // like node and tools, then used from $run, never from the bundle.
+    assert.match(
+        ps,
+        /if \(\$restoreMode\) \{ \$parts \+= @\('mongodb', 'api'\) \}/,
+    );
+    assert.match(ps, /foreach \(\$part in \$parts\)/);
+    assert.match(ps, /Join-Path \$run 'tools\\backup\\restore\.mjs'/);
+    assert.match(
+        ps,
+        /Join-Path \$run 'tools\\backup\\backup\.mjs'\), 'verify'/,
+    );
+    assert.match(
+        ps,
+        /'--mongod', \(Join-Path \$run 'mongodb\\bin\\mongod\.exe'\)/,
+    );
+    assert.match(
+        ps,
+        /'--tools', \(Join-Path \$run 'mongodb\\bin'\), '--api', \(Join-Path \$run 'api'\)/,
+    );
+    assert.doesNotMatch(ps, /Join-Path \$bundle .release\\(mongodb|api|tools)/);
+    // Fixed data root, absolute -From, required -Confirm, mode-bound flags.
+    assert.match(
+        ps,
+        /\$dataRoot = Join-Path \$env:ProgramData 'Valorthon\\GroceryPOS'/,
+    );
+    assert.match(ps, /IsPathRooted\(\$From\)/);
+    assert.match(ps, /-Mode restore needs -Confirm/);
+    assert.match(ps, /'--confirm', \$Confirm/);
+    assert.match(ps, /\(\$From -and -not \$restoreMode\)/);
+    assert.match(
+        ps,
+        /\(\$Confirm -or \$AcceptOpenShifts -or \$AcceptPendingOffline\) -and \$Mode -ne 'restore'/,
+    );
+    for (const flag of [
+        '--accept-open-shifts',
+        '--accept-newer-sales',
+        '--accept-pending-offline',
+    ])
+        assert.match(ps, new RegExp(`'${flag}'`));
 });

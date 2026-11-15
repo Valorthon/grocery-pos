@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
+import { waitPortsFree } from '../runtime/ports-helper.test.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { layout } from '../runtime/layout.mjs';
 
@@ -67,6 +68,7 @@ describe(
         let mongod;
 
         before(async () => {
+            await waitPortsFree();
             root = await mkdtemp(join(tmpdir(), 'gpos-diag-db-'));
             paths = layout(root);
             const p = await run([
@@ -109,6 +111,8 @@ describe(
             await chmod(paths.dirs.secrets, 0o700).catch(() => {});
             await rm(root, { recursive: true, force: true });
         });
+        // Registered after the cleanup above, so it runs once services stopped.
+        after(() => waitPortsFree());
 
         test('database up, API down: distinguished, with steps; secrets never read', async () => {
             await chmod(paths.dirs.secrets, 0o000);

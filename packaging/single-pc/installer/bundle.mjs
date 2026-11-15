@@ -74,6 +74,8 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/installer/CheckHealth.ps1',
     // The recovery guide ("Grocery POS help", #365).
     'help/RECOVERY.md',
+    // The owner's handover guide (#366).
+    'help/HANDOVER.md',
     'notices/COMPONENTS.md',
     // Apache-2.0 §4(a): Caddy's license text ships with it.
     'notices/proxy/LICENSE',
@@ -303,6 +305,10 @@ export async function copyTools(release) {
     await cp(
         join(SINGLE_PC, 'diagnostics', 'RECOVERY.md'),
         join(release, 'help', 'RECOVERY.md'),
+    );
+    await cp(
+        join(SINGLE_PC, 'operations', 'HANDOVER.md'),
+        join(release, 'help', 'HANDOVER.md'),
     );
     await cp(
         join(SINGLE_PC, 'caddy', 'Caddyfile'),

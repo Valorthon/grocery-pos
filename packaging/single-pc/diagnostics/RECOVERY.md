@@ -148,3 +148,34 @@ restores the pre-upgrade backup and the previous release. See the upgrade
 README (#364). Before an upgrade, close every Grocery POS tab in Chrome. If a page shows
 "Grocery POS was updated", press Reload; the basket and queued cash sales
 stay on this PC and upload after the reload.
+
+## A restore stopped part-way (vendor)
+
+Signs: after a power cut, crash or closed window during `restore.mjs`, other
+restores are refused ("An interrupted restore of … must be finished first")
+and the application does not start; the check shows **Application** FAIL. If
+the restore stopped while it was taking older backed-up data forward to this
+release (its forward migration), the data-version marker stays `migrating`
+and the API refuses to start on purpose, so half-migrated data is never used.
+
+1. Do not start the services by hand and do not run a different restore.
+2. As an administrator, re-run the same restore: the same
+   `Install.ps1 -Mode restore` command with the same `-From` folder, the same
+   `-Confirm <backup id>` and the same `-Accept…` flags as the first time. It resumes from its journal (`state\restore.json`), keeps the
+   safety backup it already took and finishes the migration.
+3. Start the services (or restart the PC), run the check, then make a backup
+   and a USB export.
+
+## Checking a USB backup stopped part-way (vendor)
+
+Signs: `Install.ps1 -Mode restore-verify` (or `backup.mjs verify --from`) was
+closed, killed or lost power; the next run says
+`…\GroceryPOS-Verify already exists` or "Restart the PC, then delete …".
+
+1. If another check is still running, wait for it to finish. The tool never
+   stops or removes a previous check: a second run refuses even when the
+   existing work folder is still empty.
+2. After a killed check, restart the PC (that stops any leftover test
+   database), then as an administrator delete
+   `C:\ProgramData\Valorthon\GroceryPOS-Verify` and run the check again.
+   Never delete `C:\ProgramData\Valorthon\GroceryPOS` itself.

@@ -59,6 +59,7 @@ import {
     logRotationTaskXml,
     checkShortcutSpec,
     helpShortcutSpec,
+    ownerGuideShortcutSpec,
     allShortcuts,
     serviceSteps,
     backupShortcutSpec,
@@ -602,6 +603,10 @@ async function installOrRepair(options, ctx, log) {
             checkShortcutSpec(paths, release),
         );
         await ctx.createShortcuts(loc.helpShortcuts, helpShortcutSpec(release));
+        await ctx.createShortcuts(
+            loc.ownerGuideShortcuts,
+            ownerGuideShortcutSpec(release),
+        );
         await done('shortcut');
 
         // Disk use stays bounded: keep this release and the newest other.
