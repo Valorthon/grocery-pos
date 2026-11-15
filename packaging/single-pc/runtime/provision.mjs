@@ -46,6 +46,8 @@ import {
 export const EXIT = { OK: 0, FAILED: 1, USAGE: 2, REFUSED: 3 };
 const STAGES = ['layout', 'secrets', 'database', 'config'];
 const MONGO_FCV = '7.0';
+/** contracts DATA_VERSION_COLLECTION (#364), in the app database. */
+export const DATA_VERSION_COLLECTION = 'systemdataversion';
 
 /** A safe refusal: the installation is left exactly as found. */
 export class RefusedError extends Error {
@@ -363,6 +365,7 @@ async function provisionDatabase(
     install,
     journal,
     log,
+    dataVersion,
 ) {
     let root = await tryRootClient(driver, secrets.mongoRootPassword);
     if (!root) {
@@ -416,7 +419,14 @@ async function provisionDatabase(
         if (!root) throw new Error('Root user could not authenticate.');
     }
     try {
-        await verifyAndConverge(root, install, journal, secrets, log);
+        await verifyAndConverge(
+            root,
+            install,
+            journal,
+            secrets,
+            log,
+            dataVersion,
+        );
         return root;
     } catch (error) {
         // The caller stops a mongod it started; it needs root to do so.
@@ -425,7 +435,14 @@ async function provisionDatabase(
     }
 }
 
-async function verifyAndConverge(root, install, journal, secrets, log) {
+async function verifyAndConverge(
+    root,
+    install,
+    journal,
+    secrets,
+    log,
+    dataVersion,
+) {
     const admin = root.db('admin');
     await boundedWait(
         async () =>
@@ -466,6 +483,25 @@ async function verifyAndConverge(root, install, journal, secrets, log) {
             schema: RUNTIME_SCHEMA,
             createdAt: new Date(),
         });
+        // A new database starts at the installing release's data version
+        // (#364); the API refuses any other. Never rewritten here.
+        if (dataVersion !== undefined) {
+            await root
+                .db(APP_DATABASE)
+                .collection(DATA_VERSION_COLLECTION)
+                .updateOne(
+                    { _id: 'data' },
+                    {
+                        $setOnInsert: {
+                            dataVersion,
+                            state: 'ready',
+                            updatedAt: new Date(),
+                            history: [],
+                        },
+                    },
+                    { upsert: true },
+                );
+        }
     }
     // Converge the API user to the stored password and least role.
     const api = {
@@ -607,6 +643,7 @@ export async function provision(options, log = () => {}) {
                 install,
                 journal,
                 log,
+                options.dataVersion,
             );
         } catch (error) {
             root = error.rootClient;

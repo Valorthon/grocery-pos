@@ -33,6 +33,13 @@ import {
 } from '../runtime/layout.mjs';
 import { provision } from '../runtime/provision.mjs';
 import {
+    DATA_VERSION,
+    MIGRATIONS,
+    MIN_UPGRADE_FROM,
+    pendingMigrations,
+    runMigrations,
+} from '../upgrade/migrations.mjs';
+import {
     ARCHIVE,
     BACKED_UP_SECRETS,
     BackupError,
@@ -277,9 +284,14 @@ export async function restore(options, log = () => {}) {
         throw new RefusedError(
             `Restore replaces all store data with backup ${manifest.backupId} (taken ${manifest.createdAt}). Re-run with --confirm ${manifest.backupId} to proceed.`,
         );
+    // The data version this release runs (#364): its own registry, or the
+    // previous release's when an upgrade rollback restores its backup.
+    const migrations = options.migrations ?? MIGRATIONS;
     const target = {
         mongodb: await mongodVersion(options.mongod),
         app: await appVersion(options.api),
+        dataVersion: options.dataVersion ?? DATA_VERSION,
+        minDataVersion: options.minDataVersion ?? MIN_UPGRADE_FROM,
     };
     const problems = compatibility(manifest, target);
     if (problems.length)
@@ -464,6 +476,29 @@ export async function restore(options, log = () => {}) {
                     );
             }
             await checkInstallationDatabase(root, install);
+            // An older-data backup is taken forward to this release's data
+            // version (#364), so its API can start on it.
+            const backupData = manifest.versions?.data ?? 1;
+            let migrated = [];
+            if (backupData < target.dataVersion) {
+                log(
+                    `restore: migrating data ${backupData} → ${target.dataVersion}`,
+                );
+                migrated = await runMigrations(
+                    root,
+                    {
+                        from: backupData,
+                        to: target.dataVersion,
+                        release: 'restore',
+                        migrations: pendingMigrations(
+                            migrations,
+                            backupData,
+                            target.dataVersion,
+                        ),
+                    },
+                    { log },
+                );
+            }
             // Recorded in the restored database, so it survives the restore.
             await db.collection('auditlogs').insertOne(
                 auditEntry({
@@ -489,6 +524,8 @@ export async function restore(options, log = () => {}) {
                 startedAt: started,
                 completedAt,
                 collections: verification.collections,
+                dataVersion: target.dataVersion,
+                migrated,
             };
             await writeAtomic(
                 paths.restoreJournal,

@@ -162,6 +162,15 @@ separate `restore.mjs` (confirmed, loss-refusing, safety backup first, also onto
 an empty replacement root). `backups\status.json` is the interface #365 reads;
 #362 schedules `create` daily. Verified on Linux with real MongoDB/Database Tools.
 
+Implemented (#364): [upgrade/](upgrade/README.md) `upgrade.mjs` (Install.ps1
+`-Mode upgrade|upgrade-rollback|upgrade-status`): verified bundle, read-only
+preflight refusals, API/proxy stopped, verified `pre-upgrade` backup, release
+side by side, journaled idempotent migrations with a data-version marker the
+single-pc API enforces at startup, switch through the installer's repair,
+diagnostics readiness; automatic binary rollback before data changes, explicit
+`--restore-backup` after. Stale tabs get 409 `CLIENT_OUTDATED` (wire version).
+Verified on Linux with real MongoDB; Windows execution is pending.
+
 Release manifest interface: schema/version, Git commit, platform/architecture,
 exact component pins/checksums/notices, client/API/contracts compatibility,
 data/migration version, backup compatibility, packaged command entry points and

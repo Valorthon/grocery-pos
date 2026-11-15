@@ -9,7 +9,13 @@
  */
 import { request } from 'node:http';
 import * as argon from 'argon2';
-import { AuditAction, ErrorCode, Role } from '@grocery-pos/contracts';
+import {
+    AuditAction,
+    ErrorCode,
+    Role,
+    WIRE_VERSION,
+    WIRE_VERSION_HEADER,
+} from '@grocery-pos/contracts';
 import type { DbApp } from './db-app';
 
 Object.assign(process.env, {
@@ -22,7 +28,11 @@ Object.assign(process.env, {
 });
 
 const ORIGIN = 'https://localhost:1443';
-const PROXY_HEADERS = { host: 'localhost:1443', origin: ORIGIN };
+const PROXY_HEADERS = {
+    host: 'localhost:1443',
+    origin: ORIGIN,
+    [WIRE_VERSION_HEADER]: String(WIRE_VERSION),
+};
 const PASSWORD = 'single-pc-pass-358';
 
 let db: DbApp;
@@ -198,7 +208,10 @@ it('accepts a same-origin request without an Origin header', async () => {
     // the access check's 403.
     const res = await post(
         '/auth/login',
-        { host: 'localhost:1443' },
+        {
+            host: 'localhost:1443',
+            [WIRE_VERSION_HEADER]: String(WIRE_VERSION),
+        },
         { username: 'owner', password: 'not-the-password' },
     );
     expect(res.status).toBe(401);
@@ -207,11 +220,34 @@ it('accepts a same-origin request without an Origin header', async () => {
     });
 });
 
+it('refuses a stale or unversioned client with 409 before parsing its body (#364)', async () => {
+    for (const version of [undefined, String(WIRE_VERSION + 1)]) {
+        const res = await post(
+            '/offline/sync',
+            {
+                host: 'localhost:1443',
+                origin: ORIGIN,
+                ...(version ? { [WIRE_VERSION_HEADER]: version } : {}),
+            },
+            '{"not json',
+        );
+        expect(res.status).toBe(409);
+        expect(JSON.parse(res.body)).toMatchObject({
+            error: ErrorCode.CLIENT_OUTDATED,
+        });
+    }
+});
+
 it('takes a same-origin CSP report through the proxy host', async () => {
     const res = await send(
         'POST',
         '/csp-report',
-        { ...PROXY_HEADERS, 'content-type': 'application/csp-report' },
+        // The browser's report carries none of our headers.
+        {
+            host: 'localhost:1443',
+            origin: ORIGIN,
+            'content-type': 'application/csp-report',
+        },
         {
             'csp-report': {
                 'document-uri': `${ORIGIN}/sell`,

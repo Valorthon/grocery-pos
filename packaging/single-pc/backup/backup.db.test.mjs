@@ -136,6 +136,8 @@ function http(path, { method = 'GET', body, cookie } = {}) {
                 headers: {
                     Host: 'localhost:1443',
                     Origin: ORIGIN,
+                    // Every single-pc client names its wire version (#364).
+                    'x-wire-version': '1',
                     ...(body ? { 'Content-Type': 'application/json' } : {}),
                     ...(cookie ? { Cookie: cookie } : {}),
                 },

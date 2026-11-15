@@ -3,21 +3,34 @@ import axios, {
     isAxiosError,
     type InternalAxiosRequestConfig,
 } from 'axios';
+import { WIRE_VERSION, WIRE_VERSION_HEADER } from '@grocery-pos/contracts';
 import constant from '@/constant';
 import { useAuthStore } from './stores/auth';
 import { env } from './config/env';
 import { clearSessionMarker } from './utils/session-cookie';
+import { noteClientOutdated } from './utils/client-outdated';
 
 interface QueuePromise {
     resolve: (value?: unknown) => void;
     reject: (reason?: unknown) => void;
 }
 
+/**
+ * single-pc (#364): every request names this build's wire version; the API
+ * refuses another (or none) with 409 CLIENT_OUTDATED before reading the
+ * body. Cloud sends nothing new (its CORS allow-list is unchanged).
+ */
+const wireHeaders: Record<string, string> =
+    env.VITE_APP_ENV === 'single-pc'
+        ? { [WIRE_VERSION_HEADER]: String(WIRE_VERSION) }
+        : {};
+
 const api = axios.create({
     baseURL: env.VITE_API_URL,
     timeout: env.VITE_API_TIMEOUT,
     headers: {
         Accept: 'application/json',
+        ...wireHeaders,
     },
     withCredentials: true,
 });
@@ -89,6 +102,7 @@ export function refreshSession(): Promise<void> {
                 {
                     withCredentials: true, // Send cookies with refresh token
                     timeout: env.VITE_API_TIMEOUT,
+                    headers: wireHeaders,
                 },
             );
             processQueue(null);
@@ -153,7 +167,8 @@ api.interceptors.response.use(
             return api(originalRequest);
         }
 
-        // For other errors, just reject
+        // A tab older than the upgraded API: ask for a reload (#364).
+        noteClientOutdated(error);
         return Promise.reject(error);
     },
 );

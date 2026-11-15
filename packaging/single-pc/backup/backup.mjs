@@ -48,6 +48,7 @@ import {
     releaseLock,
 } from '../runtime/provision.mjs';
 import { destinationMedia } from './removable.mjs';
+import { readDataVersion } from '../upgrade/migrations.mjs';
 
 export { RefusedError };
 export const EXIT = { OK: 0, FAILED: 1, USAGE: 2, REFUSED: 3 };
@@ -59,7 +60,13 @@ export const EXPORT_REMINDER_DAYS = 7;
 /** A daily schedule that has not produced a verified backup for this long is overdue. */
 export const OVERDUE_HOURS = 36;
 export const DEFAULT_RESERVE_MB = 256;
-export const KINDS = Object.freeze(['scheduled', 'manual', 'pre-restore']);
+export const KINDS = Object.freeze([
+    'scheduled',
+    'manual',
+    'pre-restore',
+    // Taken by the upgrade tool after the API stops (#364).
+    'pre-upgrade',
+]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const ARCHIVE = 'database.archive.gz';
@@ -71,7 +78,7 @@ const INCOMPLETE = '.incomplete-';
 const VERIFY_USER = 'gpos_verify';
 const SCRATCH = '.verify-';
 export const ID_PATTERN =
-    /^\d{8}T\d{6}Z-(scheduled|manual|pre-restore)-[0-9a-f]{6}$/;
+    /^\d{8}T\d{6}Z-(scheduled|manual|pre-restore|pre-upgrade)-[0-9a-f]{6}$/;
 export const EXPORT_PREFIX = 'GroceryPOS-backup-';
 
 /**
@@ -300,9 +307,12 @@ export function compareVersions(a, b) {
 
 /**
  * A backup can be restored by a target only with the same MongoDB
- * major.minor (dump format and FCV) and an app version no older than the
- * one that wrote the data (an older app may not read newer data; newer app
- * versions migrate forward through #364).
+ * major.minor (dump format and FCV), an app version no older than the one
+ * that wrote the data, and a data version (#364) the target can run: the
+ * same one, or an older one its migrations take forward (restore.mjs runs
+ * them right after the restore). A backup taken mid-upgrade, newer data or
+ * data below the target's upgrade floor is refused. Backups from before
+ * #364 record no data version: they are version 1.
  */
 export function compatibility(manifest, target) {
     const problems = [];
@@ -319,6 +329,21 @@ export function compatibility(manifest, target) {
         problems.push(
             `backup is from app ${manifest.versions?.app}, newer than this installation's ${target.app}`,
         );
+    if (target.dataVersion !== undefined) {
+        const data = manifest.versions?.data ?? 1;
+        if ((manifest.versions?.dataState ?? 'ready') !== 'ready')
+            problems.push(
+                'backup was taken while an upgrade was migrating its data',
+            );
+        else if (data > target.dataVersion)
+            problems.push(
+                `backup holds data version ${data}, newer than this release's ${target.dataVersion}`,
+            );
+        else if (data < (target.minDataVersion ?? 1))
+            problems.push(
+                `backup holds data version ${data}; this release migrates from ${target.minDataVersion} only`,
+            );
+    }
     return problems;
 }
 
@@ -1181,6 +1206,11 @@ async function createLocked(paths, install, options, id, log) {
     let estimate = 0;
     try {
         versions = await checkInstallationDatabase(root, install);
+        // The data version the backup holds (#364): a restore compares it
+        // with the release restoring it.
+        const marker = await readDataVersion(root);
+        versions.data = marker.dataVersion;
+        versions.dataState = marker.state;
         for (const db of [APP_DATABASE, RUNTIME_DATABASE]) {
             const s = await root.db(db).command({ dbStats: 1 });
             estimate += (s.dataSize ?? 0) + (s.indexSize ?? 0);
@@ -1276,7 +1306,14 @@ async function dumpAndVerify(
             restore: 'mongorestore --oplogReplay',
             databases: ARCHIVE_DATABASES,
         },
-        versions: { mongodb: versions.mongodb, fcv: versions.fcv, tools, app },
+        versions: {
+            mongodb: versions.mongodb,
+            fcv: versions.fcv,
+            tools,
+            app,
+            data: versions.data,
+            dataState: versions.dataState,
+        },
         contents: {
             included: [ARCHIVE, ...INCLUDED_FILES.map((p) => `files/${p}`)],
             excluded: EXCLUDED,

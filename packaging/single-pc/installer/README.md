@@ -195,6 +195,13 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
 
 ## Repair, interrupted runs, reinstall and uninstall
 
+- Upgrades are `-Mode upgrade` (with `upgrade-rollback` and
+  `upgrade-status`), which run the bundle's `tools\upgrade\upgrade.mjs`
+  from the same verified copy ([../upgrade/](../upgrade/README.md), #364).
+  `repair` with a bundle of another version than the installed one is
+  refused: data migrations and the pre-upgrade backup belong to the
+  upgrade tool.
+
 - An interrupted run (power cut, crash) leaves no partial release under the
   real name, no regenerated secret and no second admin. Re-running the same
   mode resumes; provisioning resumes from its own journal.

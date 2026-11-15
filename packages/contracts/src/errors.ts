@@ -77,6 +77,12 @@ export enum ErrorCode {
     OFFLINE_PENDING = 'OFFLINE_003',
     CONFLICT = 'CONFLICT_001',
     /**
+     * Single-PC (#364): the request came from a browser tab still running a
+     * previous release (`WIRE_VERSION_HEADER` differs). 409, refused before
+     * the body is read; reload the page. Queued offline cash stays queued.
+     */
+    CLIENT_OUTDATED = 'CLIENT_001',
+    /**
      * Any other 4xx the API refused with no more specific code (e.g. 405,
      * 413, 415). The response keeps the real HTTP status.
      */
