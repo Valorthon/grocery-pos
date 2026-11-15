@@ -90,6 +90,7 @@ export class AppError extends Error {
             case ErrorCode.OFFLINE_RECONCILIATION_REQUIRED:
             case ErrorCode.OFFLINE_PENDING:
             case ErrorCode.CONFLICT:
+            case ErrorCode.CLIENT_OUTDATED:
                 return HttpStatus.CONFLICT;
             case ErrorCode.RATE_LIMITED:
                 return HttpStatus.TOO_MANY_REQUESTS;

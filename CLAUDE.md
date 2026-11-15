@@ -1264,6 +1264,29 @@ on upstream fixes).
   entry. The installer's `\GroceryPOS\Nightly log rotation` task (SYSTEM,
   backup time + 30 min) runs `rotate-logs` (keeps 5 rotated mongod logs).
 
+**Single-PC upgrades** (#364, `packaging/single-pc/upgrade/`)
+
+- Vendor-run, manual, offline (`Install.ps1 -Mode upgrade`, also
+  `upgrade-rollback`/`upgrade-status`); no automatic updates. Stages
+  verify → preflight → stop → backup → place → migrate → switch → ready,
+  journaled in `state\upgrade.json`, each idempotent; re-run resumes.
+  Preflight refuses (nothing changed) open shifts, active offline leases,
+  no/overdue/failed backup, low disk, downgrades, another MongoDB series.
+- Data version: contracts `SINGLE_PC_DATA_VERSION` equals
+  `upgrade/migrations.mjs` `DATA_VERSION` (pinned by a test). The
+  single-pc API refuses to start unless `grocery.systemdataversion` is
+  `ready` at exactly that version (absent = 1). A schema change needing a
+  migration bumps both and registers an idempotent, offline migration;
+  the cloud's legacy backfills never run on single-PC data.
+- Binary rollback is automatic only before a data-changing migration
+  starts; after, only finishing or `--restore-backup <pre-upgrade id>`
+  (restore.mjs, refuses later sales unless accepted). `repair` with
+  another version is refused.
+- Stale tabs: the single-pc client sends `WIRE_VERSION` in
+  `x-wire-version`; another value is 409 `CLIENT_OUTDATED` before the body
+  is read, and the outbox keeps such receipts queued (not blocked). Bump
+  `WIRE_VERSION` on an incompatible wire change. Cloud sends no header.
+
 **Store settings** (#47, owner decision 2026-11-05)
 
 - Currency remains PHP only; existing centavos are never relabelled as another currency.

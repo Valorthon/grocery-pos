@@ -1,4 +1,10 @@
 import { ForbiddenException, type INestApplication } from '@nestjs/common';
+import {
+    ErrorCode,
+    WIRE_VERSION,
+    WIRE_VERSION_HEADER,
+} from '@grocery-pos/contracts';
+import { ConflictError } from '../errors/app-error';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { TypedConfigService } from '../typed-config/typed-config.service';
 import { isSinglePcEnv } from '../typed-config/app-env';
@@ -41,12 +47,42 @@ export function localAccessCheck(frontendUrl: string): LocalAccessCheck {
     };
 }
 
-/** Express middleware: a refusal goes to GlobalFilter as a 403. */
+export const CLIENT_OUTDATED_MESSAGE =
+    'Grocery POS was updated on this PC. Reload the page to continue.';
+
+/**
+ * A stale browser tab after an upgrade (#364): the single-pc client sends
+ * its build's `WIRE_VERSION` in `WIRE_VERSION_HEADER`; a different value is
+ * refused. A request without the header (local tools, health probes, the
+ * browser's own CSP reports) is not a client build and passes.
+ */
+export function isOutdatedClient(req: Request): boolean {
+    const sent = req.headers[WIRE_VERSION_HEADER];
+    if (sent === undefined) return false;
+    return (
+        (Array.isArray(sent) ? sent.join(',') : sent) !== String(WIRE_VERSION)
+    );
+}
+
+/**
+ * Express middleware: a Host/Origin refusal goes to GlobalFilter as a 403,
+ * then a stale client as 409 `CLIENT_OUTDATED`. Both run before any body is
+ * read, so an old-shape body is never validated (an offline upload refused
+ * as a 400 would be blocked for reconciliation; a 409 stays queued).
+ */
 export function localAccessMiddleware(frontendUrl: string): RequestHandler {
     const check = localAccessCheck(frontendUrl);
     return (req: Request, _res: Response, next: NextFunction) => {
         const refusal = check(req);
-        next(refusal ? new ForbiddenException(refusal) : undefined);
+        if (refusal) return next(new ForbiddenException(refusal));
+        if (!isHealthProbe(req) && isOutdatedClient(req))
+            return next(
+                new ConflictError(
+                    ErrorCode.CLIENT_OUTDATED,
+                    CLIENT_OUTDATED_MESSAGE,
+                ),
+            );
+        next(undefined);
     };
 }
 

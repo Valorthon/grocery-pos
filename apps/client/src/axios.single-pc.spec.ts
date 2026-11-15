@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WIRE_VERSION, WIRE_VERSION_HEADER } from '@grocery-pos/contracts';
 import axios, {
     AxiosError,
     AxiosHeaders,
@@ -31,6 +32,14 @@ afterEach(() => {
 describe('single-pc API base (#358)', () => {
     it('sends requests to the same origin under /v1', () => {
         expect(api.defaults.baseURL).toBe('/v1');
+    });
+
+    it('names its wire version on every request (#364 stale tabs)', () => {
+        expect(
+            (api.defaults.headers as unknown as Record<string, unknown>)[
+                WIRE_VERSION_HEADER
+            ],
+        ).toBe(String(WIRE_VERSION));
     });
 
     it('refreshes at the same-origin /v1/auth/refresh', async () => {

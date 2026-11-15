@@ -20,7 +20,11 @@ import {
     readOfflineState,
     saveOfflineState,
 } from '@/offline/database';
-import { PROBE_TIMEOUT_MS, useOfflineStore } from './offline';
+import {
+    PROBE_TIMEOUT_MS,
+    offlineRefusalBlocks,
+    useOfflineStore,
+} from './offline';
 import { seedLegacyOfflineDatabase } from '@/offline/testing/legacy-database';
 vi.mock('@/axios', () => ({ default: { get: vi.fn(), post: vi.fn() } }));
 const USER = '0123456789abcdef01234567';
@@ -325,6 +329,25 @@ it.each([
         expect(api.post).toHaveBeenCalledTimes(1);
     },
 );
+it('keeps a receipt queued and retryable when a stale tab is refused after an upgrade (#364)', async () => {
+    await store.queue(body(), items());
+    vi.mocked(api.post).mockRejectedValueOnce(
+        failure(409, ErrorCode.CLIENT_OUTDATED),
+    );
+    await store.sync();
+    expect(store.pending[0]?.blocked).toBeUndefined();
+    expect(await pendingOffline(USER)).toHaveLength(1);
+    // The reloaded page uploads the same stored request once.
+    vi.mocked(api.post).mockImplementation(acknowledged);
+    await store.sync();
+    expect(await pendingOffline(USER)).toEqual([]);
+});
+it('only reconciliation-class refusals block a receipt', () => {
+    expect(offlineRefusalBlocks(ErrorCode.CLIENT_OUTDATED, 409)).toBe(false);
+    expect(offlineRefusalBlocks(undefined, 500)).toBe(false);
+    expect(offlineRefusalBlocks(undefined, 400)).toBe(true);
+    expect(offlineRefusalBlocks(ErrorCode.OFFLINE_INVALID, 409)).toBe(true);
+});
 it('keeps transient HTTP failures retryable rather than discarding cash', async () => {
     await store.queue(body(), items());
     vi.mocked(api.post).mockRejectedValue(failure(500));

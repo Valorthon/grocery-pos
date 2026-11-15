@@ -21,18 +21,28 @@
     .\Install.ps1 -ManifestSha256 <hash> -Mode uninstall
 .EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
+.EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode upgrade
+.EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode upgrade-rollback -RestoreBackup <pre-upgrade backup id>
+.EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode upgrade-status
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [ValidatePattern('^[0-9A-Fa-f]{64}$')]
     [string]$ManifestSha256,
-    [ValidateSet('install', 'repair', 'uninstall', 'handover-done')]
+    [ValidateSet('install', 'repair', 'uninstall', 'handover-done',
+        'upgrade', 'upgrade-rollback', 'upgrade-status')]
     [string]$Mode = 'install',
     [string]$AdminUsername,
     [string]$StoreTimezone,
     [string]$BackupTime,
-    [switch]$RemoveCaTrust
+    [switch]$RemoveCaTrust,
+    [ValidatePattern('^[0-9A-Za-z-]{1,80}$')]
+    [string]$RestoreBackup,
+    [switch]$AcceptNewerSales
 )
 
 Set-StrictMode -Version Latest
@@ -102,15 +112,29 @@ try {
         throw 'REFUSED:the bundle is missing installer files.'
     }
 
-    $nodeArgs = @((Join-Path $run 'tools\installer\install.mjs'), $Mode)
-    if ($Mode -eq 'install' -or $Mode -eq 'repair') {
+    # Upgrades (#364) run the new bundle's upgrade tool from the same
+    # verified copy; it re-verifies the whole release itself.
+    $upgradeCommands = @{ 'upgrade' = 'upgrade'; 'upgrade-rollback' = 'rollback'; 'upgrade-status' = 'status' }
+    if ($upgradeCommands.ContainsKey($Mode)) {
+        if (-not $expected.ContainsKey('tools/upgrade/upgrade.mjs')) {
+            throw 'REFUSED:this bundle has no upgrade tool.'
+        }
+        $nodeArgs = @((Join-Path $run 'tools\upgrade\upgrade.mjs'), $upgradeCommands[$Mode])
+    } else {
+        $nodeArgs = @((Join-Path $run 'tools\installer\install.mjs'), $Mode)
+    }
+    if ($Mode -eq 'upgrade-rollback' -and $RestoreBackup) {
+        $nodeArgs += @('--restore-backup', $RestoreBackup)
+        if ($AcceptNewerSales) { $nodeArgs += '--accept-newer-sales' }
+    }
+    if ($Mode -eq 'install' -or $Mode -eq 'repair' -or $Mode -eq 'upgrade') {
         # The manifest bytes already checked against -ManifestSha256, written
         # into the admin-only run folder; install.mjs never reads the bundle's.
         $verifiedManifest = Join-Path $run 'bundle-manifest.json'
         [System.IO.File]::WriteAllBytes($verifiedManifest, $manifestBytes)
         $nodeArgs += @('--bundle', $bundle, '--manifest', $verifiedManifest,
             '--manifest-sha256', $manifestHash)
-        if ($BackupTime) { $nodeArgs += @('--backup-time', $BackupTime) }
+        if ($BackupTime -and $Mode -ne 'upgrade') { $nodeArgs += @('--backup-time', $BackupTime) }
     }
     if ($Mode -eq 'install') {
         if ($AdminUsername) { $nodeArgs += @('--admin-username', $AdminUsername) }

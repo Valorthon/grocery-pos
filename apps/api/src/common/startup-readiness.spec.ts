@@ -1,9 +1,76 @@
 import type { Connection } from 'mongoose';
 import {
+    assertDataVersion,
     awaitDatabaseReady,
     connectionRetryOptions,
     DatabaseNotReadyError,
+    dataVersionProblem,
+    DataVersionMismatchError,
 } from './startup-readiness';
+
+describe('data-version gate (#364)', () => {
+    function connection(marker: unknown, db = true): Connection {
+        const findOne = jest.fn().mockResolvedValue(marker);
+        const collection = jest.fn(() => ({ findOne }));
+        return {
+            db: db ? { collection } : undefined,
+        } as unknown as Connection;
+    }
+
+    it('starts on its own version, and on no marker for version 1', async () => {
+        await expect(
+            assertDataVersion(
+                connection({ dataVersion: 3, state: 'ready' }),
+                3,
+                'c',
+                'data',
+            ),
+        ).resolves.toBeUndefined();
+        await expect(
+            assertDataVersion(connection(null), 1, 'c', 'data'),
+        ).resolves.toBeUndefined();
+    });
+
+    it.each([
+        [
+            { dataVersion: 2, state: 'ready' },
+            1,
+            /data version 2; this release needs 1/,
+        ],
+        [
+            { dataVersion: 1, state: 'ready' },
+            2,
+            /data version 1; this release needs 2/,
+        ],
+        [null, 2, /data version 1; this release needs 2/],
+        [{ dataVersion: 2, state: 'migrating' }, 2, /being upgraded/],
+    ])(
+        'refuses %j for release version %d',
+        async (marker, expected, message) => {
+            const run = () =>
+                assertDataVersion(connection(marker), expected, 'c', 'data');
+            await expect(run()).rejects.toThrow(message);
+            await expect(run()).rejects.toBeInstanceOf(
+                DataVersionMismatchError,
+            );
+        },
+    );
+
+    it('refuses without a database handle', async () => {
+        await expect(
+            assertDataVersion(connection(null, false), 1, 'c', 'data'),
+        ).rejects.toThrow(/No database connection/);
+    });
+
+    it('is satisfied only by the ready state and the exact number', () => {
+        expect(
+            dataVersionProblem({ dataVersion: 1, state: 'ready' }, 1),
+        ).toBeNull();
+        expect(
+            dataVersionProblem({ dataVersion: '1', state: 'ready' }, 1),
+        ).not.toBeNull();
+    });
+});
 
 function fakeConnection(answers: unknown[], models = 2) {
     const command = jest.fn();

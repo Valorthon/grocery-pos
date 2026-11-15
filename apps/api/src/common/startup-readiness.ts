@@ -66,6 +66,54 @@ export async function awaitDatabaseReady(
  */
 export const SINGLE_PC_CONNECT_RETRY_DELAY_MS = 3_000;
 
+/**
+ * single-pc data-version gate (#364). The upgrade tool records the data
+ * version in the app database (`DATA_VERSION_COLLECTION`) and marks it
+ * `migrating` while migrations run. This API starts only on exactly its
+ * own `SINGLE_PC_DATA_VERSION` in the `ready` state, so neither an older
+ * release after a forward migration nor a newer one before it can run
+ * against the data. An absent marker is the #360 baseline, version 1.
+ */
+export class DataVersionMismatchError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'DataVersionMismatchError';
+    }
+}
+
+export interface DataVersionMarker {
+    dataVersion?: unknown;
+    state?: unknown;
+}
+
+export function dataVersionProblem(
+    marker: DataVersionMarker | null,
+    expected: number,
+): string | null {
+    const version = marker ? marker.dataVersion : 1;
+    const state = marker ? marker.state : 'ready';
+    if (state !== 'ready')
+        return `The database is being upgraded (state ${String(state)}); finish or roll back the upgrade (upgrade.mjs status).`;
+    if (version !== expected)
+        return `The database has data version ${String(version)}; this release needs ${expected}. Run the matching release or the upgrade tool.`;
+    return null;
+}
+
+export async function assertDataVersion(
+    connection: Connection,
+    expected: number,
+    collection: string,
+    id: string,
+): Promise<void> {
+    const db = connection.db;
+    if (!db) throw new DataVersionMismatchError('No database connection.');
+    const marker = await db
+        .collection<{ _id: string } & DataVersionMarker>(collection)
+        .findOne({ _id: id });
+    const problem = dataVersionProblem(marker, expected);
+    if (problem) throw new DataVersionMismatchError(problem);
+}
+
 export function connectionRetryOptions(
     singlePc: boolean,
 ): { retryAttempts: number; retryDelay: number } | Record<string, never> {

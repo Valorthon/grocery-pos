@@ -136,3 +136,14 @@ Signs: **Clock** FAIL. Set the date and time in Windows Settings > Time &
 language (turn on "Set time automatically" if the PC is online), then restart
 the PC. Do not sell while the clock is wrong: sales would land on the wrong
 day.
+
+## After an interrupted or failed upgrade (vendor)
+
+Grocery POS stays closed until the upgrade is finished or rolled back; that
+is on purpose. Do not start the services by hand. Run, as an administrator,
+from the new release's bundle folder: `Install.ps1 -ManifestSha256 <hash>
+-Mode upgrade-status`. Re-running `-Mode upgrade` resumes it; if the status
+says a restore is required, `-Mode upgrade-rollback -RestoreBackup <id>`
+restores the pre-upgrade backup and the previous release. See the upgrade
+README (#364). If a page says "Grocery POS was updated on this PC", reload
+it; queued cash sales stay on this PC and upload after the reload.

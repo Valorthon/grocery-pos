@@ -42,6 +42,25 @@ const networkFailure = (error: unknown) =>
     isAxiosError(error) && !error.response;
 /** How long an availability probe may take before the API counts as down. */
 export const PROBE_TIMEOUT_MS = 5000;
+
+/**
+ * Whether a refused upload needs admin review (it stays stored, marked
+ * blocked) rather than a later retry. A stale tab after an upgrade
+ * (409 CLIENT_OUTDATED, #364) is a retry: the receipt stays queued and
+ * the reloaded page uploads it.
+ */
+export function offlineRefusalBlocks(
+    code: ErrorCode | undefined,
+    status: number,
+): boolean {
+    if (code === ErrorCode.CLIENT_OUTDATED) return false;
+    return (
+        code === ErrorCode.OFFLINE_RECONCILIATION_REQUIRED ||
+        code === ErrorCode.OFFLINE_INVALID ||
+        code === ErrorCode.SALE_IDEMPOTENCY_MISMATCH ||
+        [400, 401, 403].includes(status)
+    );
+}
 export const useOfflineStore = defineStore('offline', () => {
     const owner = ref<string | null>(null);
     const state = ref<OfflineState | null>(null);
@@ -379,16 +398,13 @@ export const useOfflineStore = defineStore('offline', () => {
                             setConnection(false);
                             break;
                         }
-                        const code = apiErrorCode(cause);
                         if (
-                            code ===
-                                ErrorCode.OFFLINE_RECONCILIATION_REQUIRED ||
-                            code === ErrorCode.OFFLINE_INVALID ||
-                            code === ErrorCode.SALE_IDEMPOTENCY_MISMATCH ||
-                            (isAxiosError(cause) &&
-                                [400, 401, 403].includes(
-                                    cause.response?.status ?? 0,
-                                ))
+                            offlineRefusalBlocks(
+                                apiErrorCode(cause),
+                                isAxiosError(cause)
+                                    ? (cause.response?.status ?? 0)
+                                    : 0,
+                            )
                         )
                             await blockOffline(entry, message(cause));
                         error.value = message(cause);

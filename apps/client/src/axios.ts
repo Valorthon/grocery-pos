@@ -3,6 +3,7 @@ import axios, {
     isAxiosError,
     type InternalAxiosRequestConfig,
 } from 'axios';
+import { WIRE_VERSION, WIRE_VERSION_HEADER } from '@grocery-pos/contracts';
 import constant from '@/constant';
 import { useAuthStore } from './stores/auth';
 import { env } from './config/env';
@@ -18,6 +19,12 @@ const api = axios.create({
     timeout: env.VITE_API_TIMEOUT,
     headers: {
         Accept: 'application/json',
+        // single-pc (#364): the API refuses a tab still running a previous
+        // release with 409 CLIENT_OUTDATED, before reading its body. Cloud
+        // sends nothing new (its CORS allow-list is unchanged).
+        ...(env.VITE_APP_ENV === 'single-pc'
+            ? { [WIRE_VERSION_HEADER]: String(WIRE_VERSION) }
+            : {}),
     },
     withCredentials: true,
 });

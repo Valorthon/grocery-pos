@@ -59,7 +59,13 @@ export const EXPORT_REMINDER_DAYS = 7;
 /** A daily schedule that has not produced a verified backup for this long is overdue. */
 export const OVERDUE_HOURS = 36;
 export const DEFAULT_RESERVE_MB = 256;
-export const KINDS = Object.freeze(['scheduled', 'manual', 'pre-restore']);
+export const KINDS = Object.freeze([
+    'scheduled',
+    'manual',
+    'pre-restore',
+    // Taken by the upgrade tool after the API stops (#364).
+    'pre-upgrade',
+]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const ARCHIVE = 'database.archive.gz';
@@ -71,7 +77,7 @@ const INCOMPLETE = '.incomplete-';
 const VERIFY_USER = 'gpos_verify';
 const SCRATCH = '.verify-';
 export const ID_PATTERN =
-    /^\d{8}T\d{6}Z-(scheduled|manual|pre-restore)-[0-9a-f]{6}$/;
+    /^\d{8}T\d{6}Z-(scheduled|manual|pre-restore|pre-upgrade)-[0-9a-f]{6}$/;
 export const EXPORT_PREFIX = 'GroceryPOS-backup-';
 
 /**

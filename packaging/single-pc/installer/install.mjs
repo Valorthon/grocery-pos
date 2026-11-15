@@ -331,10 +331,14 @@ function handoverNote(username) {
 
 async function installOrRepair(options, ctx, log) {
     const loc = ctx.locations;
-    const bundle = await readBundle(options.bundle, {
-        manifest: options.manifest,
-        manifestSha256: options.manifestSha256,
-    });
+    // The upgrade tool (#364) hands over a bundle it verified itself, or the
+    // previous release it re-verified for a rollback.
+    const bundle =
+        options.verifiedBundle ??
+        (await readBundle(options.bundle, {
+            manifest: options.manifest,
+            manifestSha256: options.manifestSha256,
+        }));
     const dataState = await classifyDataRoot(loc.dataRoot);
     const facts = await ctx.facts({ loc, bundle, dataState });
     const { refusals, warnings } = evaluatePreflight(
@@ -356,6 +360,19 @@ async function installOrRepair(options, ctx, log) {
     try {
         const paths = layout(loc.dataRoot);
         const previous = dataState === 'ours' ? await readState(paths) : null;
+        // Another version over an installation is an upgrade or a
+        // rollback: data migrations and the pre-upgrade backup are the
+        // upgrade tool's (#364), never a plain repair's.
+        if (
+            options.mode === 'repair' &&
+            !options.verifiedBundle &&
+            previous?.version &&
+            previous.version !== bundle.manifest.version
+        ) {
+            throw new RefusedError(
+                `This PC runs Grocery POS ${previous.version}; ${bundle.manifest.version} is installed with the upgrade tool (upgrade.mjs), not repair.`,
+            );
+        }
         const adminUsername = options.adminUsername ?? previous?.adminUsername;
         if (!adminUsername && options.mode === 'install') {
             throw new RefusedError(
@@ -393,6 +410,10 @@ async function installOrRepair(options, ctx, log) {
             dataRoot: loc.dataRoot,
             mongod: bin.mongod,
             api: bin.api,
+            // A new database starts at this release's data version (#364).
+            ...(bundle.manifest.data?.dataVersion
+                ? { dataVersion: bundle.manifest.data.dataVersion }
+                : {}),
             ...(options.storeTimezone
                 ? { storeTimezone: options.storeTimezone }
                 : {}),

@@ -2,6 +2,13 @@ import { ForbiddenException, type INestApplication } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { TypedConfigService } from '../typed-config/typed-config.service';
 import {
+    ErrorCode,
+    WIRE_VERSION,
+    WIRE_VERSION_HEADER,
+} from '@grocery-pos/contracts';
+import { ConflictError } from '../errors/app-error';
+import {
+    isOutdatedClient,
     localAccessCheck,
     localAccessMiddleware,
     useLocalAccess,
@@ -85,6 +92,64 @@ describe('localAccessMiddleware', () => {
             next,
         );
         expect(next).toHaveBeenCalledWith(undefined);
+    });
+});
+
+describe('stale clients after an upgrade (#364)', () => {
+    const res = {} as Response;
+    const host = { host: 'localhost:1443' };
+
+    it('passes the current wire version and requests without the header', () => {
+        expect(
+            isOutdatedClient(
+                req({ ...host, [WIRE_VERSION_HEADER]: String(WIRE_VERSION) }),
+            ),
+        ).toBe(false);
+        expect(isOutdatedClient(req(host))).toBe(false);
+    });
+
+    it.each(['0', String(WIRE_VERSION + 1), '', 'x'])(
+        'refuses wire version %j with 409 CLIENT_OUTDATED before the body',
+        (sent) => {
+            const next = jest.fn();
+            localAccessMiddleware(FRONTEND)(
+                req(
+                    { ...host, [WIRE_VERSION_HEADER]: sent },
+                    'POST',
+                    '/v1/offline/sync',
+                ),
+                res,
+                next,
+            );
+            const [error] = next.mock.calls[0] as [ConflictError];
+            expect(error).toBeInstanceOf(ConflictError);
+            expect(error.code).toBe(ErrorCode.CLIENT_OUTDATED);
+            expect(error.statusCode).toBe(409);
+        },
+    );
+
+    it('lets health probes through whatever they send', () => {
+        const next = jest.fn();
+        localAccessMiddleware(FRONTEND)(
+            req(
+                { ...host, [WIRE_VERSION_HEADER]: '0' },
+                'GET',
+                '/v1/health/ready',
+            ),
+            res,
+            next,
+        );
+        expect(next).toHaveBeenCalledWith(undefined);
+    });
+
+    it('a foreign host is still a 403 first', () => {
+        const next = jest.fn();
+        localAccessMiddleware(FRONTEND)(
+            req({ host: 'evil', [WIRE_VERSION_HEADER]: '0' }),
+            res,
+            next,
+        );
+        expect(next).toHaveBeenCalledWith(expect.any(ForbiddenException));
     });
 });
 

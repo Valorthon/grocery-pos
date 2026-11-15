@@ -12,7 +12,15 @@ import { useBodyParsers } from './common/body-parsers';
 import { getConnectionToken } from '@nestjs/mongoose';
 import type { Connection } from 'mongoose';
 import { isSinglePcEnv } from './common/typed-config/app-env';
-import { awaitDatabaseReady } from './common/startup-readiness';
+import {
+    assertDataVersion,
+    awaitDatabaseReady,
+} from './common/startup-readiness';
+import {
+    DATA_VERSION_COLLECTION,
+    DATA_VERSION_ID,
+    SINGLE_PC_DATA_VERSION,
+} from '@grocery-pos/contracts';
 
 async function bootstrap() {
     const logger = new Logger('Bootstrap');
@@ -51,7 +59,15 @@ async function bootstrap() {
     // single-pc (#360): no traffic before the local replica set is a
     // writable primary and every index exists. Cloud startup is unchanged.
     if (isSinglePcEnv(config.get('APP_ENV'))) {
-        await awaitDatabaseReady(app.get<Connection>(getConnectionToken()));
+        const connection = app.get<Connection>(getConnectionToken());
+        await awaitDatabaseReady(connection);
+        // #364: never run against another release's data version.
+        await assertDataVersion(
+            connection,
+            SINGLE_PC_DATA_VERSION,
+            DATA_VERSION_COLLECTION,
+            DATA_VERSION_ID,
+        );
     }
 
     const port = config.get('PORT') ?? process.env.PORT;

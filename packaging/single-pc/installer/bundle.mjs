@@ -26,6 +26,7 @@ import {
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readZip } from './zip.mjs';
+import { dataCompatibility } from '../upgrade/migrations.mjs';
 
 export const EXIT = { OK: 0, FAILED: 1, USAGE: 2, REFUSED: 3 };
 export const BUNDLE_SCHEMA = 1;
@@ -67,6 +68,9 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/backup/removable.mjs',
     'tools/installer/Install.ps1',
     'tools/diagnostics/diagnose.mjs',
+    // Upgrades and their data migrations (#364).
+    'tools/upgrade/upgrade.mjs',
+    'tools/upgrade/migrations.mjs',
     'tools/installer/CheckHealth.ps1',
     // The recovery guide ("Grocery POS help", #365).
     'help/RECOVERY.md',
@@ -84,6 +88,7 @@ export const TOOL_DIRS = Object.freeze([
     'backup',
     'installer',
     'diagnostics',
+    'upgrade',
 ]);
 
 export function sha256(buffer) {
@@ -509,9 +514,11 @@ export async function buildBundle(options, log = () => {}) {
             schema: BUNDLE_SCHEMA,
             version,
             commit,
-            appVersion: apiPkg.version,
+            appVersion: options.appVersion ?? apiPkg.version,
             builtAt: (options.now ?? new Date()).toISOString(),
             platform: components.platform,
+            // Data version, upgrade floor and migrations (#364).
+            data: options.data ?? dataCompatibility(),
             components: Object.fromEntries(
                 shipped.map((c) => [
                     c.key,
