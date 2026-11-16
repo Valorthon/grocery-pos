@@ -13,17 +13,26 @@ before taking the target offline. Preserve upstream provenance/signature and
 license materials with the test record; SHA-256 alone is integrity, not an
 independent signature verification. The harness refuses a checksum mismatch.
 
-Build the contracts first and API from the intended full Git commit. Prepare an
-isolated production dependency tree using pnpm's deploy command (build-machine
-tooling only):
+Use pnpm 10.33.0 (pinned in the root `package.json`) on the build machine.
+From the repository root at the intended full Git commit, install the frozen
+workspace dependencies, then build contracts before the API. Prepare an isolated
+production dependency tree with the same lockfile-backed, hoisted deployment as
+the [bundle builder](../installer/README.md#building-a-bundle-vendor-build-machine-online):
 
 ```powershell
+pnpm install --frozen-lockfile
 pnpm --filter @grocery-pos/contracts build
 pnpm --filter grocery-pos-api build
-pnpm --filter grocery-pos-api deploy --legacy --prod C:\gpos-proof-api
+pnpm install --lockfile-only --frozen-lockfile --ignore-scripts
+pnpm --filter grocery-pos-api deploy --prod --config.node-linker=hoisted C:\gpos-proof-api
 # API's gitignore excludes dist from package copying; add the compiled output.
 Copy-Item -Recurse apps\api\dist C:\gpos-proof-api\dist
 ```
+
+Use a new destination directory. Keep the committed workspace settings
+(`injectWorkspacePackages` and `syncInjectedDepsAfterScripts`) so built contracts
+are included. A missing or stale lockfile must be corrected in the source
+checkout before proceeding; do not bypass frozen validation or use legacy deploy.
 
 In **that new throwaway artifact directory only**, remove the copied `src`,
 `test` and top-level development scripts/configuration. Retain `package.json`,
