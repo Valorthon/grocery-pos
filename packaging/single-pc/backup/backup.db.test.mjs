@@ -262,6 +262,28 @@ async function rewriteManifest(dir, change) {
     );
 }
 
+// The writer creates then fills this file while the interruption test polls it.
+const readScratchPort = (path) =>
+    readFile(path, 'utf8')
+        .then((text) => JSON.parse(text).port)
+        .catch(() => 0);
+
+test('scratch port polling waits through absent, empty and partially written metadata', async (t) => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-scratch-port-'));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const path = join(dir, 'port');
+    assert.equal(await readScratchPort(path), 0);
+    await writeFile(path, '');
+    assert.equal(await readScratchPort(path), 0);
+    await writeFile(path, '{"port":27019,');
+    assert.equal(await readScratchPort(path), 0);
+    await writeFile(
+        path,
+        JSON.stringify({ port: 27019, credential: 'test-only' }),
+    );
+    assert.equal(await readScratchPort(path), 27019);
+});
+
 describe(
     'single-pc backup and restore on real MongoDB',
     { skip: !MONGOD || !TOOLS },
@@ -594,12 +616,8 @@ describe(
                 for (const n of await readdir(paths.dirs.backups)) {
                     if (!n.startsWith('.verify-')) continue;
                     // {port, credential}: the instance requires auth.
-                    const port = await readFile(
+                    const port = await readScratchPort(
                         join(paths.dirs.backups, n, 'port'),
-                        'utf8',
-                    ).then(
-                        (t) => JSON.parse(t).port,
-                        () => 0,
                     );
                     if (port && (await listening(port))) return port;
                 }

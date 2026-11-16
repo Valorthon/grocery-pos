@@ -389,13 +389,45 @@ function run(command, args, options = {}) {
     execFileSync(command, args, {
         cwd: REPO,
         stdio: ['ignore', 'inherit', 'inherit'],
-        env: { ...process.env, HUSKY: '0', ...options.env },
         shell: process.platform === 'win32',
+        ...options,
+        env: { ...process.env, HUSKY: '0', ...options.env },
     });
+}
+
+/** Validate the source manifests too: deploy derives its manifest from the
+ * lockfile, so deploy's own frozen install alone cannot detect stale sources. */
+export function validateDeploymentLockfile(repo = REPO) {
+    run(
+        'pnpm',
+        ['install', '--lockfile-only', '--frozen-lockfile', '--ignore-scripts'],
+        {
+            cwd: repo,
+        },
+    );
+}
+
+/** pnpm 10's supported deploy derives a dedicated lockfile and frozen-installs
+ * it, preserving overrides and peer bindings. Hoisting keeps USB/NTFS portable. */
+export function deployProduction(destination, repo = REPO) {
+    validateDeploymentLockfile(repo);
+    run(
+        'pnpm',
+        [
+            '--filter',
+            'grocery-pos-api',
+            'deploy',
+            '--prod',
+            '--config.node-linker=hoisted',
+            destination,
+        ],
+        { cwd: repo },
+    );
 }
 
 /** Builds contracts, API and the single-pc client, and lays them out. */
 export async function buildApp(release, scratch) {
+    validateDeploymentLockfile();
     run('pnpm', ['--filter', '@grocery-pos/contracts', 'build']);
     run('pnpm', ['--filter', 'grocery-pos-api', 'build']);
     run('pnpm', ['--filter', 'grocery-pos-client', 'build'], {
@@ -409,15 +441,7 @@ export async function buildApp(release, scratch) {
     const deployed = join(scratch, 'api-deploy');
     // Hoisted: real directories, no symlinks, so the tree survives copying
     // to removable media and NTFS without Developer Mode.
-    run('pnpm', [
-        '--filter',
-        'grocery-pos-api',
-        'deploy',
-        '--prod',
-        '--legacy',
-        '--config.node-linker=hoisted',
-        deployed,
-    ]);
+    deployProduction(deployed);
     const api = join(release, 'api');
     await mkdir(api, { recursive: true });
     await cp(join(deployed, 'package.json'), join(api, 'package.json'));

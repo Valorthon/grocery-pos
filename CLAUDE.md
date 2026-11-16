@@ -1210,8 +1210,9 @@ on upstream fixes).
 - `bundle.mjs` (vendor build machine, online) builds the offline bundle:
   pinned `components.json` archives verified by SHA-256 (cache tampering
   refused), mapped onto `releaseLayout` by `zip.mjs` (Caddy's LICENSE
-  shipped), API via `pnpm deploy --prod --legacy` hoisted (Windows x64
-  prebuilds only), client with `VITE_APP_ENV=single-pc`, tools, notices, a
+  shipped), API via frozen lockfile-backed `pnpm deploy --prod` hoisted
+  (injected workspace packages synced after build, stale source lockfiles
+  refused; Windows x64 prebuilds only), client with `VITE_APP_ENV=single-pc`, tools, notices, a
   per-file `bundle-manifest.json` and `SHA256SUMS`. It prints the
   manifest's SHA-256, which the vendor records out of band; signing is
   deferred. The store downloads nothing.

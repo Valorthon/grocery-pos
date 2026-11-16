@@ -48,8 +48,16 @@ node packaging/single-pc/installer/bundle.mjs --out <new folder> [--cache <dir>]
    `services\WinSW.exe`; license and notice files go to `notices\<component>\`.
 3. Contracts, API and the client (`VITE_APP_ENV=single-pc`,
    `VITE_API_URL=/v1`) are built from the checkout. The API's production
-   dependencies come from `pnpm deploy --prod --legacy` with the hoisted
-   linker (real folders, no symlinks), plus `apps/api/dist`. Native addons
+   dependencies come from pnpm 10.33.0's lockfile-backed `pnpm deploy --prod`
+   with the hoisted linker (real folders, no symlinks), plus `apps/api/dist`.
+   Before building and deploying, a frozen, lockfile-only install validates
+   the checkout's manifests, workspace settings and overrides. An absent or
+   stale lockfile refuses the build. `injectWorkspacePackages` enables the
+   supported deploy path; `syncInjectedDepsAfterScripts: [build]` refreshes
+   built contracts before consumers run. Deploy derives a dedicated lockfile
+   from the committed workspace lockfile and frozen-installs its exact
+   versions, integrities and peer resolutions, without re-resolving ranges.
+   Native addons
    must be Windows x64 prebuilds (argon2); other platforms' prebuilds are
    removed.
 4. The packaging scripts (no tests), `Caddyfile`, `help\RECOVERY.md`,
@@ -230,7 +238,8 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
 
 ## Verification
 
-Portable, in CI (`pnpm test:single-pc-proof`, `installer.test.mjs`): ZIP
+Portable, in CI (`pnpm test:single-pc-proof`, `installer.test.mjs` and
+`deployment.test.mjs`): ZIP
 reader and path safety; component pins; download/cache SHA-256 refusal;
 archive → release mapping; Windows-only native addons; a complete bundle
 with manifest, `SHA256SUMS`, notices and tamper detection (changed, missing,
@@ -242,6 +251,15 @@ copy (static); uninstall scope; and a full install → interrupted install →
 resume → repair → damaged-release repair → uninstall → reinstall →
 handover cleanup run against a recording context, with secrets unchanged.
 PowerShell scripts get static checks only (no `pwsh` in CI).
+
+The deployment regression starts an isolated localhost npm registry, locks
+1.0.0, then publishes an allowed 1.1.0. Real pnpm deployment with an empty
+store and again with the populated store must produce the same production
+inventory at 1.0.0, preserve registry integrity hashes, overrides and peer
+bindings, include built workspace contracts, exclude development packages
+and contain no symlinks. Changing a manifest without its lockfile must fail.
+See [deployment-evidence.md](deployment-evidence.md) for the investigation
+of the previous legacy deployment. Actual Windows acceptance stays in #366.
 
 Manually on Linux (2026-11-14): a real bundle from the pinned archives
 (all six SHA-256 matched, 13,303 files, about 325 MB), `sha256sum -c

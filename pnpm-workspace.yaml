@@ -3,6 +3,12 @@ packages:
     - 'packages/*'
     - '.railway'
 
+# pnpm 10's lockfile-backed deploy requires injected workspace packages.
+# Refresh their built files before API/client consumers run.
+injectWorkspacePackages: true
+syncInjectedDepsAfterScripts:
+    - build
+
 allowBuilds:
     '@nestjs/core': true
     argon2: true
