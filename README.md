@@ -23,7 +23,7 @@ The build emits CommonJS and ES modules; relative imports in `src` end in
 
 ## Setup
 
-Requires Node `^20.19.0 || >=22.12.0` (the `engines` range; CI and the
+Requires Node `^20.19.0 || ^22.13.0 || >=24` (the `engines` range; CI and the
 Docker images use Node 22) and pnpm 10.
 
 ```bash
