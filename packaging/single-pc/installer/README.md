@@ -31,6 +31,11 @@ reboot, crash recovery and LAN checks are unproven until the #357/#366 run
 
 ## Building a bundle (vendor build machine, online)
 
+Use Node 22.13 or later in the Node 22 series (prefer the bundle's pinned
+22.23.5). Use pnpm 10.33.0, pinned in the root `package.json`. The complete
+supported Node range is in the [setup guide](../../../README.md#setup).
+Run these commands from the repository root at the intended release commit:
+
 ```bash
 pnpm install --frozen-lockfile
 node packaging/single-pc/installer/bundle.mjs --out <new folder> [--cache <dir>] [--offline]

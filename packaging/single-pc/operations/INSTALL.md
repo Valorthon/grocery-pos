@@ -14,7 +14,10 @@ it differs from what you see (B15).
 1. The PC: Windows 11 (client edition, build 22000 or later), Intel/AMD x64,
    Google Chrome installed, at least 5 GB free on the data drive, ideally a
    UPS. 4 GB RAM is the target being qualified, not a proven minimum.
-2. Build the bundle from the release commit on the vendor build machine:
+2. Build the bundle from the release commit on the vendor build machine,
+   using Node 22.13 or later in the Node 22 series (prefer the pinned 22.23.5)
+   and pnpm 10.33.0. Run from the repository root; the complete supported Node
+   range is in the [setup guide](../../../README.md#setup).
 
     ```bash
     pnpm install --frozen-lockfile
@@ -24,7 +27,8 @@ it differs from what you see (B15).
 
 3. Write the printed `bundle-manifest.json SHA-256` in your build log and on
    a note kept **apart from** the USB stick. It is the only proof the bundle
-   was not changed on the way.
+   was not changed on the way. For a new release commit, build a fresh bundle,
+   rerun readiness and record its new hash; do not reuse an earlier bundle's hash.
 4. Copy the whole bundle folder to a USB stick. Agree the first
    administrator's username with the owner (lower case; no password yet).
 
