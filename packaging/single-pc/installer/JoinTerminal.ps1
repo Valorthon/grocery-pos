@@ -56,8 +56,13 @@ $shortcuts = @(
 
 $recorded = $null
 if (Test-Path -LiteralPath $stateFile) {
-    $recorded = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
-    if ($recorded.thumbprint -notmatch '^[0-9A-F]{40}$') {
+    try {
+        $recorded = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
+        $recordedOk = $recorded.thumbprint -match '^[0-9A-F]{40}$'
+    } catch {
+        $recordedOk = $false
+    }
+    if (-not $recordedOk) {
         Stop-Failed "$stateFile is damaged; remove the Grocery POS certificate by hand (certlm.msc) and delete that file."
     }
 }
@@ -84,30 +89,51 @@ $infoFile = Join-Path $here 'terminal.json'
 if (-not (Test-Path -LiteralPath $rootFile) -or -not (Test-Path -LiteralPath $infoFile)) {
     Stop-Refused 'root.crt or terminal.json is missing. Run this from the terminal package folder.'
 }
-$info = Get-Content -LiteralPath $infoFile -Raw | ConvertFrom-Json
-if ($info.schema -ne 1 -or $info.port -ne 1443 -or
-    $info.lanIp -notmatch '^\d{1,3}(\.\d{1,3}){3}$' -or
-    $info.serverUrl -ne ('https://' + $info.lanIp + ':1443') -or
-    $info.rootSha256 -notmatch '^[0-9a-f]{64}$' -or
-    $info.rootThumbprint -notmatch '^[0-9A-F]{40}$') {
-    Stop-Refused 'terminal.json is not valid.'
+try {
+    $info = Get-Content -LiteralPath $infoFile -Raw | ConvertFrom-Json
+    $infoOk = ($info.schema -eq 1 -and $info.port -eq 1443 -and
+        $info.lanIp -match '^\d{1,3}(\.\d{1,3}){3}$' -and
+        $info.serverUrl -eq ('https://' + $info.lanIp + ':1443') -and
+        $info.rootSha256 -match '^[0-9a-f]{64}$' -and
+        $info.rootThumbprint -cmatch '^[0-9A-F]{40}$')
+} catch {
+    $infoOk = $false
 }
+if (-not $infoOk) { Stop-Refused 'terminal.json is not valid.' }
 $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $rootFile).Hash.ToLowerInvariant()
 if ($actual -ne $info.rootSha256) {
     Stop-Refused 'root.crt does not match this package (SHA-256 differs). Make a new terminal package on the main PC.'
 }
-$replacing = $recorded -and ($recorded.thumbprint -ne $info.rootThumbprint)
+# The file itself must be the CA certificate terminal.json names; the
+# thumbprint recorded is the certificate's own.
+try {
+    $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 -ArgumentList $rootFile
+    $thumbprint = $cert.Thumbprint.ToUpperInvariant()
+    $basic = @($cert.Extensions | Where-Object {
+            $_ -is [System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension] })
+    $isCa = ($basic.Count -eq 1 -and $basic[0].CertificateAuthority)
+} catch {
+    Stop-Refused 'root.crt is not a certificate. Make a new terminal package on the main PC.'
+}
+if ($thumbprint -ne $info.rootThumbprint -or -not $isCa) {
+    Stop-Refused 'root.crt is not the CA certificate this package names (thumbprint differs). Make a new terminal package on the main PC.'
+}
+$replacing = $recorded -and ($recorded.thumbprint -ne $thumbprint)
 if ($Mode -eq 'join' -and $replacing) {
     Stop-Refused 'This terminal already trusts another Grocery POS root. Use -Mode rejoin to replace it.'
 }
 
 if ($replacing) { Remove-Root $recorded.thumbprint }
 
+# Display only: the owner compares it with what the main PC showed.
+Write-Host "Certificate thumbprint: $thumbprint"
+Write-Host 'Compare it with the thumbprint the main PC showed for its terminal package (and README.txt).'
+
 & certutil.exe -addstore -f Root $rootFile | Out-Null
 if ($LASTEXITCODE -ne 0) { Stop-Failed 'Could not add the Grocery POS certificate to the Windows Root store.' }
 
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
-@{ thumbprint = $info.rootThumbprint; serverUrl = $info.serverUrl } |
+@{ thumbprint = $thumbprint; serverUrl = $info.serverUrl } |
     ConvertTo-Json | Set-Content -LiteralPath $stateFile -Encoding UTF8
 
 # Windows time from the main PC (its NTP server is #398). w32time is

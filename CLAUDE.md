@@ -1094,7 +1094,8 @@ IPv4>` (install/repair; repair and upgrade keep it, `none` turns it off)
   writes the public Caddy root, `terminal.json` (URL, root SHA-256 + SHA-1
   thumbprint), `JoinTerminal.ps1` and `README.txt`. On a terminal (no
   services/Node) `JoinTerminal.ps1 -Mode join|rejoin|leave` follows
-  `joinPlan`: hash check first, machine Root store, thumbprint recorded in
+  `joinPlan`: hash check, then the cert's own thumbprint and CA flag
+  must match `terminal.json` (thumbprint shown on both PCs to compare), machine Root store, thumbprint recorded in
   `%ProgramData%\Valorthon\GroceryPOS-Terminal`, Windows time from the
   main PC (`w32tm` manual peer, resync failure only warns), Chrome shortcut,
   plain `GET /` TLS check (never health). Rejoin/leave delete our root by

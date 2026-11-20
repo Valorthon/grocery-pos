@@ -58,6 +58,7 @@ try {
         -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
     $lines = @(Get-Content -LiteralPath $err | Where-Object { $_ -match '^(Refused: |Failed: )' })
     $done = @(Get-Content -LiteralPath $out | Where-Object { $_ -match '^Done: ' })
+    $thumb = @(Get-Content -LiteralPath $out | Where-Object { $_ -match '^Root thumbprint: [0-9A-F]{40}$' })
 } finally {
     Remove-Item -LiteralPath $out, $err -Force -ErrorAction SilentlyContinue
 }
@@ -69,6 +70,10 @@ if ($process.ExitCode -ne 0) {
 }
 $folder = $target
 if ($done.Count) { $folder = $done[-1].Substring(6) }
+$fingerprint = ''
+if ($thumb.Count) { $fingerprint = $thumb[-1].Substring(17) }
 Show-Message ("Done. The terminal package is in:`n$folder`n`n" +
+    "Certificate thumbprint: $fingerprint`n" +
+    "Each terminal shows this thumbprint when it joins; compare it with this one.`n`n" +
     'On each terminal, copy the folder and follow README.txt in it.')
 exit 0

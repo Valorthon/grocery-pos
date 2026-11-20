@@ -52,6 +52,7 @@ import {
     readRootPassword,
 } from '../backup/backup.mjs';
 import { sha256, verifyTree } from './bundle.mjs';
+import { readStoredLanIp } from './terminal.mjs';
 import {
     DEFAULT_BACKUP_TIME,
     HANDOVER_FILE,
@@ -303,16 +304,6 @@ async function writeState(paths, state) {
         mode: 0o600,
     });
     await rename(`${path}.tmp`, path);
-}
-
-/** The LAN IP this installation serves, or null (#396). */
-async function readStoredLanIp(paths) {
-    const state = await readState(paths);
-    if (state && Object.hasOwn(state, 'lanIp')) return state.lanIp ?? null;
-    const manifest = JSON.parse(
-        await readFile(paths.runtimeManifest, 'utf8').catch(() => 'null'),
-    );
-    return manifest?.lanIp ?? null;
 }
 
 /** state\releases\<version>.json: a placed release's verified manifest. */

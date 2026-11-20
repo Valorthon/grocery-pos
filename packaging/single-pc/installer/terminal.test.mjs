@@ -21,7 +21,7 @@ import {
     checkInfo,
     joinPlan,
     parseArgs,
-    storedLanIp,
+    readStoredLanIp,
     terminalInfo,
     timeSteps,
     writePackage,
@@ -63,6 +63,10 @@ before(async () => {
 });
 after(() => rm(tmp, { recursive: true, force: true }));
 
+const facts = (info) => ({
+    actualRootSha256: info.rootSha256,
+    actualRoot: { thumbprint: info.rootThumbprint, ca: true },
+});
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
 test('the package info pins the root by SHA-256 and SHA-1 thumbprint', () => {
@@ -100,7 +104,7 @@ test('join refuses a root whose hash differs and changes nothing', () => {
             joinPlan({
                 mode: 'join',
                 info: { ...info, serverUrl: 'https://evil:1443' },
-                actualRootSha256: info.rootSha256,
+                ...facts(info),
             }),
         /not valid/,
     );
@@ -112,6 +116,7 @@ test('join trusts, records, sets time, makes the shortcut, then checks TLS witho
         mode: 'join',
         info,
         actualRootSha256: info.rootSha256.toUpperCase(),
+        actualRoot: { thumbprint: info.rootThumbprint.toLowerCase(), ca: true },
     });
     assert.deepEqual(
         steps.map((s) => s.kind),
@@ -136,7 +141,7 @@ test('join trusts, records, sets time, makes the shortcut, then checks TLS witho
     const again = joinPlan({
         mode: 'join',
         info,
-        actualRootSha256: info.rootSha256,
+        ...facts(info),
         recorded: { thumbprint: info.rootThumbprint },
     });
     assert.ok(!again.some((s) => s.kind === 'untrust'));
@@ -154,7 +159,7 @@ test('join with another recorded root is refused; rejoin replaces it by thumbpri
             joinPlan({
                 mode: 'join',
                 info,
-                actualRootSha256: info.rootSha256,
+                ...facts(info),
                 recorded,
             }),
         /Use rejoin/,
@@ -162,7 +167,7 @@ test('join with another recorded root is refused; rejoin replaces it by thumbpri
     const steps = joinPlan({
         mode: 'rejoin',
         info,
-        actualRootSha256: info.rootSha256,
+        ...facts(info),
         recorded,
     });
     assert.deepEqual(steps[0], {
@@ -184,6 +189,40 @@ test('join with another recorded root is refused; rejoin replaces it by thumbpri
                 recorded,
             }),
         /SHA-256 differs/,
+    );
+});
+
+test('a root.crt whose own thumbprint or CA flag differs is refused before trust', () => {
+    const info = terminalInfo('192.168.1.10', rootA);
+    const other = terminalInfo('192.168.1.10', rootB);
+    assert.throws(
+        () =>
+            joinPlan({
+                mode: 'join',
+                info,
+                actualRootSha256: info.rootSha256,
+                actualRoot: { thumbprint: other.rootThumbprint, ca: true },
+            }),
+        /thumbprint differs/,
+    );
+    assert.throws(
+        () =>
+            joinPlan({
+                mode: 'join',
+                info,
+                actualRootSha256: info.rootSha256,
+                actualRoot: { thumbprint: info.rootThumbprint, ca: false },
+            }),
+        /thumbprint differs/,
+    );
+    assert.throws(
+        () =>
+            joinPlan({ mode: 'join', info, actualRootSha256: info.rootSha256 }),
+        /thumbprint differs/,
+    );
+    assert.throws(
+        () => checkInfo({ ...info, lanIp: 'none', serverUrl: null }),
+        /not valid/,
     );
 });
 
@@ -221,13 +260,13 @@ test('package writes the public root, info, script and readme from the stored LA
     const paths = layout(dataRoot);
     await mkdir(dirname(caddyRootCertificate(paths)), { recursive: true });
     await writeFile(caddyRootCertificate(paths), rootA);
-    assert.equal(await storedLanIp(dataRoot), null);
+    assert.equal(await readStoredLanIp(paths), null);
     await mkdir(paths.dirs.state, { recursive: true });
     await writeFile(
         join(paths.dirs.state, 'installer.json'),
         JSON.stringify({ lanIp: '192.168.1.10' }),
     );
-    const lanIp = await storedLanIp(dataRoot);
+    const lanIp = await readStoredLanIp(paths);
     assert.equal(lanIp, '192.168.1.10');
     const to = join(tmp, 'usb');
     const { dir } = await writePackage({
@@ -302,4 +341,13 @@ test('JoinTerminal.ps1 follows the plan', async () => {
     );
     assert.match(make, /-Verb RunAs/);
     assert.match(make, /'package', '--data-root'/);
+    assert.match(make, /Certificate thumbprint: \$fingerprint/);
+    assert.match(make, /compare/i);
+    assert.match(ps, /X509Certificate2/);
+    assert.match(ps, /compare/i);
+    assert.ok(ps.indexOf('X509Certificate2') < ps.indexOf('-addstore'));
+    assert.ok(
+        ps.indexOf('Write-Host "Certificate thumbprint') <
+            ps.indexOf('-addstore'),
+    );
 });

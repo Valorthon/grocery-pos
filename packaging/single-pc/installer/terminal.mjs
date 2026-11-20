@@ -89,13 +89,22 @@ export function checkInfo(info) {
         /^[0-9a-f]{64}$/.test(info.rootSha256 ?? '') &&
         /^[0-9A-F]{40}$/.test(info.rootThumbprint ?? '');
     if (!ok) throw new TerminalRefusedError('terminal.json is not valid.');
-    parseLanIp(info.lanIp);
+    let ip = null;
+    try {
+        ip = parseLanIp(info.lanIp);
+    } catch {
+        // Reported below like any other invalid file.
+    }
+    if (!ip) throw new TerminalRefusedError('terminal.json is not valid.');
     return info;
 }
 
 /**
  * What JoinTerminal.ps1 does, in order. `actualRootSha256` is the hash of
- * the package's root.crt as found on the terminal; `recorded` is the
+ * the package's root.crt as found on the terminal and `actualRoot` what
+ * loading it as a certificate shows (`{ thumbprint, ca }`); both must match
+ * terminal.json before anything changes, and the recorded thumbprint is
+ * the certificate's own. `recorded` is the
  * terminal's own record of a previous join (`{ thumbprint, serverUrl }`)
  * or null. Refusals change nothing.
  *
@@ -109,7 +118,13 @@ export function checkInfo(info) {
  * - leave: deletes only the recorded root and the shortcut, and forgets
  *   the record. Windows time keeps its setting.
  */
-export function joinPlan({ mode, info, actualRootSha256, recorded = null }) {
+export function joinPlan({
+    mode,
+    info,
+    actualRootSha256,
+    actualRoot,
+    recorded = null,
+}) {
     if (!TERMINAL_MODES.includes(mode)) {
         throw new Error(`The mode is one of: ${TERMINAL_MODES.join(', ')}.`);
     }
@@ -131,8 +146,14 @@ export function joinPlan({ mode, info, actualRootSha256, recorded = null }) {
             'root.crt does not match this package (SHA-256 differs). Make a new terminal package on the main PC.',
         );
     }
+    const thumbprint = String(actualRoot?.thumbprint ?? '').toUpperCase();
+    if (thumbprint !== info.rootThumbprint || actualRoot?.ca !== true) {
+        throw new TerminalRefusedError(
+            'root.crt is not the CA certificate this package names (thumbprint differs). Make a new terminal package on the main PC.',
+        );
+    }
     const replacing =
-        recorded?.thumbprint && recorded.thumbprint !== info.rootThumbprint;
+        recorded?.thumbprint && recorded.thumbprint !== thumbprint;
     if (mode === 'join' && replacing) {
         throw new TerminalRefusedError(
             'This terminal already trusts another Grocery POS root. Use rejoin to replace it.',
@@ -145,7 +166,7 @@ export function joinPlan({ mode, info, actualRootSha256, recorded = null }) {
         { kind: 'trust', file: PACKAGE_FILES.root },
         {
             kind: 'record',
-            thumbprint: info.rootThumbprint,
+            thumbprint,
             serverUrl: info.serverUrl,
         },
         ...timeSteps(info.lanIp),
@@ -192,13 +213,23 @@ export function readmeText(info) {
         `${PRODUCT}: join a Windows terminal`,
         '',
         `Main PC: ${info.serverUrl}`,
+        `Root certificate thumbprint: ${info.rootThumbprint}`,
         `Root certificate SHA-256: ${info.rootSha256}`,
         '',
         'On the terminal (Windows with Google Chrome, on the same shop network):',
-        '1. Copy this folder to the terminal (for example from a USB drive).',
-        '2. Right-click Start, open "Terminal (Admin)" or "Windows PowerShell (Admin)", and run:',
+        `1. Copy this folder (GroceryPOS-terminal-${info.lanIp}) to the terminal, for example to C:\\GroceryPOS-terminal.`,
+        '2. Right-click Start, open "Terminal (Admin)" or "Windows PowerShell (Admin)".',
+        '3. Go to the folder, then run the script:',
+        '   cd C:\\GroceryPOS-terminal',
         '   powershell -ExecutionPolicy Bypass -File .\\JoinTerminal.ps1 -Mode join',
-        `3. Open "${PRODUCT}" on the desktop.`,
+        '4. The script shows the certificate thumbprint before trusting it.',
+        '   Compare it with the thumbprint the main PC showed (and above).',
+        `5. Open "${PRODUCT}" on the desktop.`,
+        '',
+        'Time: the script sets this terminal to take its time from the main PC.',
+        'That works only once the main PC serves time (issue #398); until then',
+        'the script warns that the clock could not sync, and the clock must be',
+        'kept right by hand.',
         '',
         'After the main PC was replaced or its certificate changed, make a new',
         'package and run it with -Mode rejoin. To stop using this terminal, run',
@@ -239,9 +270,9 @@ export async function writePackage({ dataRoot, to, lanIp, scriptDir }) {
     return { dir, info };
 }
 
-/** The LAN IP the installer recorded (state\installer.json, #396). */
-export async function storedLanIp(dataRoot) {
-    const paths = layout(dataRoot);
+/** The LAN IP the installer recorded (state\installer.json, else
+ *  config\runtime.json; #396), or null. install.mjs uses it too. */
+export async function readStoredLanIp(paths) {
     const read = async (file) =>
         JSON.parse(await readFile(file, 'utf8').catch(() => 'null'));
     const state = await read(join(paths.dirs.state, 'installer.json'));
@@ -277,10 +308,11 @@ async function main(argv) {
     try {
         const { dir, info } = await writePackage({
             ...options,
-            lanIp: await storedLanIp(options.dataRoot),
+            lanIp: await readStoredLanIp(layout(options.dataRoot)),
             scriptDir: dirname(fileURLToPath(import.meta.url)),
         });
         console.log(`Done: ${dir}`);
+        console.log(`Root thumbprint: ${info.rootThumbprint}`);
         console.log(`Root SHA-256: ${info.rootSha256}`);
         return EXIT.OK;
     } catch (error) {

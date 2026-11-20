@@ -273,7 +273,12 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   then `/resync /force`, only a warning while the main PC serves no time
   yet; its NTP server is #398), creates the "Grocery POS" Chrome shortcut
   to `https://<IP>:1443/` (Public Desktop + common Start menu) and checks
-  TLS with a plain `GET` of the site root (never `/v1/health*`). Join with a
+  TLS with a plain `GET` of the site root (never `/v1/health*`). Before
+  trusting, it loads `root.crt` as a certificate and refuses unless its
+  own thumbprint equals `terminal.json`'s and it is a CA; it prints the
+  thumbprint to compare with the one "Make terminal package" showed
+  (display only). Time sync works only once the main PC serves time
+  (#398). Join with a
   different recorded root is refused; rejoin deletes the old root by its
   recorded thumbprint (never by name: every Caddy root has a similar CN)
   first. Leave deletes only the recorded root and the shortcut; Windows
