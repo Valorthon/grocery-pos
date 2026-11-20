@@ -40,7 +40,9 @@ import {
     ORIGIN,
     PORTS,
     REPLICA_SET,
+    LAN_SERVICE,
     SERVICES,
+    isPrivateIpv4,
     layout,
 } from '../runtime/layout.mjs';
 
@@ -78,6 +80,7 @@ export const CHECK_IDS = Object.freeze([
     'database',
     'api',
     'proxy',
+    'lanProxy',
     'disk',
     'backups',
     'clock',
@@ -171,6 +174,14 @@ export const GUIDANCE = Object.freeze({
     proxy: [
         'The browser address https://localhost:1443 is not working. Restart the PC.',
         'If Chrome shows a certificate warning, see RECOVERY.md "Certificate or address problems"; never click through the warning.',
+    ],
+    lanProxy: [
+        'LAN terminals cannot connect; this PC keeps working at https://localhost:1443.',
+        'Check the network cable or Wi-Fi and that the router is on: this PC must have its fixed LAN address back. The LAN service retries by itself.',
+        'Still down after the network is back: restart the PC. See RECOVERY.md "LAN terminals cannot connect".',
+    ],
+    lanProxyMissing: [
+        'LAN terminals are configured but their service is not installed. Ask your vendor to run the installer in repair mode.',
     ],
     certificate: [
         'The local security certificate is missing or expiring. Ask your vendor to run the installer in repair mode (it renews the local certificate and trusts it again).',
@@ -331,7 +342,30 @@ const PORT_NAMES = [
     ['proxy', 'Browser address', PORTS.proxy, [LOOPBACK, '::1']],
 ];
 
-export async function checkPorts(ctx) {
+/**
+ * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
+ * and only if it is a private IPv4 address. Never for the API or MongoDB.
+ */
+async function configuredLanIp(ctx, paths) {
+    if (!paths) return null;
+    const lanIp = (await readJson(ctx, paths.runtimeManifest))?.lanIp;
+    return typeof lanIp === 'string' && isPrivateIpv4(lanIp) ? lanIp : null;
+}
+
+export async function checkPorts(ctx, paths) {
+    // Only the LAN proxy service may listen on the LAN IP (#396): while it
+    // is known not to run, a listener there is someone else's.
+    const configured = await configuredLanIp(ctx, paths);
+    const states = configured ? await ctx.serviceStates() : null;
+    const lanIp =
+        // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
+        // under SCM recovery) may hold the LAN listener.
+        states &&
+        (states[LAN_SERVICE] === 'STOPPED' ||
+            states[LAN_SERVICE] === 'absent' ||
+            states[LAN_SERVICE] === undefined)
+            ? null
+            : configured;
     const details = {};
     const closed = [];
     const exposed = [];
@@ -340,7 +374,12 @@ export async function checkPorts(ctx) {
         for (const host of hosts)
             if (await ctx.tcp(host, port)) open.push(host);
         const listening = await ctx.listeners(port);
-        const foreign = (listening ?? []).filter((a) => !isLoopback(a));
+        const allowed = (address) =>
+            isLoopback(address) ||
+            (key === 'proxy' &&
+                lanIp !== null &&
+                address.toLowerCase().replace(/^::ffff:/, '') === lanIp);
+        const foreign = (listening ?? []).filter((a) => !allowed(a));
         details[key] = { port, reachable: open, listeners: listening };
         if (foreign.length) exposed.push(`${label} (${port})`);
         else if (open.length < hosts.length) closed.push(`${label} (${port})`);
@@ -367,8 +406,62 @@ export async function checkPorts(ctx) {
         'ports',
         'Ports (this PC only)',
         'ok',
-        'Database, application and browser address answer on this PC only.',
-        { details },
+        lanIp
+            ? `Database and application answer on this PC only; the LAN terminals' service also on ${lanIp}.`
+            : 'Database, application and browser address answer on this PC only.',
+        { details: { ...details, lanIp } },
+    );
+}
+
+/**
+ * The LAN terminals' proxy (#396), apart from the app: a stopped or
+ * unreachable LAN service means terminals cannot connect, never that this
+ * PC's register is down.
+ */
+export async function checkLanProxy(ctx, paths) {
+    const title = 'LAN terminals';
+    const lanIp = await configuredLanIp(ctx, paths);
+    if (!lanIp)
+        return result(
+            'lanProxy',
+            title,
+            'info',
+            'No LAN terminals are set up.',
+        );
+    const states = await ctx.serviceStates();
+    const state = states?.[LAN_SERVICE];
+    const details = { lanIp, service: LAN_SERVICE, state: state ?? null };
+    if (state === 'absent')
+        return result(
+            'lanProxy',
+            title,
+            'fail',
+            `LAN terminals are set up for ${lanIp} but ${LAN_SERVICE} is not installed.`,
+            { details, steps: GUIDANCE.lanProxyMissing },
+        );
+    const listening = (await ctx.listeners(PORTS.proxy)) ?? [];
+    const answering = listening.some(
+        (a) => a.toLowerCase().replace(/^::ffff:/, '') === lanIp,
+    );
+    if ((state && state !== 'RUNNING') || (states && !answering))
+        return result(
+            'lanProxy',
+            title,
+            'warn',
+            `LAN terminals cannot connect to ${lanIp}; this PC still works.`,
+            {
+                details: { ...details, listening: answering },
+                steps: GUIDANCE.lanProxy,
+            },
+        );
+    return result(
+        'lanProxy',
+        title,
+        states ? 'ok' : 'unknown',
+        states
+            ? `LAN terminals connect to https://${lanIp}:${PORTS.proxy}.`
+            : 'Service state is only read on Windows.',
+        { details: { ...details, listening: answering } },
     );
 }
 
@@ -741,6 +834,8 @@ async function logSources(ctx, paths) {
     for (const [name, dir] of [
         ['application', paths.apiLogs],
         ['proxy', paths.proxyLogs],
+        // The LAN terminals' proxy (#396); empty without LAN terminals.
+        ['proxyLan', paths.proxyLanLogs],
     ]) {
         const files = ((await ctx.list(dir)) ?? []).sort();
         sources.push([
@@ -805,10 +900,11 @@ export async function diagnose(options, ctx = realContext()) {
     const checks = [
         await checkVersions(ctx, paths, options.release),
         await checkServices(ctx),
-        await checkPorts(ctx),
+        await checkPorts(ctx, paths),
         await checkDatabase(ctx, apiDir),
         await checkApi(ctx),
         await checkProxy(ctx, paths, now),
+        await checkLanProxy(ctx, paths),
         await checkDisk(ctx, paths, programDir),
         await checkBackups(paths, now),
         await checkClock(ctx, paths, now),
@@ -993,6 +1089,14 @@ export function serviceStateFromStatus(text) {
     return map[value] ?? 'UNKNOWN';
 }
 
+/** Every service whose state is read: the three, plus the LAN proxy (#396),
+ *  reported as `absent` without LAN terminals. checkServices reads only
+ *  SERVICES; checkPorts and checkLanProxy read LAN_SERVICE. */
+export const QUERIED_SERVICES = Object.freeze([
+    ...Object.values(SERVICES),
+    LAN_SERVICE,
+]);
+
 export function realContext() {
     const windows = process.platform === 'win32';
     return {
@@ -1008,7 +1112,7 @@ export function realContext() {
         async serviceStates() {
             if (!windows) return null;
             const out = {};
-            for (const name of Object.values(SERVICES)) {
+            for (const name of QUERIED_SERVICES) {
                 // The Status enum name is not localized (sc.exe's text may be).
                 const { code, stdout } = await execCapture('powershell.exe', [
                     '-NoProfile',
@@ -1153,7 +1257,7 @@ export function rotateReason(error) {
 /** Exactly what a support export contains (README "Support export"). */
 export const EXPORT_INCLUDES = Object.freeze([
     'The full check report shown by "Check Grocery POS" (versions, services, ports, database/application/address state, disk space, backup status, clock, recent error lines).',
-    `The last ${EXPORT_LINES_PER_FILE} lines of each log file (database, application, proxy), redacted.`,
+    `The last ${EXPORT_LINES_PER_FILE} lines of each log file (database, application, proxy, LAN proxy), redacted.`,
     'Removed from every line: secrets, passwords, tokens, cookies, connection strings, e-mail addresses, user names, quoted text and IP addresses; database log lines keep only time, severity, component, id and message.',
     'Not included: database contents, sales or customer data, backups, secrets, certificates or configuration files.',
 ]);

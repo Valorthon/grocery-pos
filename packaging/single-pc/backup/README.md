@@ -108,14 +108,25 @@ Included (`files\…` in the backup): `secrets\mongo-keyfile`,
 unreachable (#360 has no reset path), and the JWT secret signs offline cost
 evidence and leases (#37), so a replacement PC needs them.
 
+The local CA root (#396, owner decision 2026-11-20):
+`tls\data\caddy\pki\authorities\local\root.crt` and `root.key`, when
+Caddy has created them (both or neither). A replacement PC restored onto an
+empty data root gets them back in a private `tls\`, so Caddy keeps the same
+root and every LAN terminal (and the installer's trust step) keeps trusting
+it. The intermediate and site certificates are never copied; Caddy rebuilds
+them. Restoring onto an existing installation leaves its `tls\` alone.
+Backups made before #396 have no root: their replacement PC gets a new one
+and every terminal re-joins (#397). **The root key is in every backup and
+USB export**: whoever holds the drive can impersonate the main PC to joined
+terminals, so exports stay in the owner's custody.
+
 `cookie-secret` is not included: it signs the session cookies only (the API
 accepts access tokens solely from cookies it signs), and every restore
 writes a new one, so no pre-restore access or refresh token works afterwards.
 
 Excluded, with reasons in each manifest: `secrets\api.env` and
-`config\mongod.cfg` (derived, rewritten for the target paths), `tls\` (the
-local CA is trusted per machine; the replacement's installer creates and
-trusts its own, #358/#362), `logs\`, the live `database\` files, the
+`config\mongod.cfg` (derived, rewritten for the target paths), the rest of
+`tls\` (Caddy rebuilds it from the root), `logs\`, the live `database\` files, the
 `local` database, and browser storage (below).
 
 Local backups sit in `backups\` (owner-only; SYSTEM/Administrators on
@@ -165,8 +176,8 @@ linked from the app). Before anything changes it:
 2. requires `--confirm <backup id>` exactly;
 3. checks compatibility: same MongoDB major.minor, app version no older than
    the backup's (newer data is never opened by an older app);
-4. refuses while the API listens (stop `GroceryPOS-Proxy` and
-   `GroceryPOS-API`; MongoDB may run or is started by the tool);
+4. refuses while the API listens (stop `GroceryPOS-ProxyLan` where
+   installed, then `GroceryPOS-Proxy` and `GroceryPOS-API`; MongoDB may run or is started by the tool);
 5. on an existing installation: same installation id and identical secrets,
    then refuses each kind of loss unless accepted on its own flag: open
    shifts (`--accept-open-shifts`), active offline cash leases, which mean a
@@ -208,8 +219,12 @@ verified admin-only copy, never from the bundle folder.
    On an empty data root it places the backup's identity and secrets,
    provisions (#360), and restores. The store's users and passwords come
    back with the data.
-3. Register/start the services (#362). The new local CA must be trusted on
-   the new PC (installer). Log in; take a backup and an export.
+   It also places the CA root and the LAN IP setting (#396) and reports
+   the IP; give the new PC that fixed address before installing, or
+   install and then run `-Mode repair -LanIp <new IP>` (terminals re-join)
+   or `-LanIp none`.
+3. Register/start the services (#362). The installer trusts the restored
+   (or, for an older backup, new) local CA on the new PC. Log in; take a backup and an export.
 
 Restored on Linux end-to-end, including the compiled API logging in the
 restored first ADMIN.

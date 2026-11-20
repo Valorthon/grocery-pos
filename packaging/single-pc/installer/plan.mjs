@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
     ORIGIN,
     PORTS,
+    LAN_SERVICE,
     SERVICES,
     releaseLayout,
     serviceDefinitions,
@@ -183,6 +184,37 @@ export function evaluatePreflight(facts, mode) {
     if (mode === 'repair' && facts.dataRoot !== 'ours') {
         refusals.push('There is no Grocery POS installation to repair.');
     }
+    // LAN terminals (#396): the fixed IP must be on a local network adapter
+    // and its HTTPS port free (our own proxy may hold it during a repair).
+    if (facts.lanIp) {
+        // Only a new or changed IP is refused when missing: a kept one may
+        // be briefly absent (cable, router off), and refusing it would block
+        // repair, upgrade and rollback until the network is back.
+        if (!facts.lanIpPresent && facts.lanIpChanged) {
+            refusals.push(
+                `The LAN IP ${facts.lanIp} is not an address of this PC. Give this PC that fixed address (static or a router reservation) first, or choose another with --lan-ip.`,
+            );
+        } else if (!facts.lanIpPresent) {
+            warnings.push(
+                `The LAN IP ${facts.lanIp} is not an address of this PC right now (cable, Wi-Fi or router off?). LAN terminals cannot connect until it is back.`,
+            );
+        }
+        if (facts.lanIpMultiple) {
+            warnings.push(
+                `The LAN IP ${facts.lanIp} is on more than one network adapter; keep it on one.`,
+            );
+        }
+        if (facts.lanPortForeign) {
+            refusals.push(
+                `Port ${PORTS.proxy} on ${facts.lanIp} is in use by another program; free it.`,
+            );
+        }
+        if (facts.lanProfile === 'Public') {
+            warnings.push(
+                `The network adapter with ${facts.lanIp} is on the Public profile, where the firewall rule does not apply. Set that network to Private in Windows Settings so terminals can connect.`,
+            );
+        }
+    }
     for (const [name, port] of Object.entries(PORTS)) {
         const owner = {
             proxy: SERVICES.proxy,
@@ -233,9 +265,14 @@ function gib(bytes) {
  * Service registration steps in start order (MongoDB → API → proxy). Each
  * step is `{ kind, ... }`: `exec` (file, args), `write` (path, text).
  */
-export function serviceSteps(paths, release, serviceDir) {
+export function serviceSteps(
+    paths,
+    release,
+    serviceDir,
+    { lanIp = null } = {},
+) {
     const bin = releaseLayout(release);
-    const defs = serviceDefinitions(paths, release);
+    const defs = serviceDefinitions(paths, release, { lanIp });
     const steps = [];
     for (const def of defs) {
         if (def.host === 'mongod') {
@@ -322,7 +359,7 @@ export function serviceConfigSteps(def) {
  * top of provisioning's SYSTEM + Administrators only. `(OI)(CI)M` is
  * modify on a folder and everything below it; `(R)` read on one file.
  */
-export function aclSteps(paths, release) {
+export function aclSteps(paths, release, { lanIp = null } = {}) {
     const bin = releaseLayout(release);
     const grant = (path, account, rights) => ({
         kind: 'exec',
@@ -332,6 +369,7 @@ export function aclSteps(paths, release) {
     const mongo = serviceAccount(SERVICES.mongo);
     const api = serviceAccount(SERVICES.api);
     const proxy = serviceAccount(SERVICES.proxy);
+    const lanProxy = serviceAccount(LAN_SERVICE);
     return [
         grant(paths.dirs.database, mongo, '(OI)(CI)M'),
         grant(paths.dirs.logs, mongo, '(OI)(CI)M'),
@@ -342,6 +380,14 @@ export function aclSteps(paths, release) {
         grant(paths.dirs.tls, proxy, '(OI)(CI)M'),
         grant(paths.proxyLogs, proxy, '(OI)(CI)M'),
         grant(bin.client, proxy, '(OI)(CI)RX'),
+        // The LAN proxy (#396): the same model, sharing the TLS storage.
+        ...(lanIp
+            ? [
+                  grant(paths.dirs.tls, lanProxy, '(OI)(CI)M'),
+                  grant(paths.proxyLanLogs, lanProxy, '(OI)(CI)M'),
+                  grant(bin.client, lanProxy, '(OI)(CI)RX'),
+              ]
+            : []),
     ];
 }
 
@@ -373,6 +419,58 @@ export function caddyRootCertificate(paths) {
         'local',
         'root.crt',
     );
+}
+
+/** The Windows Firewall rule for LAN terminals (#396). */
+export const FIREWALL_RULE = 'GroceryPOS-LAN-HTTPS';
+
+/**
+ * Inbound TCP 1443 to this release's caddy.exe on the LAN IP only, from the
+ * local subnet, Private profile only. Always deletes the previous rule first
+ * (another release's path or IP); without a LAN IP the rule stays deleted.
+ */
+export function firewallSteps(release, lanIp) {
+    const steps = [removeFirewallStep()];
+    if (!lanIp) return steps;
+    steps.push({
+        kind: 'exec',
+        file: 'netsh.exe',
+        args: [
+            'advfirewall',
+            'firewall',
+            'add',
+            'rule',
+            `name=${FIREWALL_RULE}`,
+            'dir=in',
+            'action=allow',
+            'protocol=TCP',
+            `localport=${PORTS.proxy}`,
+            `localip=${lanIp}`,
+            'remoteip=localsubnet',
+            'profile=private',
+            // program= + localip= suffice: only the LAN service listens on
+            // the LAN IP (a service= filter is unproven for WinSW's child).
+            `program=${releaseLayout(release).caddy}`,
+            'enable=yes',
+        ],
+    });
+    return steps;
+}
+
+function removeFirewallStep() {
+    return {
+        kind: 'exec',
+        file: 'netsh.exe',
+        args: [
+            'advfirewall',
+            'firewall',
+            'delete',
+            'rule',
+            `name=${FIREWALL_RULE}`,
+        ],
+        // "No rules match" is not a failure.
+        allowFailure: true,
+    };
 }
 
 /** Machine trust store (Chrome on Windows uses the OS store). */
@@ -730,7 +828,8 @@ export function taskSteps(xmlPaths) {
 
 /** Stop order: proxy → API → MongoDB (reverse of start). */
 export function stopOrder() {
-    return [SERVICES.proxy, SERVICES.api, SERVICES.mongo];
+    // The LAN proxy depends on the localhost proxy, so it stops first.
+    return [LAN_SERVICE, SERVICES.proxy, SERVICES.api, SERVICES.mongo];
 }
 
 /**
@@ -754,6 +853,7 @@ export function uninstallSteps({ installedServices, shortcuts }) {
         steps.push({ kind: 'exec', file: 'sc.exe', args: ['delete', name] });
         steps.push({ kind: 'gone', name });
     }
+    steps.push(removeFirewallStep());
     for (const path of shortcuts) steps.push({ kind: 'remove', path });
     return steps;
 }

@@ -18,6 +18,8 @@
 .EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode repair
 .EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode repair -LanIp 192.168.1.10
+.EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode uninstall
 .EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
@@ -48,6 +50,9 @@ param(
     [string]$AdminUsername,
     [string]$StoreTimezone,
     [string]$BackupTime,
+    # LAN terminals (#396): this PC's fixed private IPv4 address, or 'none'.
+    [ValidatePattern('^(none|[0-9]{1,3}(\.[0-9]{1,3}){3})$')]
+    [string]$LanIp,
     [switch]$RemoveCaTrust,
     [ValidatePattern('^[0-9A-Za-z-]{1,80}$')]
     [string]$RestoreBackup,
@@ -82,6 +87,9 @@ if ($AcceptNewerSales -and -not ($Mode -eq 'restore' -or ($Mode -eq 'upgrade-rol
 }
 if (($From -and -not $restoreMode) -or (($Confirm -or $AcceptOpenShifts -or $AcceptPendingOffline) -and $Mode -ne 'restore')) {
     Stop-Refused '-From only goes with -Mode restore or restore-verify; -Confirm, -AcceptOpenShifts and -AcceptPendingOffline only with -Mode restore.'
+}
+if ($LanIp -and $Mode -ne 'install' -and $Mode -ne 'repair') {
+    Stop-Refused '-LanIp only goes with -Mode install or repair (an upgrade keeps the current LAN IP; change it afterwards with -Mode repair -LanIp).'
 }
 if ($restoreMode) {
     if (-not $From) { Stop-Refused "-Mode $Mode needs -From <backup folder>." }
@@ -190,6 +198,7 @@ try {
         $nodeArgs += @('--bundle', $bundle, '--manifest', $verifiedManifest,
             '--manifest-sha256', $manifestHash)
         if ($BackupTime -and $Mode -ne 'upgrade') { $nodeArgs += @('--backup-time', $BackupTime) }
+        if ($LanIp) { $nodeArgs += @('--lan-ip', $LanIp) }
     }
     if ($Mode -eq 'install') {
         if ($AdminUsername) { $nodeArgs += @('--admin-username', $AdminUsername) }

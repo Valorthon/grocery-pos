@@ -11,6 +11,45 @@ export const PORTS = Object.freeze({ proxy: 1443, api: 13000, mongo: 27018 });
 export const ORIGIN = `https://localhost:${PORTS.proxy}`;
 export const LOOPBACK = '127.0.0.1';
 
+/**
+ * LAN terminals (#396, ARCHITECTURE.md "LAN terminals (#402)"): one fixed
+ * private IPv4 address of this PC, in canonical dotted form, or null. Caddy
+ * listens on it as well as on loopback; the API and MongoDB never do.
+ */
+export function isPrivateIpv4(text) {
+    const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(
+        String(text),
+    );
+    if (!match) return false;
+    const octets = match.slice(1).map(Number);
+    if (match.slice(1).some((o) => o.length > 1 && o.startsWith('0')))
+        return false;
+    if (octets.some((o) => o > 255)) return false;
+    const [a, b] = octets;
+    return (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168)
+    );
+}
+
+/** The validated LAN IP, or throws. `none`/empty means no LAN terminals. */
+export function parseLanIp(text) {
+    const value = String(text ?? '').trim();
+    if (value === '' || value.toLowerCase() === 'none') return null;
+    if (!isPrivateIpv4(value)) {
+        throw new Error(
+            `The LAN IP must be a private IPv4 address of this PC (10.x, 172.16-31.x or 192.168.x), e.g. 192.168.1.10; got "${value}".`,
+        );
+    }
+    return value;
+}
+
+/** The terminals' origin for a LAN IP (the API's LAN_ORIGIN, #394). */
+export function lanOrigin(lanIp) {
+    return lanIp ? `https://${lanIp}:${PORTS.proxy}` : null;
+}
+
 export const REPLICA_SET = 'gpos';
 export const APP_DATABASE = 'grocery';
 /** Installation marker; never an application collection. */
@@ -22,6 +61,14 @@ export const SERVICES = Object.freeze({
     api: 'GroceryPOS-API',
     proxy: 'GroceryPOS-Proxy',
 });
+
+/**
+ * The LAN terminals' proxy (#396, owner decision 2026-11-20): its own Caddy
+ * service, installed only with a LAN IP, so a missing LAN address fails it
+ * alone and never GroceryPOS-Proxy (the main PC's https://localhost:1443).
+ * Not in SERVICES: an installation without LAN terminals has no such service.
+ */
+export const LAN_SERVICE = 'GroceryPOS-ProxyLan';
 
 /**
  * Persistent directories under the data root
@@ -92,8 +139,18 @@ export function layout(root) {
         mongodLog: join(dirs.logs, 'mongod.log'),
         apiLogs: join(dirs.logs, 'api'),
         proxyLogs: join(dirs.logs, 'proxy'),
+        proxyLanLogs: join(dirs.logs, 'proxy-lan'),
         caddyData: join(dirs.tls, 'data'),
         caddyConfig: join(dirs.tls, 'config'),
+        // Caddy's root CA: the only TLS files a backup carries (#396).
+        caddyRoot: join(
+            dirs.tls,
+            'data',
+            'caddy',
+            'pki',
+            'authorities',
+            'local',
+        ),
     };
 }
 
@@ -141,7 +198,11 @@ export const HEALTH = Object.freeze({
 });
 
 /** The API's environment (node --env-file). No quotes, one per line. */
-export function apiEnv(paths, secrets, { storeTimezone = 'Asia/Manila' } = {}) {
+export function apiEnv(
+    paths,
+    secrets,
+    { storeTimezone = 'Asia/Manila', lanIp = null } = {},
+) {
     const entries = [
         ['APP_ENV', 'single-pc'],
         ['PORT', String(PORTS.api)],
@@ -160,6 +221,7 @@ export function apiEnv(paths, secrets, { storeTimezone = 'Asia/Manila' } = {}) {
         ['HEALTH_DISK_THRESHOLD_PERCENT', String(HEALTH.diskFullFraction)],
         ['HEALTH_DISK_PATH', paths.root],
         ['STORE_TIMEZONE', storeTimezone],
+        ...(lanIp ? [['LAN_ORIGIN', lanOrigin(parseLanIp(lanIp))]] : []),
     ];
     for (const [key, value] of entries) {
         if (/[\r\n"'#`]/.test(value) || value !== value.trim()) {
@@ -198,6 +260,8 @@ export function releaseLayout(release, { windows = true } = {}) {
         client: join(release, 'client'),
         caddy: join(release, 'caddy', exe('caddy')),
         caddyfile: join(release, 'caddy', 'Caddyfile'),
+        // LAN terminals' proxy (#396); both import caddy\app.caddy.
+        caddyfileLan: join(release, 'caddy', 'Caddyfile.lan'),
     };
 }
 
@@ -206,8 +270,39 @@ export function releaseLayout(release, { windows = true } = {}) {
  * stop runs in reverse. #362 installs them (mongod's own --install for the
  * DB, WinSW for the API and the proxy).
  */
-export function serviceDefinitions(paths, release) {
+export function serviceDefinitions(paths, release, { lanIp = null } = {}) {
     const bin = releaseLayout(release);
+    const ip = parseLanIp(lanIp);
+    const caddyEnv = {
+        GPOS_CLIENT_ROOT: bin.client,
+        XDG_DATA_HOME: paths.caddyData,
+        XDG_CONFIG_HOME: paths.caddyConfig,
+    };
+    const lan = ip
+        ? [
+              {
+                  name: LAN_SERVICE,
+                  host: 'winsw',
+                  executable: bin.caddy,
+                  arguments: [
+                      'run',
+                      '--config',
+                      bin.caddyfileLan,
+                      '--adapter',
+                      'caddyfile',
+                  ],
+                  workingDirectory: join(release, 'caddy'),
+                  // Same TLS storage, so the same root as the localhost site.
+                  env: { ...caddyEnv, GPOS_LAN_IP: ip },
+                  // After the localhost proxy, which creates the root first.
+                  dependsOn: [SERVICES.proxy],
+                  logDirectory: paths.proxyLanLogs,
+                  readiness: `GET ${lanOrigin(ip)}/ (optional: the LAN address may be absent)`,
+                  optional: true,
+                  stopTimeoutSeconds: 30,
+              },
+          ]
+        : [];
     return [
         {
             name: SERVICES.mongo,
@@ -246,16 +341,13 @@ export function serviceDefinitions(paths, release) {
                 'caddyfile',
             ],
             workingDirectory: join(release, 'caddy'),
-            env: {
-                GPOS_CLIENT_ROOT: bin.client,
-                XDG_DATA_HOME: paths.caddyData,
-                XDG_CONFIG_HOME: paths.caddyConfig,
-            },
+            env: caddyEnv,
             dependsOn: [SERVICES.api],
             logDirectory: paths.proxyLogs,
             readiness: `GET ${ORIGIN}/v1/health/ready`,
             stopTimeoutSeconds: 30,
         },
+        ...lan,
     ];
 }
 
@@ -319,11 +411,14 @@ export function winswXml(service) {
 }
 
 /** Non-secret manifest for installer/backup/diagnostics (config/runtime.json). */
-export function runtimeManifest(paths, install) {
+export function runtimeManifest(paths, install, { lanIp = null } = {}) {
     return {
         schema: RUNTIME_SCHEMA,
         installationId: install.installationId,
         origin: ORIGIN,
+        // LAN terminals (#396): the fixed IP and origin, or null.
+        lanIp: lanIp ?? null,
+        lanOrigin: lanOrigin(lanIp),
         ports: PORTS,
         bind: LOOPBACK,
         replicaSet: REPLICA_SET,

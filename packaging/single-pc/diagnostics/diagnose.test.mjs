@@ -11,13 +11,15 @@ import {
     rm,
     writeFile,
 } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
-import { SERVICES, layout } from '../runtime/layout.mjs';
+import { LAN_SERVICE, SERVICES, layout } from '../runtime/layout.mjs';
 import {
     CHECK_IDS,
     EXPORT_INCLUDES,
+    QUERIED_SERVICES,
     GUIDANCE,
     REPORT_KEYS,
     STATUSES,
@@ -203,6 +205,182 @@ describe('diagnose', () => {
         );
         assert.equal(byId(report, 'ports').status, 'fail');
         assert.deepEqual(byId(report, 'ports').steps, GUIDANCE.exposed);
+    });
+
+    test('the real context queries the three services and the LAN proxy (#396)', () => {
+        assert.deepEqual(
+            [...QUERIED_SERVICES],
+            [...Object.values(SERVICES), LAN_SERVICE],
+        );
+        const source = readFileSync(
+            new URL('./diagnose.mjs', import.meta.url),
+            'utf8',
+        );
+        const real = source.slice(
+            source.indexOf('export function realContext'),
+        );
+        assert.match(
+            real.slice(0, real.indexOf('async listeners')),
+            /for \(const name of QUERIED_SERVICES\)/,
+        );
+    });
+
+    test('any LAN service state but STOPPED may hold the LAN listener (#396)', async () => {
+        const paths = layout(root);
+        for (const [lanState, status] of [
+            ['START_PENDING', 'ok'],
+            ['STOP_PENDING', 'ok'],
+            ['STOPPED', 'fail'],
+        ]) {
+            const report = await diagnose(
+                { dataRoot: root },
+                healthy({
+                    readText: async (path) =>
+                        path === paths.runtimeManifest
+                            ? JSON.stringify({ lanIp: '192.168.1.10' })
+                            : (await import('node:fs/promises')).readFile(
+                                  path,
+                                  'utf8',
+                              ),
+                    serviceStates: async () => ({
+                        ...Object.fromEntries(
+                            Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+                        ),
+                        [LAN_SERVICE]: lanState,
+                    }),
+                    listeners: async (p) =>
+                        p === 1443
+                            ? ['127.0.0.1', '::1', '192.168.1.10']
+                            : ['127.0.0.1'],
+                }),
+            );
+            assert.equal(byId(report, 'ports').status, status, lanState);
+        }
+    });
+
+    test('the proxy may listen on the configured LAN IP only (#396)', async () => {
+        const paths = layout(root);
+        const running =
+            (lanState = 'RUNNING') =>
+            async () => ({
+                ...Object.fromEntries(
+                    Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+                ),
+                [LAN_SERVICE]: lanState,
+            });
+        const withManifest = (manifest, listeners, lanState = 'RUNNING') =>
+            healthy({
+                serviceStates: running(lanState),
+                readText: async (path) =>
+                    path === paths.runtimeManifest
+                        ? JSON.stringify(manifest)
+                        : (await import('node:fs/promises')).readFile(
+                              path,
+                              'utf8',
+                          ),
+                listeners,
+            });
+        const lan = { lanIp: '192.168.1.10' };
+        const ok = await diagnose(
+            { dataRoot: root },
+            withManifest(lan, async (p) =>
+                p === 1443
+                    ? ['127.0.0.1', '::1', '192.168.1.10']
+                    : ['127.0.0.1'],
+            ),
+        );
+        assert.equal(byId(ok, 'ports').status, 'ok');
+        assert.equal(byId(ok, 'lanProxy').status, 'ok');
+        // The LAN service stopped (address gone): terminals cannot connect,
+        // a warning, not an app failure; this PC's checks stay ok.
+        const down = await diagnose(
+            { dataRoot: root },
+            withManifest(
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '::1'] : ['127.0.0.1'],
+                'STOPPED',
+            ),
+        );
+        assert.equal(byId(down, 'lanProxy').status, 'warn');
+        assert.deepEqual(byId(down, 'lanProxy').steps, GUIDANCE.lanProxy);
+        for (const id of ['services', 'ports', 'api'])
+            assert.equal(byId(down, id).status, 'ok', id);
+        // Running but not listening on the IP is the same warning.
+        const deaf = await diagnose(
+            { dataRoot: root },
+            withManifest(lan, async () => ['127.0.0.1', '::1']),
+        );
+        assert.equal(byId(deaf, 'lanProxy').status, 'warn');
+        const missing = await diagnose(
+            { dataRoot: root },
+            withManifest(lan, async () => ['127.0.0.1', '::1'], 'absent'),
+        );
+        assert.equal(byId(missing, 'lanProxy').status, 'fail');
+        assert.deepEqual(
+            byId(missing, 'lanProxy').steps,
+            GUIDANCE.lanProxyMissing,
+        );
+        // Without LAN terminals the check is informational.
+        const none = await diagnose(
+            { dataRoot: root },
+            withManifest({}, async (p) =>
+                p === 1443 ? ['127.0.0.1', '::1'] : ['127.0.0.1'],
+            ),
+        );
+        assert.equal(byId(none, 'lanProxy').status, 'info');
+        assert.match(byId(ok, 'ports').summary, /192\.168\.1\.10/);
+        const fails = [
+            // Another LAN address, or a wildcard, for the proxy.
+            [
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '192.168.1.11'] : ['127.0.0.1'],
+            ],
+            [
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '0.0.0.0'] : ['127.0.0.1'],
+            ],
+            [
+                lan,
+                async (p) => (p === 1443 ? ['127.0.0.1', '::'] : ['127.0.0.1']),
+            ],
+            // The API or MongoDB on the LAN IP.
+            [
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1'] : ['127.0.0.1', '192.168.1.10'],
+            ],
+            // A configured address that is not private never counts.
+            [
+                { lanIp: '8.8.8.8' },
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '8.8.8.8'] : ['127.0.0.1'],
+            ],
+            // No LAN IP configured.
+            [
+                {},
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '192.168.1.10'] : ['127.0.0.1'],
+            ],
+        ];
+        // A listener on the LAN IP while the LAN service is not running is
+        // not ours.
+        fails.push([
+            lan,
+            async (p) =>
+                p === 1443 ? ['127.0.0.1', '192.168.1.10'] : ['127.0.0.1'],
+            'STOPPED',
+        ]);
+        for (const [manifest, listeners, lanState] of fails) {
+            const report = await diagnose(
+                { dataRoot: root },
+                withManifest(manifest, listeners, lanState),
+            );
+            assert.equal(byId(report, 'ports').status, 'fail');
+            assert.deepEqual(byId(report, 'ports').steps, GUIDANCE.exposed);
+        }
     });
 
     test('low and full disk', async () => {
@@ -570,6 +748,7 @@ describe('review fixes and owner decisions (#365)', () => {
                 'database',
                 'application',
                 'proxy',
+                'proxyLan',
             ]);
             assert.match(content.logs.database[0], /boom/);
             await assert.rejects(

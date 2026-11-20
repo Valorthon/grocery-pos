@@ -27,6 +27,7 @@ import { pathToFileURL } from 'node:url';
 import { boundedWait } from '../proof/policy.mjs';
 import {
     APP_DATABASE,
+    LAN_SERVICE,
     SERVICES,
     layout,
     releaseLayout,
@@ -44,6 +45,7 @@ import {
 import { lossChecks, restore } from '../backup/restore.mjs';
 import { verifyTree } from '../installer/bundle.mjs';
 import {
+    lanAddressFacts,
     readReleaseRecord,
     placeRelease,
     readBundle,
@@ -408,15 +410,23 @@ async function binaryRollback(paths, journal, ctx, log) {
 }
 
 async function holdServices(ctx) {
-    for (const name of [SERVICES.proxy, SERVICES.api])
+    // The LAN proxy (#396) only exists with a LAN IP; setStartMode skips an
+    // absent service.
+    for (const name of [LAN_SERVICE, SERVICES.proxy, SERVICES.api])
         await ctx.setStartMode(name, 'demand');
     for (const name of stopOrder())
         if (name !== SERVICES.mongo) await ctx.stopService(name);
 }
 
 async function releaseServices(ctx) {
-    for (const name of [SERVICES.api, SERVICES.proxy])
+    for (const name of [SERVICES.api, SERVICES.proxy, LAN_SERVICE])
         await ctx.setStartMode(name, 'auto');
+}
+
+/** The LAN proxy, when installed; its absence or a missing address is no
+ *  reason to fail the store's own recovery (#396). */
+async function startLanProxy(ctx) {
+    await ctx.startService(LAN_SERVICE).catch(() => {});
 }
 
 /**
@@ -535,6 +545,15 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                 releaseBytes: bundle.releaseBytes,
             });
             if (refusals.length) throw new RefusedError(refusals.join(' '));
+            // LAN terminals (#396): a kept LAN IP that is absent right now is
+            // a warning only; the switch's repair keeps it either way.
+            if (state.lanIp && ctx.lanAddressFacts) {
+                const lan = await ctx.lanAddressFacts(state.lanIp);
+                if (!lan.lanIpPresent)
+                    log(
+                        `warning: the LAN IP ${state.lanIp} is not an address of this PC right now; LAN terminals cannot connect until it is back.`,
+                    );
+            }
             log(
                 `preflight: ${from.version} (data ${from.data.dataVersion}) → ${to.version} (data ${to.data.dataVersion})`,
             );
@@ -749,6 +768,7 @@ async function recover(paths, journal, ctx, error, log) {
         await releaseServices(ctx);
         for (const name of [SERVICES.api, SERVICES.proxy])
             await ctx.startService(name);
+        await startLanProxy(ctx);
         await writeJournal(paths, {
             ...journal,
             state: 'refused',
@@ -943,6 +963,7 @@ export function upgradeContext(env = process.env) {
                 );
         },
         freeBytes,
+        lanAddressFacts,
         readiness: (dataRoot, release) =>
             diagnosticsReadiness(dataRoot, release),
         apiDir: (release) => releaseLayout(release).api,
