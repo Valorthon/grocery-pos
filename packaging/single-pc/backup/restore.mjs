@@ -370,7 +370,7 @@ export async function restore(options, log = () => {}) {
         );
         if (lanIp)
             log(
-                `restore: LAN terminals use https://${lanIp}:${PORTS.proxy}; give this PC that fixed IP before running the installer, or run it with -LanIp <new IP> (terminals then re-join) or -LanIp none`,
+                `restore: LAN terminals use https://${lanIp}:${PORTS.proxy}; give this PC that fixed IP before running the installer, or install and then run repair with -LanIp <new IP> (terminals then re-join) or -LanIp none`,
             );
     } else {
         const install = await readInstall(paths);

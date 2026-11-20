@@ -1068,10 +1068,14 @@ requestId}`. A 5xx never carries details or internals.
   `/v1/health*` 404. Firewall rule `GroceryPOS-LAN-HTTPS`: inbound TCP 1443
   to the release's caddy.exe, localip the IP, `remoteip=localsubnet`,
   Private profile; deleted on every run first and on uninstall; a Public
-  adapter is a warning. Preflight refuses an IP not on a local adapter or
-  a foreign listener on it. Changing the IP in repair is refused while a
-  shift is open or an offline lease is active (a new origin strands the
-  terminals' browser storage). Diagnostics: only the proxy may also listen
+  adapter is a warning. Preflight refuses a new/changed IP not on a local
+  adapter (`-AddressState Preferred`) or a foreign listener on it; the kept
+  IP missing only warns (repair/upgrade/rollback must still run). Changing
+  the IP is repair-only (install over an existing root refuses it;
+  `Install.ps1` refuses `-LanIp` outside install/repair) and is refused
+  while a shift is open or an offline lease is active, checked before and
+  again after the proxy and API stop (a new origin strands the terminals'
+  browser storage). Diagnostics: only the proxy may also listen
   on the configured private LAN IP. Real-Caddy test:
   `GPOS_TEST_CADDY=<caddy> pnpm test:single-pc-caddy` (not in CI). Windows
   execution pending (#401); UDP 123 is #398.

@@ -32,6 +32,7 @@ import {
     EXIT,
     classifyDataRoot,
     parseArgs,
+    parseLanAddress,
     runInstaller,
     utf16,
 } from './install.mjs';
@@ -671,7 +672,10 @@ function recordingContext(dir, { failProvisionOnce = false } = {}) {
         },
         async lanChangeBlockers(paths, release) {
             log.push(['lanChangeBlockers', release]);
-            return ctx.blockers;
+            // A list answers one call each (a shift opening in between).
+            return Array.isArray(ctx.blockers)
+                ? ctx.blockers.shift()
+                : ctx.blockers;
         },
         async exec(file, args) {
             log.push([file, ...args]);
@@ -978,10 +982,47 @@ test('LAN terminals: preflight, firewall rule and uninstall (#396)', () => {
         { refusals: [], warnings: [] },
     );
     assert.match(
-        evaluatePreflight({ ...lan, lanIpPresent: false }, 'install')
-            .refusals[0],
+        evaluatePreflight(
+            { ...lan, lanIpPresent: false, lanIpChanged: true },
+            'install',
+        ).refusals[0],
         /192\.168\.1\.10 is not an address of this PC/,
     );
+    // A kept IP that is briefly absent only warns (repair, upgrade, rollback).
+    const kept = evaluatePreflight(
+        { ...lan, dataRoot: 'ours', lanIpPresent: false },
+        'repair',
+    );
+    assert.deepEqual(kept.refusals, []);
+    assert.match(kept.warnings[0], /not an address of this PC right now/);
+    assert.match(
+        evaluatePreflight(
+            {
+                ...lan,
+                dataRoot: 'ours',
+                lanIpPresent: true,
+                lanIpMultiple: true,
+            },
+            'repair',
+        ).warnings[0],
+        /more than one network adapter/,
+    );
+    // Preferred addresses only; Public on any adapter wins.
+    assert.deepEqual(parseLanAddress(''), {
+        lanIpPresent: false,
+        lanIpMultiple: false,
+        lanProfile: undefined,
+    });
+    assert.deepEqual(parseLanAddress('present|Private\r\n'), {
+        lanIpPresent: true,
+        lanIpMultiple: false,
+        lanProfile: 'Private',
+    });
+    assert.deepEqual(parseLanAddress('present|Private\npresent|Public\n'), {
+        lanIpPresent: true,
+        lanIpMultiple: true,
+        lanProfile: 'Public',
+    });
     assert.match(
         evaluatePreflight(
             { ...lan, lanIpPresent: true, lanPortForeign: true },
@@ -1089,12 +1130,49 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
         );
         assert.equal((await state()).lanIp, '192.168.1.10');
     }
-    // A missing IP is refused by preflight.
+    // A shift opened while the proxy and API stop is caught by the second
+    // check; the services are started again and nothing changes.
+    ctx.blockers = [
+        { openShifts: 0, activeLeases: 0 },
+        { openShifts: 1, activeLeases: 0 },
+    ];
+    ctx.log.length = 0;
+    await assert.rejects(
+        runInstaller({ mode: 'repair', ...pinned, lanIp: '192.168.1.20' }, ctx),
+        /The LAN IP cannot change now: 1 shift/,
+    );
+    assert.deepEqual(
+        ctx.log.filter((e) => ['stop', 'start', 'provision'].includes(e[0])),
+        [
+            ['stop', SERVICES.proxy],
+            ['stop', SERVICES.api],
+            ['start', SERVICES.api],
+            ['start', SERVICES.proxy],
+        ],
+    );
+    assert.equal((await state()).lanIp, '192.168.1.10');
+    // A new IP that is missing is refused by preflight.
     ctx.lanFacts = { lanIpPresent: false };
     await assert.rejects(
         runInstaller({ mode: 'repair', ...pinned, lanIp: '192.168.1.20' }, ctx),
-        /not an address of this PC/,
+        /not an address of this PC\. /,
     );
+    // The kept IP missing (router off) does not block a repair.
+    await runInstaller({ mode: 'repair', ...pinned }, ctx);
+    assert.equal((await state()).lanIp, '192.168.1.10');
+    // Install over the kept data root never changes the IP (it cannot check
+    // shifts and leases there): repair does.
+    ctx.lanFacts = { lanIpPresent: true };
+    const installed = new Map(ctx.services);
+    ctx.services.clear(); // as after an uninstall
+    await assert.rejects(
+        runInstaller(
+            { mode: 'install', ...pinned, lanIp: '192.168.1.20' },
+            ctx,
+        ),
+        /Install with that setting.*-Mode repair -LanIp/,
+    );
+    for (const [name, value] of installed) ctx.services.set(name, value);
     ctx.lanFacts = { lanIpPresent: true };
     ctx.blockers = { openShifts: 0, activeLeases: 0 };
     ctx.log.length = 0;

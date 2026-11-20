@@ -88,6 +88,9 @@ if ($AcceptNewerSales -and -not ($Mode -eq 'restore' -or ($Mode -eq 'upgrade-rol
 if (($From -and -not $restoreMode) -or (($Confirm -or $AcceptOpenShifts -or $AcceptPendingOffline) -and $Mode -ne 'restore')) {
     Stop-Refused '-From only goes with -Mode restore or restore-verify; -Confirm, -AcceptOpenShifts and -AcceptPendingOffline only with -Mode restore.'
 }
+if ($LanIp -and $Mode -ne 'install' -and $Mode -ne 'repair') {
+    Stop-Refused '-LanIp only goes with -Mode install or repair (an upgrade keeps the current LAN IP; change it afterwards with -Mode repair -LanIp).'
+}
 if ($restoreMode) {
     if (-not $From) { Stop-Refused "-Mode $Mode needs -From <backup folder>." }
     if ($Mode -eq 'restore' -and -not $Confirm) { Stop-Refused '-Mode restore needs -Confirm <backup id>.' }
@@ -195,7 +198,7 @@ try {
         $nodeArgs += @('--bundle', $bundle, '--manifest', $verifiedManifest,
             '--manifest-sha256', $manifestHash)
         if ($BackupTime -and $Mode -ne 'upgrade') { $nodeArgs += @('--backup-time', $BackupTime) }
-        if ($LanIp -and $Mode -ne 'upgrade') { $nodeArgs += @('--lan-ip', $LanIp) }
+        if ($LanIp) { $nodeArgs += @('--lan-ip', $LanIp) }
     }
     if ($Mode -eq 'install') {
         if ($AdminUsername) { $nodeArgs += @('--admin-username', $AdminUsername) }

@@ -134,9 +134,13 @@ Steps (each idempotent; `state\installer.json` records the stages):
    services (a listener whose executable is not under our `releases\` is
    refused even then, `Get-NetTCPConnection`), and the data root's state: new, ours (reinstall) or foreign
    (refused). A missing Chrome is a warning. With a LAN IP (#396): the
-   address must be on a local adapter (`Get-NetIPAddress`) and port 1443
-   free on it unless our proxy holds it; an adapter on the Public network
-   profile is a warning (the firewall rule is Private-only). `install` with services
+   address must be on a local adapter (`Get-NetIPAddress -AddressState
+Preferred`, so a conflicting address is not present) and port 1443 free
+   on it unless our proxy holds it. A new or changed IP that is missing is
+   refused; the kept IP missing (cable out, router off) is only a warning,
+   so repair, upgrade and rollback still run. Public on any adapter holding
+   it, or the IP on several adapters, is a warning (the firewall rule is
+   Private-only). `install` with services
    already registered is refused ("use repair"); `repair` needs an existing
    installation.
 3. **Lock** (`installer.lock`, the provisioning lock implementation).
@@ -242,9 +246,12 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   `-LanIp none` turns it off. A different IP is a new origin (each
   terminal's queued offline cash lives in the old origin's browser
   storage), so repair refuses the change while a shift is open or an
-  offline lease is active, checked before anything stops. An install over
-  a restored data root uses the backup's IP (a missing one is refused by
-  preflight) unless `-LanIp` names another.
+  offline lease is active, checked before anything stops and again once
+  the proxy and API are stopped (they are restarted on a refusal). An
+  install over an existing data root (a reinstall, or a restored one) keeps
+  its stored IP and refuses `-LanIp` naming another: change it afterwards
+  with `-Mode repair -LanIp`. `-LanIp` is refused in upgrade modes; the
+  upgrade keeps the IP and warns in preflight if it is absent.
 - `uninstall` stops and deletes our three services, deletes our tasks,
   the LAN firewall rule, shortcuts, releases, wrappers and task XML. It **keeps** the data root
   (database, secrets, TLS state, backups, logs, installer state), the

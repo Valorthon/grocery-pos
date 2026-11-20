@@ -63,8 +63,8 @@ its own (a reinstall) and keeps the restored users.
     With LAN terminals (#396) it also brings back the local CA root, so
     joined terminals keep trusting the new PC, and prints the LAN address
     they use: give the new PC that fixed IP (or router reservation) before
-    step 3. Otherwise install with `-LanIp <new IP>` and re-join every
-    terminal (#397), or `-LanIp none`. A backup from before #396 has no
+    step 3. Otherwise install, then run `-Mode repair -LanIp <new IP>` and
+    re-join every terminal (#397), or `-LanIp none`. A backup from before #396 has no
     root: every terminal re-joins.
 
 3. Install over the restored data root as in [INSTALL.md](INSTALL.md)

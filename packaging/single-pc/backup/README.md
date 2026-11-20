@@ -221,7 +221,8 @@ verified admin-only copy, never from the bundle folder.
    back with the data.
    It also places the CA root and the LAN IP setting (#396) and reports
    the IP; give the new PC that fixed address before installing, or
-   install with `-LanIp <new IP>` (terminals re-join) or `-LanIp none`.
+   install and then run `-Mode repair -LanIp <new IP>` (terminals re-join)
+   or `-LanIp none`.
 3. Register/start the services (#362). The installer trusts the restored
    (or, for an older backup, new) local CA on the new PC. Log in; take a backup and an export.
 

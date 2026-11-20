@@ -44,6 +44,7 @@ import {
 import { lossChecks, restore } from '../backup/restore.mjs';
 import { verifyTree } from '../installer/bundle.mjs';
 import {
+    lanAddressFacts,
     readReleaseRecord,
     placeRelease,
     readBundle,
@@ -535,6 +536,15 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                 releaseBytes: bundle.releaseBytes,
             });
             if (refusals.length) throw new RefusedError(refusals.join(' '));
+            // LAN terminals (#396): a kept LAN IP that is absent right now is
+            // a warning only; the switch's repair keeps it either way.
+            if (state.lanIp && ctx.lanAddressFacts) {
+                const lan = await ctx.lanAddressFacts(state.lanIp);
+                if (!lan.lanIpPresent)
+                    log(
+                        `warning: the LAN IP ${state.lanIp} is not an address of this PC right now; LAN terminals cannot connect until it is back.`,
+                    );
+            }
             log(
                 `preflight: ${from.version} (data ${from.data.dataVersion}) → ${to.version} (data ${to.data.dataVersion})`,
             );
@@ -943,6 +953,7 @@ export function upgradeContext(env = process.env) {
                 );
         },
         freeBytes,
+        lanAddressFacts,
         readiness: (dataRoot, release) =>
             diagnosticsReadiness(dataRoot, release),
         apiDir: (release) => releaseLayout(release).api,

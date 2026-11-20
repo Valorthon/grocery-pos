@@ -430,6 +430,7 @@ async function installOrRepair(options, ctx, log) {
         {
             ...facts,
             lanIp,
+            lanIpChanged: lanIp !== storedLanIp,
             dataRoot: dataState,
             releaseBytes: bundle.releaseBytes,
         },
@@ -473,9 +474,16 @@ async function installOrRepair(options, ctx, log) {
         // A new LAN IP is a new origin: each terminal's queued offline cash
         // and lease live in the old origin's browser storage, so the change
         // waits until no shift is open and no lease is active (#396, the
-        // restore checks). Checked while the services still run.
+        // restore checks). Checked while the services still run, and again
+        // once the proxy and API are stopped (mongod still up), so no shift
+        // can open in between. Install over an existing data root cannot
+        // check (its database is not running): it refuses the change.
         if (lanIp !== storedLanIp && dataState === 'ours') {
-            if (options.mode === 'repair') {
+            if (options.mode !== 'repair')
+                throw new RefusedError(
+                    `This installation is set up for LAN IP ${storedLanIp ?? 'none'}. Install with that setting (omit -LanIp), then change it with -Mode repair -LanIp, which first checks that no shift is open and no offline lease is active.`,
+                );
+            const check = async () => {
                 const found = await ctx.lanChangeBlockers(
                     paths,
                     previous?.release,
@@ -487,14 +495,24 @@ async function installOrRepair(options, ctx, log) {
                     blockers.push(
                         `${found.activeLeases} terminal(s) hold offline cash leases`,
                     );
-                if (blockers.length)
-                    throw new RefusedError(
-                        `The LAN IP cannot change now: ${blockers.join('; ')}. Close every shift and synchronize every terminal first.`,
-                    );
-            } else {
-                const note = `This installation was set up for LAN IP ${storedLanIp ?? 'none'}; it now uses ${lanIp ?? 'none'}. Every terminal re-joins.`;
-                warnings.push(note);
-                log(`warning: ${note}`);
+                return blockers;
+            };
+            const refuse = (blockers) =>
+                new RefusedError(
+                    `The LAN IP cannot change now: ${blockers.join('; ')}. Close every shift and synchronize every terminal first.`,
+                );
+            let blockers = await check();
+            if (blockers.length) throw refuse(blockers);
+            const front = [SERVICES.proxy, SERVICES.api].filter((name) =>
+                facts.servicesInstalled.includes(name),
+            );
+            for (const name of front) await ctx.stopService(name);
+            blockers = await check();
+            if (blockers.length) {
+                // Put the store back as it was before refusing.
+                for (const name of [...front].reverse())
+                    await ctx.startService(name);
+                throw refuse(blockers);
             }
         }
 
@@ -791,6 +809,39 @@ export async function runInstaller(options, ctx, log = () => {}) {
     return installOrRepair(options, ctx, log);
 }
 
+// ------------------------------------------------------------ LAN address
+
+/**
+ * `Get-NetIPAddress` output for the LAN IP (#396): one line per adapter
+ * holding it in the Preferred state (a Duplicate or Tentative address, an
+ * IP conflict, is not present), each with that adapter's NetworkCategory.
+ * Public on any adapter wins, so the warning is never hidden.
+ */
+export function parseLanAddress(stdout) {
+    const categories = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('present|'))
+        .map((line) => line.slice('present|'.length));
+    return {
+        lanIpPresent: categories.length > 0,
+        lanIpMultiple: categories.length > 1,
+        lanProfile: categories.includes('Public')
+            ? 'Public'
+            : (categories.find(Boolean) ?? undefined),
+    };
+}
+
+export async function lanAddressFacts(lanIp) {
+    const { stdout } = await powershell(
+        'Get-NetIPAddress -AddressFamily IPv4 -IPAddress $env:GPOS_IP -AddressState Preferred -ErrorAction SilentlyContinue |' +
+            ' ForEach-Object { $p = Get-NetConnectionProfile -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue;' +
+            " 'present|' + [string]$p.NetworkCategory }",
+        { GPOS_IP: lanIp },
+    );
+    return parseLanAddress(stdout);
+}
+
 // ------------------------------------------------------------ Windows context
 
 function execCapture(file, args, options = {}) {
@@ -916,22 +967,14 @@ export function windowsContext(env = process.env) {
             }
             // LAN terminals (#396): the IP must be on a local adapter; its
             // network profile decides whether the Private-only rule applies.
-            let lanIpPresent = false;
-            let lanProfile;
-            let lanPortBusy = false;
-            if (lanIp) {
-                const { stdout } = await powershell(
-                    '$a = Get-NetIPAddress -AddressFamily IPv4 -IPAddress $env:GPOS_IP -ErrorAction SilentlyContinue;' +
-                        ' if ($a) { $p = Get-NetConnectionProfile -InterfaceIndex $a.InterfaceIndex -ErrorAction SilentlyContinue;' +
-                        " 'present|' + [string]$p.NetworkCategory }",
-                    { GPOS_IP: lanIp },
-                );
-                const [present, category] = stdout.trim().split('|');
-                lanIpPresent = present === 'present';
-                lanProfile = category || undefined;
-                lanPortBusy =
-                    lanIpPresent && (await portBusy(lanIp, PORTS.proxy));
-            }
+            const lan = lanIp
+                ? await lanAddressFacts(lanIp)
+                : { lanIpPresent: false };
+            const { lanIpPresent, lanProfile, lanIpMultiple } = lan;
+            const lanPortBusy =
+                Boolean(lanIp) &&
+                lanIpPresent &&
+                (await portBusy(lanIp, PORTS.proxy));
             const checkOwners = [...portsBusy];
             if (lanPortBusy && !checkOwners.includes(PORTS.proxy))
                 checkOwners.push(PORTS.proxy);
@@ -970,6 +1013,7 @@ export function windowsContext(env = process.env) {
                 portsForeign,
                 lanIpPresent,
                 lanProfile,
+                lanIpMultiple,
                 lanPortForeign:
                     lanPortBusy && portsForeign.includes(PORTS.proxy),
                 freeBytes: {

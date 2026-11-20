@@ -186,9 +186,21 @@ export function evaluatePreflight(facts, mode) {
     // LAN terminals (#396): the fixed IP must be on a local network adapter
     // and its HTTPS port free (our own proxy may hold it during a repair).
     if (facts.lanIp) {
-        if (!facts.lanIpPresent) {
+        // Only a new or changed IP is refused when missing: a kept one may
+        // be briefly absent (cable, router off), and refusing it would block
+        // repair, upgrade and rollback until the network is back.
+        if (!facts.lanIpPresent && facts.lanIpChanged) {
             refusals.push(
                 `The LAN IP ${facts.lanIp} is not an address of this PC. Give this PC that fixed address (static or a router reservation) first, or choose another with --lan-ip.`,
+            );
+        } else if (!facts.lanIpPresent) {
+            warnings.push(
+                `The LAN IP ${facts.lanIp} is not an address of this PC right now (cable, Wi-Fi or router off?). LAN terminals cannot connect until it is back.`,
+            );
+        }
+        if (facts.lanIpMultiple) {
+            warnings.push(
+                `The LAN IP ${facts.lanIp} is on more than one network adapter; keep it on one.`,
             );
         }
         if (facts.lanPortForeign) {
