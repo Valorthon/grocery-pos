@@ -1030,8 +1030,14 @@ requestId}`. A 5xx never carries details or internals.
 - `APP_ENV=single-pc` is the single-PC production topology, not a dev mode:
   strict secrets like prod (`requiresStrictSecrets`), `DOMAIN` blank,
   `FRONTEND_URL` exactly `https://localhost[:port]`, `HOST` loopback
-  (default `127.0.0.1`, else `::1`), no `trust proxy` (`req.ip` is the
-  socket peer; `common/http-topology.ts`, `applyTrustProxy`). `isDeployedEnv` stays prod/stage only.
+  (default `127.0.0.1`, else `::1`), `trust proxy = 'loopback'` only
+  (#395; never a hop count or `true`): Caddy replaces any client-sent
+  X-Forwarded-For (no `trusted_proxies`), so `req.ip` is each LAN
+  terminal's address (`common/http-topology.ts`, `applyTrustProxy`).
+  Accepted trade-off: a local process can forge it to the loopback API.
+  `canonicalClientIp` maps `::1` to `127.0.0.1` for rate limits
+  (`clientIp`, `RateLimitGuard.getTracker`) and audit, so the main PC is
+  one client. `isDeployedEnv` stays prod/stage only.
 - Cookies are Secure, host-only and `SameSite=Lax`, cleared with the same
   attributes; Lax is no CSRF defence between localhost ports, the Origin
   check is. `useLocalAccess` (`common/local-access`, first in

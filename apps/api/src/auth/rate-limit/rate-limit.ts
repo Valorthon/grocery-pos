@@ -16,6 +16,7 @@ import {
 import type { ThrottlerLimitDetail, ThrottlerStorage } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { RateLimitError } from '../../common/errors';
+import { canonicalClientIp } from '../../common/http-topology';
 
 /**
  * Brute-force protection for the credential-bearing routes (issue #12).
@@ -38,8 +39,9 @@ import { RateLimitError } from '../../common/errors';
  * budget.
  *
  * The client IP is `req.ip`, which is only the real client when Express's
- * `trust proxy` matches the deployment (see main.ts): otherwise every
- * request looks like it comes from the proxy and shares one `ip` budget.
+ * `trust proxy` matches the deployment (`http-topology.ts`): prod/stage
+ * trust one cloud hop, single-pc trusts loopback Caddy (#395), so each LAN
+ * terminal has its own buckets. IPv6 loopback counts as 127.0.0.1.
  */
 export const THROTTLER_IP = 'ip';
 export const THROTTLER_ACCOUNT = 'account';
@@ -63,7 +65,8 @@ export const RATE_LIMITS = {
     cspReport: {
         // Unauthenticated. A page load that trips the CSP sends one legacy
         // report per violation (plus batched Reporting API posts), and a
-        // shop's terminals share one IP; beyond this, reports are dropped.
+        // cloud shop's terminals may share one public IP; beyond this,
+        // reports are dropped.
         // Every POST counts, refused ones too (`CspReportLimiter`, #108).
         ip: { limit: 60, ttl: MINUTE_MS },
     },
@@ -76,7 +79,7 @@ interface RequestLike {
 }
 
 export function clientIp(req: RequestLike): string {
-    return req.ip ? normalizeIp(req.ip) : 'unknown';
+    return req.ip ? normalizeIp(canonicalClientIp(req.ip)) : 'unknown';
 }
 
 /** Authenticated attempts are counted per user, whatever IP they come from. */
@@ -91,6 +94,11 @@ export function userTracker(req: RequestLike): string {
  */
 @Injectable()
 export class RateLimitGuard extends ThrottlerGuard {
+    /** The default tracker, with IPv6 loopback as 127.0.0.1 (#395). */
+    protected getTracker(req: Record<string, unknown>): Promise<string> {
+        return Promise.resolve(clientIp(req as RequestLike));
+    }
+
     protected throwThrottlingException(
         context: ExecutionContext,
         detail: ThrottlerLimitDetail,

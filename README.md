@@ -113,7 +113,7 @@ forwards `/v1/*` to the API.
 
 - API: `APP_ENV=single-pc`, `PORT=13000`, `FRONTEND_URL=https://localhost:1443`,
   `DOMAIN` blank. It listens on `127.0.0.1` (`HOST` may be `::1`, nothing
-  else), trusts no proxy (`req.ip` is the socket peer), uses prod's strict secret rules and
+  else), trusts X-Forwarded-For only from loopback Caddy (#395: `req.ip` is each LAN terminal's address, the main PC 127.0.0.1), uses prod's strict secret rules and
   sets Secure, host-only, `SameSite=Lax` cookies. Every request must carry
   `Host: localhost:1443`, and an `Origin` must be `https://localhost:1443`,
   or it gets a 403 before its body is read. GET/HEAD `/v1/health*` are

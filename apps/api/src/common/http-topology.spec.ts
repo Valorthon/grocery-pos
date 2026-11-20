@@ -1,4 +1,9 @@
-import { isLoopbackHost, listenHost, trustProxySetting } from './http-topology';
+import {
+    canonicalClientIp,
+    isLoopbackHost,
+    listenHost,
+    trustProxySetting,
+} from './http-topology';
 
 describe('listenHost (#358)', () => {
     it('binds single-pc to IPv4 loopback by default', () => {
@@ -37,12 +42,26 @@ describe('trustProxySetting', () => {
         expect(trustProxySetting('stage')).toBe(1);
     });
 
-    it('trusts no proxy in single-pc: req.ip is the socket peer', () => {
-        expect(trustProxySetting('single-pc')).toBeUndefined();
+    it('trusts only the loopback proxy in single-pc (#395)', () => {
+        expect(trustProxySetting('single-pc')).toBe('loopback');
     });
 
     it('trusts nothing in dev and test', () => {
         expect(trustProxySetting('dev')).toBeUndefined();
         expect(trustProxySetting('test')).toBeUndefined();
+    });
+});
+
+describe('canonicalClientIp (#395)', () => {
+    it.each([
+        ['::1', '127.0.0.1'],
+        ['::ffff:127.0.0.1', '127.0.0.1'],
+        ['127.0.0.1', '127.0.0.1'],
+        ['::ffff:192.168.1.20', '192.168.1.20'],
+        ['::FFFF:10.0.0.2', '10.0.0.2'],
+        ['192.168.1.20', '192.168.1.20'],
+        ['fe80::1', 'fe80::1'],
+    ])('%s -> %s', (ip, expected) => {
+        expect(canonicalClientIp(ip)).toBe(expected);
     });
 });

@@ -52,8 +52,8 @@ async function bootstrap() {
     // gets the CORS headers, so the client can read the error.
     useBodyParsers(app);
 
-    // prod/stage trust their one cloud proxy hop; single-pc, dev and test
-    // trust none (see trustProxySetting, #358).
+    // prod/stage trust their one cloud proxy hop, single-pc its loopback
+    // Caddy (#395); dev and test trust none (see trustProxySetting).
     applyTrustProxy(app, config.get('APP_ENV'));
 
     app.enableShutdownHooks();
