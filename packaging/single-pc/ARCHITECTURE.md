@@ -162,6 +162,8 @@ the main PC's installation over HTTPS. This section is the reference for
   and catalogue answers carry `serverTime`, and the terminal stores its
   offset with the lease, uses corrected time for readiness, enqueue and
   `soldAt` (clamped to the lease/proof issue time) and warns above 30 s.
+  Upgrade does not apply the time-server or firewall steps: after upgrading
+  a LAN-enabled site from a release before #398, run repair.
 - Threat model: the shop LAN is isolated (no guest Wi-Fi on it) but people on it
   are treated as untrusted insiders. They reach only Caddy's HTTPS and the NTP
   service; every action still needs a login, roles, PINs and audit as on the
