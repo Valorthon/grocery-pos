@@ -335,29 +335,92 @@ it('answers health probes on the API port directly, and nothing else', async () 
     expect(other.status).toBe(403);
 });
 
-// Last: it spends this file's login IP budget.
-it('ignores a spoofed X-Forwarded-For for the rate limit and audit IP', async () => {
+/** What Caddy forwards for a LAN terminal (#395): its peer address. */
+const fromTerminal = (ip: string) => ({
+    ...LAN_HEADERS,
+    'x-forwarded-for': ip,
+});
+
+const badLogin = (headers: Record<string, string>, username: string) =>
+    post('/auth/login', headers, { username, password: 'wrong-password-1' });
+
+it('gives each LAN terminal its own login lockout (#395)', async () => {
+    const a = fromTerminal('192.168.1.20');
+    const b = fromTerminal('192.168.1.21');
     const statuses: number[] = [];
-    for (let i = 0; i < 25; i++) {
-        const res = await post(
-            '/auth/login',
+    for (let i = 0; i < 6; i++)
+        statuses.push((await badLogin(a, 'cashier1')).status);
+    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    expect(statuses[5]).toBe(429);
+    // Same account, another terminal: not locked out.
+    expect((await badLogin(b, 'cashier1')).status).toBe(401);
+});
+
+it('gives each LAN terminal its own manager PIN lockout (#395)', async () => {
+    // A login on a third address, so no login bucket is shared.
+    const loggedIn = await post('/auth/login', fromTerminal('192.168.1.30'), {
+        username: 'owner',
+        password: PASSWORD,
+    });
+    expect(loggedIn.status).toBeLessThan(300);
+    const cookie = cookieHeader(setCookies(loggedIn));
+    const approve = (ip: string) =>
+        post(
+            '/auth/override',
+            { ...fromTerminal(ip), cookie },
             {
-                ...PROXY_HEADERS,
-                'x-forwarded-for': `203.0.113.${i + 1}`,
+                username: 'nobody',
+                pin: '000000',
+                action: 'STOCK_COUNT',
+                context: {
+                    stockCount: {
+                        countId: '0123456789abcdef01234567',
+                        version: 0,
+                    },
+                },
             },
-            { username: `spoof${i}`, password: 'wrong-password-1' },
+        );
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++)
+        statuses.push((await approve('192.168.1.22')).status);
+    expect(statuses.slice(0, 5).every((s) => s !== 429)).toBe(true);
+    expect(statuses[5]).toBe(429);
+    expect((await approve('192.168.1.23')).status).not.toBe(429);
+});
+
+it('ignores a forged X-Forwarded-For entry before the real peer (#395)', async () => {
+    // Caddy replaces a client-sent header (no trusted_proxies); were one
+    // ever passed along, only the hop Caddy added (the rightmost) counts.
+    const statuses: number[] = [];
+    for (let i = 0; i < 6; i++) {
+        const res = await badLogin(
+            {
+                ...LAN_HEADERS,
+                'x-forwarded-for': `203.0.113.${i + 1}, 192.168.1.24`,
+            },
+            'cashier2',
         );
         statuses.push(res.status);
     }
-    // One IP bucket (the socket peer), so the 20-per-minute limit trips
-    // although every request named a different client.
-    expect(statuses).toContain(429);
-    expect(statuses.filter((s) => s === 401).length).toBeLessThanOrEqual(20);
+    // One terminal, one account bucket, whatever address was forged.
+    expect(statuses[5]).toBe(429);
+});
 
-    const failed = await db
+it('records the LAN terminal address in the audit log (#395)', async () => {
+    await badLogin(fromTerminal('192.168.1.25'), 'audited');
+    const entry = await db
+        .model('AuditLog')
+        .findOne({ action: AuditAction.AUTH_LOGIN_FAILED })
+        .where({ ip: '192.168.1.25' })
+        .lean<{ ip: string | null } | null>();
+    expect(entry?.ip).toBe('192.168.1.25');
+});
+
+it('records the main PC (no forwarded header) as 127.0.0.1', async () => {
+    await badLogin(PROXY_HEADERS, 'mainpc');
+    const entries = await db
         .model('AuditLog')
         .find({ action: AuditAction.AUTH_LOGIN_FAILED })
         .lean<{ ip: string | null }[]>();
-    expect(failed.length).toBeGreaterThan(0);
-    for (const entry of failed) expect(entry.ip).toMatch(/127\.0\.0\.1$/);
+    expect(entries.map((e) => e.ip)).toContain('127.0.0.1');
 });
