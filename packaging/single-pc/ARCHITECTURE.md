@@ -102,6 +102,8 @@ no browser warning. Persistent protected TLS state survives repair/update.
 Document root expiry/recovery and replacement-machine trust separately; application
 updates never require changing browser origin. Root/private-key access is limited
 to the service identity and owner/admin, and is never an export of a common CA.
+With LAN terminals (#396) the root key is also in backups and USB exports, so a
+replacement PC keeps terminal trust; those copies need the same custody.
 [Caddy local HTTPS](https://caddyserver.com/docs/automatic-https#local-https).
 
 Add an explicit single-PC production topology configuration, not a new development
@@ -124,33 +126,44 @@ TLS state location and service wiring remain #360/#362.
 ## LAN terminals (#402)
 
 Owner decisions 2026-11-20 (#393). Other terminals on an isolated shop LAN use
-the main PC's installation over HTTPS. This section is the reference for #394–#401.
+the main PC's installation over HTTPS. This section is the reference for
+#394–#401.
 
 - Topology: Caddy listens on loopback (`127.0.0.1`/`::1`:1443) and on one fixed
   LAN IP of the main PC (static or router DHCP reservation), e.g.
   `https://192.168.1.10:1443`. The API stays on `127.0.0.1:13000` and MongoDB on
-  loopback port 27018; nothing but Caddy is reachable from the LAN. A Windows
-  Firewall rule admits the LAN port on the private profile only (#396).
+  loopback port 27018. From the LAN only Caddy's HTTPS port and the main PC's
+  NTP time service (UDP 123, #398) are reachable; Windows Firewall rules admit
+  them on the private profile only (#396, #398).
 - Origins: exactly two are allowed, `https://localhost:1443` (the main PC) and
-  `https://<fixed LAN IP>:1443` (every terminal). No hostname or mDNS origin, so a
-  terminal always has one origin and one offline outbox/lease. Changing the IP is
-  an operator reconfiguration that re-joins terminals.
-- Access check: Host and Origin must name one of the two origins (#394); health
-  endpoints are refused on the LAN site. The API trusts `X-Forwarded-For` only
-  from loopback Caddy, so rate limits and audit see each terminal's address (#395).
-- TLS: terminals trust the installation's Caddy root, whose certificate also
-  covers the LAN IP. The root is backed up so a replacement PC keeps terminal
-  trust (#396); a terminal joins with the package from #397.
-- Clients: Windows + Chrome terminals first (#397, #401); Android Chrome later in
-  this epic (#400). iOS is out of scope. LAN terminals set a terminal label before
-  a shift (#399).
+  `https://<fixed LAN IP>:1443` (every terminal). No hostname or mDNS origin, so
+  a terminal always has one origin and one offline outbox/lease. Changing the IP
+  is an operator reconfiguration that re-joins terminals.
+- Access check: Host and Origin must name one of the two origins (#394). Health
+  endpoints are refused on the LAN site (#394 in the API, #396 in Caddy). The
+  API trusts `X-Forwarded-For` only from loopback Caddy, so rate limits and
+  audit see each terminal's address (#395). Accepted trade-off (#395): a local
+  process on the main PC can forge `X-Forwarded-For` to the loopback API; it
+  already runs on the trusted machine.
+- TLS: terminals trust the installation's Caddy root; the LAN site's
+  certificate, issued by that root, covers the LAN IP. The root is backed up so
+  a replacement PC keeps terminal trust (#396); a terminal joins with the
+  package from #397.
+- Clients: Windows + Chrome terminals first (#397, #401); Android Chrome later
+  in this epic (#400). iOS is out of scope. LAN terminals set a terminal label
+  before a shift (#399).
 - Time: the main PC serves time (NTP) to terminals, and the app corrects any
   remaining offset against server time so offline cash is not refused (#398).
+  Terminal clocks must also stay close enough for the LAN certificate's
+  validity window to check.
 - Threat model: the shop LAN is isolated (no guest Wi-Fi on it) but people on it
-  are treated as untrusted insiders. They reach only Caddy's HTTPS; every action
-  still needs a login, roles, PINs and audit as on the main PC. DNS rebinding is
-  blocked by the Host/Origin allowlist, spoofed `X-Forwarded-For` from a non-loopback
-  peer is ignored, and MongoDB/API ports are never exposed.
+  are treated as untrusted insiders. They reach only Caddy's HTTPS and the NTP
+  service; every action still needs a login, roles, PINs and audit as on the
+  main PC. DNS rebinding is blocked by the Host/Origin allowlist, spoofed
+  `X-Forwarded-For` from a non-loopback peer is ignored, and MongoDB/API ports
+  are never exposed. Backups and USB exports carry the Caddy root key (#396): a
+  lost or copied drive lets its holder impersonate the main PC to terminals, so
+  exports stay in the owner's custody.
 
 ## Persistent installation and lifecycle interfaces (#360–#365)
 
@@ -182,7 +195,8 @@ the main PC's installation over HTTPS. This section is the reference for #394–
   app/data versions. Binary rollback is not schema recovery. Preserve a recovery
   copy; no restore over later sales without explicit operator action.
 - Bound logs, redact credentials and expose actionable diagnostics without a
-  diagnostics endpoint on the LAN (LAN listener checks are #399), automatic upload or telemetry. Customer UI details remain in the
+  diagnostics endpoint on the LAN (the listener rule is #396; other LAN checks
+  are #399), automatic upload or telemetry. Customer UI details remain in the
   owning issue and owner decisions.
 
 Implemented (#360): [runtime/](runtime/README.md) defines the data-root layout,
@@ -260,6 +274,6 @@ hosted ARM option is not this target. No external provisioning was performed.
 Record real artifact/OS/Chrome versions, hardware, full workload and limitations.
 #366 still requires clean offline install, non-admin use, boot before login, crash,
 no-internet/full-local-API operations, API outage/recovery/lost answers, authenticated
-transactions, LAN refusal of every port except Caddy's LAN listener
-(MongoDB, API, health on the LAN site), LAN terminal use (#401), replacement restore, populated/interrupted upgrade,
-stale assets, pending receipts and repair/uninstall/reinstall preservation.
+transactions, LAN refusal of every port except Caddy's LAN listener and NTP
+UDP 123 (#398) (MongoDB, API, health on the LAN site), LAN terminal use (#401),
+replacement restore, populated/interrupted upgrade, stale assets, pending receipts and repair/uninstall/reinstall preservation.
