@@ -142,7 +142,7 @@ export const MANUAL = Object.freeze([
     },
     {
         id: 'D4',
-        closes: ['#401', '#359'],
+        closes: ['#401', '#359', '#37'],
         what: 'cable pull mid-shift, offline cash and sync',
     },
     {
@@ -257,7 +257,8 @@ export function jsonList(text) {
  * listens. The one exception is Caddy on the configured LAN IP (port 1443
  * only), and only while `GroceryPOS-ProxyLan` may own it: like diagnostics'
  * `ports` check, any state but Stopped/absent/unknown (e.g. StartPending or
- * an SCM recovery restart) may hold the LAN listener.
+ * an SCM recovery restart) may hold the LAN listener. Unlike diagnostics,
+ * an unreadable service state fails closed (the LAN listener is exposed).
  */
 export function evaluateListeners(rows, { lanIp = null, lanService } = {}) {
     const ports = Object.values(PORTS);

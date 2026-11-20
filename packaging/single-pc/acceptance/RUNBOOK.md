@@ -572,7 +572,8 @@ Expected: 127.0.0.1:27018, 127.0.0.1:13000, 127.0.0.1:1443 and [::1]:1443,
 plus `<LAN IP>:1443` only when a LAN IP is configured and only while
 `GroceryPOS-ProxyLan` is not stopped (as diagnostics' `ports` check). Any
 other address, a LAN listener on 13000/27018, or one on the LAN IP while the
-service is stopped fails.
+service is stopped fails. Unlike diagnostics, the harness fails closed when it
+cannot read the LAN service state.
 
 Evidence: harness (running, stopped) `____`. Result (PASS/FAIL): `____`
 
@@ -760,11 +761,17 @@ Evidence: outputs `____`. Result (PASS/FAIL): `____`
 
 ### D8. LAN IP change
 
-Steps: try `-Mode repair -LanIp <new IP>` with a shift open (refused), then
-with none; also try `-LanIp` on `install` over an existing root (refused).
-Make a new terminal package and `-Mode rejoin` on the terminal.
+Steps: try `-Mode repair -LanIp <new IP>` with a shift open (refused), with
+an active offline lease (refused), with a new IP that is not on a local
+adapter as `Preferred` (refused), and with a foreign listener on the new IP
+(refused); open a shift while the proxy and API are stopping (the re-check
+after the stop refuses); then repair with none of these. Also try `-LanIp`
+on `install` over an existing root (refused), and run a plain repair while
+the kept IP is missing from the adapter. Make a new terminal package and
+`-Mode rejoin` on the terminal.
 
-Expected: refusals change nothing; repair moves `LAN_ORIGIN`, the LAN
+Expected: refusals change nothing; a missing kept IP only warns on repair
+(repair still runs); repair moves `LAN_ORIGIN`, the LAN
 service and both firewall rules to the new IP; the terminal works at the
 new origin after rejoin (its browser storage there starts empty). The docs'
 LAN address change steps match.
@@ -778,11 +785,21 @@ Steps: on the terminal, stop w32time and set the clock 5 min fast, then
 Restore the clock and w32time afterwards.
 
 Expected: at ±5 min the register warns about the clock (above 30 s) and the
-offline cash syncs with corrected `soldAt`. At ±3 h record what happens:
-Chrome's certificate check against the 12 h leaf, the warning and whether
-offline cash is accepted; any refusal names the clock, never silent loss.
+offline cash syncs with corrected `soldAt`. At +3 h the page loads with no
+certificate error, the register shows the clock warning, and offline cash
+syncs with `soldAt` within seconds of the main PC's time (corrected, never
+the terminal's). At −3 h record the served leaf's NotBefore: if the
+terminal's time is before it, Chrome's NET::ERR_CERT_DATE_INVALID is
+expected, no sale is lost and a queued receipt stays queued until the clock
+is fixed and the page loads; otherwise expect the same as +3 h. In both
+cases `w32tm /resync` clears it. FAIL: a lost or duplicated receipt, an
+uncorrected `soldAt`, or an app refusal that does not name the clock.
 
-Evidence: screenshots, sale ids `____`, ±3 h behaviour `____`. Result
+Why: Caddy's `tls internal` leaves last 12 h and renew at about two-thirds
+of their life, with NotBefore backdated about 1 minute, so a slow terminal
+can be before a fresh leaf's NotBefore (see D10, D11).
+
+Evidence: screenshots, sale ids `____`, leaf NotBefore `____`. Result
 (PASS/FAIL): `____`
 
 ### D10. Time server (NTP) rule and `timeServer` check
@@ -808,8 +825,8 @@ Caddy's `tls internal` leaf renewals (12 h lifetime, renewed several times a
 day); note each renewal time from the Caddy log.
 
 Expected: no Chrome "certificate not yet valid" error right after a
-renewal. If one occurs, record it here and on #401 (the fix is setting the
-leaf lifetime/renewal in the Caddyfile, as #398 allowed).
+renewal. Any such error is a FAIL: record it here and file the Caddyfile
+leaf lifetime/renewal follow-up on #401 (as #398 allowed).
 
 Evidence: renewal times `____`, errors seen `____`. Result (PASS/FAIL):
 `____`
