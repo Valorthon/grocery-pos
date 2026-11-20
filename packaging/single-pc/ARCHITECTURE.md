@@ -166,6 +166,18 @@ the main PC's installation over HTTPS. This section is the reference for
   lost or copied drive lets its holder impersonate the main PC to terminals, so
   exports stay in the owner's custody.
 
+Implemented (#396): installer `-LanIp` (install/repair; kept by repair and
+upgrade, `none` turns it off, a change refused while a shift is open or an
+offline lease is active), the API's `LAN_ORIGIN`, the generated
+`config\lan-site.caddy` imported by [caddy/Caddyfile](caddy/Caddyfile)
+(`bind <IP>` only, health 404, relative `Reporting-Endpoints`), the
+`GroceryPOS-LAN-HTTPS` firewall rule (TCP 1443, caddy.exe, LAN IP,
+local subnet, Private profile; removed on uninstall), the diagnostics
+listener rule (the proxy alone may also listen on the configured private
+LAN IP) and backups of the Caddy root pair restored onto an empty data root.
+Proven on Linux with a real Caddy (`pnpm test:single-pc-caddy`) and
+MongoDB; Windows firewall/netsh/adapter execution is pending (#401).
+
 ## Persistent installation and lifecycle interfaces (#360–#365)
 
 - Replaceable binaries: `%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>`.

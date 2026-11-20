@@ -309,8 +309,22 @@ describe(
                 MONGOD,
                 '--api',
                 apiDir,
+                '--lan-ip',
+                '192.168.1.10',
             ]).done;
             assert.equal(result.code, 0, result.stderr);
+            // Caddy's state (#396): only the root pair is ever backed up.
+            const ca = paths.caddyRoot;
+            await mkdir(ca, { recursive: true });
+            for (const file of ['root.crt', 'root.key', 'intermediate.crt'])
+                await writeFile(join(ca, file), `${file} of the source PC`);
+            await mkdir(join(paths.caddyData, 'caddy', 'certificates'), {
+                recursive: true,
+            });
+            await writeFile(
+                join(paths.caddyData, 'caddy', 'certificates', 'site.crt'),
+                'site',
+            );
             service = await startService(paths);
             if (compiledApi) {
                 ownerPassword = randomBytes(18).toString('base64url');
@@ -945,6 +959,19 @@ describe(
             await stopService(service);
             service = undefined;
 
+            // #396: the export holds the CA root pair and no other TLS file.
+            const exportedManifest = JSON.parse(
+                await readFile(join(exported, 'manifest.json'), 'utf8'),
+            );
+            assert.deepEqual(
+                exportedManifest.files
+                    .map((f) => f.path)
+                    .filter((p) => p.startsWith('files/tls/')),
+                [
+                    'files/tls/data/caddy/pki/authorities/local/root.crt',
+                    'files/tls/data/caddy/pki/authorities/local/root.key',
+                ],
+            );
             const target = layout(join(dir, 'replacement'));
             // #366: the export is checked first on the fresh PC; that
             // creates neither the data root nor anything left beside it.
@@ -965,6 +992,34 @@ describe(
             );
             assert.equal(result.code, 0, result.stderr);
             assert.match(result.stdout, /"replacementInstallation": true/);
+            // #396: the CA root pair and the LAN IP come back; Caddy
+            // rebuilds the intermediate and site certificates.
+            for (const file of ['root.crt', 'root.key'])
+                assert.equal(
+                    await readFile(join(target.caddyRoot, file), 'utf8'),
+                    `${file} of the source PC`,
+                );
+            assert.ok(!existsSync(join(target.caddyRoot, 'intermediate.crt')));
+            assert.ok(
+                !existsSync(join(target.caddyData, 'caddy', 'certificates')),
+            );
+            assert.match(result.stdout, /local CA root restored/);
+            assert.match(result.stdout, /https:\/\/192\.168\.1\.10:1443/);
+            assert.equal(
+                JSON.parse(await readFile(target.runtimeManifest, 'utf8'))
+                    .lanIp,
+                '192.168.1.10',
+            );
+            assert.match(
+                await readFile(target.apiEnv, 'utf8'),
+                /^LAN_ORIGIN=https:\/\/192\.168\.1\.10:1443$/m,
+            );
+            assert.match(
+                await readFile(target.caddyLanSite, 'utf8'),
+                /bind 192\.168\.1\.10/,
+            );
+            // The source's own TLS state was never touched by its restores.
+            assert.ok(existsSync(join(paths.caddyRoot, 'intermediate.crt')));
             assert.equal(
                 JSON.parse(await readFile(target.install, 'utf8'))
                     .installationId,

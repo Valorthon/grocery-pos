@@ -84,8 +84,8 @@ bundle.
 
 ```powershell
 # First compare by eye: (Get-FileHash .\bundle-manifest.json).Hash with the recorded hash.
-.\Install.ps1 -ManifestSha256 <hash> -Mode install -AdminUsername <name> [-StoreTimezone Asia/Manila] [-BackupTime 22:00]
-.\Install.ps1 -ManifestSha256 <hash> -Mode repair [-BackupTime HH:MM]
+.\Install.ps1 -ManifestSha256 <hash> -Mode install -AdminUsername <name> [-StoreTimezone Asia/Manila] [-BackupTime 22:00] [-LanIp 192.168.1.10]
+.\Install.ps1 -ManifestSha256 <hash> -Mode repair [-BackupTime HH:MM] [-LanIp <IPv4>|none]
 .\Install.ps1 -ManifestSha256 <hash> -Mode uninstall [-RemoveCaTrust]
 .\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
 .\Install.ps1 -ManifestSha256 <hash> -Mode restore-verify -From <full path of a backup folder>
@@ -133,7 +133,10 @@ Steps (each idempotent; `state\installer.json` records the stages):
    provisional), ports 1443/13000/27018 free unless held by our own installed
    services (a listener whose executable is not under our `releases\` is
    refused even then, `Get-NetTCPConnection`), and the data root's state: new, ours (reinstall) or foreign
-   (refused). A missing Chrome is a warning. `install` with services
+   (refused). A missing Chrome is a warning. With a LAN IP (#396): the
+   address must be on a local adapter (`Get-NetIPAddress`) and port 1443
+   free on it unless our proxy holds it; an adapter on the Public network
+   profile is a warning (the firewall rule is Private-only). `install` with services
    already registered is refused ("use repair"); `repair` needs an existing
    installation.
 3. **Lock** (`installer.lock`, the provisioning lock implementation).
@@ -155,7 +158,10 @@ Steps (each idempotent; `state\installer.json` records the stages):
    after 1 h, `failureflag 1`). ACLs are granted per the runtime README
    table, then the services are started in order and each waits for real
    readiness (MongoDB port, API `/v1/health/ready`, proxy over HTTPS with
-   Caddy's root).
+   Caddy's root). The Windows Firewall rule `GroceryPOS-LAN-HTTPS` is
+   deleted and, with a LAN IP, added again for this release's `caddy.exe`:
+   inbound TCP 1443 on the LAN IP only, `remoteip=localsubnet`,
+   `profile=private` (#396).
 8. **Trust**: waits for Caddy's internal root
    (`tls\data\caddy\pki\authorities\local\root.crt`) and adds it to the
    machine Root store (`certutil -addstore -f Root`), which Chrome on
@@ -227,8 +233,20 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   mode resumes; provisioning resumes from its own journal.
 - `repair` re-verifies/replaces the release, re-provisions, re-registers
   services, ACLs, tasks and shortcuts, keeps the admin and secrets.
-- `uninstall` stops and deletes our three services, deletes our two tasks,
-  shortcuts, releases, wrappers and task XML. It **keeps** the data root
+- LAN terminals (#396, ARCHITECTURE.md "LAN terminals (#402)"): `-LanIp
+<private IPv4>` on install or repair serves the app on
+  `https://<IP>:1443` as well as `https://localhost:1443`. It is stored in
+  `state\installer.json` and `config\runtime.json`, written as the API's
+  `LAN_ORIGIN` (#394) and as the proxy's generated `config\lan-site.caddy`
+  (`bind <IP>` only, health refused). Repair and upgrade keep it;
+  `-LanIp none` turns it off. A different IP is a new origin (each
+  terminal's queued offline cash lives in the old origin's browser
+  storage), so repair refuses the change while a shift is open or an
+  offline lease is active, checked before anything stops. An install over
+  a restored data root uses the backup's IP (a missing one is refused by
+  preflight) unless `-LanIp` names another.
+- `uninstall` stops and deletes our three services, deletes our tasks,
+  the LAN firewall rule, shortcuts, releases, wrappers and task XML. It **keeps** the data root
   (database, secrets, TLS state, backups, logs, installer state), the
   handover folder, the CA trust (unless `-RemoveCaTrust`, which removes our
   root by serial) and every Chrome profile. It never touches Chrome, .NET,

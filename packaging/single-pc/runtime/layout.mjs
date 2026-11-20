@@ -11,6 +11,45 @@ export const PORTS = Object.freeze({ proxy: 1443, api: 13000, mongo: 27018 });
 export const ORIGIN = `https://localhost:${PORTS.proxy}`;
 export const LOOPBACK = '127.0.0.1';
 
+/**
+ * LAN terminals (#396, ARCHITECTURE.md "LAN terminals (#402)"): one fixed
+ * private IPv4 address of this PC, in canonical dotted form, or null. Caddy
+ * listens on it as well as on loopback; the API and MongoDB never do.
+ */
+export function isPrivateIpv4(text) {
+    const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(
+        String(text),
+    );
+    if (!match) return false;
+    const octets = match.slice(1).map(Number);
+    if (match.slice(1).some((o) => o.length > 1 && o.startsWith('0')))
+        return false;
+    if (octets.some((o) => o > 255)) return false;
+    const [a, b] = octets;
+    return (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168)
+    );
+}
+
+/** The validated LAN IP, or throws. `none`/empty means no LAN terminals. */
+export function parseLanIp(text) {
+    const value = String(text ?? '').trim();
+    if (value === '' || value.toLowerCase() === 'none') return null;
+    if (!isPrivateIpv4(value)) {
+        throw new Error(
+            `The LAN IP must be a private IPv4 address of this PC (10.x, 172.16-31.x or 192.168.x), e.g. 192.168.1.10; got "${value}".`,
+        );
+    }
+    return value;
+}
+
+/** The terminals' origin for a LAN IP (the API's LAN_ORIGIN, #394). */
+export function lanOrigin(lanIp) {
+    return lanIp ? `https://${lanIp}:${PORTS.proxy}` : null;
+}
+
 export const REPLICA_SET = 'gpos';
 export const APP_DATABASE = 'grocery';
 /** Installation marker; never an application collection. */
@@ -94,6 +133,18 @@ export function layout(root) {
         proxyLogs: join(dirs.logs, 'proxy'),
         caddyData: join(dirs.tls, 'data'),
         caddyConfig: join(dirs.tls, 'config'),
+        // The proxy's LAN site (#396); absent without LAN terminals. The
+        // release Caddyfile imports it by glob, so absence is no error.
+        caddyLanSite: join(dirs.config, 'lan-site.caddy'),
+        // Caddy's root CA: the only TLS files a backup carries (#396).
+        caddyRoot: join(
+            dirs.tls,
+            'data',
+            'caddy',
+            'pki',
+            'authorities',
+            'local',
+        ),
     };
 }
 
@@ -141,7 +192,11 @@ export const HEALTH = Object.freeze({
 });
 
 /** The API's environment (node --env-file). No quotes, one per line. */
-export function apiEnv(paths, secrets, { storeTimezone = 'Asia/Manila' } = {}) {
+export function apiEnv(
+    paths,
+    secrets,
+    { storeTimezone = 'Asia/Manila', lanIp = null } = {},
+) {
     const entries = [
         ['APP_ENV', 'single-pc'],
         ['PORT', String(PORTS.api)],
@@ -160,6 +215,7 @@ export function apiEnv(paths, secrets, { storeTimezone = 'Asia/Manila' } = {}) {
         ['HEALTH_DISK_THRESHOLD_PERCENT', String(HEALTH.diskFullFraction)],
         ['HEALTH_DISK_PATH', paths.root],
         ['STORE_TIMEZONE', storeTimezone],
+        ...(lanIp ? [['LAN_ORIGIN', lanOrigin(parseLanIp(lanIp))]] : []),
     ];
     for (const [key, value] of entries) {
         if (/[\r\n"'#`]/.test(value) || value !== value.trim()) {
@@ -250,6 +306,8 @@ export function serviceDefinitions(paths, release) {
                 GPOS_CLIENT_ROOT: bin.client,
                 XDG_DATA_HOME: paths.caddyData,
                 XDG_CONFIG_HOME: paths.caddyConfig,
+                // Where the Caddyfile's `import` finds the LAN site (#396).
+                GPOS_CONFIG_DIR: paths.dirs.config,
             },
             dependsOn: [SERVICES.api],
             logDirectory: paths.proxyLogs,
@@ -319,11 +377,14 @@ export function winswXml(service) {
 }
 
 /** Non-secret manifest for installer/backup/diagnostics (config/runtime.json). */
-export function runtimeManifest(paths, install) {
+export function runtimeManifest(paths, install, { lanIp = null } = {}) {
     return {
         schema: RUNTIME_SCHEMA,
         installationId: install.installationId,
         origin: ORIGIN,
+        // LAN terminals (#396): the fixed IP and origin, or null.
+        lanIp: lanIp ?? null,
+        lanOrigin: lanOrigin(lanIp),
         ports: PORTS,
         bind: LOOPBACK,
         replicaSet: REPLICA_SET,
@@ -340,4 +401,30 @@ export function runtimeManifest(paths, install) {
             caddyData: paths.caddyData,
         },
     };
+}
+
+/**
+ * The proxy's LAN site (#396), imported by the release Caddyfile from
+ * config\lan-site.caddy. It listens on the LAN IP only (never 0.0.0.0),
+ * so it is its own Caddy server: a request there naming another Host
+ * (e.g. localhost:1443) matches no site and is never proxied. Health
+ * endpoints are refused here (#394's decision); `tls internal` issues the
+ * IP-SAN certificate from the same root as the localhost site.
+ */
+export function caddyLanSite(lanIp) {
+    const ip = parseLanIp(lanIp);
+    if (!ip) throw new Error('No LAN IP: there is no LAN site.');
+    return [
+        '# Generated by the Grocery POS installer (#396). Do not edit; re-run',
+        '# the installer (repair --lan-ip) to change it.',
+        `https://${ip}:${PORTS.proxy} {`,
+        `\tbind ${ip}`,
+        '\timport gpos_app',
+        '\t# Never health from the LAN (#394): a 404, not proxied to the API.',
+        '\thandle /v1/health* {',
+        '\t\trespond 404',
+        '\t}',
+        '}',
+        '',
+    ].join('\n');
 }

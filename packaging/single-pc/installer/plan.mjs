@@ -183,6 +183,25 @@ export function evaluatePreflight(facts, mode) {
     if (mode === 'repair' && facts.dataRoot !== 'ours') {
         refusals.push('There is no Grocery POS installation to repair.');
     }
+    // LAN terminals (#396): the fixed IP must be on a local network adapter
+    // and its HTTPS port free (our own proxy may hold it during a repair).
+    if (facts.lanIp) {
+        if (!facts.lanIpPresent) {
+            refusals.push(
+                `The LAN IP ${facts.lanIp} is not an address of this PC. Give this PC that fixed address (static or a router reservation) first, or choose another with --lan-ip.`,
+            );
+        }
+        if (facts.lanPortForeign) {
+            refusals.push(
+                `Port ${PORTS.proxy} on ${facts.lanIp} is in use by another program; free it.`,
+            );
+        }
+        if (facts.lanProfile === 'Public') {
+            warnings.push(
+                `The network adapter with ${facts.lanIp} is on the Public profile, where the firewall rule does not apply. Set that network to Private in Windows Settings so terminals can connect.`,
+            );
+        }
+    }
     for (const [name, port] of Object.entries(PORTS)) {
         const owner = {
             proxy: SERVICES.proxy,
@@ -340,6 +359,8 @@ export function aclSteps(paths, release) {
         grant(paths.apiEnv, api, '(R)'),
         grant(paths.apiLogs, api, '(OI)(CI)M'),
         grant(paths.dirs.tls, proxy, '(OI)(CI)M'),
+        // The generated LAN site (#396) lives in config (no secrets there).
+        grant(paths.dirs.config, proxy, '(OI)(CI)RX'),
         grant(paths.proxyLogs, proxy, '(OI)(CI)M'),
         grant(bin.client, proxy, '(OI)(CI)RX'),
     ];
@@ -373,6 +394,56 @@ export function caddyRootCertificate(paths) {
         'local',
         'root.crt',
     );
+}
+
+/** The Windows Firewall rule for LAN terminals (#396). */
+export const FIREWALL_RULE = 'GroceryPOS-LAN-HTTPS';
+
+/**
+ * Inbound TCP 1443 to this release's caddy.exe on the LAN IP only, from the
+ * local subnet, Private profile only. Always deletes the previous rule first
+ * (another release's path or IP); without a LAN IP the rule stays deleted.
+ */
+export function firewallSteps(release, lanIp) {
+    const steps = [removeFirewallStep()];
+    if (!lanIp) return steps;
+    steps.push({
+        kind: 'exec',
+        file: 'netsh.exe',
+        args: [
+            'advfirewall',
+            'firewall',
+            'add',
+            'rule',
+            `name=${FIREWALL_RULE}`,
+            'dir=in',
+            'action=allow',
+            'protocol=TCP',
+            `localport=${PORTS.proxy}`,
+            `localip=${lanIp}`,
+            'remoteip=localsubnet',
+            'profile=private',
+            `program=${releaseLayout(release).caddy}`,
+            'enable=yes',
+        ],
+    });
+    return steps;
+}
+
+function removeFirewallStep() {
+    return {
+        kind: 'exec',
+        file: 'netsh.exe',
+        args: [
+            'advfirewall',
+            'firewall',
+            'delete',
+            'rule',
+            `name=${FIREWALL_RULE}`,
+        ],
+        // "No rules match" is not a failure.
+        allowFailure: true,
+    };
 }
 
 /** Machine trust store (Chrome on Windows uses the OS store). */
@@ -754,6 +825,7 @@ export function uninstallSteps({ installedServices, shortcuts }) {
         steps.push({ kind: 'exec', file: 'sc.exe', args: ['delete', name] });
         steps.push({ kind: 'gone', name });
     }
+    steps.push(removeFirewallStep());
     for (const path of shortcuts) steps.push({ kind: 'remove', path });
     return steps;
 }

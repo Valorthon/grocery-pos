@@ -17,11 +17,12 @@ import {
     readdir,
     readFile,
     rm,
+    stat,
     writeFile,
 } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { boundedWait } from '../proof/policy.mjs';
 import {
@@ -44,6 +45,7 @@ import {
     ARCHIVE,
     BACKED_UP_SECRETS,
     BackupError,
+    CA_ROOT_FILES,
     EXIT,
     RefusedError,
     appVersion,
@@ -212,7 +214,17 @@ export async function secureFreshRoot(paths, ctx = {}) {
     await assertOnly(paths.dirs.secrets, []);
 }
 
-/** Places the backup's secrets and identity on a fresh data root. */
+const exists = (path) =>
+    stat(path).then(
+        () => true,
+        () => false,
+    );
+
+/**
+ * Places the backup's secrets, identity, runtime manifest (its LAN IP, #396)
+ * and local CA root (#396) on a fresh data root. Returns whether the root
+ * was restored.
+ */
 async function seedFreshRoot(paths, dir) {
     await secureFreshRoot(paths);
     for (const sub of ['state', 'config']) {
@@ -224,11 +236,29 @@ async function seedFreshRoot(paths, dir) {
             paths.secrets[key],
         ]),
         ['files/state/install.json', paths.install],
+        // Keeps the LAN IP setting (#396); provisioning rewrites the rest.
+        ['files/config/runtime.json', paths.runtimeManifest],
     ];
+    // The local CA root (#396), when the backup has it: Caddy keeps using
+    // it, so LAN terminals that trusted the old PC trust this one. Older
+    // backups have none; Caddy then makes a new root and terminals re-join.
+    const caRoot = [];
+    for (const rel of CA_ROOT_FILES)
+        if (await exists(join(dir, 'files', ...rel.split('/'))))
+            caRoot.push(rel);
+    if (caRoot.length === CA_ROOT_FILES.length) {
+        await secureFolder(paths.dirs.tls);
+        for (const rel of caRoot) {
+            const target = join(paths.root, ...rel.split('/'));
+            await mkdir(dirname(target), { recursive: true, mode: 0o700 });
+            files.push([`files/${rel}`, target]);
+        }
+    }
     for (const [rel, target] of files) {
         await copyFile(join(dir, ...rel.split('/')), target);
         if (!windows) await chmod(target, 0o600);
     }
+    return caRoot.length === CA_ROOT_FILES.length;
 }
 
 async function sameFile(a, b) {
@@ -328,11 +358,20 @@ export async function restore(options, log = () => {}) {
         log(
             `restore ${manifest.backupId}: new installation from the backup's identity and secrets`,
         );
-        await seedFreshRoot(paths, dir);
-        await provision(
+        const caRoot = await seedFreshRoot(paths, dir);
+        const { lanIp } = await provision(
             { dataRoot: paths.root, mongod: options.mongod, api: options.api },
             (l) => log(`provision ${l}`),
         );
+        log(
+            caRoot
+                ? 'restore: local CA root restored; joined LAN terminals keep trusting this PC'
+                : 'restore: this backup has no local CA root; the installer makes a new one and every LAN terminal re-joins',
+        );
+        if (lanIp)
+            log(
+                `restore: LAN terminals use https://${lanIp}:${PORTS.proxy}; give this PC that fixed IP before running the installer, or run it with -LanIp <new IP> (terminals then re-join) or -LanIp none`,
+            );
     } else {
         const install = await readInstall(paths);
         if (install.installationId !== manifest.installationId)

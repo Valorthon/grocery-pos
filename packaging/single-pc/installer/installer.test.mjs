@@ -51,6 +51,8 @@ import {
     releasesToPrune,
     backupTaskXml,
     evaluatePreflight,
+    FIREWALL_RULE,
+    firewallSteps,
     locations,
     reminderTaskXml,
     serviceAccount,
@@ -572,6 +574,7 @@ test('ACL grants follow the runtime README permissions table', () => {
     ]);
     assert.deepEqual(by(SERVICES.proxy), [
         [paths.dirs.tls, '(OI)(CI)M'],
+        [paths.dirs.config, '(OI)(CI)RX'],
         [paths.proxyLogs, '(OI)(CI)M'],
         ['/r/client', '(OI)(CI)RX'],
     ]);
@@ -656,8 +659,19 @@ function recordingContext(dir, { failProvisionOnce = false } = {}) {
         locations: where,
         log,
         services,
-        async facts() {
-            return { ...okFacts, servicesInstalled: [...services.keys()] };
+        lanFacts: { lanIpPresent: true },
+        blockers: { openShifts: 0, activeLeases: 0 },
+        async facts({ lanIp } = {}) {
+            ctx.factsLanIp = lanIp ?? null;
+            return {
+                ...okFacts,
+                ...ctx.lanFacts,
+                servicesInstalled: [...services.keys()],
+            };
+        },
+        async lanChangeBlockers(paths, release) {
+            log.push(['lanChangeBlockers', release]);
+            return ctx.blockers;
         },
         async exec(file, args) {
             log.push([file, ...args]);
@@ -683,6 +697,7 @@ function recordingContext(dir, { failProvisionOnce = false } = {}) {
         },
         async provision(options) {
             log.push(['provision', options.dataRoot]);
+            log.push(['provision-lan', options.lanIp]);
             if (failProvision) {
                 failProvision = false;
                 throw new Error('power cut');
@@ -956,6 +971,151 @@ test('a manifest or release file swapped after Install.ps1 checked it is refused
     await rm(dir, { recursive: true });
 });
 
+test('LAN terminals: preflight, firewall rule and uninstall (#396)', () => {
+    const lan = { ...okFacts, lanIp: '192.168.1.10' };
+    assert.deepEqual(
+        evaluatePreflight({ ...lan, lanIpPresent: true }, 'install'),
+        { refusals: [], warnings: [] },
+    );
+    assert.match(
+        evaluatePreflight({ ...lan, lanIpPresent: false }, 'install')
+            .refusals[0],
+        /192\.168\.1\.10 is not an address of this PC/,
+    );
+    assert.match(
+        evaluatePreflight(
+            { ...lan, lanIpPresent: true, lanPortForeign: true },
+            'repair',
+        ).refusals.join(' '),
+        /Port 1443 on 192\.168\.1\.10 is in use/,
+    );
+    assert.match(
+        evaluatePreflight(
+            { ...lan, lanIpPresent: true, lanProfile: 'Public' },
+            'install',
+        ).warnings[0],
+        /Public profile/,
+    );
+
+    const steps = firewallSteps('/r', '192.168.1.10');
+    assert.deepEqual(steps[0].args, [
+        'advfirewall',
+        'firewall',
+        'delete',
+        'rule',
+        `name=${FIREWALL_RULE}`,
+    ]);
+    assert.equal(steps[0].allowFailure, true);
+    const add = steps[1].args;
+    for (const arg of [
+        'dir=in',
+        'action=allow',
+        'protocol=TCP',
+        'localport=1443',
+        'localip=192.168.1.10',
+        'remoteip=localsubnet',
+        'profile=private',
+        `program=${join('/r', 'caddy', 'caddy.exe')}`,
+    ])
+        assert.ok(add.includes(arg), arg);
+    assert.ok(!add.some((a) => /any|0\.0\.0\.0|public|domain/i.test(a)));
+    // No LAN IP: the rule is only deleted.
+    assert.deepEqual(firewallSteps('/r', null), [steps[0]]);
+
+    const removal = uninstallSteps({
+        installedServices: [],
+        shortcuts: [],
+    }).find((s) => s.file === 'netsh.exe');
+    assert.deepEqual(removal, steps[0]);
+});
+
+test('the LAN IP is stored, kept by repair and changed only without open shifts or leases (#396)', async () => {
+    const dir = await scratch();
+    const bundle = await makeBundle(dir);
+    const pinned = await pin(bundle);
+    const ctx = recordingContext(dir);
+    const paths = layout(ctx.locations.dataRoot);
+    const state = async () =>
+        JSON.parse(await readFile(join(paths.dirs.state, 'installer.json')));
+    const netsh = () =>
+        ctx.log.filter((e) => e[0] === 'netsh.exe').map((e) => e.join(' '));
+
+    const result = await runInstaller(
+        {
+            mode: 'install',
+            ...pinned,
+            adminUsername: 'owner',
+            lanIp: '192.168.1.10',
+        },
+        ctx,
+    );
+    assert.equal(result.lanOrigin, 'https://192.168.1.10:1443');
+    assert.equal((await state()).lanIp, '192.168.1.10');
+    assert.ok(
+        ctx.log.some(
+            (e) => e[0] === 'provision-lan' && e[1] === '192.168.1.10',
+        ),
+    );
+    assert.ok(netsh().some((l) => l.includes('localip=192.168.1.10')));
+
+    // Repair without --lan-ip keeps it and checks nothing.
+    ctx.log.length = 0;
+    await runInstaller({ mode: 'repair', ...pinned }, ctx);
+    assert.equal(ctx.factsLanIp, '192.168.1.10');
+    assert.ok(
+        ctx.log.some(
+            (e) => e[0] === 'provision-lan' && e[1] === '192.168.1.10',
+        ),
+    );
+    assert.ok(!ctx.log.some((e) => e[0] === 'lanChangeBlockers'));
+
+    // A new IP is refused, before anything stops, while a shift is open or
+    // a terminal holds a lease.
+    for (const blockers of [
+        { openShifts: 1, activeLeases: 0 },
+        { openShifts: 0, activeLeases: 2 },
+    ]) {
+        ctx.blockers = blockers;
+        ctx.log.length = 0;
+        await assert.rejects(
+            runInstaller(
+                { mode: 'repair', ...pinned, lanIp: '192.168.1.20' },
+                ctx,
+            ),
+            /The LAN IP cannot change now/,
+        );
+        assert.ok(
+            !ctx.log.some((e) => e[0] === 'stop' || e[0] === 'provision'),
+        );
+        assert.equal((await state()).lanIp, '192.168.1.10');
+    }
+    // A missing IP is refused by preflight.
+    ctx.lanFacts = { lanIpPresent: false };
+    await assert.rejects(
+        runInstaller({ mode: 'repair', ...pinned, lanIp: '192.168.1.20' }, ctx),
+        /not an address of this PC/,
+    );
+    ctx.lanFacts = { lanIpPresent: true };
+    ctx.blockers = { openShifts: 0, activeLeases: 0 };
+    ctx.log.length = 0;
+    await runInstaller(
+        { mode: 'repair', ...pinned, lanIp: '192.168.1.20' },
+        ctx,
+    );
+    assert.equal((await state()).lanIp, '192.168.1.20');
+    assert.ok(netsh().some((l) => l.includes('localip=192.168.1.20')));
+
+    // `none` turns LAN terminals off: the rule is only deleted.
+    ctx.log.length = 0;
+    await runInstaller({ mode: 'repair', ...pinned, lanIp: null }, ctx);
+    assert.equal((await state()).lanIp, null);
+    assert.ok(ctx.log.some((e) => e[0] === 'provision-lan' && e[1] === null));
+    assert.deepEqual(netsh(), [
+        `netsh.exe advfirewall firewall delete rule name=${FIREWALL_RULE}`,
+    ]);
+    await rm(dir, { recursive: true });
+});
+
 test('installer arguments are validated per mode', () => {
     assert.throws(() => parseArgs([]), /first argument/);
     assert.throws(() => parseArgs(['install']), /--bundle is required/);
@@ -1004,6 +1164,37 @@ test('installer arguments are validated per mode', () => {
             adminUsername: 'owner',
             backupTime: '21:00',
         },
+    );
+    const lan = (value, mode = 'repair') =>
+        parseArgs([
+            mode,
+            '--bundle',
+            'b',
+            '--manifest',
+            'm',
+            '--manifest-sha256',
+            'a'.repeat(64),
+            '--lan-ip',
+            value,
+        ]).lanIp;
+    assert.equal(lan('192.168.1.10'), '192.168.1.10');
+    assert.equal(lan('10.0.0.5', 'install'), '10.0.0.5');
+    assert.equal(lan('172.31.4.2'), '172.31.4.2');
+    assert.equal(lan('none'), null);
+    for (const bad of [
+        '8.8.8.8',
+        '127.0.0.1',
+        '0.0.0.0',
+        '172.32.0.1',
+        '192.168.1.256',
+        '192.168.01.10',
+        'pos.local',
+        '::1',
+    ])
+        assert.throws(() => lan(bad), /private IPv4/, bad);
+    assert.throws(
+        () => parseArgs(['uninstall', '--lan-ip', '192.168.1.10']),
+        /Unknown option/,
     );
     assert.equal(EXIT.REFUSED, 3);
 });

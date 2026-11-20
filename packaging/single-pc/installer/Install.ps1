@@ -18,6 +18,8 @@
 .EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode repair
 .EXAMPLE
+    .\Install.ps1 -ManifestSha256 <hash> -Mode repair -LanIp 192.168.1.10
+.EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode uninstall
 .EXAMPLE
     .\Install.ps1 -ManifestSha256 <hash> -Mode handover-done
@@ -48,6 +50,9 @@ param(
     [string]$AdminUsername,
     [string]$StoreTimezone,
     [string]$BackupTime,
+    # LAN terminals (#396): this PC's fixed private IPv4 address, or 'none'.
+    [ValidatePattern('^(none|[0-9]{1,3}(\.[0-9]{1,3}){3})$')]
+    [string]$LanIp,
     [switch]$RemoveCaTrust,
     [ValidatePattern('^[0-9A-Za-z-]{1,80}$')]
     [string]$RestoreBackup,
@@ -190,6 +195,7 @@ try {
         $nodeArgs += @('--bundle', $bundle, '--manifest', $verifiedManifest,
             '--manifest-sha256', $manifestHash)
         if ($BackupTime -and $Mode -ne 'upgrade') { $nodeArgs += @('--backup-time', $BackupTime) }
+        if ($LanIp -and $Mode -ne 'upgrade') { $nodeArgs += @('--lan-ip', $LanIp) }
     }
     if ($Mode -eq 'install') {
         if ($AdminUsername) { $nodeArgs += @('--admin-username', $AdminUsername) }

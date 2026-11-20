@@ -10,7 +10,11 @@ import {
     SECRET_FILES,
     SERVICES,
     apiEnv,
+    caddyLanSite,
     databaseUrl,
+    isPrivateIpv4,
+    lanOrigin,
+    parseLanIp,
     layout,
     mongodConfig,
     runtimeManifest,
@@ -95,6 +99,94 @@ test('API env is single-pc on loopback with the local origin and no domain', () 
         apiEnv(paths, { ...secrets, jwtSecret: 'x\nAPP_ENV=dev' }),
     );
     assert.throws(() => databaseUrl('u', 'p@ss'));
+});
+
+test('LAN terminals: LAN_ORIGIN, runtime manifest and the proxy LAN site (#396)', async () => {
+    const env = (options) =>
+        Object.fromEntries(
+            apiEnv(paths, secrets, options)
+                .split('\n')
+                .filter((line) => line && !line.startsWith('#'))
+                .map((line) => line.split(/=(.*)/s).slice(0, 2)),
+        );
+    assert.equal(env().LAN_ORIGIN, undefined);
+    assert.equal(
+        env({ lanIp: '192.168.1.10' }).LAN_ORIGIN,
+        'https://192.168.1.10:1443',
+    );
+    assert.equal(env({ lanIp: '192.168.1.10' }).HOST, '127.0.0.1');
+    assert.throws(() => apiEnv(paths, secrets, { lanIp: '8.8.8.8' }));
+    assert.equal(lanOrigin(null), null);
+    assert.deepEqual(
+        [
+            runtimeManifest(paths, { installationId: 'id' }).lanIp,
+            runtimeManifest(
+                paths,
+                { installationId: 'id' },
+                { lanIp: '10.1.2.3' },
+            ).lanOrigin,
+        ],
+        [null, 'https://10.1.2.3:1443'],
+    );
+    for (const ok of [
+        '10.0.0.1',
+        '172.16.0.1',
+        '172.31.255.254',
+        '192.168.1.10',
+    ])
+        assert.ok(isPrivateIpv4(ok), ok);
+    for (const bad of [
+        '127.0.0.1',
+        '169.254.1.1',
+        '172.15.0.1',
+        '100.64.0.1',
+        '0.0.0.0',
+        '1.2.3',
+        '10.0.0.01',
+    ])
+        assert.ok(!isPrivateIpv4(bad), bad);
+    assert.equal(parseLanIp(' none '), null);
+    assert.equal(parseLanIp(''), null);
+
+    const site = caddyLanSite('192.168.1.10');
+    assert.match(site, /^https:\/\/192\.168\.1\.10:1443 \{$/m);
+    assert.match(site, /^\tbind 192\.168\.1\.10$/m);
+    assert.match(site, /import gpos_app/);
+    assert.match(site, /handle \/v1\/health\* \{\n\t\trespond 404/);
+    assert.doesNotMatch(site, /0\.0\.0\.0|\[::\]|localhost/);
+    assert.throws(() => caddyLanSite(null));
+    assert.throws(() => caddyLanSite('0.0.0.0'));
+    assert.ok(paths.caddyLanSite.startsWith(paths.dirs.config));
+
+    const proxy = serviceDefinitions(paths, '/r').find(
+        (d) => d.name === SERVICES.proxy,
+    );
+    assert.equal(proxy.env.GPOS_CONFIG_DIR, paths.dirs.config);
+
+    const caddyfile = await readFile(
+        new URL('../caddy/Caddyfile', import.meta.url),
+        'utf8',
+    );
+    const directives = caddyfile
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('#'))
+        .join('\n');
+    // Every bind is explicit; never a wildcard or a global default.
+    assert.doesNotMatch(directives, /default_bind|0\.0\.0\.0|\[::\]/);
+    assert.match(
+        directives,
+        /^https:\/\/localhost:1443 \{\n\tbind 127\.0\.0\.1 \[::1\]$/m,
+    );
+    assert.match(
+        directives,
+        /^import \{\$GPOS_CONFIG_DIR\}\/lan-site\*\.caddy$/m,
+    );
+    // Same-origin per site: the report endpoint is relative.
+    assert.match(
+        directives,
+        /Reporting-Endpoints "csp-endpoint=\\"\/v1\/csp-report\\""/,
+    );
+    assert.doesNotMatch(directives, /https:\/\/localhost:1443\/v1/);
 });
 
 test('generated secrets match their stored format, and a damaged one does not', () => {

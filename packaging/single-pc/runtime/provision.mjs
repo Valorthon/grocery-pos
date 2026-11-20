@@ -4,7 +4,7 @@
 // refused unchanged (never reset). Prints progress, never secrets.
 //
 //   node provision.mjs --data-root <abs dir> --mongod <mongod> --api <api dir>
-//       [--cache-size-gb <n>] [--store-timezone <IANA>]
+//       [--cache-size-gb <n>] [--store-timezone <IANA>] [--lan-ip <IPv4>|none]
 //
 // Exit codes: 0 ready, 1 failure, 2 usage, 3 refused (nothing reset).
 import { execFileSync, spawn } from 'node:child_process';
@@ -37,7 +37,9 @@ import {
     RUNTIME_SCHEMA,
     SECRET_FILES,
     apiEnv,
+    caddyLanSite,
     layout,
+    parseLanIp,
     mongodConfig,
     runtimeManifest,
     secretPattern,
@@ -64,6 +66,7 @@ export function parseArgs(args) {
         api: 'api',
         'cache-size-gb': 'cacheSizeGB',
         'store-timezone': 'storeTimezone',
+        'lan-ip': 'lanIp',
     };
     const out = {};
     for (let i = 0; i < args.length; i += 2) {
@@ -93,6 +96,7 @@ export function parseArgs(args) {
         }
         out.cacheSizeGB = gb;
     }
+    if (out.lanIp !== undefined) out.lanIp = parseLanIp(out.lanIp);
     if (out.storeTimezone !== undefined) {
         try {
             new Intl.DateTimeFormat('en', { timeZone: out.storeTimezone });
@@ -651,16 +655,37 @@ export async function provision(options, log = () => {}) {
         }
         await done('database');
 
+        // LAN terminals (#396): an explicit `lanIp` (null turns them off);
+        // without one (restore, plain re-provisioning) the setting is kept.
+        const lanIp =
+            options.lanIp !== undefined
+                ? parseLanIp(options.lanIp)
+                : parseLanIp(
+                      (await readJson(paths.runtimeManifest))?.lanIp ?? null,
+                  );
         await writeAtomic(
             paths.apiEnv,
-            apiEnv(paths, secrets, { storeTimezone: options.storeTimezone }),
+            apiEnv(paths, secrets, {
+                storeTimezone: options.storeTimezone,
+                lanIp,
+            }),
             0o600,
         );
         await writeAtomic(
             paths.runtimeManifest,
-            JSON.stringify(runtimeManifest(paths, install), null, 2) + '\n',
+            JSON.stringify(
+                runtimeManifest(paths, install, {
+                    lanIp,
+                }),
+                null,
+                2,
+            ) + '\n',
             0o640,
         );
+        // The proxy's LAN site (#396): present exactly when LAN terminals are.
+        if (lanIp)
+            await writeAtomic(paths.caddyLanSite, caddyLanSite(lanIp), 0o640);
+        else await rm(paths.caddyLanSite, { force: true });
         await done('config');
         journal.complete = STAGES.every((stage) => journal.stages[stage]);
         await writeAtomic(
@@ -672,6 +697,7 @@ export async function provision(options, log = () => {}) {
             installationId: install.installationId,
             dataRoot: paths.root,
             complete: journal.complete,
+            lanIp,
         };
     } finally {
         await stopMongod(child, root);

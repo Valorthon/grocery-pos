@@ -16,6 +16,7 @@
         "test:single-pc-runtime": "node --test --test-concurrency=1 packaging/single-pc/runtime/provision.db.test.mjs",
         "test:single-pc-backup": "node --test --test-concurrency=1 packaging/single-pc/backup/backup.db.test.mjs",
         "test:single-pc-upgrade": "node --test --test-concurrency=1 packaging/single-pc/upgrade/upgrade.db.test.mjs",
+        "test:single-pc-caddy": "node --test packaging/single-pc/caddy/caddy.test.mjs",
         "test:single-pc-diagnostics": "node --test --test-concurrency=1 packaging/single-pc/diagnostics/diagnose.db.test.mjs",
         "seed": "pnpm --filter grocery-pos-api seed",
         "migrate:decode-entities": "pnpm --filter grocery-pos-api migrate:decode-entities",

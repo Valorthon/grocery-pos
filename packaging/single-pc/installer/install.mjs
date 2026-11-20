@@ -3,7 +3,9 @@
 //
 //   node install.mjs install   --bundle <dir> --admin-username <name>
 //                              [--store-timezone <IANA>] [--backup-time HH:MM]
+//                              [--lan-ip <IPv4>|none]
 //   node install.mjs repair    --bundle <dir> [--backup-time HH:MM]
+//                              [--lan-ip <IPv4>|none]
 //   node install.mjs uninstall [--remove-ca-trust]
 //   node install.mjs handover-done
 //
@@ -33,13 +35,21 @@ import { pathToFileURL } from 'node:url';
 import { boundedWait } from '../proof/policy.mjs';
 import { acquireLock, provision, releaseLock } from '../runtime/provision.mjs';
 import {
+    APP_DATABASE,
     LOOPBACK,
     PORTS,
     SERVICES,
+    lanOrigin,
     layout,
+    parseLanIp,
     releaseLayout,
     serviceDefinitions,
 } from '../runtime/layout.mjs';
+import {
+    connectRoot,
+    mongoDriver,
+    readRootPassword,
+} from '../backup/backup.mjs';
 import { sha256, verifyTree } from './bundle.mjs';
 import {
     DEFAULT_BACKUP_TIME,
@@ -52,6 +62,7 @@ import {
     backupTaskXml,
     caddyRootCertificate,
     evaluatePreflight,
+    firewallSteps,
     handoverAclSteps,
     locations,
     parseTime,
@@ -99,8 +110,15 @@ export function parseArgs(argv) {
             'admin-username',
             'store-timezone',
             'backup-time',
+            'lan-ip',
         ],
-        repair: ['bundle', 'manifest', 'manifest-sha256', 'backup-time'],
+        repair: [
+            'bundle',
+            'manifest',
+            'manifest-sha256',
+            'backup-time',
+            'lan-ip',
+        ],
         uninstall: ['remove-ca-trust'],
         'handover-done': [],
     }[mode];
@@ -137,6 +155,8 @@ export function parseArgs(argv) {
 
     if (out.backupTime !== undefined)
         out.backupTime = parseTime(out.backupTime);
+    // `none` turns LAN terminals off; absent keeps the current setting.
+    if (out.lanIp !== undefined) out.lanIp = parseLanIp(out.lanIp);
     if (
         out.adminUsername !== undefined &&
         !/^\S{1,64}$/.test(out.adminUsername)
@@ -283,6 +303,16 @@ async function writeState(paths, state) {
     await rename(`${path}.tmp`, path);
 }
 
+/** The LAN IP this installation serves, or null (#396). */
+async function readStoredLanIp(paths) {
+    const state = await readState(paths);
+    if (state && Object.hasOwn(state, 'lanIp')) return state.lanIp ?? null;
+    const manifest = JSON.parse(
+        await readFile(paths.runtimeManifest, 'utf8').catch(() => 'null'),
+    );
+    return manifest?.lanIp ?? null;
+}
+
 /** state\releases\<version>.json: a placed release's verified manifest. */
 export function releaseRecordPath(paths, version) {
     return join(paths.dirs.state, 'releases', `${version}.json`);
@@ -388,9 +418,21 @@ async function installOrRepair(options, ctx, log) {
             manifestSha256: options.manifestSha256,
         }));
     const dataState = await classifyDataRoot(loc.dataRoot);
-    const facts = await ctx.facts({ loc, bundle, dataState });
+    // LAN terminals (#396): the stored IP (installer state, else the runtime
+    // manifest a restore brought) unless --lan-ip names another or `none`.
+    const storedLanIp =
+        dataState === 'ours'
+            ? await readStoredLanIp(layout(loc.dataRoot))
+            : null;
+    const lanIp = options.lanIp !== undefined ? options.lanIp : storedLanIp;
+    const facts = await ctx.facts({ loc, bundle, dataState, lanIp });
     const { refusals, warnings } = evaluatePreflight(
-        { ...facts, dataRoot: dataState, releaseBytes: bundle.releaseBytes },
+        {
+            ...facts,
+            lanIp,
+            dataRoot: dataState,
+            releaseBytes: bundle.releaseBytes,
+        },
         options.mode,
     );
     for (const warning of warnings) log(`warning: ${warning}`);
@@ -428,6 +470,34 @@ async function installOrRepair(options, ctx, log) {
             );
         }
 
+        // A new LAN IP is a new origin: each terminal's queued offline cash
+        // and lease live in the old origin's browser storage, so the change
+        // waits until no shift is open and no lease is active (#396, the
+        // restore checks). Checked while the services still run.
+        if (lanIp !== storedLanIp && dataState === 'ours') {
+            if (options.mode === 'repair') {
+                const found = await ctx.lanChangeBlockers(
+                    paths,
+                    previous?.release,
+                );
+                const blockers = [];
+                if (found.openShifts)
+                    blockers.push(`${found.openShifts} shift(s) are open`);
+                if (found.activeLeases)
+                    blockers.push(
+                        `${found.activeLeases} terminal(s) hold offline cash leases`,
+                    );
+                if (blockers.length)
+                    throw new RefusedError(
+                        `The LAN IP cannot change now: ${blockers.join('; ')}. Close every shift and synchronize every terminal first.`,
+                    );
+            } else {
+                const note = `This installation was set up for LAN IP ${storedLanIp ?? 'none'}; it now uses ${lanIp ?? 'none'}. Every terminal re-joins.`;
+                warnings.push(note);
+                log(`warning: ${note}`);
+            }
+        }
+
         // Replace binaries and re-register only with everything stopped.
         for (const name of stopOrder()) {
             if (facts.servicesInstalled.includes(name))
@@ -444,6 +514,7 @@ async function installOrRepair(options, ctx, log) {
                 version: bundle.manifest.version,
                 release,
                 adminUsername,
+                lanIp,
                 backupTime:
                     options.backupTime ??
                     previous?.backupTime ??
@@ -465,6 +536,7 @@ async function installOrRepair(options, ctx, log) {
             ...(options.storeTimezone
                 ? { storeTimezone: options.storeTimezone }
                 : {}),
+            lanIp,
         });
         // The release's own verified manifest, kept for later rollbacks
         // (#364): an upgrade re-verifies the previous release against it.
@@ -494,6 +566,7 @@ async function installOrRepair(options, ctx, log) {
             ctx,
         );
         await runSteps(aclSteps(paths, release), ctx);
+        await runSteps(firewallSteps(release, lanIp), ctx);
         for (const def of serviceDefinitions(paths, release)) {
             await ctx.startService(def.name);
             await ctx.waitReady(def.name, paths);
@@ -634,6 +707,7 @@ async function installOrRepair(options, ctx, log) {
             release,
             dataRoot: loc.dataRoot,
             handover: (await exists(handover)) ? loc.handoverDir : null,
+            lanOrigin: lanOrigin(lanIp),
             warnings,
         };
     } finally {
@@ -805,7 +879,7 @@ export function windowsContext(env = process.env) {
         windows: true,
         locations: loc,
         exec: (file, args) => execCapture(file, args),
-        async facts({ loc: where = loc } = {}) {
+        async facts({ loc: where = loc, lanIp = null } = {}) {
             const arch = await powershell(
                 '[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture',
             );
@@ -840,10 +914,31 @@ export function windowsContext(env = process.env) {
                     portsBusy.push(port);
                 }
             }
+            // LAN terminals (#396): the IP must be on a local adapter; its
+            // network profile decides whether the Private-only rule applies.
+            let lanIpPresent = false;
+            let lanProfile;
+            let lanPortBusy = false;
+            if (lanIp) {
+                const { stdout } = await powershell(
+                    '$a = Get-NetIPAddress -AddressFamily IPv4 -IPAddress $env:GPOS_IP -ErrorAction SilentlyContinue;' +
+                        ' if ($a) { $p = Get-NetConnectionProfile -InterfaceIndex $a.InterfaceIndex -ErrorAction SilentlyContinue;' +
+                        " 'present|' + [string]$p.NetworkCategory }",
+                    { GPOS_IP: lanIp },
+                );
+                const [present, category] = stdout.trim().split('|');
+                lanIpPresent = present === 'present';
+                lanProfile = category || undefined;
+                lanPortBusy =
+                    lanIpPresent && (await portBusy(lanIp, PORTS.proxy));
+            }
+            const checkOwners = [...portsBusy];
+            if (lanPortBusy && !checkOwners.includes(PORTS.proxy))
+                checkOwners.push(PORTS.proxy);
             // A busy port counts as ours only if every listener's image is
             // under our releases folder.
             const portsForeign = [];
-            for (const port of portsBusy) {
+            for (const port of checkOwners) {
                 const { stdout } = await powershell(
                     'Get-NetTCPConnection -State Listen -LocalPort $env:GPOS_PORT -ErrorAction SilentlyContinue |' +
                         ' ForEach-Object { (Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue).Path }',
@@ -873,11 +968,45 @@ export function windowsContext(env = process.env) {
                 servicesInstalled,
                 portsBusy,
                 portsForeign,
+                lanIpPresent,
+                lanProfile,
+                lanPortForeign:
+                    lanPortBusy && portsForeign.includes(PORTS.proxy),
                 freeBytes: {
                     program: await freeBytes(where.programDir),
                     data: await freeBytes(where.dataRoot),
                 },
             };
+        },
+        // Open shifts and active offline leases block a LAN IP change (#396).
+        async lanChangeBlockers(paths, release) {
+            if (!release)
+                throw new RefusedError(
+                    'The installed release is unknown, so open shifts and offline leases cannot be checked; the LAN IP was not changed.',
+                );
+            let root;
+            try {
+                root = await connectRoot(
+                    mongoDriver(join(release, 'api')),
+                    await readRootPassword(paths),
+                );
+                const db = root.db(APP_DATABASE);
+                return {
+                    openShifts: await db
+                        .collection('shifts')
+                        .countDocuments({ status: 'OPEN' }),
+                    activeLeases: await db
+                        .collection('offlineleases')
+                        .countDocuments({ active: true }),
+                };
+            } catch (error) {
+                if (error?.name === 'RefusedError') throw error;
+                throw new RefusedError(
+                    'The database is not running, so open shifts and offline leases cannot be checked; start Grocery POS and retry. The LAN IP was not changed.',
+                );
+            } finally {
+                await root?.close().catch(() => {});
+            }
         },
         provision: (options) =>
             provision(options, (line) => process.stdout.write(`  ${line}\n`)),

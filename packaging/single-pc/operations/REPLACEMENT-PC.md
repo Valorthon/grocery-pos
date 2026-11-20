@@ -60,6 +60,12 @@ its own (a reinstall) and keeps the restored users.
     backup's identity and secrets, provisions the database, restores, and
     takes older data forward to this release. If it stops part-way, re-run
     the same command (RECOVERY.md "A restore stopped part-way").
+    With LAN terminals (#396) it also brings back the local CA root, so
+    joined terminals keep trusting the new PC, and prints the LAN address
+    they use: give the new PC that fixed IP (or router reservation) before
+    step 3. Otherwise install with `-LanIp <new IP>` and re-join every
+    terminal (#397), or `-LanIp none`. A backup from before #396 has no
+    root: every terminal re-joins.
 
 3. Install over the restored data root as in [INSTALL.md](INSTALL.md)
    ("At the store", step 3, with the store's existing administrator

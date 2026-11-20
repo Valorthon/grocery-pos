@@ -205,6 +205,75 @@ describe('diagnose', () => {
         assert.deepEqual(byId(report, 'ports').steps, GUIDANCE.exposed);
     });
 
+    test('the proxy may listen on the configured LAN IP only (#396)', async () => {
+        const paths = layout(root);
+        const withManifest = (manifest, listeners) =>
+            healthy({
+                readText: async (path) =>
+                    path === paths.runtimeManifest
+                        ? JSON.stringify(manifest)
+                        : (await import('node:fs/promises')).readFile(
+                              path,
+                              'utf8',
+                          ),
+                listeners,
+            });
+        const lan = { lanIp: '192.168.1.10' };
+        const ok = await diagnose(
+            { dataRoot: root },
+            withManifest(lan, async (p) =>
+                p === 1443
+                    ? ['127.0.0.1', '::1', '192.168.1.10']
+                    : ['127.0.0.1'],
+            ),
+        );
+        assert.equal(byId(ok, 'ports').status, 'ok');
+        assert.match(byId(ok, 'ports').summary, /192\.168\.1\.10/);
+        const fails = [
+            // Another LAN address, or a wildcard, for the proxy.
+            [
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '192.168.1.11'] : ['127.0.0.1'],
+            ],
+            [
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '0.0.0.0'] : ['127.0.0.1'],
+            ],
+            [
+                lan,
+                async (p) => (p === 1443 ? ['127.0.0.1', '::'] : ['127.0.0.1']),
+            ],
+            // The API or MongoDB on the LAN IP.
+            [
+                lan,
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1'] : ['127.0.0.1', '192.168.1.10'],
+            ],
+            // A configured address that is not private never counts.
+            [
+                { lanIp: '8.8.8.8' },
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '8.8.8.8'] : ['127.0.0.1'],
+            ],
+            // No LAN IP configured.
+            [
+                {},
+                async (p) =>
+                    p === 1443 ? ['127.0.0.1', '192.168.1.10'] : ['127.0.0.1'],
+            ],
+        ];
+        for (const [manifest, listeners] of fails) {
+            const report = await diagnose(
+                { dataRoot: root },
+                withManifest(manifest, listeners),
+            );
+            assert.equal(byId(report, 'ports').status, 'fail');
+            assert.deepEqual(byId(report, 'ports').steps, GUIDANCE.exposed);
+        }
+    });
+
     test('low and full disk', async () => {
         const low = await diagnose(
             { dataRoot: root },

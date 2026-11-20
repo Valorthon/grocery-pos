@@ -41,6 +41,7 @@ import {
     PORTS,
     REPLICA_SET,
     SERVICES,
+    isPrivateIpv4,
     layout,
 } from '../runtime/layout.mjs';
 
@@ -331,7 +332,18 @@ const PORT_NAMES = [
     ['proxy', 'Browser address', PORTS.proxy, [LOOPBACK, '::1']],
 ];
 
-export async function checkPorts(ctx) {
+/**
+ * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
+ * and only if it is a private IPv4 address. Never for the API or MongoDB.
+ */
+async function configuredLanIp(ctx, paths) {
+    if (!paths) return null;
+    const lanIp = (await readJson(ctx, paths.runtimeManifest))?.lanIp;
+    return typeof lanIp === 'string' && isPrivateIpv4(lanIp) ? lanIp : null;
+}
+
+export async function checkPorts(ctx, paths) {
+    const lanIp = await configuredLanIp(ctx, paths);
     const details = {};
     const closed = [];
     const exposed = [];
@@ -340,7 +352,12 @@ export async function checkPorts(ctx) {
         for (const host of hosts)
             if (await ctx.tcp(host, port)) open.push(host);
         const listening = await ctx.listeners(port);
-        const foreign = (listening ?? []).filter((a) => !isLoopback(a));
+        const allowed = (address) =>
+            isLoopback(address) ||
+            (key === 'proxy' &&
+                lanIp !== null &&
+                address.toLowerCase().replace(/^::ffff:/, '') === lanIp);
+        const foreign = (listening ?? []).filter((a) => !allowed(a));
         details[key] = { port, reachable: open, listeners: listening };
         if (foreign.length) exposed.push(`${label} (${port})`);
         else if (open.length < hosts.length) closed.push(`${label} (${port})`);
@@ -367,8 +384,10 @@ export async function checkPorts(ctx) {
         'ports',
         'Ports (this PC only)',
         'ok',
-        'Database, application and browser address answer on this PC only.',
-        { details },
+        lanIp
+            ? `Database and application answer on this PC only; the browser address also on ${lanIp} for LAN terminals.`
+            : 'Database, application and browser address answer on this PC only.',
+        { details: { ...details, lanIp } },
     );
 }
 
@@ -805,7 +824,7 @@ export async function diagnose(options, ctx = realContext()) {
     const checks = [
         await checkVersions(ctx, paths, options.release),
         await checkServices(ctx),
-        await checkPorts(ctx),
+        await checkPorts(ctx, paths),
         await checkDatabase(ctx, apiDir),
         await checkApi(ctx),
         await checkProxy(ctx, paths, now),

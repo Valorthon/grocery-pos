@@ -99,6 +99,17 @@ export const INCLUDED_FILES = Object.freeze([
     'state/install.json',
     'config/runtime.json',
 ]);
+/**
+ * The Caddy root CA (#396, owner decision 2026-11-20): with it a replacement
+ * PC keeps the trust every LAN terminal (and this PC) already gave it. Copied
+ * when present (Caddy creates it on first start). The key is plaintext like
+ * the secrets: whoever holds a backup or USB export can impersonate the main
+ * PC to joined terminals.
+ */
+export const CA_ROOT_FILES = Object.freeze([
+    'tls/data/caddy/pki/authorities/local/root.crt',
+    'tls/data/caddy/pki/authorities/local/root.key',
+]);
 export const EXCLUDED = Object.freeze([
     {
         path: 'secrets/cookie-secret',
@@ -114,7 +125,7 @@ export const EXCLUDED = Object.freeze([
     },
     {
         path: 'tls/',
-        reason: "the local CA is trusted per machine; a replacement PC's installer creates and trusts its own (#358/#362)",
+        reason: "everything but the local CA root (CA_ROOT_FILES): Caddy rebuilds the intermediate and site certificates from it; the replacement PC's installer trusts the restored root (#396)",
     },
     { path: 'logs/', reason: 'diagnostic only; may hold machine details' },
     {
@@ -1302,7 +1313,15 @@ async function dumpAndVerify(
         );
     if (!windows) await chmod(join(work, ARCHIVE), 0o600);
 
-    for (const rel of INCLUDED_FILES) {
+    const caRoot = [];
+    for (const rel of CA_ROOT_FILES)
+        if (await exists(join(paths.root, ...rel.split('/')))) caRoot.push(rel);
+    // Both root files or neither: a lone certificate cannot sign.
+    const copied = [
+        ...INCLUDED_FILES,
+        ...(caRoot.length === CA_ROOT_FILES.length ? caRoot : []),
+    ];
+    for (const rel of copied) {
         const target = join(work, 'files', ...rel.split('/'));
         await privateDir(dirname(target));
         await copyFile(join(paths.root, ...rel.split('/')), target);
@@ -1338,10 +1357,10 @@ async function dumpAndVerify(
             dataState: versions.dataState,
         },
         contents: {
-            included: [ARCHIVE, ...INCLUDED_FILES.map((p) => `files/${p}`)],
+            included: [ARCHIVE, ...copied.map((p) => `files/${p}`)],
             excluded: EXCLUDED,
             plaintext:
-                'Secrets are stored unencrypted (owner decision); whoever holds this backup can read the store data and its secrets.',
+                'Secrets and the local CA root key are stored unencrypted (owner decision); whoever holds this backup can read the store data and its secrets and impersonate this PC to LAN terminals.',
         },
         files,
     };

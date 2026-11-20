@@ -20,6 +20,7 @@ import { classifyLinux, classifyWindows } from './removable.mjs';
 import {
     ARCHIVE,
     BackupError,
+    CA_ROOT_FILES,
     EXCLUDED,
     INCLUDED_FILES,
     RETENTION_DAYS,
@@ -133,6 +134,17 @@ test('backups carry the secrets a replacement PC needs and say what they leave o
     // Rotated on restore instead, so pre-restore sessions end.
     assert.ok(!INCLUDED_FILES.includes('secrets/cookie-secret'));
     assert.ok(INCLUDED_FILES.includes('state/install.json'));
+    // #396: the Caddy root pair only, never the intermediate or site certs.
+    assert.deepEqual(CA_ROOT_FILES, [
+        'tls/data/caddy/pki/authorities/local/root.crt',
+        'tls/data/caddy/pki/authorities/local/root.key',
+    ]);
+    const paths = layout('/pd');
+    for (const rel of CA_ROOT_FILES)
+        assert.ok(
+            join('/pd', ...rel.split('/')).startsWith(paths.caddyRoot),
+            rel,
+        );
     for (const path of [
         'secrets/api.env',
         'secrets/cookie-secret',
