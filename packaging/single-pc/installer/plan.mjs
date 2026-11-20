@@ -32,6 +32,8 @@ export const SHORTCUT_NAME = `${PRODUCT}.lnk`;
 export const BACKUP_SHORTCUT_NAME = 'Back up to USB drive.lnk';
 /** Owner decisions 2026-11-15 (#365): health check and recovery guide. */
 export const CHECK_SHORTCUT_NAME = `Check ${PRODUCT}.lnk`;
+/** On the main PC: writes the LAN terminal package (#397). */
+export const TERMINAL_PACKAGE_SHORTCUT_NAME = 'Make terminal package.lnk';
 export const HELP_SHORTCUT_NAME = `${PRODUCT} help.lnk`;
 /** The owner's handover guide (owner decision on #366). */
 export const OWNER_GUIDE_SHORTCUT_NAME = `${PRODUCT} owner guide.lnk`;
@@ -92,6 +94,10 @@ export function locations(env) {
             programData,
             CHECK_SHORTCUT_NAME,
         ),
+        // Common Start menu only: used once per terminal, not daily (#397).
+        terminalPackageShortcuts: [
+            startMenu(programData, TERMINAL_PACKAGE_SHORTCUT_NAME),
+        ],
         // The guide: common Start menu only (owner decision 2026-11-15).
         helpShortcuts: [startMenu(programData, HELP_SHORTCUT_NAME)],
         // Next to it, common Start menu only (owner decision, #366).
@@ -118,6 +124,7 @@ export function allShortcuts(loc) {
         ...loc.shortcuts,
         ...loc.backupShortcuts,
         ...loc.checkShortcuts,
+        ...loc.terminalPackageShortcuts,
         ...loc.helpShortcuts,
         ...loc.ownerGuideShortcuts,
     ];
@@ -772,6 +779,24 @@ export function checkShortcutSpec(paths, release) {
         arguments: run.args.map(quote).join(' '),
         workingDirectory: release,
         description: `Check ${PRODUCT} and show what to do`,
+        icon: join(release, 'client', 'favicon.ico'),
+    };
+}
+
+/**
+ * "Make terminal package": MakeTerminalPackage.ps1 asks for elevation and
+ * runs `terminal.mjs package` into the folder the owner picks (#397).
+ */
+export function terminalPackageShortcutSpec(paths, release) {
+    const run = powershellFile(
+        join(release, 'tools', 'installer', 'MakeTerminalPackage.ps1'),
+        ['-DataRoot', paths.root, '-Release', release],
+    );
+    return {
+        target: run.file,
+        arguments: run.args.map(quote).join(' '),
+        workingDirectory: release,
+        description: `Make the package that joins a LAN terminal to ${PRODUCT}`,
         icon: join(release, 'client', 'favicon.ico'),
     };
 }

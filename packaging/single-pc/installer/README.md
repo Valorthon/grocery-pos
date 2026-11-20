@@ -257,6 +257,32 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   its stored IP and refuses `-LanIp` naming another: change it afterwards
   with `-Mode repair -LanIp`. `-LanIp` is refused in upgrade modes; the
   upgrade keeps the IP and warns in preflight if it is absent.
+- Joining a Windows terminal (#397): the common Start menu shortcut
+  "Make terminal package" (`MakeTerminalPackage.ps1`, elevated) runs
+  `terminal.mjs package --data-root <dir> --to <folder>` into a folder the
+  owner picks. It writes `GroceryPOS-terminal-<IP>\` with the public Caddy
+  root `root.crt` (never the key), `terminal.json` (server URL, the root's
+  SHA-256 and SHA-1 thumbprint), `JoinTerminal.ps1` and `README.txt`;
+  without a LAN IP it is refused. On the terminal (no services, no Node),
+  an administrator runs `JoinTerminal.ps1 -Mode join|rejoin|leave`
+  (`joinPlan` in `terminal.mjs` is its tested specification): join checks
+  the root's SHA-256 first, `certutil -addstore -f Root`, records the
+  thumbprint in `%ProgramData%\Valorthon\GroceryPOS-Terminal\terminal.json`,
+  points Windows time at the main PC (`w32time` automatic,
+  `w32tm /config /manualpeerlist:<IP>,0x8 /syncfromflags:manual /update`,
+  then `/resync /force`, only a warning while the main PC serves no time
+  yet; its NTP server is #398), creates the "Grocery POS" Chrome shortcut
+  to `https://<IP>:1443/` (Public Desktop + common Start menu) and checks
+  TLS with a plain `GET` of the site root (never `/v1/health*`). Before
+  trusting, it loads `root.crt` as a certificate and refuses unless its
+  own thumbprint equals `terminal.json`'s and it is a CA; it prints the
+  thumbprint to compare with the one "Make terminal package" showed
+  (display only). Time sync works only once the main PC serves time
+  (#398). Join with a
+  different recorded root is refused; rejoin deletes the old root by its
+  recorded thumbprint (never by name: every Caddy root has a similar CN)
+  first. Leave deletes only the recorded root and the shortcut; Windows
+  time keeps its setting. Windows execution is pending (#401).
 - `uninstall` stops and deletes our services (and the LAN proxy), deletes our tasks,
   the LAN firewall rule, shortcuts, releases, wrappers and task XML. It **keeps** the data root
   (database, secrets, TLS state, backups, logs, installer state), the
