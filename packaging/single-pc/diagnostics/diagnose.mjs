@@ -1,5 +1,6 @@
 // Single-PC operator diagnostics (#365): a local, read-only health report
-// with plain recovery steps. No network beyond loopback, no upload, no
+// with plain recovery steps. No network beyond this PC (loopback and, with
+// LAN terminals, a TLS handshake to its own LAN address), no upload, no
 // telemetry, never reads secrets\ and grants no application role.
 //
 //   node diagnose.mjs check --data-root <abs> [--release <abs>] [--json]
@@ -29,10 +30,15 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { createRequire } from 'node:module';
 import { connect } from 'node:net';
+import { connect as tlsConnect } from 'node:tls';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { readStatus, statusSummary } from '../backup/backup.mjs';
-import { caddyRootCertificate, MIN_FREE } from '../installer/plan.mjs';
+import {
+    caddyRootCertificate,
+    FIREWALL_RULE,
+    MIN_FREE,
+} from '../installer/plan.mjs';
 import {
     DB_USERS,
     HEALTH,
@@ -81,6 +87,7 @@ export const CHECK_IDS = Object.freeze([
     'api',
     'proxy',
     'lanProxy',
+    'lanNetwork',
     'disk',
     'backups',
     'clock',
@@ -179,6 +186,19 @@ export const GUIDANCE = Object.freeze({
         'LAN terminals cannot connect; this PC keeps working at https://localhost:1443.',
         'Check the network cable or Wi-Fi and that the router is on: this PC must have its fixed LAN address back. The LAN service retries by itself.',
         'Still down after the network is back: restart the PC. See RECOVERY.md "LAN terminals cannot connect".',
+    ],
+    lanAddressGone: [
+        "This PC no longer has its fixed LAN address, so terminals cannot reach it. Check the cable or Wi-Fi, then check the router's address reservation (or the PC's static IP) still gives this PC the same address.",
+        'If the address had to change, every terminal must be joined again. See RECOVERY.md "LAN address changed".',
+    ],
+    lanPublic: [
+        "The network is set to Public, where the terminals' firewall rule does not apply. In Windows Settings > Network & internet, open this network and choose Private.",
+    ],
+    lanFirewall: [
+        'The firewall rule for LAN terminals is missing or turned off. Ask your vendor to run the installer in repair mode.',
+    ],
+    lanCertificate: [
+        'The LAN address\'s certificate does not match. Restart the PC; if it persists, ask your vendor to run the installer in repair mode. See RECOVERY.md "LAN terminals cannot connect".',
     ],
     lanProxyMissing: [
         'LAN terminals are configured but their service is not installed. Ask your vendor to run the installer in repair mode.',
@@ -462,6 +482,85 @@ export async function checkLanProxy(ctx, paths) {
             ? `LAN terminals connect to https://${lanIp}:${PORTS.proxy}.`
             : 'Service state is only read on Windows.',
         { details: { ...details, listening: answering } },
+    );
+}
+
+/**
+ * The LAN terminals' network on this PC (#399): the fixed LAN IP is still on
+ * a network adapter (DHCP drift), that network is Private, the firewall
+ * rule is on, and the certificate served on the IP covers it (a TLS
+ * handshake to this PC's own address, verified with the local root; never
+ * unverified). Pieces that cannot be read are `unknown`, never `ok`.
+ */
+export async function checkLanNetwork(ctx, paths) {
+    const title = 'LAN network';
+    const lanIp = await configuredLanIp(ctx, paths);
+    if (!lanIp)
+        return result(
+            'lanNetwork',
+            title,
+            'info',
+            'No LAN terminals are set up.',
+        );
+    const address = (await ctx.lanAddress?.(lanIp)) ?? null;
+    const firewall = (await ctx.firewallRule?.(FIREWALL_RULE)) ?? null;
+    const pem = await ctx
+        .readText(caddyRootCertificate(paths))
+        .catch(() => null);
+    const tls =
+        pem && address?.lanIpPresent !== false && ctx.tlsHandshake
+            ? await ctx.tlsHandshake(lanIp, PORTS.proxy, pem)
+            : null;
+    const details = {
+        lanIp,
+        addressPresent: address?.lanIpPresent ?? null,
+        profile: address?.lanProfile ?? null,
+        firewallRule: firewall,
+        tls: tls ? (tls.error ? 'failed' : 'verified') : 'unverified',
+        tlsError: tls?.error ?? null,
+    };
+    const problems = [];
+    const steps = [];
+    let status = 'ok';
+    const flag = (level, text, guidance) => {
+        if (STATUS_RANK[level] > STATUS_RANK[status]) status = level;
+        problems.push(text);
+        steps.push(...guidance);
+    };
+    if (address?.lanIpPresent === false)
+        flag('warn', `this PC no longer has ${lanIp}`, GUIDANCE.lanAddressGone);
+    else if (address?.lanProfile === 'Public')
+        flag('warn', 'the network is Public', GUIDANCE.lanPublic);
+    if (firewall === 'missing' || firewall === 'disabled')
+        flag('warn', `the firewall rule is ${firewall}`, GUIDANCE.lanFirewall);
+    if (tls?.error)
+        flag(
+            'warn',
+            `the certificate on ${lanIp} failed (${tls.error})`,
+            GUIDANCE.lanCertificate,
+        );
+    if (problems.length)
+        return result(
+            'lanNetwork',
+            title,
+            status,
+            `LAN terminals may not connect: ${problems.join('; ')}.`,
+            { details, steps },
+        );
+    const unread =
+        !address ||
+        (address.lanIpPresent && !address.lanProfile) ||
+        address.lanProfile === 'unknown' ||
+        !firewall ||
+        !tls;
+    return result(
+        'lanNetwork',
+        title,
+        unread ? 'unknown' : 'ok',
+        unread
+            ? 'Some LAN network facts could not be read (adapter and firewall only on Windows; the certificate only with the local root, run as administrator).'
+            : `${lanIp} is on a Private network, the firewall rule is on and its certificate is valid.`,
+        { details },
     );
 }
 
@@ -905,6 +1004,7 @@ export async function diagnose(options, ctx = realContext()) {
         await checkApi(ctx),
         await checkProxy(ctx, paths, now),
         await checkLanProxy(ctx, paths),
+        await checkLanNetwork(ctx, paths),
         await checkDisk(ctx, paths, programDir),
         await checkBackups(paths, now),
         await checkClock(ctx, paths, now),
@@ -988,6 +1088,48 @@ function tcp(host, port) {
         socket.once('connect', () => (socket.destroy(), done(true)));
         socket.once('timeout', () => (socket.destroy(), done(false)));
         socket.once('error', () => done(false));
+    });
+}
+
+/** Get-NetFirewallRule's Enabled (a locale-independent enum) to a state. */
+export function firewallState(text) {
+    const value = text.trim();
+    if (value === '') return 'missing';
+    return value === 'True' ? 'enabled' : 'disabled';
+}
+
+/** The installer's adapter facts (#396): Preferred address lines with their
+ *  NetworkCategory; Public on any adapter wins, and a present address
+ *  without a readable category is 'unknown', never ok. */
+export function parseLanAddress(stdout) {
+    const categories = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.startsWith('present|'))
+        .map((line) => line.slice('present|'.length));
+    return {
+        lanIpPresent: categories.length > 0,
+        lanProfile: categories.includes('Public')
+            ? 'Public'
+            : categories.length > 0
+              ? (categories.find(Boolean) ?? 'unknown')
+              : null,
+    };
+}
+
+/** A TLS handshake to this PC's own LAN address, verified with the local
+ *  root (Node checks the IP against the certificate's IP SANs). */
+function tlsHandshake(host, port, ca) {
+    return new Promise((done) => {
+        const socket = tlsConnect({ host, port, ca, timeout: 5000 });
+        socket.once('secureConnect', () => (socket.destroy(), done({})));
+        socket.once(
+            'timeout',
+            () => (socket.destroy(), done({ error: 'TIMEOUT' })),
+        );
+        // A late error after destroy must not throw unhandled.
+        socket.on('error', () => {});
+        socket.once('error', (error) => done({ error: error.code ?? 'error' }));
     });
 }
 
@@ -1143,6 +1285,29 @@ export function realContext() {
                       .filter(Boolean)
                 : null;
         },
+        async lanAddress(lanIp) {
+            if (!windows) return null;
+            // Same query as the installer's preflight (install.mjs).
+            const { code, stdout } = await execCapture('powershell.exe', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                `Get-NetIPAddress -AddressFamily IPv4 -IPAddress '${lanIp}' -AddressState Preferred -ErrorAction SilentlyContinue | ForEach-Object { $p = Get-NetConnectionProfile -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue; 'present|' + [string]$p.NetworkCategory }`,
+            ]);
+            return code === 0 ? parseLanAddress(stdout) : null;
+        },
+        async firewallRule(name) {
+            if (!windows) return null;
+            const { code, stdout } = await execCapture('powershell.exe', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                `$r = Get-NetFirewallRule -DisplayName '${name}' -ErrorAction SilentlyContinue; if ($r) { [string]($r | Select-Object -First 1).Enabled }`,
+            ]);
+            if (code !== 0) return null;
+            return firewallState(stdout);
+        },
+        tlsHandshake,
         async mongoHello(apiDir) {
             if (!apiDir) return { error: 'release not found' };
             let client;

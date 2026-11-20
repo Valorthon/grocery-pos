@@ -27,6 +27,9 @@ Windows order below is not yet performed (RUNBOOK B7).
 
 - Sales and changes made after that backup.
 - Chrome data on the old PC: parked tickets and queued offline cash sales.
+  LAN terminals keep their own Chrome data, but each must be joined again
+  (`JoinTerminal.ps1 -Mode rejoin`) if the restored PC has a new CA root or
+  another LAN IP; sync their offline cash before the old PC goes (#399).
   Count the drawer for any cash sale that never reached the server and
   record it by hand.
 

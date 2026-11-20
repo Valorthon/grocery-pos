@@ -25,8 +25,9 @@ staging are unchanged.
 4. `-Mode upgrade-status` prints the journal (`state\upgrade.json`):
    stages done, the pre-upgrade backup id, migrations applied, timings.
 
-Browsers: close every Grocery POS tab in Chrome before step 3 (after the
-registers show no pending offline cash), and open it again with the
+Browsers: close every Grocery POS tab in Chrome, on this PC and on every
+LAN terminal (#399), before step 3 (after the registers show no pending
+offline cash; a terminal's queued cash lives only in its own Chrome), and open it again with the
 shortcut afterwards. A tab left open gets the reload dialog (see "Stale
 browser tabs").
 

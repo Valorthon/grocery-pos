@@ -196,6 +196,9 @@ session: `refreshtokens`, `stepups` and `overridegrants` are emptied and a
 new cookie secret is written to `secrets\cookie-secret` and `api.env`, so
 pre-restore access tokens stop working immediately and everyone logs in
 again. The JWT secret is kept, so signed offline evidence stays valid.
+With LAN terminals, log every terminal out and close its Grocery POS tabs
+before the restore, and sync their offline cash first: the active-lease
+refusal is about cash queued on those terminals (#399).
 
 **Offline cash after a restore needs an ADMIN.** Offline leases are kept,
 but their sessions are gone, so a terminal's queued cash sale is refused

@@ -21,25 +21,52 @@ export const storePresentation = shallowRef<StoreSettings>({
     ...initialSettings,
 });
 const TERMINAL_KEY = 'grocery_pos_terminal_label_v1';
-function readTerminal(): string {
+/** The saved label, or '' when none is saved (or storage is unreadable). */
+function readSavedTerminal(): string {
     try {
         return (
             localStorage
                 .getItem(TERMINAL_KEY)
                 ?.trim()
-                .slice(0, SETTINGS_LIMITS.TERMINAL) || DEFAULT_TERMINAL
+                .slice(0, SETTINGS_LIMITS.TERMINAL) ?? ''
         );
     } catch {
-        return DEFAULT_TERMINAL;
+        return '';
     }
 }
-export const terminalLabel = ref(readTerminal());
+const savedTerminal = ref(readSavedTerminal());
+export const terminalLabel = ref(savedTerminal.value || DEFAULT_TERMINAL);
+/** Whether this browser has a saved label, apart from the default (#399). */
+export function hasSavedTerminalLabel(): boolean {
+    return savedTerminal.value !== '';
+}
+/** Re-read the saved label, e.g. after another tab saved it (#399). */
+export function refreshSavedTerminalLabel(): void {
+    savedTerminal.value = readSavedTerminal();
+    terminalLabel.value = savedTerminal.value || DEFAULT_TERMINAL;
+}
+/**
+ * A LAN terminal (#399): a single-pc build opened by any address but
+ * localhost (the main PC). It must have a saved label before opening a
+ * shift, so its Z-reads never all read "Lane #1". Presentation only: the
+ * label has no permission significance and the API checks nothing.
+ */
+export function isLanTerminal(
+    appEnv: string | undefined = import.meta.env.VITE_APP_ENV as
+        string | undefined,
+    hostname: string = window.location.hostname,
+): boolean {
+    return appEnv === 'single-pc' && hostname !== 'localhost';
+}
+export const TERMINAL_LABEL_REQUIRED =
+    "Ask an admin to set this terminal's label in Store settings.";
 export function saveTerminalLabel(value: string): boolean {
     const label = value.trim();
     if (!label || label.length > SETTINGS_LIMITS.TERMINAL) return false;
     try {
         localStorage.setItem(TERMINAL_KEY, label);
         terminalLabel.value = label;
+        savedTerminal.value = label;
         return true;
     } catch {
         return false;

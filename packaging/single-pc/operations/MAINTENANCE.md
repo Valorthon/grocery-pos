@@ -37,7 +37,8 @@ Book the window with the owner (outside opening hours). Then, in order:
 4. **A verified backup** from the last 36 hours: "Check Grocery POS" shows
    Backups OK (the upgrade refuses otherwise and also takes its own
    pre-upgrade backup).
-5. **Close every Grocery POS tab in Chrome** on the PC.
+5. **Close every Grocery POS tab in Chrome** on the PC and on every LAN
+   terminal (#399), after each terminal shows no pending offline cash.
 6. Note the time: the window starts now.
 
 ## Upgrade

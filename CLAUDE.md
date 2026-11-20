@@ -1325,6 +1325,9 @@ on upstream fixes).
   ships as `release\help\RECOVERY.md` with a "Grocery POS help" Start menu
   entry. The installer's `\GroceryPOS\Nightly log rotation` task (SYSTEM,
   backup time + 30 min) runs `rotate-logs` (keeps 5 rotated mongod logs).
+- LAN terminals (#399): `lanNetwork` checks the LAN IP is still on an
+  adapter, its network is Private, the `GroceryPOS-LAN-HTTPS` rule is on and
+  a verified TLS handshake to the IP passes (unread = `unknown`).
 
 **Single-PC upgrades** (#364, `packaging/single-pc/upgrade/`)
 
@@ -1377,5 +1380,8 @@ on upstream fixes).
 - The default reorder level is whole displayed units for newly created products only;
   explicit existing levels and the legacy default remain unchanged.
 - A bounded terminal label is device-local presentation only, with no permission
-  significance. Offline store identity uses last-known authenticated presentation;
+  significance. A single-pc LAN terminal (any hostname but `localhost`,
+  `isLanTerminal`) can't open a shift until an ADMIN saved its label here
+  (`hasSavedTerminalLabel`; ShiftInModal says "Ask an admin…"), client-only
+  (#399). Offline store identity uses last-known authenticated presentation;
   API responses are never cached by the service worker.

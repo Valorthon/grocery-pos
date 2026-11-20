@@ -111,7 +111,8 @@ Signs: Chrome shows "Your connection is not private" on
 2. Restart the PC (the browser address service may not have started).
 3. If the warning persists, do not continue past it. The vendor runs
    **repair**, which trusts the local certificate again.
-4. Other PCs on the network cannot use this address; that is by design.
+4. Other PCs on the network cannot use this address (`localhost` is each
+   PC itself).
    LAN terminals use this PC's fixed LAN address instead (next section).
 
 ## LAN terminals cannot connect
@@ -127,6 +128,25 @@ the check shows **LAN terminals** WARN.
 3. Still down once the network is back: restart the PC. If the check then
    shows **LAN terminals** FAIL ("not installed"), the vendor runs
    **repair**.
+4. **LAN network** WARN names the cause: the fixed address is gone (next
+   section), the network is Public (set it to Private in Windows Settings >
+   Network & internet), the firewall rule is missing (vendor **repair**), or
+   the certificate on the LAN address does not match (restart, else
+   **repair**).
+
+## LAN address changed
+
+Signs: **LAN network** WARN "this PC no longer has" its address, usually
+after a router change or a DHCP lease moved (#399).
+
+1. Give this PC its fixed address back (router reservation or static IP);
+   nothing else changes and terminals reconnect by themselves.
+2. If the address must change, the vendor runs `-Mode repair -LanIp <new
+IP>` and joins every terminal again (`JoinTerminal.ps1 -Mode rejoin`).
+   A new address is a new browser origin: each terminal's Chrome data for
+   the old one (parked tickets, its terminal label, queued offline cash) is
+   not carried over. Sync offline cash and finish parked tickets first; an
+   ADMIN sets each terminal's label again in Store settings.
 
 ## Interrupted shutdown or power loss
 
