@@ -15,6 +15,10 @@ describe('AuditContextMiddleware IP (#395)', () => {
         expect(metadataFor('::1')?.ip).toBe('127.0.0.1');
     });
 
+    it('unmaps an IPv4-mapped terminal address, like the rate limits', () => {
+        expect(metadataFor('::ffff:192.168.1.20')?.ip).toBe('192.168.1.20');
+    });
+
     it('records a LAN terminal address as is', () => {
         expect(metadataFor('192.168.1.20')?.ip).toBe('192.168.1.20');
     });

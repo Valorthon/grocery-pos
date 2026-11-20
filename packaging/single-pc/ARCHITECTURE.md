@@ -115,7 +115,8 @@ Cloud/staging domains, Secure cookies and origin allowlists retain their default
 Business services, permissions, money, approvals and audit semantics remain shared.
 
 Implemented (#358): API `APP_ENV=single-pc` (`HOST` loopback, default
-`127.0.0.1`; no proxy trust, so `req.ip` is the socket peer; Host/Origin
+`127.0.0.1`; trusts X-Forwarded-For only from loopback Caddy (#395), so `req.ip`
+is each terminal's address and the main PC is 127.0.0.1; Host/Origin
 must match `FRONTEND_URL` (or `LAN_ORIGIN`, #394), checked before any body is parsed, except GET/HEAD
 `/v1/health*` on a loopback Host; Secure host-only Lax cookies), client `VITE_APP_ENV=single-pc` with the
 relative `VITE_API_URL=/v1`, and [caddy/Caddyfile](caddy/Caddyfile). The

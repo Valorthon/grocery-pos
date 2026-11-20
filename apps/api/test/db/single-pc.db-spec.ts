@@ -391,6 +391,8 @@ it('gives each LAN terminal its own manager PIN lockout (#395)', async () => {
 it('ignores a forged X-Forwarded-For entry before the real peer (#395)', async () => {
     // Caddy replaces a client-sent header (no trusted_proxies); were one
     // ever passed along, only the hop Caddy added (the rightmost) counts.
+    // Guards against `trust proxy = true`, which would take the leftmost
+    // (forged) entry and give every forged address a fresh bucket.
     const statuses: number[] = [];
     for (let i = 0; i < 6; i++) {
         const res = await badLogin(
@@ -416,11 +418,23 @@ it('records the LAN terminal address in the audit log (#395)', async () => {
     expect(entry?.ip).toBe('192.168.1.25');
 });
 
-it('records the main PC (no forwarded header) as 127.0.0.1', async () => {
-    await badLogin(PROXY_HEADERS, 'mainpc');
+it('counts the main PC over ::1 or 127.0.0.1 as one client, audited as 127.0.0.1', async () => {
+    // Caddy forwards ::1 when the main PC's browser connects over [::1].
+    const v6 = { ...PROXY_HEADERS, 'x-forwarded-for': '::1' };
+    const v4 = { ...PROXY_HEADERS, 'x-forwarded-for': '127.0.0.1' };
+    const statuses: number[] = [];
+    for (let i = 0; i < 3; i++)
+        statuses.push((await badLogin(v6, 'mainpc')).status);
+    for (let i = 0; i < 3; i++)
+        statuses.push((await badLogin(v4, 'mainpc')).status);
+    // One account bucket across both: the sixth try is refused.
+    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    expect(statuses[5]).toBe(429);
+
     const entries = await db
         .model('AuditLog')
-        .find({ action: AuditAction.AUTH_LOGIN_FAILED })
+        .find({ action: AuditAction.AUTH_LOGIN_FAILED, 'after.name': 'mainpc' })
         .lean<{ ip: string | null }[]>();
-    expect(entries.map((e) => e.ip)).toContain('127.0.0.1');
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) expect(entry.ip).toBe('127.0.0.1');
 });

@@ -14,13 +14,15 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
- * The client address as rate limits and audit record it: IPv6 loopback
- * (and IPv4-mapped `::ffff:127.0.0.1`) become `127.0.0.1`, so the main PC
- * is one client whether its browser reached Caddy over 127.0.0.1 or [::1]
- * (#395). Other addresses are returned unchanged.
+ * The client address as rate limits and audit record it (#395): IPv4-mapped
+ * IPv6 (`::ffff:a.b.c.d`) becomes `a.b.c.d` and IPv6 loopback `127.0.0.1`,
+ * so the main PC is one client whether its browser reached Caddy over
+ * 127.0.0.1 or [::1]. Other addresses are returned unchanged.
  */
 export function canonicalClientIp(ip: string): string {
-    return ip === '::1' || ip === '::ffff:127.0.0.1' ? '127.0.0.1' : ip;
+    if (ip === '::1') return '127.0.0.1';
+    const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+    return mapped ? mapped[1] : ip;
 }
 
 /**
