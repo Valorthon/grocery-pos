@@ -60,7 +60,7 @@ describe('localAccessCheck (#358)', () => {
         ['GET', '/v1/health/live'],
         ['HEAD', '/v1/health/ready'],
         ['GET', '/v1/health'],
-    ])('lets %s %s through from any host', (method, url) => {
+    ])('lets %s %s through from a loopback host', (method, url) => {
         expect(check(req({ host: '127.0.0.1:13000' }, method, url))).toBeNull();
     });
 
@@ -109,7 +109,24 @@ describe('localAccessCheck with a LAN origin (#394)', () => {
     it('refuses health probes on the LAN host only', () => {
         expect(
             check(req({ host: '192.168.1.10:1443' }, 'GET', '/v1/health/live')),
-        ).toBe('Health checks are not available on the LAN.');
+        ).toBe('Health checks are only available on this computer.');
+        for (const host of [
+            '192.168.1.10',
+            '192.168.1.10:443',
+            'rebind.example',
+            'localhost.evil.example',
+        ]) {
+            expect(check(req({ host }, 'GET', '/v1/health/ready'))).toBe(
+                'Health checks are only available on this computer.',
+            );
+        }
+        expect(check(req({}, 'GET', '/v1/health'))).not.toBeNull();
+        expect(
+            check(req({ host: '[::1]:13000' }, 'GET', '/v1/health')),
+        ).toBeNull();
+        expect(
+            check(req({ host: 'localhost' }, 'GET', '/v1/health')),
+        ).toBeNull();
         expect(
             check(req({ host: 'localhost:1443' }, 'GET', '/v1/health/live')),
         ).toBeNull();

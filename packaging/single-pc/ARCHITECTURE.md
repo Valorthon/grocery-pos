@@ -117,7 +117,7 @@ Business services, permissions, money, approvals and audit semantics remain shar
 Implemented (#358): API `APP_ENV=single-pc` (`HOST` loopback, default
 `127.0.0.1`; no proxy trust, so `req.ip` is the socket peer; Host/Origin
 must match `FRONTEND_URL` (or `LAN_ORIGIN`, #394), checked before any body is parsed, except GET/HEAD
-`/v1/health*` off the LAN host; Secure host-only Lax cookies), client `VITE_APP_ENV=single-pc` with the
+`/v1/health*` on a loopback Host; Secure host-only Lax cookies), client `VITE_APP_ENV=single-pc` with the
 relative `VITE_API_URL=/v1`, and [caddy/Caddyfile](caddy/Caddyfile). The
 API binds IPv4 loopback (`127.0.0.1:13000`) only, and Caddy proxies to
 `127.0.0.1`; Caddy itself listens on both `127.0.0.1` and `::1`. Root trust installation,

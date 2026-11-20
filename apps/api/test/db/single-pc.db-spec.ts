@@ -248,12 +248,13 @@ it('accepts the fixed LAN origin on its own host (#394)', async () => {
     });
 });
 
-it('refuses health probes on the LAN host (#394)', async () => {
-    const res = await send('GET', '/health/live', {
-        host: '192.168.1.10:1443',
-    });
-    expect(res.status).toBe(403);
-});
+it.each(['192.168.1.10:1443', '192.168.1.10', 'attacker.example'])(
+    'refuses health probes naming %s (#394)',
+    async (host) => {
+        const res = await send('GET', '/health/live', { host });
+        expect(res.status).toBe(403);
+    },
+);
 
 it('accepts a same-origin request without an Origin header', async () => {
     // Wrong credentials reach the login handler: its generic 401, not

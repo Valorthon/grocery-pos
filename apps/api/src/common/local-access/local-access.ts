@@ -13,9 +13,9 @@ type LocalAccessCheck = (req: Request) => string | null;
 
 /**
  * Health probes. They need no login and return heap, RSS and disk figures,
- * so they are exempt from the Host check only for local callers
- * (diagnostics call the API port directly); on the LAN site they are
- * refused (#394; Caddy refuses them there too, #396).
+ * so they skip the Host check only for a loopback Host (diagnostics call
+ * the API port directly); any other Host, the LAN one with or without a
+ * port included, is refused (#394; Caddy refuses them there too, #396).
  */
 function isHealthProbe(req: Request): boolean {
     return (
@@ -52,22 +52,34 @@ export function allowedOrigins(
  * DNS-rebinding pages (a foreign Host), other local web origins (a foreign
  * Origin, the CSRF defence: SameSite=Lax treats every localhost port as the
  * same site) and a direct call to the loopback API port that does not name
- * an allowed host. GET/HEAD health probes are exempt, except on the LAN host.
+ * an allowed host. GET/HEAD health probes skip it only when Host names a
+ * loopback hostname (localhost, 127.0.0.1, [::1], any port); otherwise
+ * they are refused.
  * Returns the refusal reason, or null.
  */
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** True when Host names a loopback hostname, whatever its port. */
+function isLoopbackHost(host: string | undefined): boolean {
+    if (host === undefined) return false;
+    try {
+        return LOOPBACK_HOSTNAMES.has(new URL(`http://${host}`).hostname);
+    } catch {
+        return false;
+    }
+}
+
 export function localAccessCheck(
     frontendUrl: string,
     lanOrigin?: string,
 ): LocalAccessCheck {
     const origins = allowedOrigins(frontendUrl, lanOrigin);
-    const lanHost =
-        lanOrigin === undefined ? undefined : new URL(lanOrigin).host;
     return (req) => {
         const host = req.headers.host?.toLowerCase();
         if (isHealthProbe(req)) {
-            return host !== undefined && host === lanHost
-                ? 'Health checks are not available on the LAN.'
-                : null;
+            return isLoopbackHost(host)
+                ? null
+                : 'Health checks are only available on this computer.';
         }
         const origin = host === undefined ? undefined : origins.get(host);
         if (origin === undefined) return 'Unexpected host.';
