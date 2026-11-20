@@ -341,7 +341,11 @@ describe('offline lease and signed catalogue', () => {
         f.products.find.mockReturnValue(new Query([]));
         await expect(
             f.service.catalog(f.actor, { lease: String(f.lease._id) }),
-        ).resolves.toEqual({ products: [], next: null });
+        ).resolves.toEqual({
+            products: [],
+            next: null,
+            serverTime: expect.any(Number),
+        });
     });
     it.each(['lease', 'version', 'session', 'shift'])(
         'refuses catalogue after %s changes',

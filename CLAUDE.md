@@ -929,6 +929,13 @@ requestId}`. A 5xx never carries details or internals.
   ADMIN may force-close; revoked cashiers/sessions or closed shifts require
   explicit ADMIN reconciliation on the terminal with a reason. Saved Z-read
   figures never change; late uploads appear in a separate report addendum.
+- Terminal clocks (#398): lease and catalogue answers carry `serverTime`
+  (epoch ms). The client keeps `clockOffset` (RTT/2 midpoint, contracts
+  `offline-clock.ts`) in the IndexedDB state with the lease and uses
+  corrected time for readiness, enqueue and `soldAt`, clamped to at least
+  the lease `issuedAt` and every line proof's `iat`; server rules are
+  unchanged. Above `OFFLINE_CLOCK_WARN_MS` (30 s) the register warns. The
+  single-PC main PC serves NTP to LAN terminals (`timeServerSteps`).
 - Native IndexedDB/service worker APIs add no runtime dependency. Fake IndexedDB
   is test-only. Signed 200-line upload bodies have a scoped 256kb limit; other
   API routes retain their existing 100kb JSON limit.

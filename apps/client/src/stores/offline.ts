@@ -13,6 +13,9 @@ import {
     TenderType,
     UnitOfMeasure,
     quantityAmount,
+    offlineClockOffset,
+    offlineSoldAtMs,
+    OFFLINE_CLOCK_WARN_MS,
     type CurrentShiftView,
     type OfflineCatalogPage,
     type OfflineLeaseView,
@@ -38,6 +41,26 @@ import {
 } from '@/offline/database';
 import type { CartItem } from './cart';
 
+/** The signed `iat` (whole seconds) of a cached price proof, if readable. */
+export function proofIat(proof: string): number | undefined {
+    try {
+        const part = proof.split('.')[1] ?? '';
+        const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+        const iat = (JSON.parse(json) as { iat?: unknown }).iat;
+        return Number.isSafeInteger(iat) ? (iat as number) : undefined;
+    } catch {
+        return undefined;
+    }
+}
+/** Runs a request and measures the clock offset from its `serverTime` (#398). */
+async function timed<T extends { serverTime: number }>(
+    request: () => Promise<{ data: T }>,
+): Promise<{ data: T; offset?: number }> {
+    const sentAt = Date.now();
+    const { data } = await request();
+    const offset = offlineClockOffset(sentAt, Date.now(), data.serverTime);
+    return Number.isFinite(offset) ? { data, offset } : { data };
+}
 const networkFailure = (error: unknown) =>
     isAxiosError(error) && !error.response;
 /** How long an availability probe may take before the API counts as down. */
@@ -79,12 +102,19 @@ export const useOfflineStore = defineStore('offline', () => {
     // Bumped by every connection verdict, so an older probe can't undo it.
     let verdict = 0;
     const offline = computed(() => !connected.value);
+    /** Server minus terminal clock (ms); 0 until a lease answer was seen. */
+    const clockOffset = computed(() => state.value?.clockOffset ?? 0);
+    /** The terminal clock is far enough off to need fixing (#398). */
+    const clockWarning = computed(
+        () => Math.abs(clockOffset.value) > OFFLINE_CLOCK_WARN_MS,
+    );
+    const now = () => Date.now() + clockOffset.value;
     const ready = computed(
         () =>
             !!state.value?.lease &&
             state.value.products.length > 0 &&
             !state.value.suspended &&
-            new Date(state.value.lease.expiresAt).getTime() > Date.now(),
+            new Date(state.value.lease.expiresAt).getTime() > now(),
     );
     async function refreshPending() {
         const gen = generation;
@@ -159,28 +189,36 @@ export const useOfflineStore = defineStore('offline', () => {
             if (previous?.suspended && previous.lease?.shift._id === shift._id)
                 return;
             const terminalId = previous.terminalId;
-            const lease = (
-                await api.post<OfflineLeaseView>('/offline/lease', {
+            const { data: lease, offset } = await timed(() =>
+                api.post<OfflineLeaseView>('/offline/lease', {
                     terminalId,
-                })
-            ).data;
+                }),
+            );
             if (gen !== generation) return;
-            const active = await activateOfflineLease(previous, lease);
+            const active = await activateOfflineLease(previous, lease, offset);
             if (!active || gen !== generation) return;
             if (state.value?.lease?._id !== lease._id)
                 state.value = { ...active, products: [] };
             let cursor = active.cursor;
             do {
-                const page = (
-                    await api.get<OfflineCatalogPage>('/offline/catalog', {
+                const { data: page, offset: pageOffset } = await timed(() =>
+                    api.get<OfflineCatalogPage>('/offline/catalog', {
                         params: {
                             lease: lease._id,
                             ...(cursor ? { after: cursor } : {}),
                         },
-                    })
-                ).data;
+                    }),
+                );
                 if (gen !== generation) return;
-                if (!(await applyOfflinePage(id, lease._id, cursor, page)))
+                if (
+                    !(await applyOfflinePage(
+                        id,
+                        lease._id,
+                        cursor,
+                        page,
+                        pageOffset,
+                    ))
+                )
                     break;
                 cursor = page.next;
             } while (cursor);
@@ -324,7 +362,15 @@ export const useOfflineStore = defineStore('offline', () => {
         const tendered = body.tenders[0].amount;
         if (tendered < subtotal)
             throw new Error('Cash tender does not cover the cached total.');
-        const soldAt = new Date().toISOString();
+        // Corrected terminal clock, clamped so a residual offset can't put
+        // the sale before its lease or a price proof (#398).
+        const soldAt = new Date(
+            offlineSoldAtMs(
+                Date.now() + (saved.clockOffset ?? 0),
+                saved.lease.issuedAt,
+                lines.flatMap((line) => proofIat(line.proof) ?? []),
+            ),
+        ).toISOString();
         const receipt: Receipt = {
             ...(saved.lease.storeIdentity
                 ? { storeIdentity: saved.lease.storeIdentity }
@@ -507,6 +553,8 @@ export const useOfflineStore = defineStore('offline', () => {
         connected,
         offline,
         ready,
+        clockOffset,
+        clockWarning,
         busy,
         error,
         pendingOpen,

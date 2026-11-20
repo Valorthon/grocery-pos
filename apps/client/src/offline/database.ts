@@ -12,6 +12,8 @@ export interface OfflineState {
     products: OfflineProduct[];
     cursor: string | null;
     suspended: boolean;
+    /** Server minus terminal clock in ms, from the last lease/catalogue answer (#398). */
+    clockOffset?: number;
 }
 /** Persist lease/cursor separately so a page never clones the accumulated catalogue. */
 export type OfflineMetadata = Omit<OfflineState, 'products'>;
@@ -204,6 +206,7 @@ export async function saveOfflineState(state: OfflineState): Promise<void> {
 export async function activateOfflineLease(
     previous: OfflineMetadata,
     lease: OfflineLeaseView,
+    clockOffset?: number,
 ): Promise<OfflineMetadata | undefined> {
     const db = await database();
     const tx = db.transaction(['state', 'catalogue'], 'readwrite');
@@ -230,6 +233,7 @@ export async function activateOfflineLease(
             lease,
             cursor: same ? current.cursor : null,
             suspended: false,
+            ...(clockOffset !== undefined && { clockOffset }),
         };
         if (!same)
             tx.objectStore('catalogue').delete(ownerRange(previous.owner));
@@ -254,6 +258,7 @@ export async function applyOfflinePage(
     lease: string,
     after: string | null,
     page: OfflineCatalogPage,
+    clockOffset?: number,
 ): Promise<boolean> {
     const db = await database();
     const tx = db.transaction(['state', 'catalogue'], 'readwrite');
@@ -283,8 +288,13 @@ export async function applyOfflinePage(
         const cursor =
             page.next ??
             (last ? `${last.updatedAt}|${last._id}` : current.cursor);
-        if (cursor !== current.cursor)
-            tx.objectStore('state').put({ ...current, cursor });
+        const offset = clockOffset ?? current.clockOffset;
+        if (cursor !== current.cursor || offset !== current.clockOffset)
+            tx.objectStore('state').put({
+                ...current,
+                cursor,
+                ...(offset !== undefined && { clockOffset: offset }),
+            });
         await completed;
         return true;
     } catch (error) {
@@ -363,7 +373,8 @@ export async function queueOffline(
             !state?.lease ||
             state.suspended ||
             state.lease._id !== entry.request.lease ||
-            new Date(state.lease.expiresAt).getTime() <= Date.now()
+            new Date(state.lease.expiresAt).getTime() <=
+                Date.now() + (state.clockOffset ?? 0)
         )
             throw new Error(
                 'Offline selling is not ready or has expired. Reconnect before collecting cash.',

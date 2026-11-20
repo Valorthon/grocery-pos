@@ -32,6 +32,7 @@ import {
     errorLines,
     firewallState,
     parseLanAddress,
+    parseTimeServer,
     parseArgs,
     redact,
     renderText,
@@ -379,6 +380,80 @@ describe('diagnose', () => {
             redact(JSON.stringify(ok.details)).includes('192.168'),
             false,
         );
+    });
+
+    test('time server for LAN terminals (#398)', async () => {
+        const paths = layout(root);
+        let asked = false;
+        const ctxWith = (facts, manifest = { lanIp: '192.168.1.10' }) =>
+            healthy({
+                readText: async (path) => {
+                    if (path === paths.runtimeManifest)
+                        return JSON.stringify(manifest);
+                    return (await import('node:fs/promises')).readFile(
+                        path,
+                        'utf8',
+                    );
+                },
+                timeServer: async () => {
+                    asked = true;
+                    return facts;
+                },
+            });
+        const run = async (ctx) =>
+            byId(await diagnose({ dataRoot: root }, ctx), 'timeServer');
+        // No LAN IP: info, and nothing is read.
+        const none = await run(ctxWith({ state: 'RUNNING' }, {}));
+        assert.equal(none.status, 'info');
+        assert.equal(asked, false);
+        const ok = await run(
+            ctxWith({ state: 'RUNNING', ntpServerEnabled: true }),
+        );
+        assert.equal(ok.status, 'ok');
+        for (const facts of [
+            { state: 'STOPPED', ntpServerEnabled: true },
+            { state: 'PAUSED', ntpServerEnabled: true },
+            { state: 'absent', ntpServerEnabled: true },
+            { state: 'RUNNING', ntpServerEnabled: false },
+            { state: null, ntpServerEnabled: false },
+        ]) {
+            const warn = await run(ctxWith(facts));
+            assert.equal(warn.status, 'warn', JSON.stringify(facts));
+            assert.deepEqual(warn.steps, GUIDANCE.timeServer);
+        }
+        for (const facts of [
+            null,
+            { state: 'RUNNING', ntpServerEnabled: null },
+            { state: 'UNKNOWN', ntpServerEnabled: true },
+            { state: 'START_PENDING', ntpServerEnabled: true },
+            { state: 'STOP_PENDING', ntpServerEnabled: true },
+            { state: null, ntpServerEnabled: true },
+        ]) {
+            const unknown = await run(ctxWith(facts));
+            assert.equal(unknown.status, 'unknown', JSON.stringify(facts));
+        }
+    });
+
+    test('time server fact parser (#398)', () => {
+        const t = (stdout) => parseTimeServer(stdout);
+        assert.deepEqual(t('svc=Running\r\nntp=1\r\n'), {
+            state: 'RUNNING',
+            ntpServerEnabled: true,
+        });
+        assert.deepEqual(t('svc=Stopped\nntp=0'), {
+            state: 'STOPPED',
+            ntpServerEnabled: false,
+        });
+        // Not found is absent; access denied or any other error is unknown.
+        assert.equal(t('svc=notfound\nntp=1').state, 'absent');
+        assert.equal(t('svc=error\nntp=1').state, null);
+        assert.equal(t('svc=StartPending').state, 'START_PENDING');
+        assert.equal(t('svc=Weird').state, 'UNKNOWN');
+        assert.equal(t('svc=absent').state, 'UNKNOWN');
+        assert.equal(t('ntp=error').ntpServerEnabled, null);
+        assert.equal(t('ntp=').ntpServerEnabled, null);
+        assert.deepEqual(t(''), { state: null, ntpServerEnabled: null });
+        assert.deepEqual(t(undefined), { state: null, ntpServerEnabled: null });
     });
 
     test('LAN network fact parsers (#399)', () => {
@@ -819,9 +894,25 @@ describe('review fixes and owner decisions (#365)', () => {
     test('JSON report keys, check ids and status values are pinned', async () => {
         const report = await diagnose({ dataRoot: root }, healthy());
         assert.deepEqual(Object.keys(report), [...REPORT_KEYS]);
+        const ids = [
+            'versions',
+            'services',
+            'ports',
+            'database',
+            'api',
+            'proxy',
+            'lanProxy',
+            'lanNetwork',
+            'timeServer',
+            'disk',
+            'backups',
+            'clock',
+            'logs',
+        ];
+        assert.deepEqual([...CHECK_IDS], ids);
         assert.deepEqual(
             report.checks.map((c) => c.id),
-            [...CHECK_IDS],
+            ids,
         );
         assert.deepEqual(
             [...STATUSES],

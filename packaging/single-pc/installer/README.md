@@ -270,21 +270,34 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   thumbprint in `%ProgramData%\Valorthon\GroceryPOS-Terminal\terminal.json`,
   points Windows time at the main PC (`w32time` automatic,
   `w32tm /config /manualpeerlist:<IP>,0x8 /syncfromflags:manual /update`,
-  then `/resync /force`, only a warning while the main PC serves no time
-  yet; its NTP server is #398), creates the "Grocery POS" Chrome shortcut
+  then `/resync /force`; a failed resync is only a warning), creates the "Grocery POS" Chrome shortcut
   to `https://<IP>:1443/` (Public Desktop + common Start menu) and checks
   TLS with a plain `GET` of the site root (never `/v1/health*`). Before
   trusting, it loads `root.crt` as a certificate and refuses unless its
   own thumbprint equals `terminal.json`'s and it is a CA; it prints the
   thumbprint to compare with the one "Make terminal package" showed
-  (display only). Time sync works only once the main PC serves time
-  (#398). Join with a
+  (display only). Join with a
   different recorded root is refused; rejoin deletes the old root by its
   recorded thumbprint (never by name: every Caddy root has a similar CN)
   first. Leave deletes only the recorded root and the shortcut; Windows
   time keeps its setting. Windows execution is pending (#401).
+- Time server (#398): with a LAN IP, install/repair make the main PC the
+  terminals' clock: `W32Time\TimeProviders\NtpServer\Enabled=1`,
+  `w32tm /config /reliable:yes /update` (AnnounceFlags 5, so the isolated
+  main PC serves time while unsynced), w32time start type automatic with
+  its triggers removed (`sc triggerinfo w32time delete`), restarted; and
+  the firewall rule `GroceryPOS-LAN-NTP` (inbound UDP 123, localip the LAN
+  IP, `remoteip=localsubnet`, Private profile), deleted first on every run
+  and not recreated without a LAN IP. A terminal polls between
+  `MinPollInterval` and `MaxPollInterval` (standalone defaults 2^10 s, about
+  17 minutes, to 2^15 s, about 9 hours). Windows refuses a correction larger
+  than `MaxPosPhaseCorrection`/`MaxNegPhaseCorrection` (standalone default
+  54000 s, 15 hours): a terminal off by more must have its date and time
+  set by hand first, then `JoinTerminal.ps1 -Mode rejoin`.
+- Upgrade does not apply the time-server or firewall steps: after upgrading
+  a LAN-enabled site from a release before #398, run `repair` once.
 - `uninstall` stops and deletes our services (and the LAN proxy), deletes our tasks,
-  the LAN firewall rule, shortcuts, releases, wrappers and task XML. It **keeps** the data root
+  the LAN firewall rules (`GroceryPOS-LAN-HTTPS`, `GroceryPOS-LAN-NTP`), shortcuts, releases, wrappers and task XML. It **keeps** the data root
   (database, secrets, TLS state, backups, logs, installer state), the
   handover folder, the CA trust (unless `-RemoveCaTrust`, which removes our
   root by serial) and every Chrome profile. It never touches Chrome, .NET,

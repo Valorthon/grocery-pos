@@ -4,7 +4,8 @@
             status.offline ||
             status.ready ||
             status.pending.length ||
-            status.error
+            status.error ||
+            status.clockWarning
         "
         class="shrink-0 px-3 py-2 bg-amber-50 border-b border-amber-200 text-sm flex flex-wrap items-center gap-2"
         role="status"
@@ -25,6 +26,13 @@
                 ? 'Cached prices; no discounts, GCash, voids or refunds.'
                 : 'Offline cash is not prepared. Reconnect before selling.'
         }}</span>
+        <span
+            v-if="status.clockWarning"
+            class="text-red-800"
+            data-testid="offline-clock-warning"
+            >This terminal's clock is {{ clockDrift }} off the main PC. Ask the
+            owner to fix its time setting.</span
+        >
         <span v-if="status.error" class="text-red-800">{{ status.error }}</span>
         <button
             v-if="status.pending.length"
@@ -107,7 +115,14 @@
     </BaseModal>
 </template>
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 import { useOfflineStore } from '@/stores/offline';
 import { useAuthStore } from '@/stores/auth';
 import { useShiftStore } from '@/stores/shift';
@@ -120,6 +135,13 @@ import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
 const status = useOfflineStore();
+/** The offset in whole minutes, or seconds below a minute. */
+const clockDrift = computed(() => {
+    const seconds = Math.round(Math.abs(status.clockOffset) / 1000);
+    return seconds < 60
+        ? `${seconds} seconds`
+        : `${Math.round(seconds / 60)} min`;
+});
 const auth = useAuthStore();
 const shifts = useShiftStore();
 const reasons = reactive<Record<string, string>>({});

@@ -12,6 +12,8 @@ import {
     ErrorCode,
     Role,
     UnitOfMeasure,
+    offlineClockOffset,
+    offlineSoldAtMs,
     type OfflineCatalogPage,
     type OfflineLeaseView,
     type OfflineSaleRequest,
@@ -124,6 +126,51 @@ beforeEach(async () => {
         lines: [{ product, quantity: 450, proof: item.proof }],
     };
 });
+it.each([
+    ['5 min slow', -300_000],
+    ['5 min fast', 300_000],
+])(
+    'accepts a clock-corrected soldAt from a terminal %s (#398)',
+    async (_, skew) => {
+        // The terminal measures its offset around a fresh lease answer.
+        const sentAt = Date.now() + skew;
+        const again = await read<OfflineLeaseView>(
+            await db.call(seller, 'POST', '/offline/lease', { terminalId }),
+        );
+        const offset = offlineClockOffset(
+            sentAt,
+            Date.now() + skew,
+            again.body.serverTime,
+        );
+        expect(Math.abs(offset + skew)).toBeLessThan(2000);
+        const iat = (
+            JSON.parse(
+                Buffer.from(
+                    body.lines[0].proof.split('.')[1],
+                    'base64url',
+                ).toString(),
+            ) as { iat: number }
+        ).iat;
+        const raw = new Date(Date.now() + skew).toISOString();
+        const refused = await db.call(seller, 'POST', '/offline/sync', {
+            ...body,
+            soldAt: raw,
+        });
+        expect(refused.status).toBe(409);
+        const soldAt = new Date(
+            offlineSoldAtMs(Date.now() + skew + offset, lease.issuedAt, [iat]),
+        ).toISOString();
+        const result = await read<Receipt>(
+            await db.call(seller, 'POST', '/offline/sync', {
+                ...body,
+                idempotencyKey: randomUUID(),
+                soldAt,
+            }),
+        );
+        expect(result.status).toBe(201);
+        expect(result.body.createdAt).toBe(soldAt);
+    },
+);
 it('preserves signed cached price after an online price edit, original time and exact weighed stock', async () => {
     await db
         .model('Product')

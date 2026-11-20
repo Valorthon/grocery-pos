@@ -48,6 +48,7 @@ const state = (owner = 'owner', lease = 'lease'): OfflineState => ({
             openingFloat: 10000,
             movements: [],
         },
+        serverTime: 0,
     },
 });
 beforeEach(() => {
@@ -82,6 +83,7 @@ it('commits a page, tombstones and its resume cursor together, retaining other o
         await applyOfflinePage('owner', 'lease', null, {
             products: [product('a'), product('old', 150)],
             next: 'page-2',
+            serverTime: 0,
         }),
     ).toBe(true);
     closeOfflineDatabase();
@@ -90,6 +92,7 @@ it('commits a page, tombstones and its resume cursor together, retaining other o
         await applyOfflinePage('owner', 'lease', 'page-2', {
             products: [{ ...product('old'), isActive: false }, product('b')],
             next: null,
+            serverTime: 0,
         }),
     ).toBe(true);
     expect((await readOfflineState('owner'))?.products).toEqual([
@@ -120,7 +123,11 @@ it('rolls back page writes and cursor when a later product hits a quota failure,
                 throw new DOMException('full', 'QuotaExceededError');
             return original.call(this, value, key);
         });
-    const page = { products: [product('a'), product('b')], next: 'next' };
+    const page = {
+        products: [product('a'), product('b')],
+        next: 'next',
+        serverTime: 0,
+    };
     await expect(
         applyOfflinePage('owner', 'lease', null, page),
     ).rejects.toThrow('full');
@@ -132,12 +139,13 @@ it('rolls back page writes and cursor when a later product hits a quota failure,
 
 it('ignores a late page after another tab advances the cursor', async () => {
     await saveOfflineState(state());
-    const page = { products: [product('a')], next: 'next' };
+    const page = { products: [product('a')], next: 'next', serverTime: 0 };
     expect(await applyOfflinePage('owner', 'lease', null, page)).toBe(true);
     expect(
         await applyOfflinePage('owner', 'lease', null, {
             products: [product('a', 999)],
             next: 'stale',
+            serverTime: 0,
         }),
     ).toBe(false);
     expect(
@@ -154,6 +162,7 @@ it('checks suspension under the page transaction lock and never resumes a closin
     const updating = applyOfflinePage('owner', 'lease', null, {
         products: [product('new')],
         next: 'next',
+        serverTime: 0,
     });
     await suspending;
     expect(await updating).toBe(false);
@@ -180,12 +189,14 @@ it('atomically resets visibility for a new lease and rejects older lease respons
         await applyOfflinePage('owner', 'lease', null, {
             products: [product('stale')],
             next: null,
+            serverTime: 0,
         }),
     ).toBe(false);
     expect(
         await applyOfflinePage('owner', 'next-lease', null, {
             products: [product('new')],
             next: null,
+            serverTime: 0,
         }),
     ).toBe(true);
     expect((await readOfflineState('owner'))?.products).toEqual([
@@ -200,6 +211,7 @@ it('does not rewrite catalogue or cursor for an empty unchanged delta', async ()
         await applyOfflinePage('owner', 'lease', null, {
             products: [],
             next: null,
+            serverTime: 0,
         }),
     ).toBe(true);
     expect(writes).not.toHaveBeenCalled();
@@ -236,6 +248,7 @@ it('never creates catalogue rows for a missing owner or a mismatched terminal', 
         await applyOfflinePage('absent', 'lease', null, {
             products: [product('a')],
             next: null,
+            serverTime: 0,
         }),
     ).toBe(false);
     const previous = await getOrCreateOfflineState('owner', () => 'terminal');

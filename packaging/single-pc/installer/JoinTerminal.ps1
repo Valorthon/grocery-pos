@@ -136,9 +136,11 @@ New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 @{ thumbprint = $thumbprint; serverUrl = $info.serverUrl } |
     ConvertTo-Json | Set-Content -LiteralPath $stateFile -Encoding UTF8
 
-# Windows time from the main PC (its NTP server is #398). w32time is
-# trigger-start on workgroup PCs, so it starts automatically from now on.
+# Windows time from the main PC (it serves NTP since #398). w32time is
+# trigger-start on workgroup PCs, so it starts automatically from now on,
+# without the triggers that stop it again.
 & sc.exe config w32time start= auto | Out-Null
+& sc.exe triggerinfo w32time delete | Out-Null
 Start-Service -Name w32time -ErrorAction SilentlyContinue
 & w32tm.exe /config ('/manualpeerlist:' + $info.lanIp + ',0x8') /syncfromflags:manual /update | Out-Null
 if ($LASTEXITCODE -ne 0) { Stop-Failed 'Could not set Windows time to follow the main PC.' }

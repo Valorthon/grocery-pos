@@ -65,6 +65,7 @@ import {
     caddyRootCertificate,
     evaluatePreflight,
     firewallSteps,
+    timeServerSteps,
     handoverAclSteps,
     locations,
     parseTime,
@@ -587,6 +588,7 @@ async function installOrRepair(options, ctx, log) {
         );
         await runSteps(aclSteps(paths, release, { lanIp }), ctx);
         await runSteps(firewallSteps(release, lanIp), ctx);
+        await runSteps(timeServerSteps(lanIp), ctx);
         for (const def of serviceDefinitions(paths, release, { lanIp })) {
             await ctx.startService(def.name);
             if (!def.optional) {

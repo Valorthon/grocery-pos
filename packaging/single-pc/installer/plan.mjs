@@ -464,6 +464,100 @@ export function firewallSteps(release, lanIp) {
     return steps;
 }
 
+/** The Windows Firewall rule for terminal time sync (#398). */
+export const NTP_FIREWALL_RULE = 'GroceryPOS-LAN-NTP';
+const W32TIME_KEY = 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\W32Time';
+
+/**
+ * The main PC serves Windows time (NTP, UDP 123) to LAN terminals (#398):
+ * the NtpServer provider on, `/reliable:yes` (AnnounceFlags=5, so an
+ * isolated, unsynced main PC is still served), w32time automatic without
+ * its workgroup trigger-stop, then restarted. Inbound UDP 123 on the LAN IP
+ * only, from the local subnet, Private profile. Without a LAN IP the rule
+ * is only deleted; the time settings stay (harmless with no rule).
+ */
+export function timeServerSteps(lanIp) {
+    const steps = [removeNtpFirewallStep()];
+    if (!lanIp) return steps;
+    steps.push(
+        {
+            kind: 'exec',
+            file: 'reg.exe',
+            args: [
+                'add',
+                `${W32TIME_KEY}\\TimeProviders\\NtpServer`,
+                '/v',
+                'Enabled',
+                '/t',
+                'REG_DWORD',
+                '/d',
+                '1',
+                '/f',
+            ],
+        },
+        {
+            kind: 'exec',
+            file: 'sc.exe',
+            args: ['config', 'w32time', 'start=', 'auto'],
+        },
+        {
+            kind: 'exec',
+            file: 'sc.exe',
+            args: ['triggerinfo', 'w32time', 'delete'],
+            // Already without triggers is not a failure.
+            allowFailure: true,
+        },
+        {
+            kind: 'exec',
+            file: 'net.exe',
+            args: ['stop', 'w32time'],
+            // Not running yet is not a failure.
+            allowFailure: true,
+        },
+        { kind: 'exec', file: 'net.exe', args: ['start', 'w32time'] },
+        {
+            kind: 'exec',
+            file: 'w32tm.exe',
+            args: ['/config', '/reliable:yes', '/update'],
+        },
+        {
+            kind: 'exec',
+            file: 'netsh.exe',
+            args: [
+                'advfirewall',
+                'firewall',
+                'add',
+                'rule',
+                `name=${NTP_FIREWALL_RULE}`,
+                'dir=in',
+                'action=allow',
+                'protocol=UDP',
+                'localport=123',
+                `localip=${lanIp}`,
+                'remoteip=localsubnet',
+                'profile=private',
+                'enable=yes',
+            ],
+        },
+    );
+    return steps;
+}
+
+function removeNtpFirewallStep() {
+    return {
+        kind: 'exec',
+        file: 'netsh.exe',
+        args: [
+            'advfirewall',
+            'firewall',
+            'delete',
+            'rule',
+            `name=${NTP_FIREWALL_RULE}`,
+        ],
+        allowFailure: true,
+    };
+}
+
 function removeFirewallStep() {
     return {
         kind: 'exec',
@@ -878,7 +972,7 @@ export function uninstallSteps({ installedServices, shortcuts }) {
         steps.push({ kind: 'exec', file: 'sc.exe', args: ['delete', name] });
         steps.push({ kind: 'gone', name });
     }
-    steps.push(removeFirewallStep());
+    steps.push(removeFirewallStep(), removeNtpFirewallStep());
     for (const path of shortcuts) steps.push({ kind: 'remove', path });
     return steps;
 }

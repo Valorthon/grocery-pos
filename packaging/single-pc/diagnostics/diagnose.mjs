@@ -88,6 +88,7 @@ export const CHECK_IDS = Object.freeze([
     'proxy',
     'lanProxy',
     'lanNetwork',
+    'timeServer',
     'disk',
     'backups',
     'clock',
@@ -199,6 +200,10 @@ export const GUIDANCE = Object.freeze({
     ],
     lanCertificate: [
         'The LAN address\'s certificate does not match. Restart the PC; if it persists, ask your vendor to run the installer in repair mode. See RECOVERY.md "LAN terminals cannot connect".',
+    ],
+    timeServer: [
+        "LAN terminals take their time from this PC, but its time service is off, so the terminals' clocks will drift and offline cash sales may be refused.",
+        'Restart the PC. If this stays, ask your vendor to run the installer in repair mode. See RECOVERY.md "Terminal clocks".',
     ],
     lanProxyMissing: [
         'LAN terminals are configured but their service is not installed. Ask your vendor to run the installer in repair mode.',
@@ -482,6 +487,56 @@ export async function checkLanProxy(ctx, paths) {
             ? `LAN terminals connect to https://${lanIp}:${PORTS.proxy}.`
             : 'Service state is only read on Windows.',
         { details: { ...details, listening: answering } },
+    );
+}
+
+/**
+ * The time server for LAN terminals (#398): w32time running and the
+ * NtpServer provider enabled. Read-only; facts it cannot read are `unknown`.
+ */
+export async function checkTimeServer(ctx, paths) {
+    const title = 'Time for LAN terminals';
+    const lanIp = await configuredLanIp(ctx, paths);
+    if (!lanIp)
+        return result(
+            'timeServer',
+            title,
+            'info',
+            'No LAN terminals are set up.',
+        );
+    const facts = (await ctx.timeServer?.()) ?? null;
+    const state = facts?.state ?? null;
+    const enabled = facts?.ntpServerEnabled ?? null;
+    const details = { lanIp, service: state, ntpServerEnabled: enabled };
+    // Pending and unreadable states are unknown, not a warning.
+    const running =
+        state === 'RUNNING'
+            ? true
+            : ['STOPPED', 'PAUSED', 'absent'].includes(state)
+              ? false
+              : null;
+    if (running === false || enabled === false)
+        return result(
+            'timeServer',
+            title,
+            'warn',
+            'This PC is not serving time to the LAN terminals; their clocks will drift.',
+            { details, steps: GUIDANCE.timeServer },
+        );
+    if (running === null || enabled === null)
+        return result(
+            'timeServer',
+            title,
+            'unknown',
+            'Could not read the Windows time service settings.',
+            { details },
+        );
+    return result(
+        'timeServer',
+        title,
+        'ok',
+        'This PC serves time to the LAN terminals.',
+        { details },
     );
 }
 
@@ -1005,6 +1060,7 @@ export async function diagnose(options, ctx = realContext()) {
         await checkProxy(ctx, paths, now),
         await checkLanProxy(ctx, paths),
         await checkLanNetwork(ctx, paths),
+        await checkTimeServer(ctx, paths),
         await checkDisk(ctx, paths, programDir),
         await checkBackups(paths, now),
         await checkClock(ctx, paths, now),
@@ -1216,6 +1272,31 @@ export async function tailFile(path, bytes) {
 }
 
 /** Get-Service Status names (a locale-independent enum) to sc.exe's. */
+/**
+ * The time-server facts printed by realContext().timeServer: `svc=<Status>`
+ * or `svc=notfound` (absent) or `svc=error` (unknown), and `ntp=<Enabled>`
+ * or `ntp=error`. Missing or empty values are null (unknown).
+ */
+export function parseTimeServer(stdout) {
+    const values = {};
+    for (const line of String(stdout ?? '').split(/\r?\n/)) {
+        const m = /^(svc|ntp)=(.*)$/.exec(line.trim());
+        if (m) values[m[1]] = m[2].trim();
+    }
+    const svc = values.svc;
+    const state =
+        !svc || svc === 'error'
+            ? null
+            : svc === 'notfound'
+              ? 'absent'
+              : serviceStateFromStatus(svc);
+    const ntp = values.ntp;
+    return {
+        state,
+        ntpServerEnabled: ntp && /^\d+$/.test(ntp) ? Number(ntp) === 1 : null,
+    };
+}
+
 export function serviceStateFromStatus(text) {
     const map = {
         Running: 'RUNNING',
@@ -1284,6 +1365,17 @@ export function realContext() {
                       .map((l) => l.trim())
                       .filter(Boolean)
                 : null;
+        },
+        async timeServer() {
+            if (!windows) return null;
+            // One call; every failure prints its own marker (parseTimeServer).
+            const { code, stdout } = await execCapture('powershell.exe', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                "try { 'svc=' + [string](Get-Service -Name 'w32time' -ErrorAction Stop).Status } catch [Microsoft.PowerShell.Commands.ServiceCommandException] { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'svc=notfound' } else { 'svc=error' } } catch { 'svc=error' }; try { 'ntp=' + [string](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\TimeProviders\\NtpServer' -Name Enabled -ErrorAction Stop).Enabled } catch { 'ntp=error' }",
+            ]);
+            return code === 0 ? parseTimeServer(stdout) : null;
         },
         async lanAddress(lanIp) {
             if (!windows) return null;

@@ -172,6 +172,23 @@ language (turn on "Set time automatically" if the PC is online), then restart
 the PC. Do not sell while the clock is wrong: sales would land on the wrong
 day.
 
+With LAN terminals the main PC is their clock (#398): the shop network has no
+internet time, so check the main PC's date and time against a phone once a
+week and after a power cut. A terminal follows it by itself (about every
+17 minutes to 9 hours); a terminal more than 15 hours off (Windows'
+`MaxPosPhaseCorrection`/`MaxNegPhaseCorrection` limit, 54000 s), or one
+whose register shows "This terminal's clock is … off the main PC. Ask the
+owner to fix its time setting.", needs its date and time set by hand
+first, then `JoinTerminal.ps1 -Mode rejoin`.
+
+## Terminal clocks
+
+"Check Grocery POS" warns "This PC is not serving time to the LAN terminals"
+when the Windows Time service is stopped or its time server is turned off.
+The terminals' clocks then drift and offline cash sales may be refused.
+Restart the PC. If the warning stays after a restart, the time server is
+turned off: ask your vendor to run repair.
+
 ## After an interrupted or failed upgrade (vendor)
 
 Grocery POS stays closed until the upgrade is finished or rolled back; that
