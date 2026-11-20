@@ -234,7 +234,7 @@ export function readmeText(info) {
         `5. Open "${PRODUCT}" on the desktop.`,
         '',
         'Time: the script sets this terminal to take its time from the main PC.',
-        'Windows then checks it by itself (about every 17 minutes to a few',
+        'Windows then checks it by itself (about every 17 minutes to 9',
         'hours). A clock more than 15 hours off (MaxPosPhaseCorrection and',
         'MaxNegPhaseCorrection, 54000 s) is not corrected: set the date',
         'and time by hand first, then run the script again. If the main PC is',

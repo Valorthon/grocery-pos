@@ -508,8 +508,13 @@ export async function checkTimeServer(ctx, paths) {
     const state = facts?.state ?? null;
     const enabled = facts?.ntpServerEnabled ?? null;
     const details = { lanIp, service: state, ntpServerEnabled: enabled };
+    // Pending and unreadable states are unknown, not a warning.
     const running =
-        state === null || state === 'UNKNOWN' ? null : state === 'RUNNING';
+        state === 'RUNNING'
+            ? true
+            : ['STOPPED', 'PAUSED', 'absent'].includes(state)
+              ? false
+              : null;
     if (running === false || enabled === false)
         return result(
             'timeServer',
@@ -1267,6 +1272,31 @@ export async function tailFile(path, bytes) {
 }
 
 /** Get-Service Status names (a locale-independent enum) to sc.exe's. */
+/**
+ * The time-server facts printed by realContext().timeServer: `svc=<Status>`
+ * or `svc=notfound` (absent) or `svc=error` (unknown), and `ntp=<Enabled>`
+ * or `ntp=error`. Missing or empty values are null (unknown).
+ */
+export function parseTimeServer(stdout) {
+    const values = {};
+    for (const line of String(stdout ?? '').split(/\r?\n/)) {
+        const m = /^(svc|ntp)=(.*)$/.exec(line.trim());
+        if (m) values[m[1]] = m[2].trim();
+    }
+    const svc = values.svc;
+    const state =
+        !svc || svc === 'error'
+            ? null
+            : svc === 'notfound'
+              ? 'absent'
+              : serviceStateFromStatus(svc);
+    const ntp = values.ntp;
+    return {
+        state,
+        ntpServerEnabled: ntp && /^\d+$/.test(ntp) ? Number(ntp) === 1 : null,
+    };
+}
+
 export function serviceStateFromStatus(text) {
     const map = {
         Running: 'RUNNING',
@@ -1338,27 +1368,14 @@ export function realContext() {
         },
         async timeServer() {
             if (!windows) return null;
-            const svc = await execCapture('powershell.exe', [
+            // One call; every failure prints its own marker (parseTimeServer).
+            const { code, stdout } = await execCapture('powershell.exe', [
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
-                "$s = Get-Service -Name 'w32time' -ErrorAction SilentlyContinue; if ($s) { [string]$s.Status }",
+                "try { 'svc=' + [string](Get-Service -Name 'w32time' -ErrorAction Stop).Status } catch [Microsoft.PowerShell.Commands.ServiceCommandException] { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'svc=notfound' } else { 'svc=error' } } catch { 'svc=error' }; try { 'ntp=' + [string](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\TimeProviders\\NtpServer' -Name Enabled -ErrorAction Stop).Enabled } catch { 'ntp=error' }",
             ]);
-            const reg = await execCapture('powershell.exe', [
-                '-NoProfile',
-                '-NonInteractive',
-                '-Command',
-                "(Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\TimeProviders\\NtpServer' -Name Enabled -ErrorAction Stop).Enabled",
-            ]);
-            const value = reg.stdout.trim();
-            return {
-                state:
-                    svc.code === 0 ? serviceStateFromStatus(svc.stdout) : null,
-                ntpServerEnabled:
-                    reg.code === 0 && /^\d+$/.test(value)
-                        ? Number(value) === 1
-                        : null,
-            };
+            return code === 0 ? parseTimeServer(stdout) : null;
         },
         async lanAddress(lanIp) {
             if (!windows) return null;
