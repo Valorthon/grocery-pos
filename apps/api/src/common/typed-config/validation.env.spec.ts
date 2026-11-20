@@ -121,6 +121,51 @@ describe('envSchema single-pc (#358)', () => {
         ]);
     });
 
+    it.each([
+        'https://192.168.1.10:1443',
+        'https://10.0.0.2:1443',
+        'https://172.16.0.1:1443',
+        'https://172.31.255.254:1443',
+    ])('accepts the LAN_ORIGIN %s (#394)', (LAN_ORIGIN) => {
+        expect(issuePaths({ ...SINGLE_PC_ENV, LAN_ORIGIN })).toEqual([]);
+        expect(validateEnv({ ...SINGLE_PC_ENV, LAN_ORIGIN }).LAN_ORIGIN).toBe(
+            LAN_ORIGIN,
+        );
+    });
+
+    it.each([
+        'http://192.168.1.10:1443',
+        'https://192.168.1.10:1444',
+        'https://192.168.1.10',
+        'https://192.168.1.10:1443/',
+        'https://u:p@192.168.1.10:1443',
+        'https://8.8.8.8:1443',
+        'https://172.32.0.1:1443',
+        'https://127.0.0.1:1443',
+        'https://169.254.1.1:1443',
+        'https://localhost:1443',
+        'https://pos.lan:1443',
+        'https://[fd00::1]:1443',
+        'https://192.168.1.300:1443',
+        'not a url',
+    ])('refuses the LAN_ORIGIN %s', (LAN_ORIGIN) => {
+        expect(issuePaths({ ...SINGLE_PC_ENV, LAN_ORIGIN })).toEqual([
+            'LAN_ORIGIN',
+        ]);
+    });
+
+    it('treats a blank LAN_ORIGIN as unset', () => {
+        expect(
+            envSchema.parse({ ...SINGLE_PC_ENV, LAN_ORIGIN: ' ' }).LAN_ORIGIN,
+        ).toBe(undefined);
+    });
+
+    it('refuses a LAN_ORIGIN outside single-pc', () => {
+        expect(
+            issuePaths({ ...PROD_ENV, LAN_ORIGIN: 'https://192.168.1.10:443' }),
+        ).toEqual(['LAN_ORIGIN']);
+    });
+
     it.each(['127.0.0.1', '::1'])('accepts the loopback HOST %s', (HOST) => {
         expect(issuePaths({ ...SINGLE_PC_ENV, HOST })).toEqual([]);
     });

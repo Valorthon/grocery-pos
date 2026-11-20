@@ -23,8 +23,9 @@ export class CookieService {
     /**
      * prod and stage (APP_ENV) are both served over HTTPS, so their
      * cookies are Secure (#29: stage used to get plain cookies). So is
-     * single-pc (#358), at `https://localhost:1443`: Secure, host-only (it
-     * has no DOMAIN) and Lax, since the API is same-origin behind its proxy.
+     * single-pc (#358), at `https://localhost:1443` and, for LAN terminals,
+     * the fixed LAN origin (#394): Secure, host-only (no DOMAIN, so each
+     * origin keeps its own cookies) and Lax, since the API is same-origin behind its proxy.
      * Lax is not the CSRF defence there: every localhost port is the same
      * site, so another local web app could still send these cookies. The
      * Host/Origin check (`common/local-access`) is what refuses it.

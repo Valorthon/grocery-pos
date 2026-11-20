@@ -21,6 +21,7 @@ import type { DbApp } from './db-app';
 Object.assign(process.env, {
     APP_ENV: 'single-pc',
     FRONTEND_URL: 'https://localhost:1443',
+    LAN_ORIGIN: 'https://192.168.1.10:1443',
     DOMAIN: '',
     // Strict secrets apply: distinct, non-placeholder values.
     COOKIE_SECRET: 'Q8wN2eR5tY1uI4oP7aS0dF3gH6jK9lZ2xC5vB8nM1qW4eR7tY0uI3oP6',
@@ -31,6 +32,12 @@ const ORIGIN = 'https://localhost:1443';
 const PROXY_HEADERS = {
     host: 'localhost:1443',
     origin: ORIGIN,
+    [WIRE_VERSION_HEADER]: String(WIRE_VERSION),
+};
+const LAN_ORIGIN = 'https://192.168.1.10:1443';
+const LAN_HEADERS = {
+    host: '192.168.1.10:1443',
+    origin: LAN_ORIGIN,
     [WIRE_VERSION_HEADER]: String(WIRE_VERSION),
 };
 const PASSWORD = 'single-pc-pass-358';
@@ -202,6 +209,52 @@ it.each([
     });
     expect(typeof body.requestId).toBe('string');
 });
+
+it.each([
+    [
+        'the LAN host with the localhost Origin',
+        { ...LAN_HEADERS, origin: ORIGIN },
+    ],
+    [
+        'the localhost host with the LAN Origin',
+        { ...PROXY_HEADERS, origin: LAN_ORIGIN },
+    ],
+    [
+        'an unlisted private IP',
+        {
+            ...LAN_HEADERS,
+            host: '192.168.1.11:1443',
+            origin: 'https://192.168.1.11:1443',
+        },
+    ],
+])('refuses %s (#394)', async (_label, headers) => {
+    const res = await post('/auth/login', headers, {
+        username: 'owner',
+        password: 'not-the-password',
+    });
+    expect(res.status).toBe(403);
+    expect(JSON.parse(res.body)).toMatchObject({ error: ErrorCode.FORBIDDEN });
+});
+
+it('accepts the fixed LAN origin on its own host (#394)', async () => {
+    // Wrong credentials reach the login handler: its generic 401.
+    const res = await post('/auth/login', LAN_HEADERS, {
+        username: 'owner',
+        password: 'not-the-password',
+    });
+    expect(res.status).toBe(401);
+    expect(JSON.parse(res.body)).toMatchObject({
+        error: ErrorCode.AUTH_INVALID_CREDENTIALS,
+    });
+});
+
+it.each(['192.168.1.10:1443', '192.168.1.10', 'attacker.example'])(
+    'refuses health probes naming %s (#394)',
+    async (host) => {
+        const res = await send('GET', '/health/live', { host });
+        expect(res.status).toBe(403);
+    },
+);
 
 it('accepts a same-origin request without an Origin header', async () => {
     // Wrong credentials reach the login handler: its generic 401, not

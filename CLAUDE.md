@@ -1036,10 +1036,16 @@ requestId}`. A 5xx never carries details or internals.
   attributes; Lax is no CSRF defence between localhost ports, the Origin
   check is. `useLocalAccess` (`common/local-access`, first in
   `useBodyParsers`, before any body is read) refuses any request whose Host
-  isn't FRONTEND_URL's host or whose Origin (when sent) isn't its origin:
-  403 `FORBIDDEN` with the normal error body (the filter reports
-  `originalUrl`). GET/HEAD `/v1/health*` are exempt. Not installed in any
-  other APP_ENV.
+  isn't an allowed host or whose Origin (when sent) isn't that host's
+  origin: 403 `FORBIDDEN` with the normal error body (the filter reports
+  `originalUrl`). GET/HEAD `/v1/health*` skip it only when Host's
+  hostname is localhost, 127.0.0.1 or [::1] (any port), else 403. Not installed in any other APP_ENV.
+- LAN terminals (#394, epic #402): optional `LAN_ORIGIN`, single-pc only,
+  exactly `https://<RFC 1918 IPv4>:<FRONTEND_URL's port>` (no hostname).
+  The allowed origins are exactly FRONTEND_URL and LAN_ORIGIN; Host and
+  Origin must name the same one. CORS (`corsFor`) answers only the origin
+  of the request's Host. Cookies stay host-only per origin. Health probes
+  from the LAN are refused in the API (and in Caddy, #396).
 - Client `VITE_APP_ENV=single-pc` requires `VITE_API_URL=/v1` (relative,
   same-origin) and no `VITE_DOMAIN`; other stages still need an absolute URL.
 - Caddy (`packaging/single-pc/caddy/Caddyfile`) binds 127.0.0.1 + ::1:1443,

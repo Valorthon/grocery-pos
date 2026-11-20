@@ -11,7 +11,12 @@ import { isSinglePcEnv } from '../typed-config/app-env';
 
 type LocalAccessCheck = (req: Request) => string | null;
 
-/** Health probes: they expose no data, and local diagnostics call the API port directly. */
+/**
+ * Health probes. They need no login and return heap, RSS and disk figures,
+ * so they skip the Host check only for a loopback Host (diagnostics call
+ * the API port directly); any other Host, the LAN one with or without a
+ * port included, is refused (#394; Caddy refuses them there too, #396).
+ */
 function isHealthProbe(req: Request): boolean {
     return (
         (req.method === 'GET' || req.method === 'HEAD') &&
@@ -20,25 +25,64 @@ function isHealthProbe(req: Request): boolean {
 }
 
 /**
- * The single-pc entry check (#358). The browser reaches the API only
- * through the local HTTPS proxy at FRONTEND_URL (`https://localhost:1443`),
- * which forwards the original Host. So every request must name that host,
- * and a request that carries an Origin must come from that origin. This
- * refuses DNS-rebinding pages (a foreign Host), other local web origins (a
- * foreign Origin, the CSRF defence: SameSite=Lax treats every localhost
- * port as the same site) and a direct call to the loopback API port that
- * does not name the proxy's host. GET/HEAD health probes are exempt.
+ * The allowed origins keyed by their lower-case host: FRONTEND_URL
+ * (`https://localhost:1443`) and, with LAN terminals, LAN_ORIGIN
+ * (`https://<fixed LAN IP>:1443`, #394). Never any other host.
+ */
+export function allowedOrigins(
+    frontendUrl: string,
+    lanOrigin?: string,
+): Map<string, string> {
+    const origins = new Map<string, string>();
+    for (const value of [frontendUrl, lanOrigin]) {
+        if (value === undefined) continue;
+        const url = new URL(value);
+        origins.set(url.host.toLowerCase(), url.origin);
+    }
+    return origins;
+}
+
+/**
+ * The single-pc entry check (#358, #394). The browser reaches the API only
+ * through the local HTTPS proxy, at FRONTEND_URL on the main PC or at
+ * LAN_ORIGIN from a LAN terminal, and the proxy forwards the original Host.
+ * So every request must name one of those two hosts, and a request that
+ * carries an Origin must come from the origin of that same host (a LAN page
+ * can't act on the localhost site, nor the reverse). This refuses
+ * DNS-rebinding pages (a foreign Host), other local web origins (a foreign
+ * Origin, the CSRF defence: SameSite=Lax treats every localhost port as the
+ * same site) and a direct call to the loopback API port that does not name
+ * an allowed host. GET/HEAD health probes skip it only when Host names a
+ * loopback hostname (localhost, 127.0.0.1, [::1], any port); otherwise
+ * they are refused.
  * Returns the refusal reason, or null.
  */
-export function localAccessCheck(frontendUrl: string): LocalAccessCheck {
-    const url = new URL(frontendUrl);
-    const origin = url.origin;
-    const host = url.host.toLowerCase();
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/** True when Host names a loopback hostname, whatever its port. */
+function isLoopbackHost(host: string | undefined): boolean {
+    if (host === undefined) return false;
+    try {
+        return LOOPBACK_HOSTNAMES.has(new URL(`http://${host}`).hostname);
+    } catch {
+        return false;
+    }
+}
+
+export function localAccessCheck(
+    frontendUrl: string,
+    lanOrigin?: string,
+): LocalAccessCheck {
+    const origins = allowedOrigins(frontendUrl, lanOrigin);
     return (req) => {
-        if (isHealthProbe(req)) return null;
-        if (req.headers.host?.toLowerCase() !== host) {
-            return 'Unexpected host.';
+        const host = req.headers.host?.toLowerCase();
+        if (isHealthProbe(req)) {
+            return isLoopbackHost(host)
+                ? null
+                : 'Health checks are only available on this computer.';
         }
+        const origin = host === undefined ? undefined : origins.get(host);
+        if (origin === undefined) return 'Unexpected host.';
         const requestOrigin = req.headers.origin;
         if (requestOrigin !== undefined && requestOrigin !== origin) {
             return 'Unexpected origin.';
@@ -80,8 +124,11 @@ export function isOutdatedClient(req: Request): boolean {
  * read, so an old-shape body is never validated (an offline upload refused
  * as a 400 would be blocked for reconciliation; a 409 stays queued).
  */
-export function localAccessMiddleware(frontendUrl: string): RequestHandler {
-    const check = localAccessCheck(frontendUrl);
+export function localAccessMiddleware(
+    frontendUrl: string,
+    lanOrigin?: string,
+): RequestHandler {
+    const check = localAccessCheck(frontendUrl, lanOrigin);
     return (req: Request, _res: Response, next: NextFunction) => {
         const refusal = check(req);
         if (refusal) return next(new ForbiddenException(refusal));
@@ -110,5 +157,10 @@ export function useLocalAccess(app: INestApplication): void {
         return;
     }
     if (!isSinglePcEnv(config.get('APP_ENV'))) return;
-    app.use(localAccessMiddleware(config.get('FRONTEND_URL')));
+    app.use(
+        localAccessMiddleware(
+            config.get('FRONTEND_URL'),
+            config.get('LAN_ORIGIN'),
+        ),
+    );
 }
