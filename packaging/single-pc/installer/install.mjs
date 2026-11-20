@@ -70,6 +70,7 @@ import {
     reminderTaskXml,
     logRotationTaskXml,
     checkShortcutSpec,
+    terminalPackageShortcutSpec,
     helpShortcutSpec,
     ownerGuideShortcutSpec,
     allShortcuts,
@@ -716,6 +717,10 @@ async function installOrRepair(options, ctx, log) {
         await ctx.createShortcuts(
             loc.checkShortcuts,
             checkShortcutSpec(paths, release),
+        );
+        await ctx.createShortcuts(
+            loc.terminalPackageShortcuts,
+            terminalPackageShortcutSpec(paths, release),
         );
         await ctx.createShortcuts(loc.helpShortcuts, helpShortcutSpec(release));
         await ctx.createShortcuts(

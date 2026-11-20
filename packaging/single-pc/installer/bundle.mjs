@@ -74,6 +74,10 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'tools/upgrade/upgrade.mjs',
     'tools/upgrade/migrations.mjs',
     'tools/installer/CheckHealth.ps1',
+    // LAN terminal package and join script (#397).
+    'tools/installer/terminal.mjs',
+    'tools/installer/MakeTerminalPackage.ps1',
+    'tools/installer/JoinTerminal.ps1',
     // The recovery guide ("Grocery POS help", #365).
     'help/RECOVERY.md',
     // The owner's handover guide (#366).

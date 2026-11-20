@@ -181,6 +181,15 @@ diagnostics (a LAN-IP listener only while the LAN service runs; a separate
 Proven on Linux with a real Caddy (`pnpm test:single-pc-caddy`) and
 MongoDB; Windows firewall/netsh/adapter execution is pending (#401).
 
+Implemented (#397): the main PC's "Make terminal package" shortcut writes
+the terminal package (public root, its SHA-256 and thumbprint, server URL,
+`JoinTerminal.ps1`); on the terminal `JoinTerminal.ps1 -Mode
+join|rejoin|leave` verifies the hash, trusts the root in the machine Root
+store, takes Windows time from the main PC, creates the Chrome shortcut and
+checks TLS with a plain GET of `/`; rejoin and leave delete our root by
+recorded thumbprint only ([installer/README.md](installer/README.md)).
+Windows execution is pending (#401).
+
 ## Persistent installation and lifecycle interfaces (#360–#365)
 
 - Replaceable binaries: `%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>`.

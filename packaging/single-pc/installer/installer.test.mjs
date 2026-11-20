@@ -47,6 +47,7 @@ import {
     addMinutes,
     allShortcuts,
     checkShortcutSpec,
+    terminalPackageShortcutSpec,
     helpShortcutSpec,
     ownerGuideShortcutSpec,
     logRotationTaskXml,
@@ -1332,6 +1333,8 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
         'ExportReminder.ps1',
         'BackupToUsb.ps1',
         'CheckHealth.ps1',
+        'MakeTerminalPackage.ps1',
+        'JoinTerminal.ps1',
     ]) {
         const text = await readFile(new URL(name, here), 'utf8');
         assert.match(text, /^#Requires -Version 5\.1/, name);
@@ -1505,7 +1508,7 @@ test('"Check Grocery POS" and "Grocery POS help" shortcuts (owner decisions 2026
         loc.ownerGuideShortcuts[0],
         /Start Menu\/Programs\/Grocery POS owner guide\.lnk$/,
     );
-    assert.equal(allShortcuts(loc).length, 8);
+    assert.equal(allShortcuts(loc).length, 9);
     const steps = uninstallSteps({
         installedServices: [],
         shortcuts: allShortcuts(loc),
@@ -1591,4 +1594,19 @@ test('Install.ps1 restore modes run only from the verified admin-only copy (#366
         '--accept-pending-offline',
     ])
         assert.match(ps, new RegExp(`'${flag}'`));
+});
+
+test('"Make terminal package" is a Start menu shortcut removed on uninstall (#397)', () => {
+    const loc = locations({ ProgramData: '/pd', PUBLIC: '/pub' });
+    const spec = terminalPackageShortcutSpec(layout('/pd/data'), '/r');
+    assert.match(
+        spec.arguments,
+        /MakeTerminalPackage\.ps1 -DataRoot \/pd\/data -Release \/r$/,
+    );
+    assert.equal(loc.terminalPackageShortcuts.length, 1);
+    assert.match(
+        loc.terminalPackageShortcuts[0],
+        /Start Menu.*Make terminal package\.lnk$/,
+    );
+    assert.ok(allShortcuts(loc).includes(loc.terminalPackageShortcuts[0]));
 });
