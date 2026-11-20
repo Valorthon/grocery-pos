@@ -55,6 +55,7 @@ export const SCENARIOS = Object.freeze([
     ...['A1', 'A2', 'A3', 'A4', 'A5', 'A6'],
     ...Array.from({ length: 17 }, (_, i) => `B${i + 1}`),
     ...['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'R1'],
+    ...Array.from({ length: 13 }, (_, i) => `D${i + 1}`),
 ]);
 
 /** Source tools the bundle copies (bundle.mjs TOOL_DIRS / REQUIRED_RELEASE_FILES). */
