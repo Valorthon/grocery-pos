@@ -1014,10 +1014,6 @@ describe(
                 await readFile(target.apiEnv, 'utf8'),
                 /^LAN_ORIGIN=https:\/\/192\.168\.1\.10:1443$/m,
             );
-            assert.match(
-                await readFile(target.caddyLanSite, 'utf8'),
-                /bind 192\.168\.1\.10/,
-            );
             // The source's own TLS state was never touched by its restores.
             assert.ok(existsSync(join(paths.caddyRoot, 'intermediate.crt')));
             assert.equal(

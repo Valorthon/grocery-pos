@@ -40,6 +40,7 @@ import {
     ORIGIN,
     PORTS,
     REPLICA_SET,
+    LAN_SERVICE,
     SERVICES,
     isPrivateIpv4,
     layout,
@@ -79,6 +80,7 @@ export const CHECK_IDS = Object.freeze([
     'database',
     'api',
     'proxy',
+    'lanProxy',
     'disk',
     'backups',
     'clock',
@@ -172,6 +174,14 @@ export const GUIDANCE = Object.freeze({
     proxy: [
         'The browser address https://localhost:1443 is not working. Restart the PC.',
         'If Chrome shows a certificate warning, see RECOVERY.md "Certificate or address problems"; never click through the warning.',
+    ],
+    lanProxy: [
+        'LAN terminals cannot connect; this PC keeps working at https://localhost:1443.',
+        'Check the network cable or Wi-Fi and that the router is on: this PC must have its fixed LAN address back. The LAN service retries by itself.',
+        'Still down after the network is back: restart the PC. See RECOVERY.md "LAN terminals cannot connect".',
+    ],
+    lanProxyMissing: [
+        'LAN terminals are configured but their service is not installed. Ask your vendor to run the installer in repair mode.',
     ],
     certificate: [
         'The local security certificate is missing or expiring. Ask your vendor to run the installer in repair mode (it renews the local certificate and trusts it again).',
@@ -343,7 +353,12 @@ async function configuredLanIp(ctx, paths) {
 }
 
 export async function checkPorts(ctx, paths) {
-    const lanIp = await configuredLanIp(ctx, paths);
+    // Only the LAN proxy service may listen on the LAN IP (#396): while it
+    // is known not to run, a listener there is someone else's.
+    const configured = await configuredLanIp(ctx, paths);
+    const states = configured ? await ctx.serviceStates() : null;
+    const lanIp =
+        states && states[LAN_SERVICE] !== 'RUNNING' ? null : configured;
     const details = {};
     const closed = [];
     const exposed = [];
@@ -385,9 +400,61 @@ export async function checkPorts(ctx, paths) {
         'Ports (this PC only)',
         'ok',
         lanIp
-            ? `Database and application answer on this PC only; the browser address also on ${lanIp} for LAN terminals.`
+            ? `Database and application answer on this PC only; the LAN terminals' service also on ${lanIp}.`
             : 'Database, application and browser address answer on this PC only.',
         { details: { ...details, lanIp } },
+    );
+}
+
+/**
+ * The LAN terminals' proxy (#396), apart from the app: a stopped or
+ * unreachable LAN service means terminals cannot connect, never that this
+ * PC's register is down.
+ */
+export async function checkLanProxy(ctx, paths) {
+    const title = 'LAN terminals';
+    const lanIp = await configuredLanIp(ctx, paths);
+    if (!lanIp)
+        return result(
+            'lanProxy',
+            title,
+            'info',
+            'No LAN terminals are set up.',
+        );
+    const states = await ctx.serviceStates();
+    const state = states?.[LAN_SERVICE];
+    const details = { lanIp, service: LAN_SERVICE, state: state ?? null };
+    if (state === 'absent')
+        return result(
+            'lanProxy',
+            title,
+            'fail',
+            `LAN terminals are set up for ${lanIp} but ${LAN_SERVICE} is not installed.`,
+            { details, steps: GUIDANCE.lanProxyMissing },
+        );
+    const listening = (await ctx.listeners(PORTS.proxy)) ?? [];
+    const answering = listening.some(
+        (a) => a.toLowerCase().replace(/^::ffff:/, '') === lanIp,
+    );
+    if ((state && state !== 'RUNNING') || (states && !answering))
+        return result(
+            'lanProxy',
+            title,
+            'warn',
+            `LAN terminals cannot connect to ${lanIp}; this PC still works.`,
+            {
+                details: { ...details, listening: answering },
+                steps: GUIDANCE.lanProxy,
+            },
+        );
+    return result(
+        'lanProxy',
+        title,
+        states ? 'ok' : 'unknown',
+        states
+            ? `LAN terminals connect to https://${lanIp}:${PORTS.proxy}.`
+            : 'Service state is only read on Windows.',
+        { details: { ...details, listening: answering } },
     );
 }
 
@@ -828,6 +895,7 @@ export async function diagnose(options, ctx = realContext()) {
         await checkDatabase(ctx, apiDir),
         await checkApi(ctx),
         await checkProxy(ctx, paths, now),
+        await checkLanProxy(ctx, paths),
         await checkDisk(ctx, paths, programDir),
         await checkBackups(paths, now),
         await checkClock(ctx, paths, now),

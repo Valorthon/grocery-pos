@@ -27,6 +27,7 @@ import { pathToFileURL } from 'node:url';
 import { boundedWait } from '../proof/policy.mjs';
 import {
     APP_DATABASE,
+    LAN_SERVICE,
     SERVICES,
     layout,
     releaseLayout,
@@ -409,15 +410,23 @@ async function binaryRollback(paths, journal, ctx, log) {
 }
 
 async function holdServices(ctx) {
-    for (const name of [SERVICES.proxy, SERVICES.api])
+    // The LAN proxy (#396) only exists with a LAN IP; setStartMode skips an
+    // absent service.
+    for (const name of [LAN_SERVICE, SERVICES.proxy, SERVICES.api])
         await ctx.setStartMode(name, 'demand');
     for (const name of stopOrder())
         if (name !== SERVICES.mongo) await ctx.stopService(name);
 }
 
 async function releaseServices(ctx) {
-    for (const name of [SERVICES.api, SERVICES.proxy])
+    for (const name of [SERVICES.api, SERVICES.proxy, LAN_SERVICE])
         await ctx.setStartMode(name, 'auto');
+}
+
+/** The LAN proxy, when installed; its absence or a missing address is no
+ *  reason to fail the store's own recovery (#396). */
+async function startLanProxy(ctx) {
+    await ctx.startService(LAN_SERVICE).catch(() => {});
 }
 
 /**
@@ -759,6 +768,7 @@ async function recover(paths, journal, ctx, error, log) {
         await releaseServices(ctx);
         for (const name of [SERVICES.api, SERVICES.proxy])
             await ctx.startService(name);
+        await startLanProxy(ctx);
         await writeJournal(paths, {
             ...journal,
             state: 'refused',

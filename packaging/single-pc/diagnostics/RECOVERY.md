@@ -110,8 +110,22 @@ Signs: Chrome shows "Your connection is not private" on
 2. Restart the PC (the browser address service may not have started).
 3. If the warning persists, do not continue past it. The vendor runs
    **repair**, which trusts the local certificate again.
-4. Other PCs on the network cannot use this address; that is by design (no
-   LAN access).
+4. Other PCs on the network cannot use this address; that is by design.
+   LAN terminals use this PC's fixed LAN address instead (next section).
+
+## LAN terminals cannot connect
+
+Signs: the other tills cannot open Grocery POS, while this PC still can;
+the check shows **LAN terminals** WARN.
+
+1. Keep selling on this PC: its own register does not depend on the
+   network. Terminals with offline cash ready can keep taking cash.
+2. Check the network cable or Wi-Fi of this PC and that the router or
+   switch is on. This PC must have its fixed LAN address back; the LAN
+   service (GroceryPOS-ProxyLan) retries by itself within a minute.
+3. Still down once the network is back: restart the PC. If the check then
+   shows **LAN terminals** FAIL ("not installed"), the vendor runs
+   **repair**.
 
 ## Interrupted shutdown or power loss
 

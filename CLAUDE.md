@@ -1059,14 +1059,21 @@ requestId}`. A 5xx never carries details or internals.
   127.0.0.1:13000 and sends the nginx policy with `connect-src 'self'` and a
   same-origin CSP report (relative `Reporting-Endpoints`), no HSTS, no
   `default_bind`/wildcard. `single-pc.db-spec.ts` covers the real app.
-- LAN site (#396): installer `-LanIp <private IPv4>` (install/repair; repair
-  and upgrade keep it, `none` turns it off) is stored in
-  `state\installer.json` + `config\runtime.json` (`lanIp`), written as
-  `LAN_ORIGIN` and as the generated `config\lan-site.caddy` (`caddyLanSite`
-  in `runtime/layout.mjs`, imported via `GPOS_CONFIG_DIR`): `bind <IP>` only,
-  its own Caddy server (a localhost Host there is never proxied),
-  `/v1/health*` 404. Firewall rule `GroceryPOS-LAN-HTTPS`: inbound TCP 1443
-  to the release's caddy.exe, localip the IP, `remoteip=localsubnet`,
+- LAN site (#396, owner decision 2026-11-20): installer `-LanIp <private
+IPv4>` (install/repair; repair and upgrade keep it, `none` turns it off)
+  is stored in `state\installer.json` + `config\runtime.json` (`lanIp`) and
+  written as `LAN_ORIGIN`. The LAN site is its own Windows service and Caddy
+  process, `GroceryPOS-ProxyLan` (`LAN_SERVICE`, not in `SERVICES`; WinSW,
+  `NT SERVICE\` account, same recovery), registered only with a LAN IP,
+  removed by `none` and uninstall, depending on and stopping before
+  `GroceryPOS-Proxy`. It runs the release's `caddy\Caddyfile.lan`
+  (`GPOS_LAN_IP` env; `bind <IP>` only, `/v1/health*` 404) and shares
+  `tls\data` (one root). Both Caddyfiles import `caddy\app.caddy` (global
+  options + the `gpos_app` snippet); the localhost `Caddyfile` never names
+  the LAN. A missing LAN address fails only the LAN service (SCM retries);
+  the installer warns instead of waiting for it. Firewall rule
+  `GroceryPOS-LAN-HTTPS`: inbound TCP 1443 to the release's caddy.exe,
+  `service=GroceryPOS-ProxyLan`, localip the IP, `remoteip=localsubnet`,
   Private profile; deleted on every run first and on uninstall; a Public
   adapter is a warning. Preflight refuses a new/changed IP not on a local
   adapter (`-AddressState Preferred`) or a foreign listener on it; the kept
@@ -1075,8 +1082,11 @@ requestId}`. A 5xx never carries details or internals.
   `Install.ps1` refuses `-LanIp` outside install/repair) and is refused
   while a shift is open or an offline lease is active, checked before and
   again after the proxy and API stop (a new origin strands the terminals'
-  browser storage). Diagnostics: only the proxy may also listen
-  on the configured private LAN IP. Real-Caddy test:
+  browser storage). Diagnostics: a listener on the configured private LAN
+  IP is allowed only while `GroceryPOS-ProxyLan` runs; the separate
+  `lanProxy` check (id pinned) is info without LAN terminals, warn when the
+  LAN service is stopped or not listening ("LAN terminals cannot connect",
+  never an app failure), fail when it is missing. Real-Caddy test:
   `GPOS_TEST_CADDY=<caddy> pnpm test:single-pc-caddy` (not in CI). Windows
   execution pending (#401); UDP 123 is #398.
 

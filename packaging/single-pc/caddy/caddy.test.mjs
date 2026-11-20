@@ -1,5 +1,6 @@
-// The release Caddyfile with a real Caddy (#396): the localhost site and the
-// generated LAN site. Needs GPOS_TEST_CADDY (a caddy binary, the version in
+// The release Caddy configuration with a real Caddy (#396): the localhost
+// service (Caddyfile) and the LAN service (Caddyfile.lan) as two processes
+// sharing one TLS storage, as installed. Needs GPOS_TEST_CADDY (a caddy binary, the version in
 // components.json) and a private IPv4 address on a local network adapter;
 // skipped otherwise. Ports are moved off 1443/13000 so it runs beside an
 // installation.
@@ -17,7 +18,7 @@ import { join } from 'node:path';
 import { connect as tlsConnect } from 'node:tls';
 import { after, before, describe, test } from 'node:test';
 import { boundedWait } from '../proof/policy.mjs';
-import { caddyLanSite, isPrivateIpv4 } from '../runtime/layout.mjs';
+import { isPrivateIpv4 } from '../runtime/layout.mjs';
 
 const CADDY = process.env.GPOS_TEST_CADDY;
 const LAN_IP = Object.values(networkInterfaces())
@@ -79,11 +80,19 @@ function get(
 }
 
 describe(
-    'the release Caddyfile on a real Caddy (#396)',
+    'the release Caddy services on a real Caddy (#396)',
     { skip: !CADDY || !LAN_IP },
     () => {
         let dir;
+        let env;
         let caddy;
+        let lanCaddy;
+        const start = (file, environment) =>
+            spawn(
+                CADDY,
+                ['run', '--config', join(dir, file), '--adapter', 'caddyfile'],
+                { env: environment, stdio: 'ignore' },
+            );
         let api;
         let ca;
         let port;
@@ -101,41 +110,38 @@ describe(
                 res.end(`api ${req.url}`);
             }).listen(0, '127.0.0.1');
             await once(api, 'listening');
-            const config = join(dir, 'config');
             const client = join(dir, 'client');
-            await mkdir(config);
             await mkdir(client);
             await writeFile(join(client, 'index.html'), 'the app');
-            const text = (
-                await readFile(new URL('./Caddyfile', import.meta.url), 'utf8')
-            )
-                .replaceAll(':1443', `:${port}`)
-                .replace('127.0.0.1:13000', `127.0.0.1:${api.address().port}`);
-            await writeFile(join(dir, 'Caddyfile'), text);
-            await writeFile(
-                join(config, 'lan-site.caddy'),
-                caddyLanSite(LAN_IP).replace(':1443', `:${port}`),
-            );
-            caddy = spawn(
-                CADDY,
-                [
-                    'run',
-                    '--config',
-                    join(dir, 'Caddyfile'),
-                    '--adapter',
-                    'caddyfile',
-                ],
-                {
-                    env: {
-                        ...process.env,
-                        XDG_DATA_HOME: join(dir, 'data'),
-                        XDG_CONFIG_HOME: join(dir, 'conf'),
-                        GPOS_CONFIG_DIR: config,
-                        GPOS_CLIENT_ROOT: client,
-                    },
-                    stdio: 'ignore',
-                },
-            );
+            // The release files, moved off the real ports.
+            for (const name of ['Caddyfile', 'Caddyfile.lan', 'app.caddy'])
+                await writeFile(
+                    join(dir, name),
+                    (
+                        await readFile(
+                            new URL(`./${name}`, import.meta.url),
+                            'utf8',
+                        )
+                    )
+                        .replaceAll(':1443', `:${port}`)
+                        .replace(
+                            '127.0.0.1:13000',
+                            `127.0.0.1:${api.address().port}`,
+                        ),
+                );
+            env = {
+                ...process.env,
+                // One TLS storage for both services, as installed.
+                XDG_DATA_HOME: join(dir, 'data'),
+                XDG_CONFIG_HOME: join(dir, 'conf'),
+                GPOS_CLIENT_ROOT: client,
+            };
+            caddy = start('Caddyfile', env);
+            await boundedWait(() => listening('127.0.0.1', port), {
+                timeoutMs: 20_000,
+                intervalMs: 200,
+            });
+            lanCaddy = start('Caddyfile.lan', { ...env, GPOS_LAN_IP: LAN_IP });
             await boundedWait(() => listening(LAN_IP, port), {
                 timeoutMs: 20_000,
                 intervalMs: 200,
@@ -156,8 +162,11 @@ describe(
         });
 
         after(async () => {
-            caddy?.kill();
-            if (caddy) await once(caddy, 'exit').catch(() => {});
+            for (const child of [lanCaddy, caddy]) {
+                if (!child || child.exitCode !== null) continue;
+                child.kill();
+                await once(child, 'exit').catch(() => {});
+            }
             api?.close();
             if (dir) await rm(dir, { recursive: true, force: true });
         });
@@ -208,13 +217,52 @@ describe(
 
         test('the localhost site is not served on the LAN listener', async () => {
             const before = seen.length;
+            // The LAN service has no localhost site: with SNI localhost the
+            // handshake fails; with the LAN certificate and Host localhost
+            // no site matches. Neither reaches the API.
+            await assert.rejects(
+                get(LAN_IP, port, '/v1/x', {
+                    insecure: true,
+                    servername: 'localhost',
+                    headers: { Host: `localhost:${port}` },
+                }),
+            );
             const spoofed = await get(LAN_IP, port, '/v1/x', {
-                insecure: true,
-                servername: 'localhost',
+                ca,
+                // No SNI, as for an IP (Node would take it from Host).
+                servername: '',
                 headers: { Host: `localhost:${port}` },
             });
             assert.equal(spoofed.body, '');
             assert.equal(seen.length, before, 'never proxied');
+        });
+
+        test('the localhost service keeps serving when the LAN address is absent', async () => {
+            // A second LAN service on an address this PC does not have (the
+            // cable is out): it fails to bind and exits; SCM would retry it.
+            const absent = [
+                '10.255.254.253',
+                '172.31.254.253',
+                '192.168.254.253',
+            ].find(
+                (ip) =>
+                    !Object.values(networkInterfaces())
+                        .flat()
+                        .some((a) => a?.address === ip),
+            );
+            const failing = start('Caddyfile.lan', {
+                ...env,
+                GPOS_LAN_IP: absent,
+            });
+            const [code] = await once(failing, 'exit');
+            assert.notEqual(code, 0);
+            const local = await get('127.0.0.1', port, '/', {
+                ca,
+                servername: 'localhost',
+                headers: { Host: `localhost:${port}` },
+            });
+            assert.equal(local.body, 'the app');
+            assert.equal(caddy.exitCode, null, 'the localhost service runs');
         });
     },
 );

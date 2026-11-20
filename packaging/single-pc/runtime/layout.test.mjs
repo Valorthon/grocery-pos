@@ -5,12 +5,12 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import {
     DIRECTORIES,
+    LAN_SERVICE,
     ORIGIN,
     PORTS,
     SECRET_FILES,
     SERVICES,
     apiEnv,
-    caddyLanSite,
     databaseUrl,
     isPrivateIpv4,
     lanOrigin,
@@ -148,45 +148,70 @@ test('LAN terminals: LAN_ORIGIN, runtime manifest and the proxy LAN site (#396)'
     assert.equal(parseLanIp(' none '), null);
     assert.equal(parseLanIp(''), null);
 
-    const site = caddyLanSite('192.168.1.10');
-    assert.match(site, /^https:\/\/192\.168\.1\.10:1443 \{$/m);
-    assert.match(site, /^\tbind 192\.168\.1\.10$/m);
-    assert.match(site, /import gpos_app/);
-    assert.match(site, /handle \/v1\/health\* \{\n\t\trespond 404/);
-    assert.doesNotMatch(site, /0\.0\.0\.0|\[::\]|localhost/);
-    assert.throws(() => caddyLanSite(null));
-    assert.throws(() => caddyLanSite('0.0.0.0'));
-    assert.ok(paths.caddyLanSite.startsWith(paths.dirs.config));
-
-    const proxy = serviceDefinitions(paths, '/r').find(
-        (d) => d.name === SERVICES.proxy,
+    // The LAN proxy is its own service, only with a LAN IP (#396).
+    assert.deepEqual(
+        serviceDefinitions(paths, '/r').map((d) => d.name),
+        Object.values(SERVICES),
     );
-    assert.equal(proxy.env.GPOS_CONFIG_DIR, paths.dirs.config);
-
-    const caddyfile = await readFile(
-        new URL('../caddy/Caddyfile', import.meta.url),
-        'utf8',
+    const defs = serviceDefinitions(paths, '/r', { lanIp: '192.168.1.10' });
+    assert.deepEqual(
+        defs.map((d) => d.name),
+        [...Object.values(SERVICES), LAN_SERVICE],
     );
-    const directives = caddyfile
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('#'))
-        .join('\n');
-    // Every bind is explicit; never a wildcard or a global default.
-    assert.doesNotMatch(directives, /default_bind|0\.0\.0\.0|\[::\]/);
+    const proxy = defs.find((d) => d.name === SERVICES.proxy);
+    const lan = defs.find((d) => d.name === LAN_SERVICE);
+    assert.equal(proxy.env.GPOS_LAN_IP, undefined);
+    assert.deepEqual(proxy.arguments.slice(0, 3), [
+        'run',
+        '--config',
+        join('/r', 'caddy', 'Caddyfile'),
+    ]);
+    assert.deepEqual(lan.arguments.slice(0, 3), [
+        'run',
+        '--config',
+        join('/r', 'caddy', 'Caddyfile.lan'),
+    ]);
+    assert.equal(lan.env.GPOS_LAN_IP, '192.168.1.10');
+    // Same TLS storage: one root for both sites.
+    assert.equal(lan.env.XDG_DATA_HOME, proxy.env.XDG_DATA_HOME);
+    assert.deepEqual(lan.dependsOn, [SERVICES.proxy]);
+    assert.equal(lan.optional, true);
+    assert.equal(lan.logDirectory, paths.proxyLanLogs);
     assert.match(
-        directives,
-        /^https:\/\/localhost:1443 \{\n\tbind 127\.0\.0\.1 \[::1\]$/m,
+        winswXml(lan),
+        /<onfailure action="restart" delay="60 sec"\/>/,
     );
+    assert.throws(() => serviceDefinitions(paths, '/r', { lanIp: '0.0.0.0' }));
+
+    const read = async (name) =>
+        (await readFile(new URL(`../caddy/${name}`, import.meta.url), 'utf8'))
+            .split('\n')
+            .filter((line) => !line.trim().startsWith('#'))
+            .join('\n');
+    const local = await read('Caddyfile');
+    const lanFile = await read('Caddyfile.lan');
+    const shared = await read('app.caddy');
+    for (const text of [local, lanFile, shared])
+        // Every bind is explicit; never a wildcard or a global default.
+        assert.doesNotMatch(text, /default_bind|0\.0\.0\.0|\[::\]/);
+    for (const text of [local, lanFile])
+        assert.match(text, /^import app\.caddy$/m);
     assert.match(
-        directives,
-        /^import \{\$GPOS_CONFIG_DIR\}\/lan-site\*\.caddy$/m,
+        local,
+        /^https:\/\/localhost:1443 \{\n\tbind 127\.0\.0\.1 \[::1\]\n\timport gpos_app\n\}$/m,
     );
+    // The localhost proxy never serves or imports the LAN site.
+    assert.doesNotMatch(local, /LAN_IP|Caddyfile\.lan|lan/i);
+    assert.match(lanFile, /^https:\/\/\{\$GPOS_LAN_IP\}:1443 \{$/m);
+    assert.match(lanFile, /^\tbind \{\$GPOS_LAN_IP\}$/m);
+    assert.match(lanFile, /handle \/v1\/health\* \{\n\t\trespond 404/);
+    assert.doesNotMatch(lanFile, /localhost|127\.0\.0\.1|::1/);
     // Same-origin per site: the report endpoint is relative.
     assert.match(
-        directives,
+        shared,
         /Reporting-Endpoints "csp-endpoint=\\"\/v1\/csp-report\\""/,
     );
-    assert.doesNotMatch(directives, /https:\/\/localhost:1443\/v1/);
+    assert.doesNotMatch(shared, /https:\/\/localhost:1443\/v1/);
 });
 
 test('generated secrets match their stored format, and a damaged one does not', () => {

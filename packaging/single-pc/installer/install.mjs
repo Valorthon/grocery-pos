@@ -36,6 +36,7 @@ import { boundedWait } from '../proof/policy.mjs';
 import { acquireLock, provision, releaseLock } from '../runtime/provision.mjs';
 import {
     APP_DATABASE,
+    LAN_SERVICE,
     LOOPBACK,
     PORTS,
     SERVICES,
@@ -503,8 +504,8 @@ async function installOrRepair(options, ctx, log) {
                 );
             let blockers = await check();
             if (blockers.length) throw refuse(blockers);
-            const front = [SERVICES.proxy, SERVICES.api].filter((name) =>
-                facts.servicesInstalled.includes(name),
+            const front = [LAN_SERVICE, SERVICES.proxy, SERVICES.api].filter(
+                (name) => facts.servicesInstalled.includes(name),
             );
             for (const name of front) await ctx.stopService(name);
             blockers = await check();
@@ -580,14 +581,30 @@ async function installOrRepair(options, ctx, log) {
             }
         }
         await runSteps(
-            serviceSteps(paths, release, join(loc.programDir, 'services')),
+            serviceSteps(paths, release, join(loc.programDir, 'services'), {
+                lanIp,
+            }),
             ctx,
         );
-        await runSteps(aclSteps(paths, release), ctx);
+        await runSteps(aclSteps(paths, release, { lanIp }), ctx);
         await runSteps(firewallSteps(release, lanIp), ctx);
-        for (const def of serviceDefinitions(paths, release)) {
+        for (const def of serviceDefinitions(paths, release, { lanIp })) {
             await ctx.startService(def.name);
-            await ctx.waitReady(def.name, paths);
+            if (!def.optional) {
+                await ctx.waitReady(def.name, paths);
+                continue;
+            }
+            // The LAN proxy (#396) never holds up the installation: with the
+            // LAN address absent it keeps retrying under SCM recovery and
+            // only the terminals wait.
+            try {
+                if (!facts.lanIpPresent) throw new Error('address absent');
+                await ctx.waitReady(def.name, paths, { lanIp });
+            } catch {
+                const note = `${def.name} is not answering on ${lanIp} yet; LAN terminals cannot connect until the address is back (it retries by itself).`;
+                warnings.push(note);
+                log(`warning: ${note}`);
+            }
         }
         await done('services');
 
@@ -952,7 +969,7 @@ export function windowsContext(env = process.env) {
                 'HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe',
             ]);
             const servicesInstalled = [];
-            for (const name of Object.values(SERVICES)) {
+            for (const name of [...Object.values(SERVICES), LAN_SERVICE]) {
                 if ((await serviceState(name)) !== 'absent')
                     servicesInstalled.push(name);
             }
@@ -1084,26 +1101,28 @@ export function windowsContext(env = process.env) {
                 },
             );
         },
-        async waitReady(name, paths, { trusted = false } = {}) {
+        async waitReady(name, paths, { trusted = false, lanIp } = {}) {
             const check =
-                name === SERVICES.mongo
-                    ? () => portBusy(LOOPBACK, PORTS.mongo)
-                    : name === SERVICES.api
-                      ? async () => {
-                            const res = await fetch(
-                                `http://${LOOPBACK}:${PORTS.api}/v1/health/ready`,
-                            ).catch(() => undefined);
-                            return res?.ok === true;
-                        }
-                      : async () =>
-                            httpsReady(
-                                `https://localhost:${PORTS.proxy}/v1/health/ready`,
-                                trusted
-                                    ? undefined
-                                    : await readFile(
-                                          caddyRootCertificate(paths),
-                                      ).catch(() => undefined),
-                            );
+                name === LAN_SERVICE
+                    ? () => portBusy(lanIp, PORTS.proxy)
+                    : name === SERVICES.mongo
+                      ? () => portBusy(LOOPBACK, PORTS.mongo)
+                      : name === SERVICES.api
+                        ? async () => {
+                              const res = await fetch(
+                                  `http://${LOOPBACK}:${PORTS.api}/v1/health/ready`,
+                              ).catch(() => undefined);
+                              return res?.ok === true;
+                          }
+                        : async () =>
+                              httpsReady(
+                                  `https://localhost:${PORTS.proxy}/v1/health/ready`,
+                                  trusted
+                                      ? undefined
+                                      : await readFile(
+                                            caddyRootCertificate(paths),
+                                        ).catch(() => undefined),
+                              );
             await boundedWait(check, { timeoutMs: 180_000, intervalMs: 1000 });
         },
         async waitFile(path) {

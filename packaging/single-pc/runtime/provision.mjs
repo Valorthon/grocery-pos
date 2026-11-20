@@ -37,7 +37,6 @@ import {
     RUNTIME_SCHEMA,
     SECRET_FILES,
     apiEnv,
-    caddyLanSite,
     layout,
     parseLanIp,
     mongodConfig,
@@ -594,6 +593,7 @@ export async function provision(options, log = () => {}) {
         for (const dir of [
             paths.apiLogs,
             paths.proxyLogs,
+            paths.proxyLanLogs,
             paths.caddyData,
             paths.caddyConfig,
         ])
@@ -682,10 +682,6 @@ export async function provision(options, log = () => {}) {
             ) + '\n',
             0o640,
         );
-        // The proxy's LAN site (#396): present exactly when LAN terminals are.
-        if (lanIp)
-            await writeAtomic(paths.caddyLanSite, caddyLanSite(lanIp), 0o640);
-        else await rm(paths.caddyLanSite, { force: true });
         await done('config');
         journal.complete = STAGES.every((stage) => journal.stages[stage]);
         await writeAtomic(

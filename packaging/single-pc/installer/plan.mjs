@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
     ORIGIN,
     PORTS,
+    LAN_SERVICE,
     SERVICES,
     releaseLayout,
     serviceDefinitions,
@@ -264,9 +265,14 @@ function gib(bytes) {
  * Service registration steps in start order (MongoDB → API → proxy). Each
  * step is `{ kind, ... }`: `exec` (file, args), `write` (path, text).
  */
-export function serviceSteps(paths, release, serviceDir) {
+export function serviceSteps(
+    paths,
+    release,
+    serviceDir,
+    { lanIp = null } = {},
+) {
     const bin = releaseLayout(release);
-    const defs = serviceDefinitions(paths, release);
+    const defs = serviceDefinitions(paths, release, { lanIp });
     const steps = [];
     for (const def of defs) {
         if (def.host === 'mongod') {
@@ -353,7 +359,7 @@ export function serviceConfigSteps(def) {
  * top of provisioning's SYSTEM + Administrators only. `(OI)(CI)M` is
  * modify on a folder and everything below it; `(R)` read on one file.
  */
-export function aclSteps(paths, release) {
+export function aclSteps(paths, release, { lanIp = null } = {}) {
     const bin = releaseLayout(release);
     const grant = (path, account, rights) => ({
         kind: 'exec',
@@ -363,6 +369,7 @@ export function aclSteps(paths, release) {
     const mongo = serviceAccount(SERVICES.mongo);
     const api = serviceAccount(SERVICES.api);
     const proxy = serviceAccount(SERVICES.proxy);
+    const lanProxy = serviceAccount(LAN_SERVICE);
     return [
         grant(paths.dirs.database, mongo, '(OI)(CI)M'),
         grant(paths.dirs.logs, mongo, '(OI)(CI)M'),
@@ -371,10 +378,16 @@ export function aclSteps(paths, release) {
         grant(paths.apiEnv, api, '(R)'),
         grant(paths.apiLogs, api, '(OI)(CI)M'),
         grant(paths.dirs.tls, proxy, '(OI)(CI)M'),
-        // The generated LAN site (#396) lives in config (no secrets there).
-        grant(paths.dirs.config, proxy, '(OI)(CI)RX'),
         grant(paths.proxyLogs, proxy, '(OI)(CI)M'),
         grant(bin.client, proxy, '(OI)(CI)RX'),
+        // The LAN proxy (#396): the same model, sharing the TLS storage.
+        ...(lanIp
+            ? [
+                  grant(paths.dirs.tls, lanProxy, '(OI)(CI)M'),
+                  grant(paths.proxyLanLogs, lanProxy, '(OI)(CI)M'),
+                  grant(bin.client, lanProxy, '(OI)(CI)RX'),
+              ]
+            : []),
     ];
 }
 
@@ -436,6 +449,8 @@ export function firewallSteps(release, lanIp) {
             'remoteip=localsubnet',
             'profile=private',
             `program=${releaseLayout(release).caddy}`,
+            // Only the LAN proxy service's process (#396).
+            `service=${LAN_SERVICE}`,
             'enable=yes',
         ],
     });
@@ -813,7 +828,8 @@ export function taskSteps(xmlPaths) {
 
 /** Stop order: proxy → API → MongoDB (reverse of start). */
 export function stopOrder() {
-    return [SERVICES.proxy, SERVICES.api, SERVICES.mongo];
+    // The LAN proxy depends on the localhost proxy, so it stops first.
+    return [LAN_SERVICE, SERVICES.proxy, SERVICES.api, SERVICES.mongo];
 }
 
 /**

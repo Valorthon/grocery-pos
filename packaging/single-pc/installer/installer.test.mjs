@@ -15,7 +15,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { SERVICES, layout } from '../runtime/layout.mjs';
+import { LAN_SERVICE, SERVICES, layout } from '../runtime/layout.mjs';
 import {
     MANIFEST,
     REQUIRED_RELEASE_FILES,
@@ -575,7 +575,6 @@ test('ACL grants follow the runtime README permissions table', () => {
     ]);
     assert.deepEqual(by(SERVICES.proxy), [
         [paths.dirs.tls, '(OI)(CI)M'],
-        [paths.dirs.config, '(OI)(CI)RX'],
         [paths.proxyLogs, '(OI)(CI)M'],
         ['/r/client', '(OI)(CI)RX'],
     ]);
@@ -1057,6 +1056,7 @@ test('LAN terminals: preflight, firewall rule and uninstall (#396)', () => {
         'remoteip=localsubnet',
         'profile=private',
         `program=${join('/r', 'caddy', 'caddy.exe')}`,
+        `service=${LAN_SERVICE}`,
     ])
         assert.ok(add.includes(arg), arg);
     assert.ok(!add.some((a) => /any|0\.0\.0\.0|public|domain/i.test(a)));
@@ -1091,6 +1091,17 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
         ctx,
     );
     assert.equal(result.lanOrigin, 'https://192.168.1.10:1443');
+    // The LAN proxy is its own service, registered and started last.
+    assert.ok(ctx.services.has(LAN_SERVICE));
+    const started = ctx.log.filter((e) => e[0] === 'start').map((e) => e[1]);
+    assert.deepEqual(started.slice(-2), [SERVICES.proxy, LAN_SERVICE]);
+    assert.ok(
+        ctx.log.some(
+            (e) =>
+                e[0] === 'icacls.exe' &&
+                e[3] === `NT SERVICE\\${LAN_SERVICE}:(OI)(CI)M`,
+        ),
+    );
     assert.equal((await state()).lanIp, '192.168.1.10');
     assert.ok(
         ctx.log.some(
@@ -1144,10 +1155,12 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
     assert.deepEqual(
         ctx.log.filter((e) => ['stop', 'start', 'provision'].includes(e[0])),
         [
+            ['stop', LAN_SERVICE],
             ['stop', SERVICES.proxy],
             ['stop', SERVICES.api],
             ['start', SERVICES.api],
             ['start', SERVICES.proxy],
+            ['start', LAN_SERVICE],
         ],
     );
     assert.equal((await state()).lanIp, '192.168.1.10');
@@ -1157,8 +1170,17 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
         runInstaller({ mode: 'repair', ...pinned, lanIp: '192.168.1.20' }, ctx),
         /not an address of this PC\. /,
     );
-    // The kept IP missing (router off) does not block a repair.
-    await runInstaller({ mode: 'repair', ...pinned }, ctx);
+    // The kept IP missing (router off) does not block a repair; the LAN
+    // service is still registered and started, without waiting for it.
+    ctx.log.length = 0;
+    const kept = await runInstaller({ mode: 'repair', ...pinned }, ctx);
+    assert.ok(
+        kept.warnings.some((w) =>
+            w.includes(`${LAN_SERVICE} is not answering`),
+        ),
+    );
+    assert.ok(ctx.log.some((e) => e[0] === 'start' && e[1] === LAN_SERVICE));
+    assert.ok(!ctx.log.some((e) => e[0] === 'ready' && e[1] === LAN_SERVICE));
     assert.equal((await state()).lanIp, '192.168.1.10');
     // Install over the kept data root never changes the IP (it cannot check
     // shifts and leases there): repair does.
@@ -1183,9 +1205,16 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
     assert.equal((await state()).lanIp, '192.168.1.20');
     assert.ok(netsh().some((l) => l.includes('localip=192.168.1.20')));
 
-    // `none` turns LAN terminals off: the rule is only deleted.
+    // `none` turns LAN terminals off: the LAN service and rule are removed.
     ctx.log.length = 0;
     await runInstaller({ mode: 'repair', ...pinned, lanIp: null }, ctx);
+    assert.ok(!ctx.services.has(LAN_SERVICE));
+    assert.ok(
+        ctx.log.some(
+            (e) =>
+                e[0] === 'sc.exe' && e[1] === 'delete' && e[2] === LAN_SERVICE,
+        ),
+    );
     assert.equal((await state()).lanIp, null);
     assert.ok(ctx.log.some((e) => e[0] === 'provision-lan' && e[1] === null));
     assert.deepEqual(netsh(), [

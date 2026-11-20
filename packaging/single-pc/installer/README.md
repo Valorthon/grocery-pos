@@ -241,8 +241,13 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
 <private IPv4>` on install or repair serves the app on
   `https://<IP>:1443` as well as `https://localhost:1443`. It is stored in
   `state\installer.json` and `config\runtime.json`, written as the API's
-  `LAN_ORIGIN` (#394) and as the proxy's generated `config\lan-site.caddy`
-  (`bind <IP>` only, health refused). Repair and upgrade keep it;
+  `LAN_ORIGIN` (#394), and served by its own service `GroceryPOS-ProxyLan`
+  (owner decision 2026-11-20) running `caddy\Caddyfile.lan` (`bind <IP>`
+  only, health refused), registered after and depending on
+  `GroceryPOS-Proxy`, sharing `tls\data`. If the address is missing (cable
+  out, router off) only that service fails and SCM keeps retrying it;
+  `https://localhost:1443` keeps working, and the installer warns instead
+  of waiting for it. `-LanIp none` and uninstall remove the service. Repair and upgrade keep it;
   `-LanIp none` turns it off. A different IP is a new origin (each
   terminal's queued offline cash lives in the old origin's browser
   storage), so repair refuses the change while a shift is open or an
@@ -252,7 +257,7 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   its stored IP and refuses `-LanIp` naming another: change it afterwards
   with `-Mode repair -LanIp`. `-LanIp` is refused in upgrade modes; the
   upgrade keeps the IP and warns in preflight if it is absent.
-- `uninstall` stops and deletes our three services, deletes our tasks,
+- `uninstall` stops and deletes our services (and the LAN proxy), deletes our tasks,
   the LAN firewall rule, shortcuts, releases, wrappers and task XML. It **keeps** the data root
   (database, secrets, TLS state, backups, logs, installer state), the
   handover folder, the CA trust (unless `-RemoveCaTrust`, which removes our

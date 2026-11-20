@@ -52,6 +52,8 @@ export const REQUIRED_RELEASE_FILES = Object.freeze([
     'mongodb/bin/mongorestore.exe',
     'caddy/caddy.exe',
     'caddy/Caddyfile',
+    'caddy/Caddyfile.lan',
+    'caddy/app.caddy',
     'services/WinSW.exe',
     'api/package.json',
     'api/dist/main.js',
@@ -310,10 +312,9 @@ export async function copyTools(release) {
         join(SINGLE_PC, 'operations', 'HANDOVER.md'),
         join(release, 'help', 'HANDOVER.md'),
     );
-    await cp(
-        join(SINGLE_PC, 'caddy', 'Caddyfile'),
-        join(release, 'caddy', 'Caddyfile'),
-    );
+    // Both proxies' configurations and their shared import (#396).
+    for (const file of ['Caddyfile', 'Caddyfile.lan', 'app.caddy'])
+        await cp(join(SINGLE_PC, 'caddy', file), join(release, 'caddy', file));
 }
 
 /** notices/COMPONENTS.md: what ships, under which license, and where the

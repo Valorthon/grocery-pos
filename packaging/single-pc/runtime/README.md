@@ -27,7 +27,6 @@ Persistent data root, `%ProgramData%\Valorthon\GroceryPOS` (`layout`):
 | --------------------------------------------- | ---------------------------------------------------------------------- | ---------- |
 | `config\mongod.cfg`                           | mongod configuration (regenerated, no secrets)                         | 0750 dir   |
 | `config\runtime.json`                         | non-secret manifest: ports, paths, service names, install id, `lanIp`  |            |
-| `config\lan-site.caddy`                       | the proxy's LAN site (#396), only with a LAN IP                        |            |
 | `secrets\mongo-keyfile`                       | replica-set keyfile (756 random bytes, base64)                         | 0700/0600  |
 | `secrets\mongo-root-password`                 | `gpos_root` (root role); provisioning/maintenance only                 |            |
 | `secrets\mongo-api-password`                  | `gpos_api` (readWrite on `grocery` only)                               |            |
@@ -133,10 +132,11 @@ found). Steps, journaled in `state\provision.json`:
    the stored password and `readWrite` on `grocery`.
 4. **config:** writes `secrets\api.env` and `config\runtime.json`, and
    with a LAN IP (`--lan-ip <private IPv4>`, #396) `LAN_ORIGIN` in
-   `api.env` and `config\lan-site.caddy`, which the release Caddyfile
-   imports through `GPOS_CONFIG_DIR` (`bind <IP>` only, `/v1/health*`
-   answered 404). `--lan-ip none` removes both; without the option the
-   manifest's current `lanIp` is kept (restore, re-provisioning).
+   `api.env`. `--lan-ip none` removes it; without the option the
+   manifest's current `lanIp` is kept (restore, re-provisioning). The LAN
+   site itself is the separate `GroceryPOS-ProxyLan` service
+   (`serviceDefinitions(paths, release, { lanIp })`), running the release's
+   `caddy\Caddyfile.lan` with `GPOS_LAN_IP`, logging to `logs\proxy-lan\`.
 
 A mongod the run started is shut down at the end with the authenticated
 `shutdown` command. If root cannot authenticate, it is signalled instead:
@@ -168,11 +168,12 @@ POSIX: the data root and private directories are 0700 and secret files
 replaces inherited ACLs on each directory with SYSTEM + Administrators full
 control (`icacls /inheritance:r`). #362 then grants, per service identity:
 
-| Identity | Access                                                                                  |
-| -------- | --------------------------------------------------------------------------------------- |
-| MongoDB  | modify `database\`, `logs\`; read `config\`, `secrets\mongo-keyfile`                    |
-| API      | read `secrets\api.env`; modify `logs\api\`                                              |
-| Proxy    | modify `tls\`, `logs\proxy\`; read `config\` (LAN site, #396) and the release `client\` |
+| Identity | Access                                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------------------------- |
+| MongoDB  | modify `database\`, `logs\`; read `config\`, `secrets\mongo-keyfile`                                       |
+| API      | read `secrets\api.env`; modify `logs\api\`                                                                 |
+| Proxy    | modify `tls\`, `logs\proxy\`; read the release `client\`                                                   |
+| ProxyLan | modify `tls\` (the same storage), `logs\proxy-lan\`; read the release `client\` (#396, only with a LAN IP) |
 
 ## Verification
 

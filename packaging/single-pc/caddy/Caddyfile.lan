@@ -1,0 +1,21 @@
+# LAN terminals (#396, ARCHITECTURE.md "LAN terminals (#402)"):
+# GroceryPOS-ProxyLan, its own Caddy process beside GroceryPOS-Proxy, so a
+# missing LAN address fails only this service (SCM keeps retrying it) and
+# https://localhost:1443 keeps working. Installed only with a LAN IP.
+#
+# Environment (set by the service definition):
+#   GPOS_CLIENT_ROOT  the compiled client of this release
+#   GPOS_LAN_IP       the fixed private IPv4 address (installer -LanIp)
+import app.caddy
+
+https://{$GPOS_LAN_IP}:1443 {
+	# The LAN IP only: never a wildcard, never loopback. A request here that
+	# names another Host (e.g. localhost:1443) matches no site and is never
+	# proxied.
+	bind {$GPOS_LAN_IP}
+	import gpos_app
+	# Never health from the LAN (#394): a 404, not proxied to the API.
+	handle /v1/health* {
+		respond 404
+	}
+}
