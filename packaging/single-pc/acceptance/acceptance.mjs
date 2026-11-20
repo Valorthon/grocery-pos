@@ -17,7 +17,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { PORTS, SERVICES, layout } from '../runtime/layout.mjs';
+import {
+    LAN_SERVICE,
+    PORTS,
+    SERVICES,
+    isPrivateIpv4,
+    layout,
+} from '../runtime/layout.mjs';
 import {
     HANDOVER_FILE,
     TASKS,
@@ -65,7 +71,11 @@ export const MANUAL = Object.freeze([
         closes: ['#366'],
         what: 'authenticated transactions on the installed DB',
     },
-    { id: 'B6', closes: ['#366', '#358'], what: 'second LAN device refused' },
+    {
+        id: 'B6',
+        closes: ['#366', '#358', '#393', '#394', '#395', '#396'],
+        what: 'LAN refusal: 1443 only from a joined terminal on the subnet; 13000/27018, other subnets, Public profile and /v1/health* refused',
+    },
     { id: 'B7', closes: ['#366', '#363'], what: 'replacement-PC restore' },
     {
         id: 'B8',
@@ -113,6 +123,72 @@ export const MANUAL = Object.freeze([
         id: 'C6',
         closes: ['#365'],
         what: 'CheckHealth.ps1 elevation, save support file',
+    },
+    // #401: two-PC LAN terminal rows (Android rows come with #400).
+    {
+        id: 'D1',
+        closes: ['#401', '#396'],
+        what: 'LAN site service, firewall and shared root',
+    },
+    {
+        id: 'D2',
+        closes: ['#401', '#397'],
+        what: 'join, rejoin and leave a Windows terminal',
+    },
+    {
+        id: 'D3',
+        closes: ['#401', '#395'],
+        what: 'concurrent sales on two terminals',
+    },
+    {
+        id: 'D4',
+        closes: ['#401', '#359', '#37'],
+        what: 'cable pull mid-shift, offline cash and sync',
+    },
+    {
+        id: 'D5',
+        closes: ['#401', '#364'],
+        what: 'upgrade with a stale terminal tab (CLIENT_OUTDATED)',
+    },
+    {
+        id: 'D6',
+        closes: ['#401', '#363'],
+        what: 'restore logs every terminal out',
+    },
+    {
+        id: 'D7',
+        closes: ['#401', '#363', '#396'],
+        what: 'replacement PC, then rejoin',
+    },
+    {
+        id: 'D8',
+        closes: ['#401', '#396', '#397'],
+        what: 'LAN IP change',
+    },
+    {
+        id: 'D9',
+        closes: ['#401', '#398'],
+        what: 'terminal clock ±5 min and ±3 h',
+    },
+    {
+        id: 'D10',
+        closes: ['#401', '#398'],
+        what: 'time server (NTP) rule and timeServer check',
+    },
+    {
+        id: 'D11',
+        closes: ['#401', '#398'],
+        what: 'Caddy leaf renewal "not yet valid" watch',
+    },
+    {
+        id: 'D12',
+        closes: ['#401', '#399', '#396'],
+        what: 'lanNetwork and lanProxy diagnostics',
+    },
+    {
+        id: 'D13',
+        closes: ['#401', '#399'],
+        what: 'terminal label before a shift',
     },
 ]);
 
@@ -176,19 +252,44 @@ export function jsonList(text) {
     return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-/** #358/#360: every listener on our ports is loopback, and each port listens. */
-export function evaluateListeners(rows) {
+/**
+ * #358/#360/#396: every listener on our ports is loopback, and each port
+ * listens. The one exception is Caddy on the configured LAN IP (port 1443
+ * only), and only while `GroceryPOS-ProxyLan` may own it: like diagnostics'
+ * `ports` check, any state but Stopped/absent/unknown (e.g. StartPending or
+ * an SCM recovery restart) may hold the LAN listener. Unlike diagnostics,
+ * an unreadable service state fails closed (the LAN listener is exposed).
+ */
+export function evaluateListeners(rows, { lanIp = null, lanService } = {}) {
     const ports = Object.values(PORTS);
     const ours = rows.filter((r) => ports.includes(Number(r.LocalPort)));
-    const exposed = ours.filter((r) => !LOOPBACK.has(String(r.LocalAddress)));
+    const lanOwned =
+        lanIp !== null &&
+        lanService != null &&
+        !['stopped', 'absent'].includes(String(lanService).toLowerCase());
+    const allowed = (r) =>
+        LOOPBACK.has(String(r.LocalAddress)) ||
+        (lanOwned &&
+            Number(r.LocalPort) === PORTS.proxy &&
+            String(r.LocalAddress)
+                .toLowerCase()
+                .replace(/^::ffff:/, '') === lanIp);
+    const exposed = ours.filter((r) => !allowed(r));
     const missing = ports.filter(
-        (p) => !ours.some((r) => Number(r.LocalPort) === p),
+        (p) =>
+            !ours.some(
+                (r) =>
+                    Number(r.LocalPort) === p &&
+                    LOOPBACK.has(String(r.LocalAddress)),
+            ),
     );
     return {
         status: exposed.length || missing.length ? 'fail' : 'pass',
         observed: ours.map((r) => `${r.LocalAddress}:${r.LocalPort}`),
         exposed: exposed.map((r) => `${r.LocalAddress}:${r.LocalPort}`),
         missing,
+        lanIp,
+        lanService: lanIp === null ? null : (lanService ?? null),
     };
 }
 
@@ -326,6 +427,19 @@ async function check(id, runbook, closes, fn) {
     }
 }
 
+/** The runtime manifest's LAN IP (#396), only if a private IPv4. */
+async function configuredLanIp(ctx, paths) {
+    try {
+        const { lanIp } = JSON.parse(
+            String(await ctx.readFile(paths.runtimeManifest)),
+        );
+        return typeof lanIp === 'string' && isPrivateIpv4(lanIp) ? lanIp : null;
+    } catch (error) {
+        if (error?.code === 'ENOENT') return null;
+        throw error;
+    }
+}
+
 function runJson(ctx, [cmd, args]) {
     const r = ctx.run(cmd, args);
     if (r.code !== 0) throw new Error(`exit ${r.code}: ${r.stderr}`);
@@ -431,19 +545,35 @@ export async function runChecks(ctx, options) {
     );
 
     results.push(
-        await check('listeners', ['B6', 'C3'], ['#358', '#360'], () => {
-            const ports = Object.values(PORTS).join(',');
-            const rows = runJson(
-                ctx,
-                ps(
-                    `Get-NetTCPConnection -State Listen -LocalPort ${ports} -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json`,
-                ),
-            );
-            return {
-                ...evaluateListeners(rows),
-                note: 'Local proof only; B6 still needs a second LAN device.',
-            };
-        }),
+        await check(
+            'listeners',
+            ['B6', 'C3'],
+            ['#358', '#360', '#396'],
+            async () => {
+                const ports = Object.values(PORTS).join(',');
+                const rows = runJson(
+                    ctx,
+                    ps(
+                        `Get-NetTCPConnection -State Listen -LocalPort ${ports} -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json`,
+                    ),
+                );
+                const lanIp = await configuredLanIp(ctx, paths);
+                let lanService = null;
+                if (lanIp) {
+                    const r = ctx.run(
+                        ...ps(
+                            `$s = Get-Service -Name '${LAN_SERVICE}' -ErrorAction SilentlyContinue; if ($s) { $s.Status.ToString() } else { 'absent' }`,
+                        ),
+                    );
+                    if (r.code === 0 && r.stdout.trim())
+                        lanService = r.stdout.trim();
+                }
+                return {
+                    ...evaluateListeners(rows, { lanIp, lanService }),
+                    note: 'Local proof only; B6 still needs a joined LAN terminal and a device on another subnet.',
+                };
+            },
+        ),
     );
 
     results.push(

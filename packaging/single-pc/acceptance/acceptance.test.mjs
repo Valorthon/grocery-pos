@@ -87,6 +87,112 @@ test('listeners: loopback only and every port present', () => {
     assert.deepEqual(missing.missing, [27018]);
 });
 
+test('listeners: Caddy on the configured LAN IP only while GroceryPOS-ProxyLan owns it (#396)', () => {
+    const lan = { LocalAddress: '192.168.1.10', LocalPort: 1443 };
+    const rows = [...GOOD_LISTENERS, lan];
+    const lanIp = '192.168.1.10';
+    for (const lanService of ['Running', 'StartPending'])
+        assert.equal(
+            evaluateListeners(rows, { lanIp, lanService }).status,
+            'pass',
+            lanService,
+        );
+    for (const lanService of ['Stopped', 'absent', undefined, null])
+        assert.deepEqual(
+            evaluateListeners(rows, { lanIp, lanService }).exposed,
+            ['192.168.1.10:1443'],
+            String(lanService),
+        );
+    // Without a configured LAN IP, or on another address or port.
+    assert.equal(evaluateListeners(rows).status, 'fail');
+    assert.deepEqual(
+        evaluateListeners(
+            [
+                ...GOOD_LISTENERS,
+                { LocalAddress: '192.168.1.11', LocalPort: 1443 },
+                { LocalAddress: '192.168.1.10', LocalPort: 13000 },
+                { LocalAddress: '192.168.1.10', LocalPort: 27018 },
+            ],
+            { lanIp, lanService: 'Running' },
+        ).exposed,
+        ['192.168.1.11:1443', '192.168.1.10:13000', '192.168.1.10:27018'],
+    );
+    // The LAN listener never stands in for the loopback one.
+    const noLoopback = evaluateListeners([...GOOD_LISTENERS.slice(0, 2), lan], {
+        lanIp,
+        lanService: 'Running',
+    });
+    assert.deepEqual(noLoopback.missing, [1443]);
+});
+
+test('runChecks listeners reads the LAN IP and the LAN service state', async () => {
+    const runtime = join(
+        'C:\\ProgramData\\Valorthon\\GroceryPOS',
+        'config',
+        'runtime.json',
+    );
+    const make = (state) =>
+        fakeContext({
+            files: { [runtime]: JSON.stringify({ lanIp: '192.168.1.10' }) },
+            run: (cmd, joined) => {
+                if (joined.includes('Get-NetTCPConnection'))
+                    return {
+                        code: 0,
+                        stdout: JSON.stringify([
+                            ...GOOD_LISTENERS,
+                            { LocalAddress: '192.168.1.10', LocalPort: 1443 },
+                        ]),
+                        stderr: '',
+                    };
+                if (joined.includes('GroceryPOS-ProxyLan'))
+                    return { code: 0, stdout: `${state}\r\n`, stderr: '' };
+            },
+        });
+    const listeners = async (state) =>
+        (
+            await runChecks(make(state), {
+                dataRoot: 'C:\\ProgramData\\Valorthon\\GroceryPOS',
+            })
+        ).find((r) => r.id === 'listeners');
+    const running = await listeners('Running');
+    assert.equal(running.status, 'pass', JSON.stringify(running));
+    assert.equal(running.lanService, 'Running');
+    assert.equal((await listeners('Stopped')).status, 'fail');
+});
+
+test('runChecks listeners refuses a LAN listener without a private configured lanIp', async () => {
+    const root = 'C:\\ProgramData\\Valorthon\\GroceryPOS';
+    const runtime = join(root, 'config', 'runtime.json');
+    for (const manifest of [{ lanIp: '8.8.8.8' }, {}]) {
+        const calls = [];
+        const ctx = fakeContext({
+            files: { [runtime]: JSON.stringify(manifest) },
+            run: (cmd, joined) => {
+                calls.push(joined);
+                if (joined.includes('Get-NetTCPConnection'))
+                    return {
+                        code: 0,
+                        stdout: JSON.stringify([
+                            ...GOOD_LISTENERS,
+                            { LocalAddress: '8.8.8.8', LocalPort: 1443 },
+                        ]),
+                        stderr: '',
+                    };
+                if (joined.includes('GroceryPOS-ProxyLan'))
+                    return { code: 0, stdout: 'Running', stderr: '' };
+            },
+        });
+        const r = (await runChecks(ctx, { dataRoot: root })).find(
+            (x) => x.id === 'listeners',
+        );
+        assert.equal(r.status, 'fail', JSON.stringify(manifest));
+        assert.equal(r.lanIp, null);
+        assert.deepEqual(r.exposed, ['8.8.8.8:1443']);
+        // No LAN service query without a usable LAN IP.
+        assert.ok(!calls.some((c) => c.includes('GroceryPOS-ProxyLan')));
+    }
+});
+
 test('services: running, automatic, virtual account, dependency order', () => {
     assert.equal(evaluateServices(GOOD_SERVICES).status, 'pass');
     const bad = evaluateServices([

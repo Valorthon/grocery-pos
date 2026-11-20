@@ -4,7 +4,9 @@ The one executable runbook for accepting a single-PC release on the target.
 It replaces [../proof/ACCEPTANCE-CHECKLIST.md](../proof/ACCEPTANCE-CHECKLIST.md)
 and keeps that file's numbering: **A1–A6 and B1–B17 are unchanged**. The new
 **C1–C8** collect the Windows-only items that #358–#365 left open, and **R1**
-is the release check done before anything is installed.
+is the release check done before anything is installed. **D1–D13** accept
+LAN terminals on two-PC hardware (#401, epic #402): a main PC plus at least
+one Windows terminal joined to it.
 
 **Not yet executed.** No Windows 11 x64 machine has been available (owner,
 2026-11-14). Every field is blank on purpose. Copy this file per run, fill the
@@ -23,40 +25,53 @@ No scenario here may run against a customer's PC or customer data
 
 ## Index
 
-| Id  | Scenario                                            | Closes           | Harness |
-| --- | --------------------------------------------------- | ---------------- | ------- |
-| R1  | Release bundle verified before install              | #366             | yes     |
-| A1  | Target eligibility (CPU, OS, storage)               | #357             | yes     |
-| A2  | Component qualification                             | #357             | partly  |
-| A3  | Compiled-runtime proof (`proof/run.mjs`)            | #357             | no      |
-| A4  | Native password verification                        | #357             | no      |
-| A5  | Authenticated MongoDB transactions                  | #357             | no      |
-| A6  | Hardware measurements (4 GB target)                 | #357             | no      |
-| B1  | Clean install, first ADMIN, forced change           | #366, #361, #362 | partly  |
-| B2  | Reboot before Windows logon                         | #366, #360, #362 | partly  |
-| B3  | Internet off, local API reachable                   | #366, #359       | no      |
-| B4  | Real API outage and recovery                        | #366, #359       | no      |
-| B5  | Authenticated transactions on the installed DB      | #366             | no      |
-| B6  | LAN refusal                                         | #366, #358       | partly  |
-| B7  | Replacement-PC restore                              | #366, #363       | partly  |
-| B8  | Populated and interrupted upgrade                   | #366, #364       | partly  |
-| B9  | Stale browser assets                                | #366, #364       | no      |
-| B10 | Pending receipt preservation                        | #366, #364, #363 | no      |
-| B11 | Crash and power-cut recovery                        | #366, #360, #362 | no      |
-| B12 | Repair, uninstall, reinstall                        | #366, #362       | no      |
-| B13 | Local HTTPS origin without warning                  | #366, #358, #362 | partly  |
-| B14 | Workload on the 4 GB PC                             | #366, #357       | no      |
-| B15 | Documentation followed as written                   | #366             | no      |
-| B16 | Installer ACLs                                      | #362, #360, #361 | yes     |
-| B17 | Back up to USB drive                                | #362, #363       | no      |
-| C1  | Browser auth flows at the installed origin          | #358             | no      |
-| C2  | Service registration, accounts, env and TLS state   | #360, #362       | yes     |
-| C3  | Listener binds                                      | #358, #360       | yes     |
-| C4  | Scheduled tasks, Windows backup tools, media checks | #362, #363       | partly  |
-| C5  | Failure exercises                                   | #365             | partly  |
-| C6  | Owner tools: Check, help, standard user             | #365             | partly  |
-| C7  | Upgrade modes and the 30-minute window              | #364             | partly  |
-| C8  | Preflight refusals and stop timing                  | #362             | no      |
+| Id  | Scenario                                            | Closes                | Harness |
+| --- | --------------------------------------------------- | --------------------- | ------- |
+| R1  | Release bundle verified before install              | #366                  | yes     |
+| A1  | Target eligibility (CPU, OS, storage)               | #357                  | yes     |
+| A2  | Component qualification                             | #357                  | partly  |
+| A3  | Compiled-runtime proof (`proof/run.mjs`)            | #357                  | no      |
+| A4  | Native password verification                        | #357                  | no      |
+| A5  | Authenticated MongoDB transactions                  | #357                  | no      |
+| A6  | Hardware measurements (4 GB target)                 | #357                  | no      |
+| B1  | Clean install, first ADMIN, forced change           | #366, #361, #362      | partly  |
+| B2  | Reboot before Windows logon                         | #366, #360, #362      | partly  |
+| B3  | Internet off, local API reachable                   | #366, #359            | no      |
+| B4  | Real API outage and recovery                        | #366, #359            | no      |
+| B5  | Authenticated transactions on the installed DB      | #366                  | no      |
+| B6  | LAN refusal                                         | #366, #358, #393–#396 | partly  |
+| B7  | Replacement-PC restore                              | #366, #363            | partly  |
+| B8  | Populated and interrupted upgrade                   | #366, #364            | partly  |
+| B9  | Stale browser assets                                | #366, #364            | no      |
+| B10 | Pending receipt preservation                        | #366, #364, #363      | no      |
+| B11 | Crash and power-cut recovery                        | #366, #360, #362      | no      |
+| B12 | Repair, uninstall, reinstall                        | #366, #362            | no      |
+| B13 | Local HTTPS origin without warning                  | #366, #358, #362      | partly  |
+| B14 | Workload on the 4 GB PC                             | #366, #357            | no      |
+| B15 | Documentation followed as written                   | #366                  | no      |
+| B16 | Installer ACLs                                      | #362, #360, #361      | yes     |
+| B17 | Back up to USB drive                                | #362, #363            | no      |
+| C1  | Browser auth flows at the installed origin          | #358                  | no      |
+| C2  | Service registration, accounts, env and TLS state   | #360, #362            | yes     |
+| C3  | Listener binds                                      | #358, #360, #396      | yes     |
+| C4  | Scheduled tasks, Windows backup tools, media checks | #362, #363            | partly  |
+| C5  | Failure exercises                                   | #365                  | partly  |
+| C6  | Owner tools: Check, help, standard user             | #365                  | partly  |
+| C7  | Upgrade modes and the 30-minute window              | #364                  | partly  |
+| C8  | Preflight refusals and stop timing                  | #362                  | no      |
+| D1  | LAN site service, firewall and shared root          | #401, #396            | partly  |
+| D2  | Join, rejoin and leave a Windows terminal           | #401, #397            | no      |
+| D3  | Concurrent sales on two terminals                   | #401, #395            | no      |
+| D4  | Cable pull mid-shift, offline cash and sync         | #401, #359, #37       | no      |
+| D5  | Upgrade with a stale terminal tab                   | #401, #364            | no      |
+| D6  | Restore logs every terminal out                     | #401, #363            | no      |
+| D7  | Replacement PC, then rejoin                         | #401, #363, #396      | no      |
+| D8  | LAN IP change                                       | #401, #396, #397      | no      |
+| D9  | Terminal clock ±5 min and ±3 h                      | #401, #398            | no      |
+| D10 | Time server (NTP) rule and `timeServer` check       | #401, #398            | no      |
+| D11 | Caddy leaf renewal: "not yet valid" watch           | #401, #398            | no      |
+| D12 | `lanNetwork` and `lanProxy` diagnostics             | #401, #399, #396      | no      |
+| D13 | Terminal label before a shift                       | #401, #399            | no      |
 
 ## 0. Run record
 
@@ -71,7 +86,9 @@ No scenario here may run against a customer's PC or customer data
 | Storage type (HDD/SATA SSD/NVMe), free GB     | `____` |
 | Physical PC or VM (vCPUs, RAM, security)      | `____` |
 | Chrome version (`chrome://version`)           | `____` |
-| Second LAN device (for B6)                    | `____` |
+| Joined Windows terminal (B6, D1–D13)          | `____` |
+| Device on another subnet (for B6)             | `____` |
+| Main PC LAN IP (and the D8 replacement IP)    | `____` |
 | Two USB drives, one SD card (for B17/C4)      | `____` |
 | Evidence folder path                          | `____` |
 
@@ -293,14 +310,28 @@ Evidence: output `____`. Result (PASS/FAIL): `____`
 
 ### B6. LAN refusal
 
-Steps: harness `listeners` (local); from a second LAN device:
-`Test-NetConnection <PC IP> -Port 1443`, `13000`, `27018` (or `nc -vz`), and
-a browser at `https://<PC IP>:1443`.
+Only Caddy's HTTPS on the configured LAN IP is reachable from the LAN, and
+only from a joined terminal on the same subnet over a Private network
+(#393–#396). Install or repair with `-LanIp <IP>` and join a terminal (D2)
+first.
 
-Expected: harness only loopback listeners; every remote attempt refused or
-timed out.
+Steps: harness `listeners` (local). From the joined terminal:
+`Test-NetConnection <IP> -Port 1443`, `13000`, `27018`; Chrome at
+`https://<IP>:1443/`; `https://<IP>:1443/v1/health`, `/v1/health/live` and
+`/v1/health/ready` (Chrome and `Invoke-WebRequest`). From a device on another
+subnet (a second router or VLAN): `Test-NetConnection <IP> -Port 1443`. Then
+switch the main PC's network profile to Public and repeat 1443 from the
+terminal; switch it back to Private.
 
-Evidence: harness `____`, remote output `____`. Result (PASS/FAIL): `____`
+Expected: harness pass (loopback listeners plus `<IP>:1443`, only while
+`GroceryPOS-ProxyLan` runs). From the terminal, 1443 connects and Chrome
+shows the app with no certificate warning; 13000 and 27018 are refused or
+time out; every `/v1/health*` URL on `https://<IP>:1443` is refused (404),
+never a health answer. 1443 is refused or times out from the other subnet,
+and from the terminal while the profile is Public.
+
+Evidence: harness `____`, terminal output `____`, other-subnet output
+`____`, Public-profile output `____`. Result (PASS/FAIL): `____`
 
 ### B7. Replacement-PC restore
 
@@ -531,15 +562,20 @@ resumes without regenerating secrets.
 
 Evidence: outputs `____`. Result (PASS/FAIL): `____`
 
-### C3. Listener binds (#358, #360)
+### C3. Listener binds (#358, #360, #396)
 
 Steps: harness `listeners`; `Get-NetTCPConnection -State Listen -LocalPort
-1443,13000,27018`.
+1443,13000,27018`; with a LAN IP set, `Get-Service GroceryPOS-ProxyLan`,
+then stop that service and run the harness again, then start it.
 
-Expected: 127.0.0.1:27018, 127.0.0.1:13000, 127.0.0.1:1443 and [::1]:1443
-only.
+Expected: 127.0.0.1:27018, 127.0.0.1:13000, 127.0.0.1:1443 and [::1]:1443,
+plus `<LAN IP>:1443` only when a LAN IP is configured and only while
+`GroceryPOS-ProxyLan` is not stopped (as diagnostics' `ports` check). Any
+other address, a LAN listener on 13000/27018, or one on the LAN IP while the
+service is stopped fails. Unlike diagnostics, the harness fails closed when it
+cannot read the LAN service state.
 
-Evidence: harness `____`. Result (PASS/FAIL): `____`
+Evidence: harness (running, stopped) `____`. Result (PASS/FAIL): `____`
 
 ### C4. Tasks, Windows backup tools and media checks (#362, #363)
 
@@ -604,6 +640,229 @@ Expected: exit 3 and fixed messages; stop time recorded.
 
 Evidence: outputs `____`, stop seconds `____`. Result (PASS/FAIL): `____`
 
+## Part D: LAN terminals on two-PC hardware (#401)
+
+A vendor-owned main PC installed with `-LanIp <IP>` and at least one Windows
+11 terminal on the same isolated shop LAN, both with test data only. The
+Android Chrome rows come with #400 and are added here when it lands.
+
+### D1. LAN site service, firewall and shared root
+
+Steps: `Get-Service GroceryPOS-Proxy, GroceryPOS-ProxyLan`; `sc qc
+GroceryPOS-ProxyLan` (dependency on `GroceryPOS-Proxy`); stop
+`GroceryPOS-Proxy` and check both stop in order, then start them. Pull the
+main PC's cable (the LAN address goes away): only `GroceryPOS-ProxyLan`
+fails and SCM keeps retrying it, `https://localhost:1443` keeps working;
+plug it back in and the service recovers by itself. `netsh advfirewall
+firewall show rule name=GroceryPOS-LAN-HTTPS verbose`. Compare the issuer of
+the leaf served on `https://localhost:1443` and on `https://<IP>:1443`.
+
+Expected: the rule is TCP 1443, `program=<release>\caddy\caddy.exe`,
+`localip=<IP>`, `remoteip=localsubnet`, `profile=private`, no service filter,
+and a terminal on the subnet reaches `https://<IP>:1443` with only that rule;
+nothing reaches loopback-bound ports from the LAN. `import app.caddy`
+resolves in the release's `caddy\` folder and the client is served from
+`{$GPOS_CLIENT_ROOT}` (a backslash path). Both Caddy processes share
+`tls\data`: one root issues both leaves. "Check Grocery POS" shows **LAN
+terminals** OK while `GroceryPOS-ProxyLan` runs and WARN while it is
+stopped.
+
+Evidence: outputs `____`, screenshots `____`. Result (PASS/FAIL): `____`
+
+### D2. Join, rejoin and leave a Windows terminal
+
+Steps: on the main PC, "Make terminal package" (Start menu): elevation
+prompt, folder picker on a USB drive; also once with no LAN IP set. On the
+terminal, from an elevated PowerShell 5.1, `JoinTerminal.ps1 -Mode join`;
+check certlm.msc, `%ProgramData%\Valorthon\GroceryPOS-Terminal\terminal.json`,
+`w32tm /query /configuration`, the Chrome shortcuts (Public Desktop, common
+Start menu). Edit `root.crt` in a copy and join with it; join with another
+main PC's package; `-Mode rejoin` with a new package; `-Mode leave`; run the
+script as a non-admin user.
+
+Expected: the package is `GroceryPOS-terminal-<IP>\` (root.crt with no key,
+terminal.json, JoinTerminal.ps1, README.txt); without a LAN IP it is
+refused with a plain message. Join puts the root in the machine Root store
+under the recorded thumbprint (shown on both PCs), sets w32time Automatic
+with NtpServer `<IP>,0x8` and resyncs once the main PC serves time (D10);
+the shortcut opens `https://<IP>:1443/` with no warning and the service
+worker registers ("Offline cash ready" can show); the TLS check reports
+Done, and with the main PC off fails with the plain message. An edited
+root is refused with "SHA-256 differs" and nothing changes; another main
+PC's package is refused for `join`. Rejoin removes only the old root (by
+thumbprint), other Caddy roots stay. Leave removes only our root and both
+shortcuts, keeps the time setting, and Chrome then refuses the site. A
+non-admin run is refused with "Run this from an administrator PowerShell
+window".
+
+Evidence: outputs `____`, screenshots `____`. Result (PASS/FAIL): `____`
+
+### D3. Concurrent sales on two terminals
+
+Steps: two cashiers, each with an open shift, one on the main PC
+(`https://localhost:1443`) and one on the terminal (`https://<IP>:1443`).
+Sell the same product on both at the same moment, including its last units;
+repeat a few times; then close both shifts. Check the Audit Log's client IP
+for each terminal and a wrong-password lockout on one terminal.
+
+Expected: both sales complete or one is refused for stock, never
+oversold; each shift's Z-read has only its own sales; the audit shows the
+terminal's own LAN address (main PC as 127.0.0.1); a lockout on one
+terminal does not lock the other (#395).
+
+Evidence: screenshots, audit rows `____`. Result (PASS/FAIL): `____`
+
+### D4. Cable pull mid-shift, offline cash and sync
+
+Steps: on the terminal, wait for "Offline cash ready", then pull its cable
+during an open shift. Take cash sales (and try GCash, a discount, a void:
+refused offline). Plug it back in and let the outbox sync; close the shift.
+
+Expected: #359/#37 semantics: offline cash only, receipts durable before the
+basket clears, synced once with no duplicates, occurrence time kept; the
+shift closes only after the queue drains.
+
+Evidence: screenshots, sale ids `____`. Result (PASS/FAIL): `____`
+
+### D5. Upgrade with a stale terminal tab
+
+Steps: leave a terminal tab open (with a basket and, if possible, a queued
+offline receipt) while the main PC is upgraded (B8). Use the stale tab.
+
+Expected: the "Grocery POS was updated" / "Reload to continue." dialog
+(`CLIENT_OUTDATED`) with only Reload; the basket and outbox survive the
+reload and the queued receipt syncs. The docs' upgrade steps (close tabs,
+sync offline cash on every terminal) match what happens.
+
+Evidence: screenshots `____`. Result (PASS/FAIL): `____`
+
+### D6. Restore logs every terminal out
+
+Steps: with both PCs logged in (no open shifts or leases), restore a
+verified backup on the main PC (`restore.mjs --confirm <id>`); use each tab.
+
+Expected: every terminal and the main PC are sent to Log in; logging in
+again works; the docs' restore step (log out every terminal) matches.
+
+Evidence: screenshots `____`. Result (PASS/FAIL): `____`
+
+### D7. Replacement PC, then rejoin
+
+Steps: B7 onto a second PC with the same LAN IP (the backup carries the
+Caddy root pair); open the terminal's shortcut; then repeat on a PC whose
+restore did not seed the root and run `JoinTerminal.ps1 -Mode rejoin` with
+a new package.
+
+Expected: with the seeded root the terminal connects with no warning and no
+rejoin, and the LAN IP is kept and reported; with a new root, rejoin is
+needed and works. The docs' replacement-PC steps match.
+
+Evidence: outputs `____`. Result (PASS/FAIL): `____`
+
+### D8. LAN IP change
+
+Steps: try `-Mode repair -LanIp <new IP>` with a shift open (refused), with
+an active offline lease (refused), with a new IP that is not on a local
+adapter as `Preferred` (refused), and with a foreign listener on the new IP
+(refused); open a shift while the proxy and API are stopping (the re-check
+after the stop refuses); then repair with none of these. Also try `-LanIp`
+on `install` over an existing root (refused), and run a plain repair while
+the kept IP is missing from the adapter. Make a new terminal package and
+`-Mode rejoin` on the terminal.
+
+Expected: refusals change nothing; a missing kept IP only warns on repair
+(repair still runs); repair moves `LAN_ORIGIN`, the LAN
+service and both firewall rules to the new IP; the terminal works at the
+new origin after rejoin (its browser storage there starts empty). The docs'
+LAN address change steps match.
+
+Evidence: outputs `____`. Result (PASS/FAIL): `____`
+
+### D9. Terminal clock ±5 min and ±3 h
+
+Steps: on the terminal, stop w32time and set the clock 5 min fast, then
+5 min slow; take offline cash (D4 flow) at each and sync. Repeat at ±3 h.
+Restore the clock and w32time afterwards.
+
+Expected: at ±5 min the register warns about the clock (above 30 s) and the
+offline cash syncs with corrected `soldAt`. At +3 h the page loads with no
+certificate error, the register shows the clock warning, and offline cash
+syncs with `soldAt` within seconds of the main PC's time (corrected, never
+the terminal's). At −3 h record the served leaf's NotBefore: if the
+terminal's time is before it, Chrome's NET::ERR_CERT_DATE_INVALID is
+expected, no sale is lost and a queued receipt stays queued until the clock
+is fixed and the page loads; otherwise expect the same as +3 h. In both
+cases `w32tm /resync` clears it. FAIL: a lost or duplicated receipt, an
+uncorrected `soldAt`, or an app refusal that does not name the clock.
+
+Why: Caddy's `tls internal` leaves last 12 h and renew at about two-thirds
+of their life, with NotBefore backdated about 1 minute, so a slow terminal
+can be before a fresh leaf's NotBefore (see D10, D11).
+
+Evidence: screenshots, sale ids `____`, leaf NotBefore `____`. Result
+(PASS/FAIL): `____`
+
+### D10. Time server (NTP) rule and `timeServer` check
+
+Steps: on the main PC `netsh advfirewall firewall show rule
+name=GroceryPOS-LAN-NTP verbose`, `w32tm /query /configuration`; on the
+terminal `w32tm /resync` and `w32tm /stripchart /computer:<IP>
+/samples:3`. Stop w32time on the main PC and run "Check Grocery POS"; start
+it again.
+
+Expected: the rule is UDP 123, `localip=<IP>`, `remoteip=localsubnet`,
+Private; NtpServer enabled with `/reliable:yes`; the terminal resyncs from
+the main PC with no internet. `timeServer` is OK while w32time runs, WARN
+while it is stopped, info without a LAN IP. After an upgrade from a release
+before #398, repair applies the time server.
+
+Evidence: outputs `____`. Result (PASS/FAIL): `____`
+
+### D11. Caddy leaf renewal: "not yet valid" watch
+
+Steps: throughout D3–D10 (at least a full day), keep a terminal open across
+Caddy's `tls internal` leaf renewals (12 h lifetime, renewed several times a
+day); note each renewal time from the Caddy log.
+
+Expected: no Chrome "certificate not yet valid" error right after a
+renewal. Any such error is a FAIL: record it here and file the Caddyfile
+leaf lifetime/renewal follow-up on #401 (as #398 allowed).
+
+Evidence: renewal times `____`, errors seen `____`. Result (PASS/FAIL):
+`____`
+
+### D12. `lanNetwork` and `lanProxy` diagnostics
+
+Steps: `diagnose.mjs check` (and "Check Grocery POS") with a LAN IP set, on
+a Private network, rule enabled, valid certificate; then each in turn:
+remove or change the adapter's IP (DHCP drift); switch the profile to
+Public; disable, then delete, `GroceryPOS-LAN-HTTPS`; run not elevated (the
+local root unreadable); remove the LAN IP (`repair -LanIp none`). Save a
+support file.
+
+Expected: `lanNetwork` ok in the first state; warns that this PC no longer
+has the IP (with the re-join steps), that the network is Public, and for
+the disabled and the deleted rule; not elevated, the certificate is
+`unverified` and the check `unknown`, never ok; without a LAN IP it is info.
+`lanProxy` as D1. The support file has the LAN IP redacted from
+`lanNetwork` details.
+
+Evidence: outputs `____`, support file `____`. Result (PASS/FAIL): `____`
+
+### D13. Terminal label before a shift
+
+Steps: on a terminal with no saved label, open Shift In; as ADMIN save the
+label in Store settings on that terminal, also from another tab while Shift
+In is open; open and close a shift. On the main PC open a shift without a
+label.
+
+Expected: without a label Shift In shows "Ask an admin to set this
+terminal's label in Store settings." and Open Register is disabled; after
+saving (either tab) it is enabled and the Z-read shows the label. The main
+PC opens a shift without one.
+
+Evidence: screenshots `____`. Result (PASS/FAIL): `____`
+
 ## Known limitations to record, not to fix here
 
 - MongoDB SSPL source-offer wording needs legal clearance before customer
@@ -620,3 +879,5 @@ Evidence: outputs `____`, stop seconds `____`. Result (PASS/FAIL): `____`
 Operator `____`, reviewer `____`, date `____`. Part A with all PASS and
 independent review may close #357; Parts B and C with all PASS, plus the
 evidence files, may close #366 and the Windows-only remainders of #358–#365.
+B6 and Part D with all PASS on the two-PC hardware may close #401's Windows
+rows; its Android rows wait for #400.
