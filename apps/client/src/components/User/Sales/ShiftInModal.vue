@@ -51,10 +51,11 @@
 import {
     hasSavedTerminalLabel,
     isLanTerminal,
+    refreshSavedTerminalLabel,
     TERMINAL_LABEL_REQUIRED,
     terminalLabel,
 } from '@/settings/presentation';
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { ArrowRight, ShieldCheck } from '@lucide/vue';
 import { billCountTotal, SHIFT_LIMITS } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
@@ -78,6 +79,10 @@ const cashierName = computed(() => authStore.user?.username ?? 'cashier');
 const labelMissing = computed(
     () => isLanTerminal() && !hasSavedTerminalLabel(),
 );
+// An admin may save the label in another tab of this browser.
+const onStorage = () => refreshSavedTerminalLabel();
+onMounted(() => window.addEventListener('storage', onStorage));
+onBeforeUnmount(() => window.removeEventListener('storage', onStorage));
 
 const billCounts = ref<BillCounts>({});
 const countsInvalid = ref(false);

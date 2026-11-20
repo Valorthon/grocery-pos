@@ -354,6 +354,18 @@ describe('diagnose', () => {
             }),
         );
         assert.equal(unread.status, 'unknown');
+        // A present address whose network category can't be read is unknown.
+        for (const lanProfile of ['unknown', null]) {
+            const blank = await run(
+                lanCtx({
+                    lanAddress: async () => ({
+                        lanIpPresent: true,
+                        lanProfile,
+                    }),
+                }),
+            );
+            assert.equal(blank.status, 'unknown', String(lanProfile));
+        }
         // Without LAN terminals it is informational and reads nothing.
         const none = await run(
             lanCtx(
@@ -384,6 +396,10 @@ describe('diagnose', () => {
                 lanProfile: 'Public',
             },
         );
+        assert.deepEqual(parseLanAddress('present|\r\n'), {
+            lanIpPresent: true,
+            lanProfile: 'unknown',
+        });
     });
 
     test('the proxy may listen on the configured LAN IP only (#396)', async () => {

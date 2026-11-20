@@ -111,6 +111,21 @@ describe('ShiftInModal on a LAN terminal (#399)', () => {
         expect(confirmButton().disabled).toBe(false);
     });
 
+    it('a label saved in another tab enables the open modal', async () => {
+        await openModal();
+        expect(confirmButton().disabled).toBe(true);
+        localStorage.setItem('grocery_pos_terminal_label_v1', 'Lane 3');
+        window.dispatchEvent(new StorageEvent('storage'));
+        await flush();
+        expect(errorText()).toBeUndefined();
+        expect(confirmButton().disabled).toBe(false);
+        // Undo for the next test: no saved label again.
+        localStorage.removeItem('grocery_pos_terminal_label_v1');
+        window.dispatchEvent(new StorageEvent('storage'));
+        await flush();
+        expect(confirmButton().disabled).toBe(true);
+    });
+
     it('a labelled LAN terminal opens a shift with its label', async () => {
         expect(saveTerminalLabel('Lane 2')).toBe(true);
         expect(hasSavedTerminalLabel()).toBe(true);

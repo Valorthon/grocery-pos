@@ -40,6 +40,11 @@ export const terminalLabel = ref(savedTerminal.value || DEFAULT_TERMINAL);
 export function hasSavedTerminalLabel(): boolean {
     return savedTerminal.value !== '';
 }
+/** Re-read the saved label, e.g. after another tab saved it (#399). */
+export function refreshSavedTerminalLabel(): void {
+    savedTerminal.value = readSavedTerminal();
+    terminalLabel.value = savedTerminal.value || DEFAULT_TERMINAL;
+}
 /**
  * A LAN terminal (#399): a single-pc build opened by any address but
  * localhost (the main PC). It must have a saved label before opening a

@@ -547,7 +547,12 @@ export async function checkLanNetwork(ctx, paths) {
             `LAN terminals may not connect: ${problems.join('; ')}.`,
             { details, steps },
         );
-    const unread = !address || !firewall || !tls;
+    const unread =
+        !address ||
+        (address.lanIpPresent && !address.lanProfile) ||
+        address.lanProfile === 'unknown' ||
+        !firewall ||
+        !tls;
     return result(
         'lanNetwork',
         title,
@@ -1094,7 +1099,8 @@ export function firewallState(text) {
 }
 
 /** The installer's adapter facts (#396): Preferred address lines with their
- *  NetworkCategory; Public on any adapter wins. */
+ *  NetworkCategory; Public on any adapter wins, and a present address
+ *  without a readable category is 'unknown', never ok. */
 export function parseLanAddress(stdout) {
     const categories = stdout
         .split(/\r?\n/)
@@ -1105,7 +1111,9 @@ export function parseLanAddress(stdout) {
         lanIpPresent: categories.length > 0,
         lanProfile: categories.includes('Public')
             ? 'Public'
-            : (categories.find(Boolean) ?? null),
+            : categories.length > 0
+              ? (categories.find(Boolean) ?? 'unknown')
+              : null,
     };
 }
 
@@ -1119,6 +1127,8 @@ function tlsHandshake(host, port, ca) {
             'timeout',
             () => (socket.destroy(), done({ error: 'TIMEOUT' })),
         );
+        // A late error after destroy must not throw unhandled.
+        socket.on('error', () => {});
         socket.once('error', (error) => done({ error: error.code ?? 'error' }));
     });
 }
