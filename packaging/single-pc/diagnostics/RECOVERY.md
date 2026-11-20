@@ -180,6 +180,14 @@ limit, 54000 s), or one whose register shows "This terminal's clock is …
 off the main PC. Ask the owner to fix its time setting.", needs its date and time set by hand first, then
 `JoinTerminal.ps1 -Mode rejoin`.
 
+## Terminal clocks
+
+"Check Grocery POS" warns "This PC is not serving time to the LAN terminals"
+when the Windows Time service is stopped or its time server is turned off.
+The terminals' clocks then drift and offline cash sales may be refused.
+Restart the PC. If the warning stays, ask your vendor to run the installer in
+repair mode, which turns the time server back on.
+
 ## After an interrupted or failed upgrade (vendor)
 
 Grocery POS stays closed until the upgrade is finished or rolled back; that

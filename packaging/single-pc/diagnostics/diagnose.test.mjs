@@ -381,6 +381,60 @@ describe('diagnose', () => {
         );
     });
 
+    test('time server for LAN terminals (#398)', async () => {
+        const paths = layout(root);
+        let asked = false;
+        const ctxWith = (facts, manifest = { lanIp: '192.168.1.10' }) =>
+            healthy({
+                readText: async (path) => {
+                    if (path === paths.runtimeManifest)
+                        return JSON.stringify(manifest);
+                    return (await import('node:fs/promises')).readFile(
+                        path,
+                        'utf8',
+                    );
+                },
+                timeServer: async () => {
+                    asked = true;
+                    return facts;
+                },
+            });
+        const run = async (ctx) =>
+            byId(await diagnose({ dataRoot: root }, ctx), 'timeServer');
+        // No LAN IP: info, and nothing is read.
+        const none = await run(ctxWith({ state: 'RUNNING' }, {}));
+        assert.equal(none.status, 'info');
+        assert.equal(asked, false);
+        const ok = await run(
+            ctxWith({ state: 'RUNNING', ntpServerEnabled: true }),
+        );
+        assert.equal(ok.status, 'ok');
+        for (const facts of [
+            { state: 'STOPPED', ntpServerEnabled: true },
+            { state: 'absent', ntpServerEnabled: true },
+            { state: 'RUNNING', ntpServerEnabled: false },
+            { state: null, ntpServerEnabled: false },
+        ]) {
+            const warn = await run(ctxWith(facts));
+            assert.equal(warn.status, 'warn', JSON.stringify(facts));
+            assert.deepEqual(warn.steps, GUIDANCE.timeServer);
+        }
+        for (const facts of [
+            null,
+            { state: 'RUNNING', ntpServerEnabled: null },
+            { state: 'UNKNOWN', ntpServerEnabled: true },
+            { state: null, ntpServerEnabled: true },
+        ]) {
+            const unknown = await run(ctxWith(facts));
+            assert.equal(unknown.status, 'unknown', JSON.stringify(facts));
+        }
+        assert.ok(CHECK_IDS.includes('timeServer'));
+        assert.equal(
+            CHECK_IDS.indexOf('timeServer'),
+            CHECK_IDS.indexOf('lanNetwork') + 1,
+        );
+    });
+
     test('LAN network fact parsers (#399)', () => {
         assert.equal(firewallState(''), 'missing');
         assert.equal(firewallState('True\r\n'), 'enabled');
