@@ -177,9 +177,10 @@ export function joinPlan({
 
 /**
  * The terminal takes its time from the main PC (owner decision
- * 2026-11-20; the main PC's NTP server is #398). w32time is trigger-start
- * on workgroup PCs, so it is set to start automatically. The resync may
- * fail until the main PC serves time; that is a warning, not a failure.
+ * 2026-11-20; the main PC serves NTP since #398). w32time is trigger-start
+ * on workgroup PCs, so it is set to start automatically and its triggers
+ * (which stop it again) are removed. The resync may fail while the main PC
+ * is off; that is a warning, not a failure.
  */
 export function timeSteps(lanIp) {
     return [
@@ -187,6 +188,12 @@ export function timeSteps(lanIp) {
             kind: 'exec',
             file: 'sc.exe',
             args: ['config', 'w32time', 'start=', 'auto'],
+        },
+        {
+            kind: 'exec',
+            file: 'sc.exe',
+            args: ['triggerinfo', 'w32time', 'delete'],
+            warnOnly: true,
         },
         { kind: 'start-service', name: 'w32time' },
         {
@@ -227,9 +234,10 @@ export function readmeText(info) {
         `5. Open "${PRODUCT}" on the desktop.`,
         '',
         'Time: the script sets this terminal to take its time from the main PC.',
-        'That works only once the main PC serves time (issue #398); until then',
-        'the script warns that the clock could not sync, and the clock must be',
-        'kept right by hand.',
+        'Windows then checks it by itself (about every 17 minutes to a few',
+        'hours). A clock more than 15 hours off is not corrected: set the date',
+        'and time by hand first, then run the script again. If the main PC is',
+        'off, the script warns that the clock could not sync yet.',
         '',
         'After the main PC was replaced or its certificate changed, make a new',
         'package and run it with -Mode rejoin. To stop using this terminal, run',

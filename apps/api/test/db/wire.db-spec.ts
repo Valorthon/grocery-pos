@@ -206,6 +206,7 @@ const INTEGER_KEYS = new Set([
     'change',
     'totalItems',
     'statusCode',
+    'serverTime',
 ]);
 
 /**

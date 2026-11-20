@@ -27,6 +27,8 @@ export interface OfflineLeaseView {
     issuedAt: string;
     expiresAt: string;
     shift: CurrentShiftView;
+    /** Server clock (epoch ms) when answering, for terminal clock correction (#398). */
+    serverTime: number;
 }
 export interface OfflineCatalogRequest {
     lease: string;
@@ -36,6 +38,8 @@ export interface OfflineCatalogRequest {
 export interface OfflineCatalogPage {
     products: OfflineProduct[];
     next: string | null;
+    /** Server clock (epoch ms) when answering, for terminal clock correction (#398). */
+    serverTime: number;
 }
 export interface OfflineSaleLine {
     product: string;
@@ -71,6 +75,7 @@ export const OFFLINE_LEASE_SHAPE: WireShape<OfflineLeaseView> = {
     issuedAt: 'required',
     expiresAt: 'required',
     shift: 'required',
+    serverTime: 'required',
 };
 export const OFFLINE_PRODUCT_SHAPE: WireShape<OfflineProduct> = {
     isActive: 'optional',
@@ -85,4 +90,5 @@ export const OFFLINE_PRODUCT_SHAPE: WireShape<OfflineProduct> = {
 export const OFFLINE_CATALOG_SHAPE: WireShape<OfflineCatalogPage> = {
     products: 'required',
     next: 'required',
+    serverTime: 'required',
 };

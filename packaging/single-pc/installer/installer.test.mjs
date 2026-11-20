@@ -56,6 +56,8 @@ import {
     evaluatePreflight,
     FIREWALL_RULE,
     firewallSteps,
+    timeServerSteps,
+    NTP_FIREWALL_RULE,
     locations,
     reminderTaskXml,
     serviceAccount,
@@ -1116,6 +1118,18 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
         ),
     );
     assert.ok(netsh().some((l) => l.includes('localip=192.168.1.10')));
+    assert.ok(
+        netsh().some(
+            (l) =>
+                l.includes(`name=${NTP_FIREWALL_RULE}`) &&
+                l.includes('localip=192.168.1.10'),
+        ),
+    );
+    assert.ok(
+        ctx.log.some(
+            (e) => e[0] === 'w32tm.exe' && e.includes('/reliable:yes'),
+        ),
+    );
 
     // Repair without --lan-ip keeps it and checks nothing.
     ctx.log.length = 0;
@@ -1237,8 +1251,59 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
     assert.ok(ctx.log.some((e) => e[0] === 'provision-lan' && e[1] === null));
     assert.deepEqual(netsh(), [
         `netsh.exe advfirewall firewall delete rule name=${FIREWALL_RULE}`,
+        `netsh.exe advfirewall firewall delete rule name=${NTP_FIREWALL_RULE}`,
     ]);
+    assert.ok(!ctx.log.some((e) => e[0] === 'w32tm.exe'));
     await rm(dir, { recursive: true });
+});
+
+test('the main PC serves time to LAN terminals (#398)', () => {
+    const steps = timeServerSteps('192.168.1.10');
+    const line = (s) => `${s.file} ${s.args.join(' ')}`;
+    assert.equal(
+        line(steps[0]),
+        `netsh.exe advfirewall firewall delete rule name=${NTP_FIREWALL_RULE}`,
+    );
+    assert.equal(steps[0].allowFailure, true);
+    const lines = steps.map(line);
+    assert.ok(
+        lines.some(
+            (l) =>
+                l.startsWith('reg.exe add ') &&
+                l.includes('W32Time\\TimeProviders\\NtpServer') &&
+                l.includes('/v Enabled /t REG_DWORD /d 1 /f'),
+        ),
+    );
+    assert.ok(lines.includes('sc.exe config w32time start= auto'));
+    assert.ok(lines.includes('sc.exe triggerinfo w32time delete'));
+    assert.ok(lines.includes('w32tm.exe /config /reliable:yes /update'));
+    // Restarted after the provider is enabled, before /reliable is applied.
+    assert.ok(
+        lines.indexOf('net.exe start w32time') >
+            lines.findIndex((l) => l.startsWith('reg.exe')),
+    );
+    const add = steps.at(-1).args;
+    for (const arg of [
+        'dir=in',
+        'action=allow',
+        'protocol=UDP',
+        'localport=123',
+        'localip=192.168.1.10',
+        'remoteip=localsubnet',
+        'profile=private',
+    ])
+        assert.ok(add.includes(arg), arg);
+    assert.ok(!add.some((a) => /any|0\.0\.0\.0|public|domain/i.test(a)));
+    // No LAN IP: the rule is only deleted.
+    assert.deepEqual(timeServerSteps(null), [steps[0]]);
+    // Uninstall removes it too.
+    assert.ok(
+        uninstallSteps({ installedServices: [], shortcuts: [] })
+            .map(line)
+            .includes(
+                `netsh.exe advfirewall firewall delete rule name=${NTP_FIREWALL_RULE}`,
+            ),
+    );
 });
 
 test('installer arguments are validated per mode', () => {

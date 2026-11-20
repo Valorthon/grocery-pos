@@ -46,6 +46,7 @@ const lease = (): OfflineLeaseView => ({
         openingFloat: 10000,
         movements: [],
     },
+    serverTime: Date.now(),
 });
 const product = (): OfflineProduct => ({
     _id: PRODUCT,
@@ -758,4 +759,85 @@ it('ignores a probe answer that arrives after logout', async () => {
     answer(failure());
     expect(await late).toBe(false);
     expect(store.connected).toBe(true);
+});
+
+/** A JWT-shaped proof whose payload carries only `iat` (seconds). */
+const proofWith = (iat: number) =>
+    `h.${btoa(JSON.stringify({ iat })).replace(/=+$/, '')}.s`;
+it.each([
+    ['5 min slow', -300_000],
+    ['5 min fast', 300_000],
+])(
+    'corrects a terminal %s for readiness, enqueue and soldAt (#398)',
+    async (_, skew) => {
+        const serverNow = Date.now();
+        // The terminal's clock reads serverNow + skew.
+        vi.spyOn(Date, 'now').mockImplementation(
+            () => new Date().getTime() + skew,
+        );
+        const issued = new Date(serverNow - 200).toISOString();
+        const fresh = { ...lease(), issuedAt: issued, serverTime: serverNow };
+        // A lease close to expiry in server time but not in a slow clock.
+        fresh.expiresAt = new Date(serverNow + 60_000).toISOString();
+        vi.mocked(api.post).mockImplementation(async (path, data) =>
+            path === '/offline/lease'
+                ? { data: fresh }
+                : acknowledged(path, data),
+        );
+        vi.mocked(api.get).mockResolvedValue({
+            data: { products: [product()], next: null, serverTime: serverNow },
+        });
+        store.setConnection(false);
+        store.setConnection(true);
+        vi.mocked(api.post).mockClear();
+        await store.prepare(fresh.shift);
+        expect(Math.abs(store.clockOffset + skew)).toBeLessThan(2000);
+        expect(store.clockWarning).toBe(true);
+        expect(store.ready).toBe(true);
+        store.setConnection(false);
+        const receipt = await store.queue(body(), items());
+        const soldAt = Date.parse(receipt.createdAt);
+        // Within the server's accepted window: not before the lease, not
+        // after server now + 120 s, before expiry.
+        expect(soldAt).toBeGreaterThanOrEqual(Date.parse(issued));
+        expect(soldAt).toBeLessThan(serverNow + 120_000);
+        expect(soldAt).toBeLessThan(Date.parse(fresh.expiresAt));
+    },
+);
+it('clamps soldAt to the lease and proof iat on a slightly slow terminal (#398)', async () => {
+    const issuedMs = Date.now() + 1500;
+    const iat = Math.floor(issuedMs / 1000) + 1;
+    const saved = (await readOfflineState(USER))!;
+    await saveOfflineState({
+        ...saved,
+        lease: { ...lease(), issuedAt: new Date(issuedMs).toISOString() },
+        products: [{ ...product(), proof: proofWith(iat) }],
+        clockOffset: 0,
+    });
+    await store.restore(USER, [Role.Seller]);
+    const receipt = await store.queue(body(), items());
+    expect(Date.parse(receipt.createdAt)).toBe(iat * 1000);
+    expect((await pendingOffline(USER))[0]?.request.soldAt).toBe(
+        receipt.createdAt,
+    );
+});
+it('refuses enqueue once the lease expired in corrected time (#398)', async () => {
+    const saved = (await readOfflineState(USER))!;
+    await saveOfflineState({
+        ...saved,
+        lease: {
+            ...lease(),
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        },
+        clockOffset: 120_000,
+    });
+    await store.restore(USER, [Role.Seller]);
+    expect(store.ready).toBe(false);
+    await expect(store.queue(body(), items())).rejects.toThrow('expired');
+});
+it('reads no iat from an unreadable proof', async () => {
+    const { proofIat } = await import('./offline');
+    expect(proofIat('server-proof')).toBeUndefined();
+    expect(proofIat('a.!!!.c')).toBeUndefined();
+    expect(proofIat(proofWith(42))).toBe(42);
 });

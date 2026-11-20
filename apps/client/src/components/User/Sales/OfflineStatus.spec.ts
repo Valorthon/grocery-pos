@@ -27,6 +27,8 @@ function fixture() {
         pendingOpen: false,
         busy: false,
         admin: false,
+        clockOffset: 0,
+        clockWarning: false,
         setConnection: vi.fn(),
         probe: vi.fn().mockResolvedValue(true),
         prepare: vi.fn().mockResolvedValue(undefined),
@@ -197,4 +199,20 @@ it('shows an empty pending list and handles a non-seller admin without preparing
     window.dispatchEvent(new Event('online'));
     await flush();
     expect(status.prepare).not.toHaveBeenCalled();
+});
+
+it('warns when the terminal clock is far off the main PC (#398)', async () => {
+    mount();
+    expect(root.querySelector('[data-testid="offline-clock-warning"]')).toBe(
+        null,
+    );
+    status.ready = false;
+    status.clockOffset = -45_000;
+    status.clockWarning = true;
+    await flush();
+    const warning = root.querySelector('[data-testid="offline-clock-warning"]');
+    expect(warning?.textContent).toContain('45 seconds off the main PC');
+    status.clockOffset = 300_000;
+    await flush();
+    expect(warning?.textContent).toContain('5 min off');
 });

@@ -124,6 +124,7 @@ test('join trusts, records, sets time, makes the shortcut, then checks TLS witho
             'trust',
             'record',
             'exec',
+            'exec',
             'start-service',
             'exec',
             'exec',
@@ -246,13 +247,16 @@ test('leave removes only the recorded root and the shortcut', () => {
 test('the terminal takes its time from the main PC', () => {
     const steps = timeSteps('192.168.1.10');
     assert.deepEqual(steps[0].args, ['config', 'w32time', 'start=', 'auto']);
-    assert.deepEqual(steps[2].args, [
+    // Without its workgroup triggers w32time stays running (#398).
+    assert.deepEqual(steps[1].args, ['triggerinfo', 'w32time', 'delete']);
+    assert.equal(steps[2].kind, 'start-service');
+    assert.deepEqual(steps[3].args, [
         '/config',
         '/manualpeerlist:192.168.1.10,0x8',
         '/syncfromflags:manual',
         '/update',
     ]);
-    assert.equal(steps[3].warnOnly, true);
+    assert.equal(steps[4].warnOnly, true);
 });
 
 test('package writes the public root, info, script and readme from the stored LAN IP', async () => {

@@ -156,7 +156,12 @@ the main PC's installation over HTTPS. This section is the reference for
 - Time: the main PC serves time (NTP) to terminals, and the app corrects any
   remaining offset against server time so offline cash is not refused (#398).
   Terminal clocks must also stay close enough for the LAN certificate's
-  validity window to check.
+  validity window to check. The installer enables the main PC's NtpServer
+  provider (`/reliable:yes`, w32time automatic) and a `GroceryPOS-LAN-NTP`
+  rule (UDP 123, LAN IP, local subnet, Private) when a LAN IP is set; lease
+  and catalogue answers carry `serverTime`, and the terminal stores its
+  offset with the lease, uses corrected time for readiness, enqueue and
+  `soldAt` (clamped to the lease/proof issue time) and warns above 30 s.
 - Threat model: the shop LAN is isolated (no guest Wi-Fi on it) but people on it
   are treated as untrusted insiders. They reach only Caddy's HTTPS and the NTP
   service; every action still needs a login, roles, PINs and audit as on the

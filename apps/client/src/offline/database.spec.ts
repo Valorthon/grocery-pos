@@ -43,6 +43,7 @@ function state(): OfflineState {
                 openingFloat: 10000,
                 movements: [],
             },
+            serverTime: 0,
         },
     };
 }

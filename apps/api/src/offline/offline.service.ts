@@ -215,6 +215,7 @@ export class OfflineService {
                 issuedAt: doc.issuedAt.toISOString(),
                 expiresAt: doc.expiresAt.toISOString(),
                 shift: toCurrentView(shift),
+                serverTime: Date.now(),
             };
         }, this.connection);
     }
@@ -336,6 +337,7 @@ export class OfflineService {
                 rows.length === limit && last
                     ? `${last.updatedAt.toISOString()}|${String(last._id)}`
                     : null,
+            serverTime: Date.now(),
         };
     }
     async release(

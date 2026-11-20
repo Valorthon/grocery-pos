@@ -172,6 +172,13 @@ language (turn on "Set time automatically" if the PC is online), then restart
 the PC. Do not sell while the clock is wrong: sales would land on the wrong
 day.
 
+With LAN terminals the main PC is their clock (#398): the shop network has no
+internet time, so check the main PC's date and time against a phone once a
+week and after a power cut. A terminal follows it by itself; a terminal more
+than 15 hours off, or one whose register shows "This terminal's clock is …
+off the main PC", needs its date and time set by hand first, then
+`JoinTerminal.ps1 -Mode rejoin`.
+
 ## After an interrupted or failed upgrade (vendor)
 
 Grocery POS stays closed until the upgrade is finished or rolled back; that
