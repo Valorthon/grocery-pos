@@ -26,7 +26,11 @@ describe('TypedConfigService', () => {
     });
 
     it('marks only DOMAIN and HOST optional: defaulted keys are never absent', () => {
-        expect([...OPTIONAL_ENV_KEYS]).toEqual(['DOMAIN', 'HOST']);
+        expect([...OPTIONAL_ENV_KEYS]).toEqual([
+            'DOMAIN',
+            'HOST',
+            'LAN_ORIGIN',
+        ]);
     });
 
     it('treats a field whose probe throws as not optional, without crashing', () => {

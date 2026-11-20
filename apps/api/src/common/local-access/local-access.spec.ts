@@ -75,6 +75,50 @@ describe('localAccessCheck (#358)', () => {
     });
 });
 
+describe('localAccessCheck with a LAN origin (#394)', () => {
+    const LAN = 'https://192.168.1.10:1443';
+    const check = localAccessCheck(FRONTEND, LAN);
+
+    it('accepts both allowed origins, each on its own host', () => {
+        expect(
+            check(req({ host: '192.168.1.10:1443', origin: LAN })),
+        ).toBeNull();
+        expect(check(req({ host: '192.168.1.10:1443' }))).toBeNull();
+        expect(
+            check(req({ host: 'localhost:1443', origin: FRONTEND })),
+        ).toBeNull();
+    });
+
+    it.each([
+        ['192.168.1.10:1443', FRONTEND],
+        ['localhost:1443', LAN],
+    ])('refuses host %s with the other site’s Origin %s', (host, origin) => {
+        expect(check(req({ host, origin }))).toBe('Unexpected origin.');
+    });
+
+    it.each([
+        '192.168.1.11:1443',
+        '10.0.0.5:1443',
+        '192.168.1.10:1444',
+        '192.168.1.10',
+        'rebind.example:1443',
+    ])('refuses the unlisted host %s', (host) => {
+        expect(check(req({ host, origin: LAN }))).toBe('Unexpected host.');
+    });
+
+    it('refuses health probes on the LAN host only', () => {
+        expect(
+            check(req({ host: '192.168.1.10:1443' }, 'GET', '/v1/health/live')),
+        ).toBe('Health checks are not available on the LAN.');
+        expect(
+            check(req({ host: 'localhost:1443' }, 'GET', '/v1/health/live')),
+        ).toBeNull();
+        expect(
+            check(req({ host: '127.0.0.1:13000' }, 'HEAD', '/v1/health')),
+        ).toBeNull();
+    });
+});
+
 describe('localAccessMiddleware', () => {
     const res = {} as Response;
 
@@ -208,6 +252,29 @@ describe('useLocalAccess', () => {
         const a = app({ APP_ENV: 'single-pc', FRONTEND_URL: FRONTEND });
         useLocalAccess(a.app);
         expect(a.use).toHaveBeenCalledTimes(1);
+    });
+
+    it('passes LAN_ORIGIN to the check', () => {
+        const a = app({
+            APP_ENV: 'single-pc',
+            FRONTEND_URL: FRONTEND,
+            LAN_ORIGIN: 'https://192.168.1.10:1443',
+        });
+        useLocalAccess(a.app);
+        const middleware = a.use.mock.calls[0]?.[0] as (
+            ...args: unknown[]
+        ) => void;
+        const next = jest.fn();
+        middleware(
+            req({
+                host: '192.168.1.10:1443',
+                origin: 'https://192.168.1.10:1443',
+                [WIRE_VERSION_HEADER]: String(WIRE_VERSION),
+            }),
+            {} as Response,
+            next,
+        );
+        expect(next).toHaveBeenCalledWith(undefined);
     });
 
     it.each(['prod', 'stage', 'dev', 'test'])('installs nothing in %s', (e) => {

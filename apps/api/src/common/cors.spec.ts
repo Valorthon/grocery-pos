@@ -2,11 +2,12 @@
  * main.ts's CORS options over real HTTP: a cross-origin browser client can
  * read `X-Request-Id` only if the response exposes it.
  */
+import { request } from 'node:http';
 import { AddressInfo } from 'node:net';
 import { Controller, Get, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { REQUEST_ID_HEADER } from '@grocery-pos/contracts';
-import { corsOptions } from './cors';
+import { corsFor, corsOptions } from './cors';
 import { RequestIdModule } from './request-id/request-id';
 
 const FRONTEND = 'https://pos.example.com';
@@ -83,5 +84,65 @@ describe('corsOptions', () => {
             'PATCH',
             'OPTIONS',
         ]);
+    });
+});
+
+describe('corsFor with a single-pc LAN origin (#394)', () => {
+    const LOCAL = 'https://localhost:1443';
+    const LAN = 'https://192.168.1.10:1443';
+    let app: INestApplication;
+    let base: string;
+
+    beforeAll(async () => {
+        const moduleRef = await Test.createTestingModule({
+            controllers: [ProbeController],
+        }).compile();
+        app = moduleRef.createNestApplication({ logger: false });
+        app.enableCors(corsFor(LOCAL, LAN));
+        await app.listen(0, '127.0.0.1');
+        const { port } = app.getHttpServer().address() as AddressInfo;
+        base = `http://127.0.0.1:${port}`;
+    });
+
+    afterAll(async () => {
+        await app.close();
+    });
+
+    function allowOrigin(host: string, origin: string): Promise<string | null> {
+        return new Promise((resolve, reject) => {
+            const url = new URL(`${base}/probe`);
+            const req = request(
+                {
+                    hostname: url.hostname,
+                    port: url.port,
+                    path: url.pathname,
+                    headers: { host, origin },
+                },
+                (res) => {
+                    res.resume();
+                    const value = res.headers['access-control-allow-origin'];
+                    resolve(typeof value === 'string' ? value : null);
+                },
+            );
+            req.on('error', reject);
+            req.end();
+        });
+    }
+
+    it('allows each origin only on its own host', async () => {
+        await expect(allowOrigin('192.168.1.10:1443', LAN)).resolves.toBe(LAN);
+        await expect(allowOrigin('localhost:1443', LOCAL)).resolves.toBe(LOCAL);
+        // A fixed allowed origin is sent as is; the browser refuses the mismatch.
+        await expect(allowOrigin('localhost:1443', LAN)).resolves.not.toBe(LAN);
+        await expect(allowOrigin('192.168.1.10:1443', LOCAL)).resolves.not.toBe(
+            LOCAL,
+        );
+        await expect(
+            allowOrigin('192.168.1.11:1443', 'https://192.168.1.11:1443'),
+        ).resolves.not.toBe('https://192.168.1.11:1443');
+    });
+
+    it('keeps the static options without a LAN origin', () => {
+        expect(corsFor(LOCAL)).toEqual(corsOptions(LOCAL));
     });
 });

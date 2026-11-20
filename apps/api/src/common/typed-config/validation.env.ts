@@ -91,6 +91,16 @@ export const envSchema = zod
                     : value,
             zod.string().trim().optional(),
         ),
+        // single-pc LAN terminals (#394): the one fixed LAN origin,
+        // `https://<private IPv4>:<FRONTEND_URL's port>`, allowed beside
+        // FRONTEND_URL. Blank means unset (no LAN terminals).
+        LAN_ORIGIN: zod.preprocess(
+            (value) =>
+                typeof value === 'string' && value.trim() === ''
+                    ? undefined
+                    : value,
+            zod.string().trim().optional(),
+        ),
         COOKIE_SECRET: secretSchema('COOKIE_SECRET'),
         JWT_SECRET: secretSchema('JWT_SECRET'),
         JWT_EXPIRY_S: zod.coerce.number().int().positive(),
@@ -189,6 +199,25 @@ export const envSchema = zod
         },
     )
     .refine(
+        (data) => data.LAN_ORIGIN === undefined || isSinglePcEnv(data.APP_ENV),
+        {
+            message:
+                'LAN_ORIGIN is for single-pc LAN terminals only; leave it blank in other APP_ENVs.',
+            path: ['LAN_ORIGIN'],
+        },
+    )
+    .refine(
+        (data) =>
+            data.LAN_ORIGIN === undefined ||
+            !isSinglePcEnv(data.APP_ENV) ||
+            isLanOrigin(data.LAN_ORIGIN, data.FRONTEND_URL),
+        {
+            message:
+                'LAN_ORIGIN must be https://<private IPv4 address>:<the port of FRONTEND_URL>, e.g. https://192.168.1.10:1443 (no hostname, no path).',
+            path: ['LAN_ORIGIN'],
+        },
+    )
+    .refine(
         (data) =>
             !requiresStrictSecrets(data.APP_ENV) ||
             !isPlaceholderSecret(data.JWT_SECRET),
@@ -235,6 +264,43 @@ export function isSinglePcFrontendUrl(value: string): boolean {
     );
 }
 
+/** True for an RFC 1918 IPv4 literal (10/8, 172.16/12, 192.168/16). */
+export function isPrivateIpv4(hostname: string): boolean {
+    const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+    if (!match) return false;
+    const octets = match.slice(1).map(Number);
+    if (octets.some((octet) => octet > 255)) return false;
+    const [a, b] = octets;
+    return (
+        a === 10 ||
+        (a === 172 && b >= 16 && b <= 31) ||
+        (a === 192 && b === 168)
+    );
+}
+
+/**
+ * The single-pc LAN origin (#394): `https://<private IPv4>[:port]` exactly
+ * (an origin, no path or credentials), on the same port as FRONTEND_URL.
+ */
+export function isLanOrigin(value: string, frontendUrl: string): boolean {
+    let url: URL;
+    let frontend: URL;
+    try {
+        url = new URL(value);
+        frontend = new URL(frontendUrl);
+    } catch {
+        return false;
+    }
+    return (
+        url.protocol === 'https:' &&
+        isPrivateIpv4(url.hostname) &&
+        !url.username &&
+        !url.password &&
+        url.origin === value &&
+        url.port === frontend.port
+    );
+}
+
 export type EnvTypes = zod.infer<typeof envSchema>;
 
 /**
@@ -259,8 +325,8 @@ export function optionalKeys<Key extends string>(
 }
 
 /**
- * Today that is DOMAIN, which only prod and stage require (#91), and HOST
- * (#358), whose default main.ts picks by APP_ENV.
+ * Today that is DOMAIN, which only prod and stage require (#91), HOST
+ * (#358), whose default main.ts picks by APP_ENV, and LAN_ORIGIN (#394).
  * TypedConfigService.get returns `undefined` for these instead of throwing.
  * A permissive field such as `zod.any()` would also land here; the spec
  * pins the set.

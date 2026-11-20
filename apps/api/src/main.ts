@@ -6,7 +6,7 @@ import { Logger, VersioningType } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { createValidationPipe } from './common/pipes/validation.pipe';
-import { corsOptions } from './common/cors';
+import { corsFor } from './common/cors';
 import { applyTrustProxy, listenHost } from './common/http-topology';
 import { useBodyParsers } from './common/body-parsers';
 import { getConnectionToken } from '@nestjs/mongoose';
@@ -45,7 +45,9 @@ async function bootstrap() {
         type: VersioningType.URI,
     });
 
-    app.enableCors(corsOptions(config.get('FRONTEND_URL')));
+    app.enableCors(
+        corsFor(config.get('FRONTEND_URL'), config.get('LAN_ORIGIN')),
+    );
     // After CORS, where Nest puts its own parsers: a refused body still
     // gets the CORS headers, so the client can read the error.
     useBodyParsers(app);
