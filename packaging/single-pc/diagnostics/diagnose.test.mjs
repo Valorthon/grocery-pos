@@ -30,6 +30,8 @@ import {
     tailFile,
     diagnose,
     errorLines,
+    firewallState,
+    parseLanAddress,
     parseArgs,
     redact,
     renderText,
@@ -256,6 +258,132 @@ describe('diagnose', () => {
             );
             assert.equal(byId(report, 'ports').status, status, lanState);
         }
+    });
+
+    test('LAN network: address, profile, firewall rule and certificate (#399)', async () => {
+        const paths = layout(root);
+        const rootPem =
+            '-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n';
+        const lanCtx = (overrides = {}, manifest = { lanIp: '192.168.1.10' }) =>
+            healthy({
+                readText: async (path) => {
+                    if (path === paths.runtimeManifest)
+                        return JSON.stringify(manifest);
+                    if (path.endsWith('root.crt')) return rootPem;
+                    return (await import('node:fs/promises')).readFile(
+                        path,
+                        'utf8',
+                    );
+                },
+                lanAddress: async () => ({
+                    lanIpPresent: true,
+                    lanProfile: 'Private',
+                }),
+                firewallRule: async () => 'enabled',
+                tlsHandshake: async (host, port, ca) => {
+                    assert.equal(host, '192.168.1.10');
+                    assert.equal(port, 1443);
+                    assert.equal(ca, rootPem);
+                    return {};
+                },
+                ...overrides,
+            });
+        const run = async (ctx) =>
+            byId(await diagnose({ dataRoot: root }, ctx), 'lanNetwork');
+        const ok = await run(lanCtx());
+        assert.equal(ok.status, 'ok');
+        assert.equal(ok.details.tls, 'verified');
+        // DHCP drift: the address is gone; no handshake is tried.
+        let shook = false;
+        const gone = await run(
+            lanCtx({
+                lanAddress: async () => ({
+                    lanIpPresent: false,
+                    lanProfile: null,
+                }),
+                tlsHandshake: async () => ((shook = true), {}),
+            }),
+        );
+        assert.equal(gone.status, 'warn');
+        assert.equal(shook, false);
+        assert.deepEqual(gone.steps, GUIDANCE.lanAddressGone);
+        const pub = await run(
+            lanCtx({
+                lanAddress: async () => ({
+                    lanIpPresent: true,
+                    lanProfile: 'Public',
+                }),
+            }),
+        );
+        assert.equal(pub.status, 'warn');
+        assert.deepEqual(pub.steps, GUIDANCE.lanPublic);
+        for (const state of ['missing', 'disabled']) {
+            const fw = await run(lanCtx({ firewallRule: async () => state }));
+            assert.equal(fw.status, 'warn', state);
+            assert.deepEqual(fw.steps, GUIDANCE.lanFirewall);
+        }
+        const cert = await run(
+            lanCtx({
+                tlsHandshake: async () => ({
+                    error: 'ERR_TLS_CERT_ALTNAME_INVALID',
+                }),
+            }),
+        );
+        assert.equal(cert.status, 'warn');
+        assert.deepEqual(cert.steps, GUIDANCE.lanCertificate);
+        assert.match(cert.summary, /ALTNAME/);
+        // Problems add up.
+        const both = await run(
+            lanCtx({
+                firewallRule: async () => 'missing',
+                lanAddress: async () => ({
+                    lanIpPresent: true,
+                    lanProfile: 'Public',
+                }),
+            }),
+        );
+        assert.deepEqual(both.steps, [
+            ...GUIDANCE.lanPublic,
+            ...GUIDANCE.lanFirewall,
+        ]);
+        // Off Windows (facts unread) it is unknown, never ok.
+        const unread = await run(
+            lanCtx({
+                lanAddress: async () => null,
+                firewallRule: async () => null,
+            }),
+        );
+        assert.equal(unread.status, 'unknown');
+        // Without LAN terminals it is informational and reads nothing.
+        const none = await run(
+            lanCtx(
+                { lanAddress: async () => assert.fail('read without LAN') },
+                {},
+            ),
+        );
+        assert.equal(none.status, 'info');
+        // The support export's redaction removes the LAN IP from details.
+        assert.equal(
+            redact(JSON.stringify(ok.details)).includes('192.168'),
+            false,
+        );
+    });
+
+    test('LAN network fact parsers (#399)', () => {
+        assert.equal(firewallState(''), 'missing');
+        assert.equal(firewallState('True\r\n'), 'enabled');
+        assert.equal(firewallState('False'), 'disabled');
+        assert.deepEqual(parseLanAddress(''), {
+            lanIpPresent: false,
+            lanProfile: null,
+        });
+        assert.deepEqual(
+            parseLanAddress('present|Private\r\npresent|Public\r\n'),
+            {
+                lanIpPresent: true,
+                lanProfile: 'Public',
+            },
+        );
     });
 
     test('the proxy may listen on the configured LAN IP only (#396)', async () => {
