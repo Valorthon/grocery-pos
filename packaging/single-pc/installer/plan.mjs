@@ -448,9 +448,9 @@ export function firewallSteps(release, lanIp) {
             `localip=${lanIp}`,
             'remoteip=localsubnet',
             'profile=private',
+            // program= + localip= suffice: only the LAN service listens on
+            // the LAN IP (a service= filter is unproven for WinSW's child).
             `program=${releaseLayout(release).caddy}`,
-            // Only the LAN proxy service's process (#396).
-            `service=${LAN_SERVICE}`,
             'enable=yes',
         ],
     });

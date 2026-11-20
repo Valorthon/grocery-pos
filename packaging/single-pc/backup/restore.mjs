@@ -350,7 +350,7 @@ export async function restore(options, log = () => {}) {
     const auditEntry = auditWriter(options.api);
     if (await portInUse(PORTS.api))
         throw new RefusedError(
-            `The API is running (port ${PORTS.api}). Stop GroceryPOS-Proxy and GroceryPOS-API before restoring.`,
+            `The API is running (port ${PORTS.api}). Stop GroceryPOS-ProxyLan (if installed), GroceryPOS-Proxy and GroceryPOS-API before restoring.`,
         );
 
     const fresh = await isEmptyOrAbsent(paths.root);

@@ -12,6 +12,7 @@ import {
     stat,
     writeFile,
 } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -1056,10 +1057,10 @@ test('LAN terminals: preflight, firewall rule and uninstall (#396)', () => {
         'remoteip=localsubnet',
         'profile=private',
         `program=${join('/r', 'caddy', 'caddy.exe')}`,
-        `service=${LAN_SERVICE}`,
     ])
         assert.ok(add.includes(arg), arg);
     assert.ok(!add.some((a) => /any|0\.0\.0\.0|public|domain/i.test(a)));
+    assert.ok(!add.some((a) => a.startsWith('service=')));
     // No LAN IP: the rule is only deleted.
     assert.deepEqual(firewallSteps('/r', null), [steps[0]]);
 
@@ -1093,6 +1094,11 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
     assert.equal(result.lanOrigin, 'https://192.168.1.10:1443');
     // The LAN proxy is its own service, registered and started last.
     assert.ok(ctx.services.has(LAN_SERVICE));
+    assert.ok(
+        existsSync(
+            join(ctx.locations.programDir, 'services', `${LAN_SERVICE}.xml`),
+        ),
+    );
     const started = ctx.log.filter((e) => e[0] === 'start').map((e) => e[1]);
     assert.deepEqual(started.slice(-2), [SERVICES.proxy, LAN_SERVICE]);
     assert.ok(
@@ -1209,6 +1215,17 @@ test('the LAN IP is stored, kept by repair and changed only without open shifts 
     ctx.log.length = 0;
     await runInstaller({ mode: 'repair', ...pinned, lanIp: null }, ctx);
     assert.ok(!ctx.services.has(LAN_SERVICE));
+    for (const ext of ['exe', 'xml'])
+        assert.ok(
+            !existsSync(
+                join(
+                    ctx.locations.programDir,
+                    'services',
+                    `${LAN_SERVICE}.${ext}`,
+                ),
+            ),
+            ext,
+        );
     assert.ok(
         ctx.log.some(
             (e) =>

@@ -580,6 +580,13 @@ async function installOrRepair(options, ctx, log) {
                 );
             }
         }
+        // Without LAN terminals the LAN proxy's wrapper goes too (#396).
+        if (!lanIp)
+            for (const ext of ['exe', 'xml'])
+                await rm(
+                    join(loc.programDir, 'services', `${LAN_SERVICE}.${ext}`),
+                    { force: true },
+                );
         await runSteps(
             serviceSteps(paths, release, join(loc.programDir, 'services'), {
                 lanIp,

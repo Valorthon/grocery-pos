@@ -1073,7 +1073,7 @@ IPv4>` (install/repair; repair and upgrade keep it, `none` turns it off)
   the LAN. A missing LAN address fails only the LAN service (SCM retries);
   the installer warns instead of waiting for it. Firewall rule
   `GroceryPOS-LAN-HTTPS`: inbound TCP 1443 to the release's caddy.exe,
-  `service=GroceryPOS-ProxyLan`, localip the IP, `remoteip=localsubnet`,
+  localip the IP (no `service=` filter), `remoteip=localsubnet`,
   Private profile; deleted on every run first and on uninstall; a Public
   adapter is a warning. Preflight refuses a new/changed IP not on a local
   adapter (`-AddressState Preferred`) or a foreign listener on it; the kept

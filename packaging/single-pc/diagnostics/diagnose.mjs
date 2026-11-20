@@ -358,7 +358,14 @@ export async function checkPorts(ctx, paths) {
     const configured = await configuredLanIp(ctx, paths);
     const states = configured ? await ctx.serviceStates() : null;
     const lanIp =
-        states && states[LAN_SERVICE] !== 'RUNNING' ? null : configured;
+        // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
+        // under SCM recovery) may hold the LAN listener.
+        states &&
+        (states[LAN_SERVICE] === 'STOPPED' ||
+            states[LAN_SERVICE] === 'absent' ||
+            states[LAN_SERVICE] === undefined)
+            ? null
+            : configured;
     const details = {};
     const closed = [];
     const exposed = [];
@@ -827,6 +834,8 @@ async function logSources(ctx, paths) {
     for (const [name, dir] of [
         ['application', paths.apiLogs],
         ['proxy', paths.proxyLogs],
+        // The LAN terminals' proxy (#396); empty without LAN terminals.
+        ['proxyLan', paths.proxyLanLogs],
     ]) {
         const files = ((await ctx.list(dir)) ?? []).sort();
         sources.push([
@@ -1080,6 +1089,14 @@ export function serviceStateFromStatus(text) {
     return map[value] ?? 'UNKNOWN';
 }
 
+/** Every service whose state is read: the three, plus the LAN proxy (#396),
+ *  reported as `absent` without LAN terminals. checkServices reads only
+ *  SERVICES; checkPorts and checkLanProxy read LAN_SERVICE. */
+export const QUERIED_SERVICES = Object.freeze([
+    ...Object.values(SERVICES),
+    LAN_SERVICE,
+]);
+
 export function realContext() {
     const windows = process.platform === 'win32';
     return {
@@ -1095,7 +1112,7 @@ export function realContext() {
         async serviceStates() {
             if (!windows) return null;
             const out = {};
-            for (const name of Object.values(SERVICES)) {
+            for (const name of QUERIED_SERVICES) {
                 // The Status enum name is not localized (sc.exe's text may be).
                 const { code, stdout } = await execCapture('powershell.exe', [
                     '-NoProfile',
@@ -1240,7 +1257,7 @@ export function rotateReason(error) {
 /** Exactly what a support export contains (README "Support export"). */
 export const EXPORT_INCLUDES = Object.freeze([
     'The full check report shown by "Check Grocery POS" (versions, services, ports, database/application/address state, disk space, backup status, clock, recent error lines).',
-    `The last ${EXPORT_LINES_PER_FILE} lines of each log file (database, application, proxy), redacted.`,
+    `The last ${EXPORT_LINES_PER_FILE} lines of each log file (database, application, proxy, LAN proxy), redacted.`,
     'Removed from every line: secrets, passwords, tokens, cookies, connection strings, e-mail addresses, user names, quoted text and IP addresses; database log lines keep only time, severity, component, id and message.',
     'Not included: database contents, sales or customer data, backups, secrets, certificates or configuration files.',
 ]);

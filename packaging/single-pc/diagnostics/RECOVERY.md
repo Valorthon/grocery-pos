@@ -40,8 +40,9 @@ Signs: the page says it cannot reach the server; the check shows **Services**,
 2. Wait 5 minutes after the restart; a database recovering from a power cut
    can take that long. Run the check again.
 3. If a service is "STOPPED": open Services (`services.msc`), right-click
-   `GroceryPOS-MongoDB` (then `GroceryPOS-API`, then `GroceryPOS-Proxy`) and
-   choose Start.
+   `GroceryPOS-MongoDB` (then `GroceryPOS-API`, then `GroceryPOS-Proxy`,
+   then `GroceryPOS-ProxyLan` if this PC serves LAN terminals) and choose
+   Start.
 4. "Application is running but cannot use the database": the database is down
    or the application cannot sign in to it. Fix the database first. If the
    database is OK and this persists, call the vendor (repair, below).

@@ -11,6 +11,7 @@ import {
     rm,
     writeFile,
 } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
@@ -18,6 +19,7 @@ import { LAN_SERVICE, SERVICES, layout } from '../runtime/layout.mjs';
 import {
     CHECK_IDS,
     EXPORT_INCLUDES,
+    QUERIED_SERVICES,
     GUIDANCE,
     REPORT_KEYS,
     STATUSES,
@@ -203,6 +205,57 @@ describe('diagnose', () => {
         );
         assert.equal(byId(report, 'ports').status, 'fail');
         assert.deepEqual(byId(report, 'ports').steps, GUIDANCE.exposed);
+    });
+
+    test('the real context queries the three services and the LAN proxy (#396)', () => {
+        assert.deepEqual(
+            [...QUERIED_SERVICES],
+            [...Object.values(SERVICES), LAN_SERVICE],
+        );
+        const source = readFileSync(
+            new URL('./diagnose.mjs', import.meta.url),
+            'utf8',
+        );
+        const real = source.slice(
+            source.indexOf('export function realContext'),
+        );
+        assert.match(
+            real.slice(0, real.indexOf('async listeners')),
+            /for \(const name of QUERIED_SERVICES\)/,
+        );
+    });
+
+    test('any LAN service state but STOPPED may hold the LAN listener (#396)', async () => {
+        const paths = layout(root);
+        for (const [lanState, status] of [
+            ['START_PENDING', 'ok'],
+            ['STOP_PENDING', 'ok'],
+            ['STOPPED', 'fail'],
+        ]) {
+            const report = await diagnose(
+                { dataRoot: root },
+                healthy({
+                    readText: async (path) =>
+                        path === paths.runtimeManifest
+                            ? JSON.stringify({ lanIp: '192.168.1.10' })
+                            : (await import('node:fs/promises')).readFile(
+                                  path,
+                                  'utf8',
+                              ),
+                    serviceStates: async () => ({
+                        ...Object.fromEntries(
+                            Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+                        ),
+                        [LAN_SERVICE]: lanState,
+                    }),
+                    listeners: async (p) =>
+                        p === 1443
+                            ? ['127.0.0.1', '::1', '192.168.1.10']
+                            : ['127.0.0.1'],
+                }),
+            );
+            assert.equal(byId(report, 'ports').status, status, lanState);
+        }
     });
 
     test('the proxy may listen on the configured LAN IP only (#396)', async () => {
@@ -695,6 +748,7 @@ describe('review fixes and owner decisions (#365)', () => {
                 'database',
                 'application',
                 'proxy',
+                'proxyLan',
             ]);
             assert.match(content.logs.database[0], /boom/);
             await assert.rejects(

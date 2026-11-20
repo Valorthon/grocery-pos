@@ -67,7 +67,7 @@ driver's message.
 | Disk space           | free space on the data and program volumes: FAIL at ≥ 90 % used (the API's own live threshold), WARN under 5 GB free (`MIN_FREE`, provisional until #357)                                                                                                                                         |                                             |
 | Backups              | [`readStatus`/`statusSummary`](../backup/backup.mjs) over `backups\status.json` (#363): last attempt, success, verified success, failure code, consecutive failures, overdue (36 h), USB export reminder (7 days)                                                                                 | infers success from backup folders or files |
 | Clock                | PC time must not be behind the last recorded installer stage or backup status update; shows the Windows time zone (the store's own is in Store settings)                                                                                                                                          | contacts a time server                      |
-| Logs and last errors | sizes, and the last 5 error lines each from `logs\mongod.log` (JSON `s: E/F`), `logs\api\` and `logs\proxy\`, read from their last 256 KB only (seek, never the whole file) and redacted                                                                                                          | prints whole logs                           |
+| Logs and last errors | sizes, and the last 5 error lines each from `logs\mongod.log` (JSON `s: E/F`), `logs\api\`, `logs\proxy\` and `logs\proxy-lan\`, read from their last 256 KB only (seek, never the whole file) and redacted                                                                                       | prints whole logs                           |
 
 Redaction (`redact`, `logLine`): everything after `Cookie:`/`Set-Cookie:`
 (all values), connection-string credentials, `password`/`secret`/`token`/
@@ -91,7 +91,8 @@ inside the data root. The owner hands it to the vendor; nothing is uploaded.
 It contains exactly (`EXPORT_INCLUDES`, repeated in the file's `includes`):
 
 - `report`: the full `check` report above (as `--json`).
-- `logs.database`, `logs.application`, `logs.proxy`: the last 200 lines of
+- `logs.database`, `logs.application`, `logs.proxy`, `logs.proxyLan`
+  (`logs\proxy-lan\`, #396; empty without LAN terminals): the last 200 lines of
   each log file (from the last 256 KB), each redacted as above.
 
 Not included: database contents, sales or customer data, backups, secrets,

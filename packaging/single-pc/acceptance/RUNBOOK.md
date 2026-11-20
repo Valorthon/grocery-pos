@@ -391,7 +391,8 @@ with an open shift and "Offline cash ready":
 
 1. Make a backup (`backup.mjs create --kind manual`, or "Back up to USB
    drive"), note its id.
-2. Stop the API (`Stop-Service GroceryPOS-Proxy, GroceryPOS-API`) and record
+2. Stop the API (`Stop-Service GroceryPOS-ProxyLan -ErrorAction
+SilentlyContinue; Stop-Service GroceryPOS-Proxy, GroceryPOS-API`) and record
    two offline cash sales: R1 and R2. Note their receipt numbers and the
    register's pending count (2).
 3. Start the API and let only R1 upload (stop it again right after R1

@@ -176,8 +176,8 @@ linked from the app). Before anything changes it:
 2. requires `--confirm <backup id>` exactly;
 3. checks compatibility: same MongoDB major.minor, app version no older than
    the backup's (newer data is never opened by an older app);
-4. refuses while the API listens (stop `GroceryPOS-Proxy` and
-   `GroceryPOS-API`; MongoDB may run or is started by the tool);
+4. refuses while the API listens (stop `GroceryPOS-ProxyLan` where
+   installed, then `GroceryPOS-Proxy` and `GroceryPOS-API`; MongoDB may run or is started by the tool);
 5. on an existing installation: same installation id and identical secrets,
    then refuses each kind of loss unless accepted on its own flag: open
    shifts (`--accept-open-shifts`), active offline cash leases, which mean a
