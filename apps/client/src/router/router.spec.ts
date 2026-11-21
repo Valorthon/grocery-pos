@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { Color } from '@/stores/ui';
 import { ASSIGNABLE_ROLES, Role } from '@grocery-pos/contracts';
 import { canViewDashboard, DASHBOARD_ROLES, homeRouteFor } from './access';
 
@@ -180,7 +181,7 @@ describe('dashboard access (issue #13)', () => {
 
         expect(router.currentRoute.value.name).toBe('Dashboard');
         expect(queue).toHaveBeenCalledWith(
-            expect.anything(),
+            Color.INFO,
             'You do not have access to that page',
         );
     });

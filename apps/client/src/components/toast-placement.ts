@@ -59,11 +59,18 @@ function registerPlacement(state: RegisterToastState): Placement {
     };
 }
 
-/** The stack's placement for the layout's choice (`uiStore`, #85). */
+/**
+ * The stack's placement for the layout's choice (`uiStore`, #85). While
+ * any modal is open (#423) the stack goes to the top of the page, so it
+ * never covers a dialog's footer buttons (as for the tender sheet).
+ */
 export function toastPlacement(
     placement: ToastPlacement,
     register: RegisterToastState,
+    modalOpen = false,
 ): Placement {
+    if (modalOpen && placement !== 'top-right')
+        return { stack: REGISTER_TOP, items: 'items-center' };
     return placement === 'register'
         ? registerPlacement(register)
         : FIXED[placement];

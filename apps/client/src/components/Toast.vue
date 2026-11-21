@@ -57,6 +57,7 @@ import { computed } from 'vue';
 import { Color, useUIStore } from '@/stores/ui';
 import ToastItem from './ToastItem.vue';
 import { toastPlacement } from './toast-placement';
+import { anyModalOpen } from './ui/modal-stack';
 
 /**
  * Every queued message, stacked (issue #18), errors above the rest.
@@ -69,6 +70,9 @@ import { toastPlacement } from './toast-placement';
  * it never covers the register's scan box or the top of the ticket. On
  * the register it also keeps clear of the tender sheet's Tender & Charge
  * and the Undo bar (`uiStore.registerToast`, see toast-placement.ts).
+ *
+ * While a modal is open the stack sits at the top (#423), clear of the
+ * dialog's footer buttons.
  */
 const uiStore = useUIStore();
 
@@ -80,7 +84,11 @@ const notices = computed(() =>
 );
 
 const placement = computed(() =>
-    toastPlacement(uiStore.toastPlacement, uiStore.registerToast),
+    toastPlacement(
+        uiStore.toastPlacement,
+        uiStore.registerToast,
+        anyModalOpen.value,
+    ),
 );
 
 /** A toast slides in from the edge it sits at. */

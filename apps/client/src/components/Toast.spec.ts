@@ -9,6 +9,7 @@ import {
     useUIStore,
 } from '@/stores/ui';
 import Toast from './Toast.vue';
+import { type ModalEntry, pushModal, removeModal } from './ui/modal-stack';
 
 let app: App | null = null;
 
@@ -33,6 +34,66 @@ afterEach(() => {
 const toasts = () => [
     ...document.querySelectorAll<HTMLElement>('[data-testid="toast"]'),
 ];
+
+describe('Toast over an open modal (issue #423)', () => {
+    const stack = () =>
+        document.querySelector<HTMLElement>('[data-testid="toast-stack"]')!;
+
+    function openModal(): ModalEntry {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const entry: ModalEntry = {
+            root: () => host,
+            panel: () => host,
+            closable: () => true,
+            close: () => undefined,
+            opener: null,
+        };
+        pushModal(entry);
+        return entry;
+    }
+
+    it('moves the stack to the top while a modal is open', async () => {
+        const ui = useUIStore();
+        ui.toastPlacement = 'bottom-center';
+        ui.queueMessage(Color.ERROR, 'Save failed');
+        await nextTick();
+        expect(stack().className).toContain('bottom-4');
+
+        const entry = openModal();
+        await nextTick();
+        expect(stack().className).toContain('top-4');
+        expect(stack().className).not.toMatch(/\bbottom-/);
+
+        removeModal(entry);
+        await nextTick();
+        expect(stack().className).toContain('bottom-4');
+    });
+
+    it('moves the register stack to the top while a modal is open', async () => {
+        const ui = useUIStore();
+        ui.toastPlacement = 'register';
+        ui.queueMessage(Color.ERROR, 'Charge failed');
+        await nextTick();
+        expect(stack().className).toMatch(/\bbottom-24\b/);
+
+        const entry = openModal();
+        await nextTick();
+        expect(stack().className).toContain('top-4');
+        expect(stack().className).not.toMatch(/\bbottom-/);
+        removeModal(entry);
+    });
+
+    it('gives the close button a 44px target', async () => {
+        useUIStore().queueMessage(Color.INFO, 'No access');
+        await nextTick();
+        const close = toasts()[0].querySelector<HTMLElement>(
+            '[aria-label="Dismiss notification"]',
+        )!;
+        expect(close.className).toContain('min-h-11');
+        expect(close.className).toContain('min-w-11');
+    });
+});
 
 describe('Toast (issue #18)', () => {
     it('renders every message queued in the same tick', async () => {
