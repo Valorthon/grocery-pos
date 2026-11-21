@@ -167,10 +167,11 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
     it('saves the key with the ticket signature when it is made', () => {
         const store = savedStore();
         createCheckoutAttempt(() => 'key-1', store).keyFor(ticket);
-        expect(store.peek()).toEqual({
+        expect(store.peek()).toMatchObject({
             idempotencyKey: 'key-1',
             ticketSignature: JSON.stringify(ticket),
         });
+        expect(store.peek()?.claim).toMatch(UUID);
     });
 
     it('reuses a saved key for the same ticket (a retry after a reload)', () => {
@@ -270,26 +271,73 @@ describe('useSaleCheckout', () => {
         expect(second.sellDetails).toEqual([{ product: 'p1', quantity: 1 }]);
     });
 
-    it('drops a new key the server refused, keeps one that may be recorded (#420)', async () => {
+    function sharedStore() {
         const store = { value: null as CheckoutAttempt | null };
-        const attemptStore = {
+        const attemptStore: AttemptStore = {
             get: () => store.value,
-            set: (a: CheckoutAttempt | null) => (store.value = a),
+            set: (a) => (store.value = a),
         };
-        const refused = setup(
+        return { store, attemptStore };
+    }
+
+    it('drops a new key when the send was stopped before a charge (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        const { checkout } = setup(
             () => Promise.reject(new SaleNotSentError('cancelled')),
             attemptStore,
         );
-        await expect(refused.checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
         expect(store.value).toBeNull();
+    });
 
-        const lost = setup(() => Promise.reject(httpError(null)), attemptStore);
-        await expect(lost.checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+    it('drops a new key the server refused with a 400 (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        const { checkout } = setup(
+            () => Promise.reject(httpError(400, {})),
+            attemptStore,
+        );
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value).toBeNull();
+    });
+
+    it('keeps a key that may be recorded, even after a later 400 (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        const { checkout, post } = setup(
+            () => Promise.reject(httpError(null)),
+            attemptStore,
+        );
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
         const key = store.value?.idempotencyKey;
         expect(key).toBeTruthy();
-        // A later 400 on that reused key cannot prove the first try failed.
-        lost.post.mockRejectedValueOnce(httpError(400, {}));
-        await expect(lost.checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        // A 400 on the reused key cannot prove the first try failed.
+        post.mockRejectedValueOnce(httpError(400, {}));
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value?.idempotencyKey).toBe(key);
+    });
+
+    it('keeps a new key that another tab reused while this send was refused (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        // What the other tab saved last; this tab's memory is stale while locked.
+        let shared: CheckoutAttempt | null = null;
+        const tabA: AttemptStore = {
+            get: attemptStore.get,
+            set: (a) => {
+                attemptStore.set(a);
+                shared = a && { ...a };
+            },
+            latest: () => shared,
+        };
+        let refuse!: (e: unknown) => void;
+        const { checkout } = setup(
+            () => new Promise<Receipt>((_, reject) => (refuse = reject)),
+            tabA,
+        );
+        const pending = checkout.submit(CASH_PAYMENT);
+        const key = store.value!.idempotencyKey;
+        // Tab B sends the same key (new claim); its answer is lost.
+        shared = { ...store.value!, claim: 'tab-b' };
+        refuse(new SaleNotSentError('cancelled'));
+        await expect(pending).rejects.toThrow();
         expect(store.value?.idempotencyKey).toBe(key);
     });
 

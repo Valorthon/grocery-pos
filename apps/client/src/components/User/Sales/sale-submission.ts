@@ -34,8 +34,10 @@ export function newIdempotencyKey(): string {
  *
  * One key per checkout attempt of a ticket: every retry of the same ticket
  * reuses it, so a sale the server already recorded is replayed rather than
- * charged again. A new key is made once the sale succeeds, or when the
- * ticket (lines, quantities, discount) changes. Changing only the payment
+ * charged again. A new key is made once the sale succeeds, when the
+ * ticket (lines, quantities, discount) changes, or after a key that was new
+ * in that submit was refused without being recorded (#420, see
+ * `nothingRecorded`). Changing only the payment
  * keeps the key: if the first try did commit, the server refuses the
  * different payment with a 409 instead of recording a second sale; if it
  * did not, the key is still unused and the new payment goes through.
@@ -44,24 +46,41 @@ export function createCheckoutAttempt(
     generate = newIdempotencyKey,
     store: AttemptStore = memoryAttemptStore(),
 ) {
-    const matches = (ticket: SaleTicketRequest) =>
-        store.get()?.ticketSignature === JSON.stringify(ticket);
     return {
-        /** True when this ticket already has a key (it may have been sent). */
-        hasKeyFor: matches,
-        keyFor(ticket: SaleTicketRequest): string {
+        /**
+         * The key for this ticket, with a new claim written into the stored
+         * attempt on every send, so a later send of the same key (another
+         * tab too) can be told apart. `fresh` is true when the key is new.
+         */
+        claim(ticket: SaleTicketRequest): {
+            key: string;
+            claim: string;
+            fresh: boolean;
+        } {
             const signature = JSON.stringify(ticket);
             const current = store.get();
-            if (current && matches(ticket)) {
-                return current.idempotencyKey;
-            }
-            const idempotencyKey = generate();
-            store.set({ idempotencyKey, ticketSignature: signature });
-            return idempotencyKey;
+            const reuse = current?.ticketSignature === signature;
+            const idempotencyKey =
+                reuse && current ? current.idempotencyKey : generate();
+            const claim = newIdempotencyKey();
+            store.set({ idempotencyKey, ticketSignature: signature, claim });
+            return { key: idempotencyKey, claim, fresh: !reuse };
         },
-        /** The sale went through: the next checkout gets a new key. */
+        keyFor(ticket: SaleTicketRequest): string {
+            return this.claim(ticket).key;
+        },
+        /** The sale went through (or was dropped): the next checkout gets a new key. */
         settle() {
             store.set(null);
+        },
+        /**
+         * Drops the key only while the stored attempt still carries this
+         * send's claim: if another send (e.g. another tab) reused the key
+         * since, that send may have been recorded, so the key stays.
+         */
+        release(claim: string) {
+            const latest = (store.latest ?? store.get)();
+            if (latest?.claim === claim) store.set(null);
         },
     };
 }
@@ -73,6 +92,8 @@ export function createCheckoutAttempt(
 export interface CheckoutAttempt {
     idempotencyKey: string;
     ticketSignature: string;
+    /** Set on every send of the key (#420): who last sent it. */
+    claim?: string;
 }
 
 /**
@@ -84,6 +105,8 @@ export interface CheckoutAttempt {
 export interface AttemptStore {
     get(): CheckoutAttempt | null;
     set(attempt: CheckoutAttempt | null): void;
+    /** The attempt as last saved by any tab; `get` when absent. */
+    latest?(): CheckoutAttempt | null;
 }
 
 function memoryAttemptStore(): AttemptStore {
@@ -139,12 +162,11 @@ export function useSaleCheckout(deps: {
         }
 
         const ticket = deps.ticket();
-        // A new key that the server only ever refused was never recorded.
-        const freshKey = !attempt.hasKeyFor(ticket);
+        const sent = attempt.claim(ticket);
         const body: SaleRequest = {
             ...payment,
             ...ticket,
-            idempotencyKey: attempt.keyFor(ticket),
+            idempotencyKey: sent.key,
         };
 
         inFlight.value = true;
@@ -157,7 +179,10 @@ export function useSaleCheckout(deps: {
             const stored = recordedReceipt(error);
             if (!stored) {
                 // Drop it so the ticket can be parked or edited freely (#420).
-                if (freshKey && nothingRecorded(error)) attempt.settle();
+                // A new key that the server only ever refused was never
+                // recorded, unless another send has reused it since.
+                if (sent.fresh && nothingRecorded(error))
+                    attempt.release(sent.claim);
                 throw error;
             }
             receipt = stored;
@@ -265,6 +290,12 @@ export class SaleNotSentError extends Error {
     }
 }
 
+/**
+ * True when this send cannot have recorded a sale: a 400 refusal, or
+ * `SaleNotSentError`. A 403 `OVERRIDE_INVALID` on the approved retry is
+ * not recorded either, but is kept on purpose (conservative and rare: an
+ * expired token or a concurrent PIN reset), so parking stays blocked.
+ */
 function nothingRecorded(error: unknown): boolean {
     return error instanceof SaleNotSentError || isRejectedSale(error);
 }

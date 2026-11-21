@@ -1313,6 +1313,7 @@ const checkout = useSaleCheckout({
     attemptStore: {
         get: () => cartStore.attempt,
         set: (attempt) => cartStore.setAttempt(attempt),
+        latest: () => cartStore.storedAttempt(),
     },
 });
 

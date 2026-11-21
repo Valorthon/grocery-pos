@@ -1695,33 +1695,18 @@ describe('Sell discount (#23)', () => {
             'Manager approval cancelled',
         );
     });
-    it('can park a discounted ticket whose approval was cancelled (#420)', async () => {
-        post.mockRejectedValue(approvalRequired());
-        await beginApprovedDiscount();
-        await clickButton(
-            [...document.querySelectorAll<HTMLButtonElement>('button')]
-                .reverse()
-                .find((b) => b.textContent?.trim() === 'Cancel')!,
-        );
-        await settleTransitions();
-        // The server refused the unapproved try: nothing can be recorded.
-        expect(useCartStore().attempt).toBeNull();
-        useCartStore().park('E2E discount sale', 'shift1');
-        expect(useCartStore().parked).toHaveLength(1);
-        expect(useCartStore().parked[0].discount).toMatchObject({
-            reason: 'Promotion',
-        });
-        expect(useCartStore().items).toEqual([]);
-    });
-    it('keeps the attempt when the approved sale got no answer', async () => {
-        let sales = 0;
-        post.mockImplementation((url) => {
-            if (url === '/auth/override')
-                return Promise.resolve({ data: { token: 'approval-token' } });
-            if (++sales === 1) return Promise.reject(approvalRequired());
-            return Promise.reject(new AxiosError('Network Error'));
-        });
-        await beginApprovedDiscount();
+    function openShift() {
+        useShiftStore().activeShift = {
+            _id: 'shift1',
+            cashierName: 'cashier',
+            status: ShiftStatus.OPEN,
+            terminal: 'Lane 1',
+            openedAt: new Date().toISOString(),
+            openingFloat: 10000,
+            movements: [],
+        };
+    }
+    async function approve() {
         await typeText(
             document.querySelector<HTMLInputElement>('#override-manager-name')!,
             'boss',
@@ -1732,10 +1717,87 @@ describe('Sell discount (#23)', () => {
         );
         await clickButton(buttonNamed('Approve action'));
         await settleTransitions();
-        expect(useCartStore().attempt).not.toBeNull();
-        expect(() => useCartStore().park('x', 'shift1')).toThrow(
-            'may already be recorded',
+    }
+    /** Closes the payment dialog, then parks through the Park dialog. */
+    async function parkByDialog(label: string) {
+        while (document.querySelector('[role="dialog"]')) {
+            await press('Escape');
+            await settleTransitions();
+        }
+        await clickButton(buttonNamed('Park Ticket'));
+        const note = document.querySelector<HTMLInputElement>('#park-note')!;
+        await typeText(note, label);
+        await clickButton(
+            [...dialog('Park ticket')!.querySelectorAll('button')].find(
+                (b) => b.textContent?.trim() === 'Park Ticket',
+            )!,
         );
+        await settleTransitions();
+    }
+    it('parks a discounted ticket whose approval was cancelled (#420)', async () => {
+        openShift();
+        post.mockRejectedValue(approvalRequired());
+        await beginApprovedDiscount();
+        await clickButton(
+            [...document.querySelectorAll<HTMLButtonElement>('button')]
+                .reverse()
+                .find((b) => b.textContent?.trim() === 'Cancel')!,
+        );
+        await settleTransitions();
+        // The server refused the unapproved try: nothing can be recorded.
+        expect(useCartStore().attempt).toBeNull();
+        await parkByDialog('E2E discount sale');
+        expect(dialog('Park ticket')).toBeNull();
+        expect(useCartStore().parked).toHaveLength(1);
+        expect(useCartStore().parked[0]).toMatchObject({
+            label: 'E2E discount sale',
+            discount: { reason: 'Promotion' },
+        });
+        expect(useCartStore().items).toEqual([]);
+        expect(buttonNamed('Parked (1)')).toBeTruthy();
+    });
+    it('parks a discounted ticket whose approved sale was refused with a 400 (#420)', async () => {
+        openShift();
+        let sales = 0;
+        post.mockImplementation((url) => {
+            if (url === '/auth/override')
+                return Promise.resolve({ data: { token: 'approval-token' } });
+            if (++sales === 1) return Promise.reject(approvalRequired());
+            return Promise.reject(
+                new AxiosError('Bad', 'ERR_BAD_REQUEST', undefined, null, {
+                    status: 400,
+                    statusText: '',
+                    data: { statusCode: 400, message: 'Insufficient stock' },
+                    headers: {},
+                    config: { headers: new AxiosHeaders() },
+                }),
+            );
+        });
+        await beginApprovedDiscount();
+        await approve();
+        expect(useCartStore().attempt).toBeNull();
+        await parkByDialog('E2E discount sale');
+        expect(useCartStore().parked).toHaveLength(1);
+        expect(useCartStore().items).toEqual([]);
+    });
+    it('shows why it will not park when the approved sale got no answer', async () => {
+        openShift();
+        let sales = 0;
+        post.mockImplementation((url) => {
+            if (url === '/auth/override')
+                return Promise.resolve({ data: { token: 'approval-token' } });
+            if (++sales === 1) return Promise.reject(approvalRequired());
+            return Promise.reject(new AxiosError('Network Error'));
+        });
+        await beginApprovedDiscount();
+        await approve();
+        expect(useCartStore().attempt).not.toBeNull();
+        await parkByDialog('x');
+        expect(
+            dialog('Park ticket')?.querySelector('[role="alert"]')?.textContent,
+        ).toContain('may already be recorded');
+        expect(useCartStore().parked).toEqual([]);
+        expect(useCartStore().items).toHaveLength(2);
     });
 
     it('refuses a fixed amount above the subtotal, as the server does', async () => {
