@@ -44,11 +44,15 @@ export function createCheckoutAttempt(
     generate = newIdempotencyKey,
     store: AttemptStore = memoryAttemptStore(),
 ) {
+    const matches = (ticket: SaleTicketRequest) =>
+        store.get()?.ticketSignature === JSON.stringify(ticket);
     return {
+        /** True when this ticket already has a key (it may have been sent). */
+        hasKeyFor: matches,
         keyFor(ticket: SaleTicketRequest): string {
             const signature = JSON.stringify(ticket);
             const current = store.get();
-            if (current && current.ticketSignature === signature) {
+            if (current && matches(ticket)) {
                 return current.idempotencyKey;
             }
             const idempotencyKey = generate();
@@ -135,6 +139,8 @@ export function useSaleCheckout(deps: {
         }
 
         const ticket = deps.ticket();
+        // A new key that the server only ever refused was never recorded.
+        const freshKey = !attempt.hasKeyFor(ticket);
         const body: SaleRequest = {
             ...payment,
             ...ticket,
@@ -149,7 +155,11 @@ export function useSaleCheckout(deps: {
             receipt = await deps.post(body);
         } catch (error) {
             const stored = recordedReceipt(error);
-            if (!stored) throw error;
+            if (!stored) {
+                // Drop it so the ticket can be parked or edited freely (#420).
+                if (freshKey && nothingRecorded(error)) attempt.settle();
+                throw error;
+            }
             receipt = stored;
             alreadyRecorded = true;
         } finally {
@@ -241,6 +251,22 @@ export function saleErrorMessage(error: unknown): string {
         return `${message}. Retry is safe and will not charge twice.`;
     }
     return `${message}.`;
+}
+
+/**
+ * Thrown by a `post` that stopped before sending a charge the server could
+ * record, e.g. a discount whose manager approval was cancelled after the
+ * server refused the unapproved request.
+ */
+export class SaleNotSentError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SaleNotSentError';
+    }
+}
+
+function nothingRecorded(error: unknown): boolean {
+    return error instanceof SaleNotSentError || isRejectedSale(error);
 }
 
 /** True when the server refused the sale as invalid (nothing was recorded). */

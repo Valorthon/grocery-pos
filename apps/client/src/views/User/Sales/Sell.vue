@@ -378,6 +378,7 @@ import {
 import { voidTicketMessage } from '@/components/User/Sales/ticket';
 import {
     isRejectedSale,
+    SaleNotSentError,
     saleErrorMessage,
     useSaleCheckout,
 } from '@/components/User/Sales/sale-submission';
@@ -1298,7 +1299,9 @@ const checkout = useSaleCheckout({
             `Approve discount of ${currency(discountAmount.value)} on subtotal ${currency(cartStore.subtotal)}. Reason: ${body.discount?.reason ?? ''}`,
         );
         if (!token)
-            throw new Error('Manager approval cancelled. Nothing was charged.');
+            throw new SaleNotSentError(
+                'Manager approval cancelled. Nothing was charged.',
+            );
         return (
             await api.post<Receipt>('/sales', body, {
                 headers: { 'X-Manager-Approval': token },

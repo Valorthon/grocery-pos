@@ -10,12 +10,14 @@ import {
 } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import {
+    type AttemptStore,
     type CheckoutAttempt,
     createCheckoutAttempt,
     newIdempotencyKey,
     isRejectedSale,
     saleErrorMessage,
     SaleNotCompletedError,
+    SaleNotSentError,
     useSaleCheckout,
 } from './sale-submission';
 import type {
@@ -206,7 +208,10 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
 describe('useSaleCheckout', () => {
     beforeEach(() => setActivePinia(createPinia()));
 
-    function setup(post: (body: SaleRequest) => Promise<Receipt>) {
+    function setup(
+        post: (body: SaleRequest) => Promise<Receipt>,
+        attemptStore?: AttemptStore,
+    ) {
         const cart = useCartStore();
         cart.add(
             { product: 'p1', EAN: '1', name: 'bread', unitPrice: 22500 },
@@ -222,6 +227,7 @@ describe('useSaleCheckout', () => {
                 })),
             }),
             post: postSpy,
+            attemptStore,
         });
         return { cart, post: postSpy, checkout };
     }
@@ -262,6 +268,29 @@ describe('useSaleCheckout', () => {
         const [first, second] = post.mock.calls.map(([body]) => body);
         expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
         expect(second.sellDetails).toEqual([{ product: 'p1', quantity: 1 }]);
+    });
+
+    it('drops a new key the server refused, keeps one that may be recorded (#420)', async () => {
+        const store = { value: null as CheckoutAttempt | null };
+        const attemptStore = {
+            get: () => store.value,
+            set: (a: CheckoutAttempt | null) => (store.value = a),
+        };
+        const refused = setup(
+            () => Promise.reject(new SaleNotSentError('cancelled')),
+            attemptStore,
+        );
+        await expect(refused.checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value).toBeNull();
+
+        const lost = setup(() => Promise.reject(httpError(null)), attemptStore);
+        await expect(lost.checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        const key = store.value?.idempotencyKey;
+        expect(key).toBeTruthy();
+        // A later 400 on that reused key cannot prove the first try failed.
+        lost.post.mockRejectedValueOnce(httpError(400, {}));
+        await expect(lost.checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value?.idempotencyKey).toBe(key);
     });
 
     it('locks the cart while the request is in flight', async () => {

@@ -1695,6 +1695,48 @@ describe('Sell discount (#23)', () => {
             'Manager approval cancelled',
         );
     });
+    it('can park a discounted ticket whose approval was cancelled (#420)', async () => {
+        post.mockRejectedValue(approvalRequired());
+        await beginApprovedDiscount();
+        await clickButton(
+            [...document.querySelectorAll<HTMLButtonElement>('button')]
+                .reverse()
+                .find((b) => b.textContent?.trim() === 'Cancel')!,
+        );
+        await settleTransitions();
+        // The server refused the unapproved try: nothing can be recorded.
+        expect(useCartStore().attempt).toBeNull();
+        useCartStore().park('E2E discount sale', 'shift1');
+        expect(useCartStore().parked).toHaveLength(1);
+        expect(useCartStore().parked[0].discount).toMatchObject({
+            reason: 'Promotion',
+        });
+        expect(useCartStore().items).toEqual([]);
+    });
+    it('keeps the attempt when the approved sale got no answer', async () => {
+        let sales = 0;
+        post.mockImplementation((url) => {
+            if (url === '/auth/override')
+                return Promise.resolve({ data: { token: 'approval-token' } });
+            if (++sales === 1) return Promise.reject(approvalRequired());
+            return Promise.reject(new AxiosError('Network Error'));
+        });
+        await beginApprovedDiscount();
+        await typeText(
+            document.querySelector<HTMLInputElement>('#override-manager-name')!,
+            'boss',
+        );
+        await typeText(
+            document.querySelector<HTMLInputElement>('#override-manager-pin')!,
+            '012345',
+        );
+        await clickButton(buttonNamed('Approve action'));
+        await settleTransitions();
+        expect(useCartStore().attempt).not.toBeNull();
+        expect(() => useCartStore().park('x', 'shift1')).toThrow(
+            'may already be recorded',
+        );
+    });
 
     it('refuses a fixed amount above the subtotal, as the server does', async () => {
         withTicket();
