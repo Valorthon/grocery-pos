@@ -101,6 +101,11 @@ USB reminder.
 4. Try another USB port or drive. Keep at least one recent copy off the
    premises.
 
+**The backup drive holds the store's keys** (the database passwords, the
+sign-in secret and the local HTTPS root key). Keep it like a
+key: locked away, never shared or lent. If a backup drive is lost or stolen,
+tell your vendor at once.
+
 ## Certificate or address problems
 
 Signs: Chrome shows "Your connection is not private" on

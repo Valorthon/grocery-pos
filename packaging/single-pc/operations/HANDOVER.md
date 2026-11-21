@@ -48,6 +48,10 @@ Always open the app with the **Grocery POS** shortcut. The address is
 - The USB copy contains all store data and can be read without a password:
   keep it locked away, ideally away from the store, and use more than one
   drive in turn.
+- The USB drive holds the store's keys (the database passwords, the sign-in
+  secret and the local HTTPS root key). Keep it like a key: locked away,
+  never shared or lent. If a backup drive is lost or stolen,
+  tell your vendor at once.
 - Restoring a backup replaces all data. It is done only by the vendor (or
   someone they instruct) with the protected restore tool.
 

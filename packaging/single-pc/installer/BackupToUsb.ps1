@@ -129,5 +129,8 @@ if ($exported.Code -ne 0) {
 }
 
 Show-Message ("Done. The backup was checked and copied to $target.`n`n" +
-    'Remove the drive safely and keep it somewhere away from this computer.')
+    'Remove the drive safely and keep it somewhere away from this computer.' +
+    "`n`nThis drive holds the store's keys: the database passwords, the sign-in " +
+    'secret and the local HTTPS root key. Keep it like a key: ' +
+    'locked away, never shared or lent. If the drive is lost or stolen, tell your vendor at once.')
 exit 0
