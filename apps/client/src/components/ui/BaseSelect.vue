@@ -65,6 +65,7 @@ const props = withDefaults(
         id: '',
         label: '',
         ariaLabel: '',
+        error: '',
         disabled: false,
         allLabel: '',
         size: 'md',
