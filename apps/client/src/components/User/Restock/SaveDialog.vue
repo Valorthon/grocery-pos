@@ -5,7 +5,11 @@
         title="Save Restock Info"
         max-width="28rem"
     >
-        <SupplierSelect v-model="supplier" :disabled="saving" />
+        <SupplierSelect
+            v-model="supplier"
+            :disabled="saving"
+            :field-error="errors.supplier"
+        />
         <BaseInput
             v-model="formData.invoiceNumber"
             label="Supplier invoice / DR number (optional)"
@@ -13,7 +17,7 @@
         />
         <BaseInput
             v-model="formData.description"
-            label="Description"
+            label="Description (required)"
             :maxlength="STRING_LIMITS.DESCRIPTION"
             :error="errors.description"
         />
@@ -80,8 +84,7 @@ async function handleSubmit() {
         ...formData,
         supplier: String(supplier.value ?? ''),
     });
-    if (!supplier.value)
-        errors.value.description = 'Choose an active supplier.';
+    if (!supplier.value) errors.value.supplier = 'Choose an active supplier.';
     if (Object.keys(errors.value).length) return;
 
     saving.value = true;

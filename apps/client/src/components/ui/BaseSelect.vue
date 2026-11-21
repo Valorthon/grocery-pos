@@ -9,9 +9,11 @@
             :aria-label="label ? undefined : ariaLabel || undefined"
             :value="selected"
             :disabled="disabled"
+            :aria-invalid="error ? true : undefined"
+            :aria-describedby="error ? errorId : undefined"
             :class="[
                 size === 'sm' ? FIELD_BASE_SM : FIELD_BASE,
-                FIELD_OK,
+                error ? FIELD_ERROR : FIELD_OK,
                 size === 'sm' ? 'px-2' : 'px-3.5',
                 disabled ? FIELD_DISABLED : 'cursor-pointer',
             ]"
@@ -22,6 +24,7 @@
                 {{ opt.label }}
             </option>
         </select>
+        <p v-if="error" :id="errorId" :class="FIELD_ERROR_TEXT">{{ error }}</p>
     </div>
 </template>
 
@@ -30,6 +33,8 @@ import {
     FIELD_BASE,
     FIELD_BASE_SM,
     FIELD_DISABLED,
+    FIELD_ERROR,
+    FIELD_ERROR_TEXT,
     FIELD_LABEL,
     FIELD_OK,
 } from './field-style';
@@ -52,12 +57,15 @@ const props = withDefaults(
         allLabel?: string;
         /** `sm`: a compact control for dense rows such as a table pager. */
         size?: 'md' | 'sm';
+        /** Inline field error, as in BaseInput (aria-invalid, described by). */
+        error?: string;
     }>(),
     {
         modelValue: '',
         id: '',
         label: '',
         ariaLabel: '',
+        error: '',
         disabled: false,
         allLabel: '',
         size: 'md',
@@ -70,6 +78,7 @@ const props = withDefaults(
  */
 const autoId = useId();
 const fieldId = computed(() => props.id || autoId);
+const errorId = computed(() => `${fieldId.value}-error`);
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: string | null): void;
