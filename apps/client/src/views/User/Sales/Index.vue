@@ -175,6 +175,9 @@
                     >
                         This is not an official receipt.
                     </p>
+                    <p class="text-xs text-muted" data-testid="non-vat-notice">
+                        {{ NON_VAT_NOTICE }}
+                    </p>
                     <header class="space-y-2">
                         <p
                             class="text-xs font-bold uppercase tracking-widest text-muted"
@@ -675,6 +678,7 @@
 </template>
 
 <script setup lang="ts">
+import { NON_VAT_NOTICE } from '@/utils/tax-notice';
 import {
     formatQuantity,
     quantityAmount,

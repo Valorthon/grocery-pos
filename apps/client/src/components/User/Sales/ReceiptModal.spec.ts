@@ -102,6 +102,15 @@ describe('ReceiptModal (issue #24)', () => {
         expect(line?.textContent?.trim()).toBe(
             'This is not an official receipt.',
         );
+        expect(
+            document
+                .querySelector(
+                    '[data-testid="receipt-paper"] [data-testid="non-vat-notice"]',
+                )
+                ?.textContent?.trim(),
+        ).toBe(
+            'Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR receipts are handled outside this app.',
+        );
     });
 
     it('shows the sale number and the full id', async () => {
@@ -150,6 +159,8 @@ describe('ReceiptModal (issue #24)', () => {
 
     it('has no sales tax line and no Print button', async () => {
         await mount(RECEIPT);
+        // The non-VAT notice (#418) says "computes no tax"; nothing else may.
+        document.querySelector('[data-testid="non-vat-notice"]')?.remove();
         expect(dialogText()).not.toMatch(/tax/i);
         const buttons = [...document.querySelectorAll('button')].map((b) =>
             b.textContent?.trim(),

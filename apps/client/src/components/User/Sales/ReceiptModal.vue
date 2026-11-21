@@ -216,6 +216,9 @@
                     >
                         This is not an official receipt.
                     </p>
+                    <p class="text-xs text-muted" data-testid="non-vat-notice">
+                        {{ NON_VAT_NOTICE }}
+                    </p>
                 </div>
             </div>
         </div>
@@ -238,6 +241,7 @@
 </template>
 
 <script setup lang="ts">
+import { NON_VAT_NOTICE } from '@/utils/tax-notice';
 import { countOf } from '@/utils/plural';
 import { storePresentation, terminalLabel } from '@/settings/presentation';
 import {

@@ -135,6 +135,13 @@ describe('event-date reports UI', () => {
             params: { from: '2026-11-05', to: '2026-11-05', groupBy: 'day' },
         });
         expect(document.body.textContent).toContain('Pacific/Auckland');
+        expect(
+            document
+                .querySelector('[data-testid="non-vat-notice"]')
+                ?.textContent?.trim(),
+        ).toBe(
+            'Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR receipts are handled outside this app.',
+        );
         // Human labels, same values (#143).
         expect(
             [
