@@ -34,7 +34,7 @@ import { connect as netConnect } from 'node:net';
 import { release as osRelease } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { redact, tailFile } from '../diagnostics/diagnose.mjs';
+import { tailFile } from '../diagnostics/diagnose.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { acquireLock, provision, releaseLock } from '../runtime/provision.mjs';
 import {
@@ -945,20 +945,76 @@ async function freeBytes(path) {
     }
 }
 
-function httpsReady(url, ca) {
+/**
+ * One HTTPS readiness probe: `{ ok, error }`, where `error` is the TLS or
+ * socket code (e.g. UNABLE_TO_GET_ISSUER_CERT_LOCALLY) or `HTTP <status>`.
+ */
+export function httpsReady(url, ca) {
     return new Promise((done) => {
         const req = httpsRequest(
             url,
             { ...(ca ? { ca } : {}), timeout: 5000 },
             (res) => {
                 res.resume();
-                done(res.statusCode === 200);
+                done(
+                    res.statusCode === 200
+                        ? { ok: true }
+                        : { ok: false, error: `HTTP ${res.statusCode}` },
+                );
             },
         );
-        req.once('error', () => done(false));
-        req.once('timeout', () => (req.destroy(), done(false)));
+        req.once('error', (e) =>
+            done({ ok: false, error: e?.code ?? e?.message ?? 'error' }),
+        );
+        req.once(
+            'timeout',
+            () => (req.destroy(), done({ ok: false, error: 'timeout' })),
+        );
         req.end();
     });
+}
+
+// Runs in a child `node --use-system-ca` (#414): Node's bundled CA list
+// never includes the Windows Root store, so only a process started with
+// that flag proves the trust Chrome relies on. No `ca` is given.
+const SYSTEM_TRUST_PROBE = `
+const url = process.argv[1];
+const req = require('node:https').request(url, { timeout: 5000 }, (res) => {
+    res.resume();
+    console.log(JSON.stringify(res.statusCode === 200 ? { ok: true } : { ok: false, error: 'HTTP ' + res.statusCode }));
+});
+req.once('error', (e) => console.log(JSON.stringify({ ok: false, error: (e && (e.code || e.message)) || 'error' })));
+req.once('timeout', () => { req.destroy(); console.log(JSON.stringify({ ok: false, error: 'timeout' })); });
+req.end();
+`;
+
+/** The child arguments of the system-trust probe (#414). */
+export function systemTrustProbeArgs(url) {
+    return ['--use-system-ca', '-e', SYSTEM_TRUST_PROBE, url];
+}
+
+/**
+ * The proxy's readiness check (#414). Untrusted: verified against the
+ * Caddy root itself. Trusted: a child node with `--use-system-ca`, so it
+ * passes only once the OS trust store holds the root.
+ */
+export async function proxyReady({ url, trusted, ca, exec, node }) {
+    if (!trusted) return httpsReady(url, ca);
+    const { code, stdout, stderr } = await exec(
+        node,
+        systemTrustProbeArgs(url),
+    );
+    const last = String(stdout).trim().split(/\r?\n/).pop();
+    try {
+        const result = JSON.parse(last);
+        if (typeof result?.ok === 'boolean') return result;
+    } catch {
+        // fall through
+    }
+    return {
+        ok: false,
+        error: `probe exit ${code}: ${String(stderr).trim().split(/\r?\n/).pop() ?? ''}`.trim(),
+    };
 }
 
 /** The real Windows context. Unproven until the #357/#366 Windows run. */
@@ -1136,27 +1192,50 @@ export function windowsContext(env = process.env, out) {
             );
         },
         async waitReady(name, paths, { trusted = false, lanIp } = {}) {
-            const check =
+            const url = `https://localhost:${PORTS.proxy}/v1/health/ready`;
+            const bool = (ok, error) => ({ ok, error: ok ? undefined : error });
+            const probe =
                 name === LAN_SERVICE
-                    ? () => portBusy(lanIp, PORTS.proxy)
+                    ? async () =>
+                          bool(
+                              await portBusy(lanIp, PORTS.proxy),
+                              `nothing listening on ${lanIp}:${PORTS.proxy}`,
+                          )
                     : name === SERVICES.mongo
-                      ? () => portBusy(LOOPBACK, PORTS.mongo)
+                      ? async () =>
+                            bool(
+                                await portBusy(LOOPBACK, PORTS.mongo),
+                                `nothing listening on ${LOOPBACK}:${PORTS.mongo}`,
+                            )
                       : name === SERVICES.api
                         ? async () => {
                               const res = await fetch(
                                   `http://${LOOPBACK}:${PORTS.api}/v1/health/ready`,
-                              ).catch(() => undefined);
-                              return res?.ok === true;
+                              ).catch((e) => ({
+                                  failed: e?.cause?.code ?? e?.message,
+                              }));
+                              return res.failed !== undefined
+                                  ? { ok: false, error: res.failed }
+                                  : bool(res.ok === true, `HTTP ${res.status}`);
                           }
                         : async () =>
-                              httpsReady(
-                                  `https://localhost:${PORTS.proxy}/v1/health/ready`,
-                                  trusted
+                              proxyReady({
+                                  url,
+                                  trusted,
+                                  ca: trusted
                                       ? undefined
                                       : await readFile(
                                             caddyRootCertificate(paths),
                                         ).catch(() => undefined),
-                              );
+                                  exec: execCapture,
+                                  node: process.execPath,
+                              });
+            let lastError;
+            const check = async () => {
+                const result = await probe();
+                if (!result.ok) lastError = result.error;
+                return result.ok;
+            };
             try {
                 await boundedWait(check, {
                     timeoutMs: 180_000,
@@ -1164,8 +1243,15 @@ export function windowsContext(env = process.env, out) {
                 });
             } catch {
                 throw new Error(
-                    await readinessFailure(name, paths, (file) =>
-                        tailFile(file, 64 * 1024),
+                    await readinessFailure(
+                        name,
+                        paths,
+                        (file) => tailFile(file, 64 * 1024),
+                        20,
+                        lastError &&
+                            (trusted
+                                ? `${lastError} (checked with the Windows trust store)`
+                                : lastError),
                     ),
                 );
             }
@@ -1224,17 +1310,31 @@ export function serviceErrorLog(name, paths) {
  * The readiness-timeout message (#412): the service's last ~20 error-log
  * lines, redacted as the diagnostics redact a support file.
  */
-export async function readinessFailure(name, paths, tail, lines = 20) {
+export async function readinessFailure(
+    name,
+    paths,
+    tail,
+    lines = 20,
+    lastError,
+) {
     const file = serviceErrorLog(name, paths);
     const text = (await tail(file))?.text ?? '';
+    // Only secret-shaped values are removed (#414): the support-file
+    // redaction blanked every quoted value of Caddy's JSON log.
     const last = text
         .split(/\r?\n/)
         .filter((l) => l.trim())
         .slice(-lines)
-        .map((l) => `    ${redact(l)}`);
+        .map((l) => {
+            const line = scrubSecrets(l);
+            return `    ${line.length > 400 ? `${line.slice(0, 400)}…` : line}`;
+        });
+    const head = lastError
+        ? `${name} did not become ready in time (last check: ${scrubSecrets(lastError)})`
+        : `${name} did not become ready in time`;
     return last.length
-        ? `${name} did not become ready in time; last lines of ${file}:\n${last.join('\n')}\n  (end of log)`
-        : `${name} did not become ready in time (${file} is empty or missing)`;
+        ? `${head}; last lines of ${file}:\n${last.join('\n')}\n  (end of log)`
+        : `${head} (${file} is empty or missing)`;
 }
 
 /** Secrets never reach the installer log, even if a message quoted one. */

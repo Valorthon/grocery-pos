@@ -2,6 +2,7 @@
 // Windows execution (services, ACLs, Task Scheduler, certutil, shortcuts)
 // is not exercised here; the orchestration runs against a recording
 // context. See README.md "Verification".
+import { execFile, execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import {
     mkdir,
@@ -34,6 +35,8 @@ import {
     classifyDataRoot,
     createRunLog,
     readinessFailure,
+    proxyReady,
+    systemTrustProbeArgs,
     serviceErrorLog,
     parseArgs,
     parseLanAddress,
@@ -1792,6 +1795,9 @@ test('a readiness timeout quotes the service error log, redacted (#412)', async 
     }));
     assert.match(message, /did not become ready/);
     assert.match(message, /parsing Caddyfile/);
+    // Plain log text survives (#414); only secret-shaped values go.
+    assert.match(message, /line 29/);
+    assert.doesNotMatch(message, /\[text\]/);
     assert.ok(!message.includes('abcdef'));
     assert.ok(!message.includes('line 10\n'));
     assert.match(message, /line 11/);
@@ -1842,4 +1848,122 @@ test('the resume command carries the operator flags (#412)', async () => {
         resumeCommand('install', pinned.manifestSha256, ctx.progress, options),
         /-Mode install -AdminUsername owner$/,
     );
+});
+
+test('the trusted proxy check runs node --use-system-ca with no CA (#414)', async () => {
+    const calls = [];
+    const url = 'https://localhost:1443/v1/health/ready';
+    const result = await proxyReady({
+        url,
+        trusted: true,
+        ca: 'ignored',
+        node: '/bundle/node.exe',
+        exec: async (file, args) => (
+            calls.push([file, args]),
+            {
+                code: 0,
+                stdout: '{"ok":false,"error":"UNABLE_TO_GET_ISSUER_CERT_LOCALLY"}\n',
+                stderr: '',
+            }
+        ),
+    });
+    assert.deepEqual(result, {
+        ok: false,
+        error: 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+    });
+    assert.deepEqual(calls, [['/bundle/node.exe', systemTrustProbeArgs(url)]]);
+    assert.equal(calls[0][1][0], '--use-system-ca');
+    assert.ok(!calls[0][1].includes('ignored'));
+    const broken = await proxyReady({
+        url,
+        trusted: true,
+        node: 'node',
+        exec: async () => ({
+            code: 9,
+            stdout: '',
+            stderr: 'bad option: --use-system-ca',
+        }),
+    });
+    assert.equal(broken.ok, false);
+    assert.match(broken.error, /exit 9: bad option/);
+});
+
+test('trusted vs root.crt against a real self-signed proxy (#414)', async (t) => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-trust-'));
+    t.after(() => rm(dir, { recursive: true, force: true }));
+    const key = join(dir, 'key.pem');
+    const crt = join(dir, 'crt.pem');
+    try {
+        execFileSync(
+            'openssl',
+            [
+                'req',
+                '-x509',
+                '-newkey',
+                'ec',
+                '-pkeyopt',
+                'ec_paramgen_curve:P-256',
+                '-nodes',
+                '-keyout',
+                key,
+                '-out',
+                crt,
+                '-subj',
+                '/CN=localhost',
+                '-addext',
+                'subjectAltName=DNS:localhost',
+                '-days',
+                '2',
+            ],
+            { stdio: 'ignore' },
+        );
+    } catch {
+        t.skip('openssl not available');
+        return;
+    }
+    const { createServer } = await import('node:https');
+    const cert = await readFile(crt);
+    const server = createServer({ key: await readFile(key), cert }, (_q, r) =>
+        r.end('ok'),
+    );
+    await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+    t.after(() => server.close());
+    const url = `https://localhost:${server.address().port}/v1/health/ready`;
+    const exec = (file, args) =>
+        new Promise((done) =>
+            execFile(file, args, (e, stdout, stderr) =>
+                done({ code: e ? 1 : 0, stdout, stderr }),
+            ),
+        );
+    // The machine's trust store does not hold this root: the trusted
+    // check must fail with the TLS reason, never pass.
+    const trusted = await proxyReady({
+        url,
+        trusted: true,
+        exec,
+        node: process.execPath,
+    });
+    assert.equal(trusted.ok, false);
+    assert.match(trusted.error, /SELF_SIGNED|ISSUER|UNABLE/);
+    assert.deepEqual(
+        await proxyReady({
+            url,
+            trusted: false,
+            ca: cert,
+            exec,
+            node: process.execPath,
+        }),
+        { ok: true },
+    );
+});
+
+test('a readiness timeout names the last check error (#414)', async () => {
+    const message = await readinessFailure(
+        SERVICES.proxy,
+        layout('/data'),
+        async () => null,
+        20,
+        'UNABLE_TO_GET_ISSUER_CERT_LOCALLY (checked with the Windows trust store)',
+    );
+    assert.match(message, /last check: UNABLE_TO_GET_ISSUER_CERT_LOCALLY/);
 });
