@@ -683,7 +683,7 @@ function onQtyEnter(product: string) {
 function onQtyScan(product: string, code: string) {
     commitQuantity(product);
     searchQuery.value = code;
-    void onScanSubmit();
+    void onScanSubmit(qtyEls.get(product) ?? null);
 }
 
 /** Escape: back to the line's quantity, and the focus to the line. */
@@ -902,7 +902,7 @@ function resetQuery(submitted: string) {
 
 /**
  * A match clicked, or Enter/Space on the focused one (#322): the focus
- * waits in the scan box, and the added line's quantity takes it (#323).
+ * waits in the scan box, and the scan box keeps it after the add (#421).
  */
 function onMatchPicked(match: Match) {
     scanInput.value?.focus();
@@ -966,7 +966,11 @@ watch(
  *    A barcode that missed and matches nothing says "Barcode … not found".
  * Nothing happens while the ticket is locked for checkout.
  */
-async function onScanSubmit() {
+/** The quantity field a burst scan came from, which may give the focus up. */
+let scanSource: Element | null = null;
+
+async function onScanSubmit(source: Element | null = null) {
+    scanSource = source;
     if (cartStore.locked) return;
     const submitted = searchQuery.value;
     const { qty, query } = parseScan(submitted, 1);
@@ -1116,24 +1120,51 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
         'success',
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,
     );
+    const from = scanSource;
+    scanSource = null;
+    const canRefocus =
+        focusIsScanOrMatches() ||
+        (from !== null && document.activeElement === from);
     resetQuery(submitted);
-    void focusAddedLine(product._id);
+    if (canRefocus) void refocusScanBoxAfterAdd(product._id);
+}
+
+function qtyFields(): Element[] {
+    return [...qtyEls.values()];
 }
 
 /**
- * After an add (#323): the line's quantity takes the focus with its value
- * selected, as F4 does, so typing replaces it and Enter goes back to the
- * scan box. Not while a modal is open or the ticket is locked.
+ * Whether the focus is where an add starts: the scan box, the matches,
+ * or nowhere. A field the cashier moved to during a slow lookup keeps it.
  */
-async function focusAddedLine(product: string) {
+function focusIsScanOrMatches(): boolean {
+    const active = document.activeElement;
+    if (!active || active === document.body) return true;
+    if (active === scanInput.value) return true;
+    return active.closest('[role="listbox"]') !== null;
+}
+
+/**
+ * After an add (#421, supersedes #323): the scan box keeps (or, after a
+ * match pick, takes back) the focus and the line stays selected, so the
+ * next text goes to the box; F4 edits the selected line's quantity. Not
+ * while a modal is open or the ticket is locked.
+ */
+async function refocusScanBoxAfterAdd(product: string) {
     await nextTick();
     if (anyModalOpen.value || isTicketLocked.value) return;
     if (selectedLine.value !== product) return;
-    // The next scan already started in the box: its digits keep the focus.
-    if (searchQuery.value !== '') return;
-    const qty = qtyEls.get(product);
-    qty?.focus();
-    qty?.select();
+    const active = document.activeElement;
+    // Only a focus that is gone (the match unmounted) or still in the box.
+    if (
+        active &&
+        active !== document.body &&
+        active !== scanInput.value &&
+        active.isConnected &&
+        !qtyFields().includes(active)
+    )
+        return;
+    scanInput.value?.focus();
 }
 
 // ---- Discount actions
