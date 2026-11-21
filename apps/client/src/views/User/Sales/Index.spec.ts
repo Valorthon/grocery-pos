@@ -1156,8 +1156,17 @@ describe('sale details receipt (#218)', () => {
             offlineNumber: 'BEC8A876',
             soldAt: '2026-09-24T01:00:00.000Z',
         });
+        // Wait for the details load to enable the button, then for the summary.
+        await vi.waitFor(() =>
+            expect(byTestId('sale-view-summary')).toHaveProperty(
+                'disabled',
+                false,
+            ),
+        );
         (byTestId('sale-view-summary') as HTMLButtonElement).click();
-        await flush();
+        await vi.waitFor(() =>
+            expect(byTestId('receipt-paper')).not.toBeNull(),
+        );
         const paper = byTestId('receipt-paper')!;
         expect(paper.textContent).toContain('This is not an official receipt.');
         expect(byTestId('receipt-offline-number')?.textContent).toContain(
@@ -1169,9 +1178,7 @@ describe('sale details receipt (#218)', () => {
         expect(byTestId('receipt-change')).not.toBeNull();
         expect(document.body.textContent).toContain('Sale summary');
         (byTestId('receipt-close') as HTMLButtonElement).click();
-        await new Promise((r) => setTimeout(r, 100));
-        await flush();
-        expect(byTestId('receipt-paper')).toBeNull();
+        await vi.waitFor(() => expect(byTestId('receipt-paper')).toBeNull());
         expect(byTestId('sale-receipt')).not.toBeNull();
     });
 
