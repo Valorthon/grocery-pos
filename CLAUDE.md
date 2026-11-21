@@ -923,7 +923,9 @@ requestId}`. A 5xx never carries details or internals.
 - Completed offline cash may drive stock negative and flags stock reconciliation;
   the private inventory marker distinguishes this from corrupt stored stock.
   Original `soldAt` is separate from server `createdAt`; receipt/history and
-  daily reporting use occurrence time.
+  daily reporting use occurrence time. A synced sale stores public
+  `offlineNumber` (`offlineSaleNumber`: last 8 of the receipt id, upper case;
+  the key stays private), shown as "Offline #…" and matched by `saleNumber` (#416).
 - Each terminal registers a server lease. Normal close requires all terminal
   queues drained and leases released, including cross-tab enqueue suspension.
   ADMIN may force-close; revoked cashiers/sessions or closed shifts require

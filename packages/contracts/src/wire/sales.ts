@@ -148,6 +148,11 @@ export interface SaleView {
     storeIdentity?: ReceiptStoreIdentity;
     soldAt?: string;
     offline?: boolean;
+    /**
+     * An offline-synced sale's number from its offline summary: the last 8
+     * of the client receipt id, upper case (#416). Never the key itself.
+     */
+    offlineNumber?: string;
     stockShortfall?: boolean;
     reconciledBy?: string;
     reconciliationReason?: string;
@@ -179,6 +184,7 @@ export const SALE_VIEW_SHAPE: WireShape<SaleView> = {
     storeIdentity: 'optional',
     soldAt: 'optional',
     offline: 'optional',
+    offlineNumber: 'optional',
     stockShortfall: 'optional',
     reconciledBy: 'optional',
     reconciliationReason: 'optional',

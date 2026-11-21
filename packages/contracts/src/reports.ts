@@ -15,6 +15,15 @@ export const REPORT_LIMITS = {
     SALE_SEARCH: /^(?:[a-f\d]{8}|[a-f\d]{24})$/i,
 } as const;
 
+/**
+ * The number an offline cash summary shows (#416): the last 8 characters of
+ * its client receipt id (the outbox idempotency key), upper case. The synced
+ * sale stores it as `offlineNumber` so that number finds it.
+ */
+export function offlineSaleNumber(receiptId: string): string {
+    return receiptId.slice(-8).toUpperCase();
+}
+
 import type { UnitOfMeasure } from './enums.js';
 import type { WireShape } from './wire-shape.js';
 

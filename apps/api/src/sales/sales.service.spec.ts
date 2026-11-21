@@ -1696,6 +1696,34 @@ describe('Sales history scoping (issues #13, #2)', () => {
             ).toEqual(OWN_SCOPE);
         });
 
+        it('matches a suffix against the id or the offline number (#416)', () => {
+            expect(
+                salesListFilter({}, { saleNumber: 'bec8a876' }, 'Asia/Manila'),
+            ).toEqual({
+                $or: [
+                    {
+                        $expr: {
+                            $regexMatch: {
+                                input: { $toString: '$_id' },
+                                regex: 'bec8a876$',
+                            },
+                        },
+                    },
+                    { offlineNumber: 'BEC8A876' },
+                ],
+            });
+        });
+
+        it('keeps the number and date filters apart with $and (#416)', () => {
+            const filter = salesListFilter(
+                {},
+                { saleNumber: 'bec8a876', dateTo: '2026-09-24' },
+                'Asia/Manila',
+            );
+            expect(filter?.$and).toHaveLength(2);
+            expect(filter).not.toHaveProperty('$or');
+        });
+
         it('adds nothing when no filter is given', () => {
             expect(salesListFilter({}, {}, 'Asia/Manila')).toEqual({});
         });

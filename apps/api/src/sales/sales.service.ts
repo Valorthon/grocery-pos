@@ -136,19 +136,32 @@ export function salesListFilter(
     if (dto.paymentType) filter.paymentType = dto.paymentType;
     if (dto.saleNumber?.length === 24)
         filter._id = new Types.ObjectId(dto.saleNumber);
-    else if (dto.saleNumber)
-        filter.$expr = {
-            $regexMatch: {
-                input: { $toString: '$_id' },
-                regex: `${dto.saleNumber}$`,
-            },
-        };
+    const and: Record<string, unknown>[] = [];
+    if (dto.saleNumber && dto.saleNumber.length !== 24)
+        // The server number (id suffix) or an offline summary's number (#416).
+        and.push({
+            $or: [
+                {
+                    $expr: {
+                        $regexMatch: {
+                            input: { $toString: '$_id' },
+                            regex: `${dto.saleNumber}$`,
+                        },
+                    },
+                },
+                { offlineNumber: dto.saleNumber.toUpperCase() },
+            ],
+        });
     const createdAt = dateRangeFilter(dto.dateFrom, dto.dateTo, timeZone);
     if (createdAt)
-        filter.$or = [
-            { soldAt: createdAt },
-            { soldAt: { $exists: false }, createdAt },
-        ];
+        and.push({
+            $or: [
+                { soldAt: createdAt },
+                { soldAt: { $exists: false }, createdAt },
+            ],
+        });
+    if (and.length === 1) Object.assign(filter, and[0]);
+    else if (and.length) filter.$and = and;
 
     return filter;
 }

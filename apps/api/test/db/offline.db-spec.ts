@@ -9,6 +9,10 @@ import {
     OFFLINE_PRODUCT_SHAPE,
     CURRENT_SHIFT_VIEW_SHAPE,
     RECEIPT_SHAPE,
+    SALE_ROW_SHAPE,
+    offlineSaleNumber,
+    type Paginated,
+    type SaleRow,
     ErrorCode,
     Role,
     UnitOfMeasure,
@@ -193,6 +197,23 @@ it('preserves signed cached price after an online price edit, original time and 
         .lean();
     expect(stored?.soldAt?.toISOString()).toBe(body.soldAt);
     expect(stored?.offline).toBe(true);
+});
+
+it('finds a synced sale by its offline summary number (#416)', async () => {
+    const result = await read<Receipt>(
+        await db.call(seller, 'POST', '/offline/sync', body),
+    );
+    expect(result.status).toBe(201);
+    const number = offlineSaleNumber(body.idempotencyKey);
+    const list = await read<Paginated<SaleRow>>(
+        await db.call(seller, 'GET', `/sales?saleNumber=${number}`),
+    );
+    expect(list.status).toBe(200);
+    expect(list.body.data.map((s) => s._id)).toEqual([result.body._id]);
+    const row = list.body.data[0];
+    expect(row.offlineNumber).toBe(number);
+    expect(wireShapeDiff(row, SALE_ROW_SHAPE).unexpected).toEqual([]);
+    expect(JSON.stringify(list.body)).not.toContain(body.idempotencyKey);
 });
 
 it('preserves the server lease identity for delayed uploads after store identity changes', async () => {

@@ -280,6 +280,14 @@
                                         @click="copyId"
                                         ><Copy class="w-4 h-4"
                                     /></BaseButton>
+                                    <span
+                                        v-if="selectedSale.offlineNumber"
+                                        class="text-muted"
+                                        data-testid="sale-offline-number"
+                                        >Offline #{{
+                                            selectedSale.offlineNumber
+                                        }}</span
+                                    >
                                 </div>
                                 <code
                                     class="block break-all text-xs text-muted"
@@ -726,6 +734,8 @@ import { Color, useUIStore } from '@/stores/ui';
 /** The ledger fields of a sale that explain its total (centavos). */
 interface SaleTotals {
     offline?: boolean;
+    /** The offline summary's number, on synced offline sales (#416). */
+    offlineNumber?: string;
     soldAt?: string;
     stockShortfall?: boolean;
     lateOffline?: boolean;
@@ -946,11 +956,14 @@ const {
     (result) => {
         serverItems.value = result.data.data.map((sale) => ({
             id: sale._id,
-            saleNumber: saleNumber(sale._id),
+            saleNumber: sale.offlineNumber
+                ? `${saleNumber(sale._id)} · Offline #${sale.offlineNumber}`
+                : saleNumber(sale._id),
             cashier: sale.cashier?.name ?? 'N/A',
             amount: formatCurrency(sale.amount ?? 0),
             totals: {
                 offline: sale.offline,
+                offlineNumber: sale.offlineNumber,
                 soldAt: sale.soldAt,
                 stockShortfall: sale.stockShortfall,
                 lateOffline: sale.lateOffline,

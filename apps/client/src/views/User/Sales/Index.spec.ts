@@ -1118,6 +1118,19 @@ describe('sale details receipt (#218)', () => {
         );
     });
 
+    it('shows the offline summary number beside the server number (#416)', async () => {
+        await openSale({
+            ...CASH_SALE,
+            offline: true,
+            offlineNumber: 'BEC8A876',
+            soldAt: '2026-09-24T01:00:00.000Z',
+        });
+        expect(byTestId('sale-number')?.textContent).toBe('#SALE1');
+        expect(byTestId('sale-offline-number')?.textContent).toBe(
+            'Offline #BEC8A876',
+        );
+    });
+
     it('lists lines compactly, measured quantities per unit', async () => {
         serve(CASH_SALE, []);
         const serveRest = api.get.getMockImplementation()!;
