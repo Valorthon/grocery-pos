@@ -801,10 +801,12 @@ requestId}`. A 5xx never carries details or internals.
   lines, 5 items)?", singular for 1). A removed line has a 5s Undo. Quantities are
   editable. A typed `12*` prefix multiplies the next scan or pick only and
   shows a badge; there is no Qty select (#323).
-- Every successful add (scan or match pick) focuses that line's quantity
-  with its value selected and selects the line (as F4); Enter commits and
-  returns to the scan box, Escape cancels; a failed add moves no focus
-  (#323). In a quantity field every digit is held back (`qty-burst.ts`)
+- Every successful add (scan or match pick, Enter/Space in the matches
+  too) keeps or returns the focus to the scan box and selects the new or
+  incremented line (#421, owner decision 2026-11-21, supersedes #323's
+  rule). F4 focuses the selected line's quantity with its value selected;
+  Enter commits and returns to the scan box, Escape cancels; a failed add
+  moves no focus. In a quantity field every digit is held back (`qty-burst.ts`)
   and typed after 200 ms without another; a held run of a valid
   EAN-13/UPC-A/EAN-8 (check digit) at most 200 ms apart, then Enter, is
   a scan: the typed quantity is committed (a refused one keeps its error)

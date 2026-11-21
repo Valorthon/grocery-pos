@@ -635,8 +635,8 @@ describe('Sell receipt on screen (issue #22 review, decision 2026-09-25)', () =>
         expect(get).toHaveBeenCalledWith(`/products/${MILK.EAN}`);
         expect(cartNames()).toEqual(['1x milk']);
         expect(input().value).toBe('');
-        // The scanned item's quantity takes the focus (#323).
-        expect(document.activeElement).toBe(qtyInputs()[0]);
+        // The scan box keeps the focus (#421).
+        expect(document.activeElement).toBe(input());
     });
 
     it('keeps Next Sale and Escape closing it', async () => {
@@ -919,9 +919,7 @@ describe('Sell Delete from the empty scan box (#85)', () => {
         // The repeat scan merged into milk in place and highlighted it.
         expect(line(0).getAttribute('aria-current')).toBe('true');
         expect(input().value).toBe('');
-        // The repeat's quantity has the focus (#323); F2 goes back.
-        expect(document.activeElement).toBe(qtyInputs()[0]);
-        await press('F2');
+        // The scan box keeps the focus (#421).
         expect(document.activeElement).toBe(input());
 
         expect((await press('Delete')).defaultPrevented).toBe(true);
@@ -1487,13 +1485,13 @@ describe('Sell match grid keys (#322)', () => {
         expect(document.activeElement).toBe(input());
     });
 
-    it('Enter adds the focused match and its quantity takes the focus', async () => {
+    it('Enter adds the focused match and the scan box takes the focus (#421)', async () => {
         await listed(2);
         await keyOnFocus('ArrowRight');
         await keyOnFocus('Enter');
         expect(cartNames()).toEqual(['1x mints']);
-        // The added line's quantity takes the focus (#323).
-        expect(document.activeElement).toBe(qtyInputs()[0]);
+        expect(document.activeElement).toBe(input());
+        expect(line(0).getAttribute('aria-current')).toBe('true');
         expect(input().value).toBe('');
     });
 
@@ -2844,7 +2842,7 @@ describe('weighed register quantities (#36)', () => {
     });
 });
 
-describe('Sell add focuses the quantity (#323)', () => {
+describe('Sell add keeps the scan box focus (#421); F4 edits the quantity (#323)', () => {
     beforeEach(() => {
         // The burst timing reads performance.now; follow the fake clock.
         vi.spyOn(performance, 'now').mockImplementation(() => Date.now());
@@ -2858,6 +2856,12 @@ describe('Sell add focuses the quantity (#323)', () => {
         input().value = code;
         input().dispatchEvent(new Event('input'));
         await pressEnter();
+    }
+
+    /** A scan, then F4 to edit the added line's quantity. */
+    async function scanAndEdit(code: string) {
+        await scanBox(code);
+        await press('F4');
     }
 
     /** Keys on the focused element, `gap` ms apart, as a wedge types. */
@@ -2880,18 +2884,33 @@ describe('Sell add focuses the quantity (#323)', () => {
         await flush();
     }
 
-    it('a scan focuses the line quantity with its value selected', async () => {
+    it('a scan keeps the scan box focused and selects the line', async () => {
         serve(() => Promise.resolve([]));
         mount();
         await scanBox(MILK.EAN);
+        expect(document.activeElement).toBe(input());
+        expect(line(0).getAttribute('aria-current')).toBe('true');
+
+        await press('F4');
         const qty = qtyInputs()[0];
         expect(document.activeElement).toBe(qty);
         expect(qty.value).toBe('1');
         expect(selectedAll(qty)).toBe(true);
-        expect(line(0).getAttribute('aria-current')).toBe('true');
     });
 
-    it('a clicked match focuses its quantity, selected', async () => {
+    it('letters typed right after a scan go to the scan box', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await scanBox(MILK.EAN);
+        await type('bread');
+        expect(input().value).toBe('bread');
+        expect(qtyInputs()[0].value).toBe('1');
+        expect(
+            document.querySelector('[data-testid="line-quantity-error"]'),
+        ).toBeNull();
+    });
+
+    it('a clicked match gives the focus back to the scan box, line selected', async () => {
         serve(() => Promise.resolve([MILK]));
         mount();
         await type('milk');
@@ -2900,22 +2919,22 @@ describe('Sell add focuses the quantity (#323)', () => {
                 '[data-testid="search-match"]',
             )!,
         );
-        const qty = qtyInputs()[0];
-        expect(document.activeElement).toBe(qty);
-        expect(selectedAll(qty)).toBe(true);
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(document.activeElement).toBe(input());
+        expect(line(0).getAttribute('aria-current')).toBe('true');
     });
 
     it('3 then Enter sets 3 and goes back; Enter alone keeps 1', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         await keys('3', 250);
         expect(qtyInputs()[0].value).toBe('3');
         await press('Enter');
         expect(cartNames()).toEqual(['3x milk']);
         expect(document.activeElement).toBe(input());
 
-        await scanBox(MINTS.EAN);
+        await scanAndEdit(MINTS.EAN);
         expect(document.activeElement).toBe(qtyInputs()[1]);
         await press('Enter');
         expect(cartNames()).toEqual(['3x milk', '1x mints']);
@@ -2925,46 +2944,45 @@ describe('Sell add focuses the quantity (#323)', () => {
     it('a burst of another code adds it; the field never shows it', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         const seen: string[] = [];
         await burst(MINTS.EAN, seen);
 
         expect(seen.every((v) => v === '1')).toBe(true);
         expect(cartNames()).toEqual(['1x milk', '1x mints']);
         expect(qtyInputs()[0].value).toBe('1');
-        expect(document.activeElement).toBe(qtyInputs()[1]);
+        expect(document.activeElement).toBe(input());
         expect(input().value).toBe('');
     });
 
-    it('the same code three times gives 3, focus kept and selected', async () => {
+    it('the same code three times gives 3, scan box focused', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         await burst(MILK.EAN);
+        await press('F4');
         await burst(MILK.EAN);
         expect(cartNames()).toEqual(['3x milk']);
-        const qty = qtyInputs()[0];
-        expect(document.activeElement).toBe(qty);
-        expect(qty.value).toBe('3');
-        expect(selectedAll(qty)).toBe(true);
+        expect(document.activeElement).toBe(input());
+        expect(qtyInputs()[0].value).toBe('3');
     });
 
     it('a typed 3 then a burst commits 3 before adding the scan', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         await keys('3', 250);
         const seen: string[] = [];
         await burst(MINTS.EAN, seen);
         expect(seen.every((v) => v === '3')).toBe(true);
         expect(cartNames()).toEqual(['3x milk', '1x mints']);
-        expect(document.activeElement).toBe(qtyInputs()[1]);
+        expect(document.activeElement).toBe(input());
     });
 
     it('an invalid typed quantity keeps its error; the scan still adds', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         const qty = qtyInputs()[0];
         qty.value = '0';
         qty.dispatchEvent(new Event('input'));
@@ -2979,7 +2997,7 @@ describe('Sell add focuses the quantity (#323)', () => {
     it('slow typing of a code is a quantity, not a scan', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         get.mockClear();
         await keys(MINTS.EAN, 300);
         // The first key replaced the selected 1.
@@ -2995,7 +3013,7 @@ describe('Sell add focuses the quantity (#323)', () => {
     it('a fast run that is no valid barcode is typed as usual', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         await keys('12', 20);
         await press('Enter');
         expect(cartNames()).toEqual(['12x milk']);
@@ -3004,12 +3022,12 @@ describe('Sell add focuses the quantity (#323)', () => {
     it('a digit typed just before a burst is the typed quantity', async () => {
         serve(() => Promise.resolve([]));
         mount();
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         const seen: string[] = [];
         await burst(`3${MINTS.EAN}`, seen);
         expect(seen.every((v) => v.length < 8)).toBe(true);
         expect(cartNames()).toEqual(['3x milk', '1x mints']);
-        expect(document.activeElement).toBe(qtyInputs()[1]);
+        expect(document.activeElement).toBe(input());
     });
 
     it.each(['Tab', 'F2', 'F4'])(
@@ -3017,7 +3035,7 @@ describe('Sell add focuses the quantity (#323)', () => {
         async (next) => {
             serve(() => Promise.resolve([]));
             mount();
-            await scanBox(MILK.EAN);
+            await scanAndEdit(MILK.EAN);
             await press('3');
             await press(next);
             if (next === 'Tab') qtyInputs()[0].blur();
@@ -3055,7 +3073,7 @@ describe('Sell add focuses the quantity (#323)', () => {
         expect(cartNames()).toEqual([]);
         expect(document.activeElement).toBe(input());
 
-        await scanBox(MILK.EAN);
+        await scanAndEdit(MILK.EAN);
         await burst('4006381333931');
         expect(cartNames()).toEqual(['1x milk']);
         expect(document.activeElement).toBe(qtyInputs()[0]);

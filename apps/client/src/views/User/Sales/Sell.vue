@@ -902,7 +902,7 @@ function resetQuery(submitted: string) {
 
 /**
  * A match clicked, or Enter/Space on the focused one (#322): the focus
- * waits in the scan box, and the added line's quantity takes it (#323).
+ * waits in the scan box, and the scan box keeps it after the add (#421).
  */
 function onMatchPicked(match: Match) {
     scanInput.value?.focus();
@@ -1121,19 +1121,16 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
 }
 
 /**
- * After an add (#323): the line's quantity takes the focus with its value
- * selected, as F4 does, so typing replaces it and Enter goes back to the
- * scan box. Not while a modal is open or the ticket is locked.
+ * After an add (#421, supersedes #323): the scan box keeps (or, after a
+ * match pick, takes back) the focus and the line stays selected, so the
+ * next text goes to the box; F4 edits the selected line's quantity. Not
+ * while a modal is open or the ticket is locked.
  */
 async function focusAddedLine(product: string) {
     await nextTick();
     if (anyModalOpen.value || isTicketLocked.value) return;
     if (selectedLine.value !== product) return;
-    // The next scan already started in the box: its digits keep the focus.
-    if (searchQuery.value !== '') return;
-    const qty = qtyEls.get(product);
-    qty?.focus();
-    qty?.select();
+    scanInput.value?.focus();
 }
 
 // ---- Discount actions
