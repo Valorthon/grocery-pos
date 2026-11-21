@@ -976,3 +976,22 @@ export function uninstallSteps({ installedServices, shortcuts }) {
     for (const path of shortcuts) steps.push({ kind: 'remove', path });
     return steps;
 }
+
+/**
+ * The mode that resumes a failed run (#412). Once an install has begun
+ * registering services, `-Mode install` is refused ("already installed"),
+ * so it resumes with repair; every other failed run re-runs its own mode.
+ */
+export function resumeMode(mode, { servicesTouched = false } = {}) {
+    return mode === 'install' && servicesTouched ? 'repair' : mode;
+}
+
+/** The exact command an operator runs next after exit 1 (#412). */
+export function resumeCommand(mode, manifestSha256, state = {}) {
+    return `.\\Install.ps1 -ManifestSha256 ${manifestSha256 ?? '<hash>'} -Mode ${resumeMode(mode, state)}`;
+}
+
+/** The installer log of one run (#412): state\installer-<UTC time>.log. */
+export function installerLogName(now = new Date()) {
+    return `installer-${now.toISOString().replace(/[:.]/g, '-')}.log`;
+}

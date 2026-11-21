@@ -47,8 +47,14 @@ it differs from what you see (B15).
 
     Exit 0 is done; 3 means it refused and changed nothing (the message says
     why: wrong Windows, port in use, low disk, already installed → use
-    `-Mode repair`); 1 means it failed part-way: run the same command again,
-    it resumes.
+    `-Mode repair`); 1 means it failed part-way: run the command the last
+    line prints ("To resume, run: …"). That is `-Mode repair` once the
+    install has registered its services (`-Mode install` would then be
+    refused as already installed), else the same `-Mode install` again;
+    both resume. Every run ends with `Installer log:` and the path of
+    `state\installer-<UTC time>.log` in the data folder; keep it with the
+    deployment evidence. A service that misses its readiness timeout
+    shows the last lines of its own error log.
 
 4. Check: double-click **Check Grocery POS** on the desktop and answer Yes;
    every line should be OK (Backups may say no backup yet).

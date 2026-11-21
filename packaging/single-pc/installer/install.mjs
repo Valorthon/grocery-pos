@@ -9,11 +9,13 @@
 //   node install.mjs uninstall [--remove-ca-trust]
 //   node install.mjs handover-done
 //
-// Exit codes: 0 done, 1 failed (re-run resumes), 2 usage, 3 refused
-// (nothing changed). Every stage is idempotent and journaled in the data
+// Exit codes: 0 done, 1 failed (the printed command resumes: repair once an
+// install has registered services), 2 usage, 3 refused (nothing changed).
+// Every run writes state\installer-<UTC time>.log in the data root (#412). Every stage is idempotent and journaled in the data
 // root's state\installer.json; replaceable binaries live under
 // %ProgramFiles%, everything persistent under %ProgramData% (README.md).
 import { execFile } from 'node:child_process';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 import { X509Certificate } from 'node:crypto';
 import {
     cp,
@@ -32,6 +34,7 @@ import { connect as netConnect } from 'node:net';
 import { release as osRelease } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { redact, tailFile } from '../diagnostics/diagnose.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { acquireLock, provision, releaseLock } from '../runtime/provision.mjs';
 import {
@@ -74,6 +77,8 @@ import {
     checkShortcutSpec,
     terminalPackageShortcutSpec,
     helpShortcutSpec,
+    installerLogName,
+    resumeCommand,
     ownerGuideShortcutSpec,
     allShortcuts,
     serviceSteps,
@@ -519,8 +524,10 @@ async function installOrRepair(options, ctx, log) {
         const release = await placeRelease(bundle, loc.releasesDir, log);
         const bin = releaseLayout(release, { windows: ctx.windows });
         const stages = {};
-        const done = async (stage) => {
+        let extra = {};
+        const done = async (stage, more) => {
             stages[stage] = new Date().toISOString();
+            if (more) extra = { ...extra, ...more };
             await writeState(paths, {
                 schema: INSTALLER_STATE_SCHEMA,
                 version: bundle.manifest.version,
@@ -532,6 +539,7 @@ async function installOrRepair(options, ctx, log) {
                     previous?.backupTime ??
                     DEFAULT_BACKUP_TIME,
                 stages,
+                ...extra,
                 complete: false,
             });
         };
@@ -558,6 +566,19 @@ async function installOrRepair(options, ctx, log) {
         await done('provision');
 
         log('services: registering MongoDB, API and proxy');
+        // From here a failed install resumes with repair (#412): the
+        // services exist, so -Mode install would be refused.
+        ctx.progress = { ...ctx.progress, servicesTouched: true };
+        const removing = stopOrder().filter((name) =>
+            facts.servicesInstalled.includes(name),
+        );
+        if (removing.length) {
+            // Re-registration deletes every installed service first. If the
+            // run stops here (a service stuck "marked for deletion"), the
+            // journal and the log say which ones are gone (#412).
+            log(`services: removing ${removing.join(', ')} to re-register`);
+            await done('services-removed', { servicesRemoved: removing });
+        }
         for (const name of stopOrder()) {
             if (facts.servicesInstalled.includes(name)) {
                 await runSteps(
@@ -607,7 +628,7 @@ async function installOrRepair(options, ctx, log) {
                 log(`warning: ${note}`);
             }
         }
-        await done('services');
+        await done('services', { servicesRemoved: undefined });
 
         log('trust: local certificate authority for Chrome');
         await ctx.waitFile(caddyRootCertificate(paths));
@@ -793,11 +814,16 @@ async function uninstall(options, ctx, log) {
             recursive: true,
             force: true,
         });
-        log(`kept: ${loc.dataRoot} (data, secrets, TLS, backups, logs)`);
+        // Only paths that exist (#412): a handover folder that was never
+        // created (the admin stage never ran) is not "kept".
+        const kept = [];
+        for (const path of [loc.dataRoot, loc.handoverDir])
+            if (await exists(path)) kept.push(path);
+        for (const path of kept) log(`kept: ${path}`);
         return {
             mode: 'uninstall',
             removedServices: facts.servicesInstalled,
-            kept: [loc.dataRoot, loc.handoverDir],
+            kept,
         };
     } finally {
         await releaseLock(loc.lock, token);
@@ -940,7 +966,7 @@ function httpsReady(url, ca) {
 }
 
 /** The real Windows context. Unproven until the #357/#366 Windows run. */
-export function windowsContext(env = process.env) {
+export function windowsContext(env = process.env, out) {
     const loc = locations(env);
     const serviceState = async (name) => {
         const { code, stdout } = await execCapture('sc.exe', ['query', name]);
@@ -1075,7 +1101,7 @@ export function windowsContext(env = process.env) {
             }
         },
         provision: (options) =>
-            provision(options, (line) => process.stdout.write(`  ${line}\n`)),
+            provision(options, (line) => (out ?? stdoutLine)(`  ${line}`)),
         async startService(name) {
             if ((await serviceState(name)) === 'RUNNING') return;
             const { code } = await execCapture('sc.exe', ['start', name]);
@@ -1090,7 +1116,11 @@ export function windowsContext(env = process.env) {
                     timeoutMs: 60_000,
                     intervalMs: 1000,
                 },
-            );
+            ).catch(() => {
+                throw new Error(
+                    `${name} is marked for deletion but Windows has not removed it yet (an open Services, Event Viewer or Task Manager window keeps it). Close those windows, or restart the PC, then resume`,
+                );
+            });
         },
         async stopService(name) {
             const state = await serviceState(name);
@@ -1128,7 +1158,18 @@ export function windowsContext(env = process.env) {
                                             caddyRootCertificate(paths),
                                         ).catch(() => undefined),
                               );
-            await boundedWait(check, { timeoutMs: 180_000, intervalMs: 1000 });
+            try {
+                await boundedWait(check, {
+                    timeoutMs: 180_000,
+                    intervalMs: 1000,
+                });
+            } catch {
+                throw new Error(
+                    await readinessFailure(name, paths, (file) =>
+                        tailFile(file, 64 * 1024),
+                    ),
+                );
+            }
         },
         async waitFile(path) {
             await boundedWait(() => exists(path), {
@@ -1161,6 +1202,94 @@ export function windowsContext(env = process.env) {
     };
 }
 
+// ------------------------------------------------------------ run log
+
+function stdoutLine(line) {
+    process.stdout.write(`${line}\n`);
+}
+
+/** Where a service writes the errors readiness waits on (#412). */
+export function serviceErrorLog(name, paths) {
+    if (name === SERVICES.mongo) return paths.mongodLog;
+    const dir =
+        name === SERVICES.api
+            ? paths.apiLogs
+            : name === LAN_SERVICE
+              ? paths.proxyLanLogs
+              : paths.proxyLogs;
+    // WinSW 2 names its logs <id>.out.log / <id>.err.log in <logpath>.
+    return join(dir, `${name}.err.log`);
+}
+
+/**
+ * The readiness-timeout message (#412): the service's last ~20 error-log
+ * lines, redacted as the diagnostics redact a support file.
+ */
+export async function readinessFailure(name, paths, tail, lines = 20) {
+    const file = serviceErrorLog(name, paths);
+    const text = (await tail(file))?.text ?? '';
+    const last = text
+        .split(/\r?\n/)
+        .filter((l) => l.trim())
+        .slice(-lines)
+        .map((l) => `    ${redact(l)}`);
+    return last.length
+        ? `${name} did not become ready in time. Last lines of ${file}:\n${last.join('\n')}\n`
+        : `${name} did not become ready in time (${file} is empty or missing)`;
+}
+
+/** Secrets never reach the installer log, even if a message quoted one. */
+export function scrubSecrets(text) {
+    return String(text)
+        .replace(/(mongodb(?:\+srv)?:\/\/)[^@\s/]+@/gi, '$1[redacted]@')
+        .replace(
+            /(\b(?:password|passwd|secret|token|database[-_]?url)\b["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+            '$1[redacted]',
+        );
+}
+
+/**
+ * One run's log (#412): `state\installer-<UTC time>.log` under the data
+ * root. Lines are buffered until the state folder exists (a new install
+ * creates it while provisioning), then flushed and appended as they come.
+ */
+export function createRunLog(dataRoot, now = new Date()) {
+    const dir = join(dataRoot, 'state');
+    const path = join(dir, installerLogName(now));
+    const pending = [];
+    let open = false;
+    const flush = () => {
+        if (open) return true;
+        if (!existsSync(dir)) return false;
+        try {
+            writeFileSync(path, pending.join(''));
+            open = true;
+            pending.length = 0;
+        } catch {
+            // The console still has it all.
+        }
+        return open;
+    };
+    return {
+        path,
+        write(text) {
+            const line = `${new Date().toISOString()} ${scrubSecrets(text)}\n`;
+            if (open) {
+                try {
+                    appendFileSync(path, line);
+                } catch {
+                    // Never fail the run over its log.
+                }
+                return;
+            }
+            pending.push(line);
+            flush();
+        },
+        /** Writes what is buffered; false when there is no data root yet. */
+        flush,
+    };
+}
+
 async function main() {
     let options;
     try {
@@ -1175,24 +1304,44 @@ async function main() {
         );
         return EXIT.REFUSED;
     }
+    const ctx = windowsContext(process.env, (line) => say(line));
+    const runLog = createRunLog(ctx.locations.dataRoot);
+    const say = (line, stream = process.stdout) => {
+        stream.write(`${line}\n`);
+        runLog.write(line);
+    };
+    say(`${options.mode}: ${new Date().toISOString()}`);
+    let code;
     try {
-        const result = await runInstaller(options, windowsContext(), (line) =>
-            process.stdout.write(`${line}\n`),
-        );
-        process.stdout.write(`${JSON.stringify(result)}\n`);
-        return EXIT.OK;
+        const result = await runInstaller(options, ctx, (line) => say(line));
+        say(JSON.stringify(result));
+        code = EXIT.OK;
     } catch (error) {
         if (error?.name === 'RefusedError') {
-            process.stderr.write(`Refused: ${error.message}\n`);
-            return EXIT.REFUSED;
+            say(`Refused: ${error.message}`, process.stderr);
+            code = EXIT.REFUSED;
+        } else {
+            // Fixed text plus our own message: never a driver/OS message
+            // that could quote a connection string.
+            const safe =
+                error instanceof Error &&
+                !/mongodb(\+srv)?:\/\//.test(error.message);
+            say(
+                `Failed: ${safe ? error.message : 'unexpected error'}. Data, secrets and backups were kept. To resume, run: ${resumeCommand(options.mode, options.manifestSha256, ctx.progress)}`,
+                process.stderr,
+            );
+            // The stack goes to the log only (it never quotes secrets:
+            // scrubbed like every line).
+            if (safe && error.stack) runLog.write(error.stack);
+            code = EXIT.FAILED;
         }
-        // Fixed text plus our own message: never a driver/OS message that
-        // could quote a connection string.
-        process.stderr.write(
-            `Failed: ${error instanceof Error && !/mongodb(\+srv)?:\/\//.test(error.message) ? error.message : 'unexpected error'}. Nothing was removed; re-run to resume.\n`,
-        );
-        return EXIT.FAILED;
     }
+    process.stdout.write(
+        runLog.flush()
+            ? `Installer log: ${runLog.path}\n`
+            : 'Installer log: none (the data folder was never created).\n',
+    );
+    return code;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

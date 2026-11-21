@@ -32,6 +32,9 @@ import {
 import {
     EXIT,
     classifyDataRoot,
+    createRunLog,
+    readinessFailure,
+    serviceErrorLog,
     parseArgs,
     parseLanAddress,
     runInstaller,
@@ -41,6 +44,9 @@ import {
     HANDOVER_FILE,
     HANDOVER_NOTE,
     MIN_FREE,
+    installerLogName,
+    resumeCommand,
+    resumeMode,
     TASKS,
     aclSteps,
     backupShortcutSpec,
@@ -1674,4 +1680,122 @@ test('"Make terminal package" is a Start menu shortcut removed on uninstall (#39
         /Start Menu.*Make terminal package\.lnk$/,
     );
     assert.ok(allShortcuts(loc).includes(loc.terminalPackageShortcuts[0]));
+});
+
+// ------------------------------------------------------------ #412
+
+test('a failed install resumes with repair once services were touched (#412)', () => {
+    assert.equal(resumeMode('install'), 'install');
+    assert.equal(resumeMode('install', { servicesTouched: true }), 'repair');
+    assert.equal(resumeMode('repair', { servicesTouched: true }), 'repair');
+    assert.equal(resumeMode('uninstall'), 'uninstall');
+    assert.equal(
+        resumeCommand('install', 'ab'.repeat(32), { servicesTouched: true }),
+        `.\\Install.ps1 -ManifestSha256 ${'ab'.repeat(32)} -Mode repair`,
+    );
+    // The repair it names is not refused as "already installed".
+    const facts = { ...okFacts, dataRoot: 'ours' };
+    const installed = { ...facts, servicesInstalled: [SERVICES.mongo] };
+    assert.match(
+        evaluatePreflight(installed, 'install').refusals.join(' '),
+        /use repair/,
+    );
+    assert.deepEqual(evaluatePreflight(installed, 'repair').refusals, []);
+});
+
+test('a failure while re-registering journals removed services and sets the resume mode (#412)', async () => {
+    const dir = await scratch();
+    const bundle = await makeBundle(dir);
+    const pinned = await pin(bundle);
+    const ctx = recordingContext(dir);
+    await runInstaller(
+        { mode: 'install', ...pinned, adminUsername: 'owner' },
+        ctx,
+    );
+    ctx.progress = undefined;
+    ctx.waitServiceGone = async (name) => {
+        if (name === SERVICES.api) throw new Error('marked for deletion');
+    };
+    await assert.rejects(
+        runInstaller({ mode: 'repair', ...pinned }, ctx),
+        /marked for deletion/,
+    );
+    assert.equal(ctx.progress.servicesTouched, true);
+    const state = JSON.parse(
+        await readFile(
+            join(layout(ctx.locations.dataRoot).dirs.state, 'installer.json'),
+            'utf8',
+        ),
+    );
+    assert.equal(state.complete, false);
+    assert.deepEqual(state.servicesRemoved, [
+        SERVICES.proxy,
+        SERVICES.api,
+        SERVICES.mongo,
+    ]);
+    // Repair finishes it and clears the note.
+    ctx.waitServiceGone = async () => {};
+    await runInstaller({ mode: 'repair', ...pinned }, ctx);
+    const after = JSON.parse(
+        await readFile(
+            join(layout(ctx.locations.dataRoot).dirs.state, 'installer.json'),
+            'utf8',
+        ),
+    );
+    assert.equal(after.complete, true);
+    assert.equal(after.servicesRemoved, undefined);
+});
+
+test('uninstall reports as kept only paths that exist (#412)', async () => {
+    const dir = await scratch();
+    const ctx = recordingContext(dir);
+    await mkdir(ctx.locations.dataRoot, { recursive: true });
+    const removed = await runInstaller({ mode: 'uninstall' }, ctx);
+    assert.deepEqual(removed.kept, [ctx.locations.dataRoot]);
+});
+
+test('the run log buffers until the state folder exists and scrubs secrets (#412)', async () => {
+    const dir = await scratch();
+    const root = join(dir, 'data');
+    const now = new Date('2026-11-17T11:51:00.123Z');
+    assert.equal(
+        installerLogName(now),
+        'installer-2026-11-17T11-51-00-123Z.log',
+    );
+    const runLog = createRunLog(root, now);
+    runLog.write('preflight');
+    assert.equal(runLog.flush(), false);
+    await mkdir(join(root, 'state'), { recursive: true });
+    runLog.write('DATABASE_URL=mongodb://root:hunter2@127.0.0.1:27017/x');
+    runLog.write('password: s3cret');
+    assert.equal(runLog.flush(), true);
+    assert.equal(runLog.path, join(root, 'state', installerLogName(now)));
+    const text = await readFile(runLog.path, 'utf8');
+    assert.match(text, /preflight\n/);
+    assert.ok(!text.includes('hunter2'));
+    assert.ok(!text.includes('s3cret'));
+    assert.equal(text.trim().split('\n').length, 3);
+});
+
+test('a readiness timeout quotes the service error log, redacted (#412)', async () => {
+    const paths = layout('/data');
+    assert.equal(
+        serviceErrorLog(SERVICES.proxy, paths),
+        join(paths.proxyLogs, `${SERVICES.proxy}.err.log`),
+    );
+    assert.equal(serviceErrorLog(SERVICES.mongo, paths), paths.mongodLog);
+    const lines = Array.from({ length: 30 }, (_, i) => `line ${i}`);
+    lines.push('Error: token=abcdef parsing Caddyfile');
+    const message = await readinessFailure(SERVICES.proxy, paths, async () => ({
+        text: lines.join('\r\n'),
+    }));
+    assert.match(message, /did not become ready/);
+    assert.match(message, /parsing Caddyfile/);
+    assert.ok(!message.includes('abcdef'));
+    assert.ok(!message.includes('line 10\n'));
+    assert.match(message, /line 11/);
+    assert.match(
+        await readinessFailure(SERVICES.api, paths, async () => null),
+        /empty or missing/,
+    );
 });
