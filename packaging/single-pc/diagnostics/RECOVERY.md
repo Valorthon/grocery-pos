@@ -102,7 +102,7 @@ USB reminder.
    premises.
 
 **The backup drive holds the store's keys** (the database passwords, the
-sign-in secret and the key of the local HTTPS certificate). Keep it like a
+sign-in secret and the local HTTPS root key). Keep it like a
 key: locked away, never shared or lent. If a backup drive is lost or stolen,
 tell your vendor at once.
 

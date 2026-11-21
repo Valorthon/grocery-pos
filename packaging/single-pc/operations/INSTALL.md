@@ -79,7 +79,7 @@ it differs from what you see (B15).
    in the Start menu as **Grocery POS owner guide**).
 5. Make the first backup and USB export together ("Back up to USB drive").
    Tell the owner the drive holds the store's keys (database passwords,
-   sign-in secret, local HTTPS root key): keep it locked away like a key,
+   sign-in secret, the local HTTPS root key): keep it locked away like a key,
    never share it, and tell the vendor at once if it is lost.
 6. Keep the bundle folder (or the USB stick) for repairs, and delete the copy
    in `C:\GroceryPOS-Setup` if the owner prefers; the installation does not

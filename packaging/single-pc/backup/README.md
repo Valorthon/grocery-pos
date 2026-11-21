@@ -104,7 +104,7 @@ again with a `STATUS_CORRUPT` failure naming it, never a silent reset.
 
 > **A backup holds the store's keys.** Every backup, and every USB export
 > made by "Back up to USB drive", contains the database passwords, the
-> sign-in secret and the key of the local HTTPS certificate, unencrypted
+> sign-in secret and (once Caddy has made it) the local HTTPS root key, unencrypted
 > (owner decision 2026-11-21, #419). Keep the drive like a key: locked away,
 > never shared or lent. If a backup drive is lost or stolen, tell the vendor
 > at once.
