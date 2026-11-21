@@ -109,7 +109,7 @@ describe('ReceiptModal (issue #24)', () => {
                 )
                 ?.textContent?.trim(),
         ).toBe(
-            'Totals include no VAT breakdown. VAT, SC/PWD and BIR receipts are handled outside this app.',
+            'Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR receipts are handled outside this app.',
         );
     });
 
@@ -159,6 +159,8 @@ describe('ReceiptModal (issue #24)', () => {
 
     it('has no sales tax line and no Print button', async () => {
         await mount(RECEIPT);
+        // The non-VAT notice (#418) says "computes no tax"; nothing else may.
+        document.querySelector('[data-testid="non-vat-notice"]')?.remove();
         expect(dialogText()).not.toMatch(/tax/i);
         const buttons = [...document.querySelectorAll('button')].map((b) =>
             b.textContent?.trim(),

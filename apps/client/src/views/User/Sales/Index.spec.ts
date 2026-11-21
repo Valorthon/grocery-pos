@@ -397,7 +397,7 @@ describe('sales errors (issue #18)', () => {
                 )
                 ?.textContent?.trim(),
         ).toBe(
-            'Totals include no VAT breakdown. VAT, SC/PWD and BIR receipts are handled outside this app.',
+            'Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR receipts are handled outside this app.',
         );
     });
 

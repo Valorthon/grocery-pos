@@ -733,8 +733,8 @@ original identity/timezone; legacy receipts without snapshots show the current
 last-known identity. Offline leases retain their server-issued identity snapshot
 for delayed uploads. Receipt printing and BIR compliance remain deferred to #48.
 
-Totals are non-VAT: the app does no tax math and shows no VAT breakdown.
-VAT, SC/PWD discounts and BIR receipts are handled outside this app (#418).
+Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR
+receipts are handled outside this app (#418).
 Store settings, the sale summary and Sales reports say so.
 
 The terminal/lane label is stored on the device and used for its next shift. It

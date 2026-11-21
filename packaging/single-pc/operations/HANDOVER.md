@@ -39,10 +39,10 @@ Always open the app with the **Grocery POS** shortcut. The address is
 
 ## Taxes and official receipts
 
-Grocery POS records totals without a VAT breakdown and issues no official
-receipts. Every sale summary says "This is not an official receipt." VAT,
-senior citizen and PWD discounts, and BIR receipts are handled outside this
-app, with the store's own receipts.
+Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR
+receipts are handled outside this app, with the store's own receipts. Grocery
+POS issues no official receipts: every sale summary says "This is not an
+official receipt."
 
 ## Backups
 

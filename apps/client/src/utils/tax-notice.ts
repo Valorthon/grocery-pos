@@ -4,4 +4,4 @@
  * own receipts (#48).
  */
 export const NON_VAT_NOTICE =
-    'Totals include no VAT breakdown. VAT, SC/PWD and BIR receipts are handled outside this app.';
+    'Totals are non-VAT; this app computes no tax. VAT, SC/PWD discounts and BIR receipts are handled outside this app.';
