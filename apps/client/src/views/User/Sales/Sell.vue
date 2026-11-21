@@ -117,6 +117,7 @@
                     :matches-settled="search.settled.value"
                     :next-scan-qty="nextScanQty"
                     :scan-feedback="scanFeedback"
+                    :stock-warning="stockWarning"
                     @submit="onScanSubmit"
                     @search-change="onSearchChange"
                     @enter-matches="matchesList?.focusOption(0)"
@@ -382,6 +383,7 @@ import {
     saleErrorMessage,
     useSaleCheckout,
 } from '@/components/User/Sales/sale-submission';
+import { stockWarningText } from '@/components/User/Sales/stock-warning';
 import {
     isBarcode,
     type Match,
@@ -484,6 +486,35 @@ const searchTerm = computed(() => parseScan(searchQuery.value, 1).query);
 const nextScanQty = computed(() => parseScan(searchQuery.value, 1).qty);
 const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
     null,
+);
+/**
+ * Stock the online lookup reported per product id (#422), for the
+ * non-blocking warning when a line asks for more. Offline adds none.
+ */
+const knownStock = new Map<string, number>();
+/** The register's lookups ask for the stock hint; other callers don't. */
+const STOCK_LOOKUP = { params: { withStock: true } };
+const stockWarning = ref<{ product: string; message: string } | null>(null);
+
+/** Warns (or clears the warning) for one line against its known stock. */
+function checkStock(product: string) {
+    const item = cartStore.items.find((i) => i.product === product);
+    const stock = knownStock.get(product);
+    const message =
+        item && stock !== undefined
+            ? stockWarningText(item.name, item.quantity, stock, item.unit)
+            : null;
+    if (message) stockWarning.value = { product, message };
+    else if (stockWarning.value?.product === product) stockWarning.value = null;
+}
+// A removed line (or a cleared ticket) takes its warning with it.
+watch(
+    () => cartStore.items.map((i) => i.product).join(),
+    () => {
+        const warned = stockWarning.value?.product;
+        if (warned && !cartStore.items.some((i) => i.product === warned))
+            stockWarning.value = null;
+    },
 );
 const isCheckoutOpen = ref(false);
 const isReceiptOpen = ref(false);
@@ -668,6 +699,7 @@ function commitQuantity(product: string): boolean {
         )!,
     );
     delete qtyDrafts[product];
+    checkStock(product);
     return true;
 }
 
@@ -717,6 +749,7 @@ function increment(item: CartItem) {
         item.product,
         item.quantity + quantityScale(item.unit),
     );
+    checkStock(item.product);
 }
 
 function decrement(item: CartItem) {
@@ -728,6 +761,7 @@ function decrement(item: CartItem) {
             item.product,
             item.quantity - quantityScale(item.unit),
         );
+    checkStock(item.product);
 }
 
 // ---- Line removal with Undo (decision 2026-09-25, #23)
@@ -880,6 +914,7 @@ function clearFeedback() {
     if (feedbackTimer) clearTimeout(feedbackTimer);
     feedbackTimer = undefined;
     scanFeedback.value = null;
+    stockWarning.value = null;
 }
 
 function cancelPendingSearch() {
@@ -1042,6 +1077,7 @@ async function lookUpBarcode(
             ? { data: await offline.product(EAN) }
             : await api.get<ProductView>(
                   `/products/${encodeURIComponent(EAN)}`,
+                  STOCK_LOOKUP,
               );
         if (basket !== cartStore.items) return 'failed';
         addProduct(res.data, qty, submitted);
@@ -1081,6 +1117,7 @@ async function selectMatch(
             ? { data: await offline.product(match.EAN) }
             : await api.get<ProductView>(
                   `/products/${encodeURIComponent(match.EAN)}`,
+                  STOCK_LOOKUP,
               );
         if (basket !== cartStore.items) return;
         addProduct(res.data, qty, submitted);
@@ -1116,6 +1153,10 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
     // Rung up again: the removed line is not put back on top of it.
     if (undo.value?.item.product === product._id) dismissUndo();
     selectedLine.value = product._id;
+    if (!offline.offline && product.stock !== undefined)
+        knownStock.set(product._id, product.stock);
+    else knownStock.delete(product._id);
+    checkStock(product._id);
     showFeedback(
         'success',
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,

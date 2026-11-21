@@ -714,3 +714,37 @@ describe('ProductService.getByBarcode (#214)', () => {
         ).rejects.toMatchObject({ code: ErrorCode.PRODUCT_NOT_FOUND });
     });
 });
+
+describe('ProductService.withSellableStock (#422)', () => {
+    const product = {
+        _id: new mongoose.Types.ObjectId(),
+        EAN: '4800016644580',
+        name: 'yogurt',
+        price: 5000,
+        tracksExpiry: true,
+    } as unknown as Parameters<ProductService['withSellableStock']>[0];
+
+    function serviceWith(stock: number | undefined) {
+        const sellableStock = jest.fn().mockResolvedValue(stock);
+        const service = Object.assign(
+            Object.create(ProductService.prototype) as object,
+            { inventoryService: { sellableStock } },
+        ) as unknown as ProductService;
+        return { service, sellableStock };
+    }
+
+    it('adds the sellable stock, asking for lots when tracked', async () => {
+        const { service, sellableStock } = serviceWith(3);
+        await expect(service.withSellableStock(product)).resolves.toEqual({
+            ...product,
+            stock: 3,
+        });
+        expect(sellableStock).toHaveBeenCalledWith(product._id, true);
+    });
+
+    it('leaves stock out without an inventory row', async () => {
+        const { service } = serviceWith(undefined);
+        const result = await service.withSellableStock(product);
+        expect(result).not.toHaveProperty('stock');
+    });
+});

@@ -69,8 +69,14 @@ export class ProductController {
         @Param() dto: GetDto,
         @Query() query: GetByBarcodeQueryDto,
     ): Promise<ProductView> {
+        const product = await this.service.getByBarcode(
+            dto,
+            query.includeArchived,
+        );
         return asJson(
-            await this.service.getByBarcode(dto, query.includeArchived),
+            query.withStock
+                ? await this.service.withSellableStock(product)
+                : product,
         );
     }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { UnitOfMeasure as U } from './enums.js';
 import {
     formatQuantity,
+    insufficientStockText,
     maxQuantityForAmount,
     parseQuantity,
     quantityAmount,
@@ -128,6 +129,25 @@ describe('per-product reorder defaults', () => {
         expect(reorderLevelOf({ unit: U.KG, reorderLevel: 0 })).toBe(0);
         expect(reorderQuantityOf({ unit: U.KG, reorderQuantity: 450 })).toBe(
             450,
+        );
+    });
+});
+
+describe('insufficientStockText (#422)', () => {
+    it('words each short line in display units, never below zero', () => {
+        expect(
+            insufficientStockText([
+                {
+                    product: 'p1',
+                    name: 'rice',
+                    unit: U.KG,
+                    requested: 2500,
+                    available: 1000,
+                },
+                { product: 'p2', requested: 3, available: -2 },
+            ]),
+        ).toBe(
+            'rice: 2.500 kg requested, 1.000 kg available; Unknown product: 3 pc requested, 0 pc available',
         );
     });
 });

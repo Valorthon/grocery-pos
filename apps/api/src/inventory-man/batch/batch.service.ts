@@ -107,6 +107,37 @@ export class InventoryBatchService implements OnModuleInit {
             if (await this.tracked(id(product), session))
                 await this.assertInvariant(id(product), session);
     }
+    /** What `consume` could take now: the unexpired dated lots' total (#422). */
+    async sellableQty(
+        product: Types.ObjectId,
+        session?: ClientSession,
+    ): Promise<number> {
+        const today = this.today(
+            new Date(),
+            await this.settings.timezone(session),
+        );
+        const rows = await this.batches
+            .find(
+                {
+                    product,
+                    remainingQty: { $gt: 0 },
+                    reconciliation: { $ne: true },
+                    expiryDate: { $gte: today },
+                },
+                { remainingQty: 1 },
+            )
+            .session(session ?? null)
+            .lean();
+        return rows.reduce((sum, row) => sum + row.remainingQty, 0);
+    }
+    /** `sellableQty` for an expiry-tracked product, undefined otherwise. */
+    async trackedSellable(
+        product: Types.ObjectId,
+        session: ClientSession,
+    ): Promise<number | undefined> {
+        if (!(await this.tracked(product, session))) return undefined;
+        return this.sellableQty(product, session);
+    }
     /** Consume only unexpired dated lots; aggregate stock guard remains a separate transaction write. */
     async consume(
         product: Types.ObjectId,

@@ -11,6 +11,7 @@ import {
     type Receipt,
     wireShapeDiff,
     INVENTORY_BATCH_SHAPE,
+    type AppErrorResponse,
 } from '@grocery-pos/contracts';
 import { InventoryBatchService } from '../../src/inventory-man/batch/batch.service';
 import {
@@ -184,10 +185,14 @@ it('blocks expired online sales, treats today as usable, writes off a chosen bat
     expect((await receive(id, 2, day(-1), 'expired')).status).toBe(201);
     expect((await receive(id, 1, day(0), 'today')).status).toBe(201);
     const seller = await cashier();
-    expect(
-        (await db.call(seller, 'POST', '/sales', cashSale(id, 2, 36000)))
-            .status,
-    ).toBe(400);
+    const short = await read<AppErrorResponse>(
+        await db.call(seller, 'POST', '/sales', cashSale(id, 2, 36000)),
+    );
+    expect(short.status).toBe(400);
+    // #422: the refusal names the product with its unexpired stock.
+    expect(short.body.details).toEqual([
+        expect.objectContaining({ product: id, requested: 2, available: 1 }),
+    ]);
     expect(await stockOf(db, id)).toBe(3);
     expect(
         (await db.call(seller, 'POST', '/sales', cashSale(id, 1, 18000)))

@@ -63,6 +63,7 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
         ensureValid: jest.fn(realEnsureValid),
         getByBarcode: jest.fn(realGetByBarcode),
         addMany: jest.fn().mockResolvedValue(undefined),
+        withSellableStock: jest.fn(async (product: unknown) => product),
     };
 
     beforeAll(async () => {

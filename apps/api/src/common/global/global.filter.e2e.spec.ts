@@ -77,7 +77,10 @@ describe('Error responses (e2e, issue #8)', () => {
     const service = new ProductService(
         connection,
         { insertMany, findOne } as unknown as Model<Product>,
-        { createMany: inventoryCreateMany } as unknown as InventoryService,
+        {
+            createMany: inventoryCreateMany,
+            sellableStock: jest.fn().mockResolvedValue(undefined),
+        } as unknown as InventoryService,
         {} as EanCounterService,
         undefined,
         {

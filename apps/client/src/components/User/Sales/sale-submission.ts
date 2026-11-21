@@ -1,4 +1,5 @@
 import { ref } from 'vue';
+import { shortStockText } from './stock-warning';
 import { isAxiosError } from 'axios';
 import {
     type AppErrorResponse,
@@ -267,6 +268,9 @@ export function saleErrorMessage(error: unknown): string {
         return `${message}. Check Sales History before charging again.`;
     }
     if (res.status === 400) {
+        const short = shortStockText(data);
+        if (short)
+            return `${message}: ${short}. Remove or reduce them, then retry.`;
         return `${message}. Review the ticket and the total, then retry.`;
     }
     if (res.status >= 500) {

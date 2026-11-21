@@ -815,6 +815,15 @@ requestId}`. A 5xx never carries details or internals.
   a scan: the typed quantity is committed (a refused one keeps its error)
   and the code goes through the scan box's normal flow, never showing in
   the field. Same code again is +1.
+- Stock warning (#422, owner-unavailable assumption 2026-11-22,
+  reversible): the register's scan/pick lookup sends `?withStock=true`, so
+  `GET /products/:EAN` adds `stock` (sellable minor units: unexpired lots
+  capped by the aggregate when tracked; absent without an inventory row);
+  sellers thus see per-product stock there. A line added or raised above
+  it shows a non-blocking amber warning under the scan box; the line is
+  still added. Offline adds show none. The insufficient-stock 400 lists
+  `InsufficientStockLine`s (netted per product, every short product) in
+  `details`; the checkout error names them in display units.
 - Basket, discount and checkout attempt (`idempotencyKey`) are kept per
   cashier in localStorage `grocery_pos_cart_v1:<userId>`, so a reload
   retries the same key and can't double-charge. Cleared on sale, void and

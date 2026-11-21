@@ -7,6 +7,7 @@ import {
     PaymentType,
     SaleStatus,
     TenderType,
+    UnitOfMeasure,
 } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import {
@@ -519,6 +520,33 @@ describe('saleErrorMessage', () => {
             ),
         ).toBe(
             'The tendered amount does not cover the total. Review the ticket and the total, then retry.',
+        );
+    });
+
+    it('names each short product in display units (#422)', () => {
+        expect(
+            saleErrorMessage(
+                httpError(400, {
+                    message: 'Insufficient stock for one or more products',
+                    details: [
+                        {
+                            product: 'p1',
+                            name: 'rice',
+                            unit: UnitOfMeasure.KG,
+                            requested: 2500,
+                            available: 1000,
+                        },
+                        {
+                            product: 'p2',
+                            name: 'milk',
+                            requested: 3,
+                            available: 0,
+                        },
+                    ],
+                }),
+            ),
+        ).toBe(
+            'Insufficient stock for one or more products: rice: 2.500 kg requested, 1.000 kg available; milk: 3 pc requested, 0 pc available. Remove or reduce them, then retry.',
         );
     });
 

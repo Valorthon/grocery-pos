@@ -86,6 +86,14 @@
             <CheckCircle2 class="w-4 h-4 shrink-0" aria-hidden="true" />
             <span>{{ scanFeedback.message }}</span>
         </div>
+        <div
+            v-if="stockWarning"
+            class="mt-2.5 p-2.5 rounded-card flex items-center gap-2 text-sm font-bold bg-warning-bg border border-warning-border text-warning-fg"
+            data-testid="stock-warning"
+        >
+            <TriangleAlert class="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span>{{ stockWarning.message }}</span>
+        </div>
     </div>
     <div role="alert" aria-live="assertive" data-testid="scan-alert">
         <div
@@ -104,7 +112,13 @@
  * the next-scan badge and the scan result regions. State lives in Sell.vue.
  */
 import { useTemplateRef } from 'vue';
-import { AlertCircle, Barcode, CheckCircle2, X } from '@lucide/vue';
+import {
+    AlertCircle,
+    Barcode,
+    CheckCircle2,
+    TriangleAlert,
+    X,
+} from '@lucide/vue';
 import KeyHint from '@/components/ui/KeyHint.vue';
 import { REGISTER_KEYS } from '@/composables/useRegisterShortcuts';
 
@@ -115,6 +129,8 @@ const props = defineProps<{
     matchesSettled: boolean;
     nextScanQty: number;
     scanFeedback: { type: 'success' | 'error'; message: string } | null;
+    /** Non-blocking: a line asks for more than the known stock (#422). */
+    stockWarning?: { message: string } | null;
 }>();
 const query = defineModel<string>({ required: true });
 const emit = defineEmits<{

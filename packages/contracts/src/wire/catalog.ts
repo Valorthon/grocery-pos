@@ -34,6 +34,11 @@ export interface ProductView {
     price: number;
     /** Category ObjectId; absent means uncategorized. */
     category?: string;
+    /**
+     * `GET /products/:EAN` only (#422): stock the register can sell, in
+     * minor units (unexpired lots when tracked). A hint, not a reservation.
+     */
+    stock?: number;
     createdAt: string;
     updatedAt: string;
 }
@@ -44,6 +49,7 @@ export const PRODUCT_VIEW_SHAPE: WireShape<ProductView> = {
     reorderQuantity: 'optional',
     isActive: 'optional',
     unit: 'optional',
+    stock: 'optional',
     _id: 'required',
     EAN: 'required',
     name: 'required',

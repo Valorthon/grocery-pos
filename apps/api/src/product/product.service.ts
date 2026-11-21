@@ -100,6 +100,17 @@ export class ProductService {
         return product;
     }
 
+    /** The product plus the register's sellable `stock` hint (#422). */
+    async withSellableStock(
+        product: ProductDoc,
+    ): Promise<ProductDoc & { stock?: number }> {
+        const stock = await this.inventoryService.sellableStock(
+            product._id,
+            product.tracksExpiry === true,
+        );
+        return stock === undefined ? product : { ...product, stock };
+    }
+
     /**
      * Applies a batch of product edits, all or nothing.
      *
