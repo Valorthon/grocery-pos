@@ -206,7 +206,11 @@ it('finds a synced sale by its offline summary number (#416)', async () => {
     expect(result.status).toBe(201);
     const number = offlineSaleNumber(body.idempotencyKey);
     const list = await read<Paginated<SaleRow>>(
-        await db.call(seller, 'GET', `/sales?saleNumber=${number}`),
+        await db.call(
+            seller,
+            'GET',
+            `/sales?page=1&limit=10&saleNumber=${number}`,
+        ),
     );
     expect(list.status).toBe(200);
     expect(list.body.data.map((s) => s._id)).toEqual([result.body._id]);

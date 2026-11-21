@@ -1715,13 +1715,45 @@ describe('Sales history scoping (issues #13, #2)', () => {
         });
 
         it('keeps the number and date filters apart with $and (#416)', () => {
-            const filter = salesListFilter(
-                {},
-                { saleNumber: 'bec8a876', dateTo: '2026-09-24' },
-                'Asia/Manila',
-            );
-            expect(filter?.$and).toHaveLength(2);
-            expect(filter).not.toHaveProperty('$or');
+            expect(
+                salesListFilter(
+                    OWN_SCOPE,
+                    { saleNumber: 'bec8a876', dateTo: '2026-09-24' },
+                    'Asia/Manila',
+                ),
+            ).toEqual({
+                ...OWN_SCOPE,
+                $and: [
+                    {
+                        $or: [
+                            {
+                                $expr: {
+                                    $regexMatch: {
+                                        input: { $toString: '$_id' },
+                                        regex: 'bec8a876$',
+                                    },
+                                },
+                            },
+                            { offlineNumber: 'BEC8A876' },
+                        ],
+                    },
+                    {
+                        $or: [
+                            {
+                                soldAt: {
+                                    $lt: new Date('2026-09-24T16:00:00.000Z'),
+                                },
+                            },
+                            {
+                                soldAt: { $exists: false },
+                                createdAt: {
+                                    $lt: new Date('2026-09-24T16:00:00.000Z'),
+                                },
+                            },
+                        ],
+                    },
+                ],
+            });
         });
 
         it('adds nothing when no filter is given', () => {
