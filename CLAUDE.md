@@ -1120,6 +1120,9 @@ IPv4>` (install/repair; repair and upgrade keep it, `none` turns it off)
 - The app issues no official receipts: the on-screen sale summary is marked
   "This is not an official receipt.", with no printing, and BIR receipts are
   the store's responsibility (#48; VAT and SC/PWD stay there too).
+- Non-VAT wording (#418, owner decision 2026-11-21): no tax math; Store
+  settings, the sale summary paper and Sales reports show `NON_VAT_NOTICE`
+  (`utils/tax-notice.ts`), pinned by their specs.
 - Product editing and archival are implemented in #38; unit remains immutable.
 - Open decisions and follow-ups are listed in #31.
 

@@ -14,6 +14,9 @@
                     refunds affect the day they happened. Costs use
                     latest-receipt estimates.
                 </p>
+                <p class="text-sm text-slate-600" data-testid="non-vat-notice">
+                    {{ NON_VAT_NOTICE }}
+                </p>
                 <p v-if="options" class="text-sm">
                     Store timezone: {{ options.timeZone }} · Maximum
                     {{ options.maxDays }} days. Weeks start Monday.
@@ -311,6 +314,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { NON_VAT_NOTICE } from '@/utils/tax-notice';
 import { GROUP_LABELS } from './group-labels';
 import { REPORT_HELP } from './column-help';
 import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue';

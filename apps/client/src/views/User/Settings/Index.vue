@@ -6,6 +6,9 @@
                     Store identity appears on new on-screen sale summaries and
                     closing reports. Existing saved identities remain unchanged.
                 </p>
+                <p class="text-sm text-slate-600" data-testid="non-vat-notice">
+                    {{ NON_VAT_NOTICE }}
+                </p>
                 <p
                     v-if="settings.error"
                     role="alert"
@@ -127,6 +130,7 @@
     </PageFrame>
 </template>
 <script setup lang="ts">
+import { NON_VAT_NOTICE } from '@/utils/tax-notice';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     SETTINGS_LIMITS,

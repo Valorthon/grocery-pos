@@ -37,6 +37,13 @@ Always open the app with the **Grocery POS** shortcut. The address is
 - Do not clear Chrome's browsing data: it holds parked tickets and offline
   cash sales that have not been sent yet.
 
+## Taxes and official receipts
+
+Grocery POS records totals without a VAT breakdown and issues no official
+receipts. Every sale summary says "This is not an official receipt." VAT,
+senior citizen and PWD discounts, and BIR receipts are handled outside this
+app, with the store's own receipts.
+
 ## Backups
 
 - A backup is made automatically every night at 22:00 if the PC is on (or

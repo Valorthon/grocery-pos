@@ -390,6 +390,15 @@ describe('sales errors (issue #18)', () => {
         expect(line?.textContent?.trim()).toBe(
             'This is not an official receipt.',
         );
+        expect(
+            document
+                .querySelector(
+                    '[data-testid="sale-receipt"] [data-testid="non-vat-notice"]',
+                )
+                ?.textContent?.trim(),
+        ).toBe(
+            'Totals include no VAT breakdown. VAT, SC/PWD and BIR receipts are handled outside this app.',
+        );
     });
 
     it('badges each status: completed green, voided red, refunded amber (#243)', async () => {

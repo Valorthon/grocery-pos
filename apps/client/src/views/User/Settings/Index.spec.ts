@@ -52,6 +52,13 @@ it('shows persisted identity and the fixed owner policies', async () => {
     expect(field('Currency').disabled).toBe(true);
     expect(document.body.textContent).toContain('Every discount still');
     expect(document.body.textContent).toContain('ADMIN PIN');
+    expect(
+        document
+            .querySelector('[data-testid="non-vat-notice"]')
+            ?.textContent?.trim(),
+    ).toBe(
+        'Totals include no VAT breakdown. VAT, SC/PWD and BIR receipts are handled outside this app.',
+    );
 });
 it('keeps edits after an API save failure and permits retry', async () => {
     await mount();

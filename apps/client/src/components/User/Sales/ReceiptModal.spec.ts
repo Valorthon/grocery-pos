@@ -102,6 +102,15 @@ describe('ReceiptModal (issue #24)', () => {
         expect(line?.textContent?.trim()).toBe(
             'This is not an official receipt.',
         );
+        expect(
+            document
+                .querySelector(
+                    '[data-testid="receipt-paper"] [data-testid="non-vat-notice"]',
+                )
+                ?.textContent?.trim(),
+        ).toBe(
+            'Totals include no VAT breakdown. VAT, SC/PWD and BIR receipts are handled outside this app.',
+        );
     });
 
     it('shows the sale number and the full id', async () => {
