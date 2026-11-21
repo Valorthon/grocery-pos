@@ -1471,6 +1471,8 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
     );
     assert.match(backup, /'create'.*'manual'/s);
     assert.match(backup, /'export', '--data-root'/);
+    assert.match(backup, /holds the store's keys/);
+    assert.match(backup, /tell your vendor at once/);
     const reminder = await readFile(
         new URL('ExportReminder.ps1', here),
         'utf8',

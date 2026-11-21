@@ -102,6 +102,13 @@ again with a `STATUS_CORRUPT` failure naming it, never a silent reset.
 
 ## Contents and secrets
 
+> **A backup holds the store's keys.** Every backup, and every USB export
+> made by "Back up to USB drive", contains the database passwords, the
+> sign-in secret and the key of the local HTTPS certificate, unencrypted
+> (owner decision 2026-11-21, #419). Keep the drive like a key: locked away,
+> never shared or lent. If a backup drive is lost or stolen, tell the vendor
+> at once.
+
 Included (`files\…` in the backup): `secrets\mongo-keyfile`,
 `mongo-root-password`, `mongo-api-password`, `jwt-secret`,
 `state\install.json`, `config\runtime.json`. Without them the database is
