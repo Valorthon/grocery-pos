@@ -73,7 +73,11 @@ export class ProductController {
             dto,
             query.includeArchived,
         );
-        return asJson(await this.service.withSellableStock(product));
+        return asJson(
+            query.withStock
+                ? await this.service.withSellableStock(product)
+                : product,
+        );
     }
 
     // Non-price fields: Restocker. `price`: Admin only; the whole batch is a

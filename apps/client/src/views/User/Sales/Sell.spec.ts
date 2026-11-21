@@ -9,7 +9,9 @@ import {
     type SaleRequest,
     SaleStatus,
     ShiftStatus,
+    type ProductView,
 } from '@grocery-pos/contracts';
+import { useOfflineStore } from '@/stores/offline';
 import { useShiftStore } from '@/stores/shift';
 import { type StoredAttempt, useCartStore } from '@/stores/cart';
 import { stubMatchMedia } from '@/testing/match-media';
@@ -23,6 +25,7 @@ const post = vi.hoisted(() =>
 );
 vi.mock('@/axios', () => ({ default: { get, post } }));
 
+const STOCK_LOOKUP = { params: { withStock: true } };
 const MILK = { product: 'p1', EAN: '2000000000015', name: 'milk' };
 const MINTS = { product: 'p2', EAN: '2000000000022', name: 'mints' };
 const PRODUCTS: Record<
@@ -166,7 +169,7 @@ describe('Sell register search', () => {
         await keyOnFocus('Enter');
 
         expect(cartNames()).toEqual(['1x mints']);
-        expect(get).not.toHaveBeenCalledWith('/products/mi');
+        expect(get).not.toHaveBeenCalledWith('/products/mi', STOCK_LOOKUP);
         expect(input().value).toBe('');
     });
 
@@ -278,7 +281,10 @@ describe('Sell register search', () => {
         await pressEnter();
 
         expect(cartNames()).toEqual([]);
-        expect(get).not.toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+        expect(get).not.toHaveBeenCalledWith(
+            `/products/${MILK.EAN}`,
+            STOCK_LOOKUP,
+        );
     });
 
     it('reports a double Enter once, not as a failed search', async () => {
@@ -320,7 +326,7 @@ describe('Sell register search', () => {
         input().dispatchEvent(new Event('input'));
         await pressEnter();
 
-        expect(get).toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+        expect(get).toHaveBeenCalledWith(`/products/${MILK.EAN}`, STOCK_LOOKUP);
         expect(cartNames()).toEqual(['1x milk']);
     });
 
@@ -334,7 +340,10 @@ describe('Sell register search', () => {
         await pressEnter();
 
         expect(cartNames()).toEqual([]);
-        expect(get).not.toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+        expect(get).not.toHaveBeenCalledWith(
+            `/products/${MILK.EAN}`,
+            STOCK_LOOKUP,
+        );
     });
 });
 
@@ -620,7 +629,10 @@ describe('Sell receipt on screen (issue #22 review, decision 2026-09-25)', () =>
         await press('Enter');
         await settleTransitions();
         expect(dialog('Transaction Complete')).not.toBeNull();
-        expect(get).not.toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+        expect(get).not.toHaveBeenCalledWith(
+            `/products/${MILK.EAN}`,
+            STOCK_LOOKUP,
+        );
     });
 
     it('starts the next sale with a scan typed on the receipt', async () => {
@@ -632,7 +644,7 @@ describe('Sell receipt on screen (issue #22 review, decision 2026-09-25)', () =>
 
         expect(enter.defaultPrevented).toBe(true);
         expect(dialog('Transaction Complete')).toBeNull();
-        expect(get).toHaveBeenCalledWith(`/products/${MILK.EAN}`);
+        expect(get).toHaveBeenCalledWith(`/products/${MILK.EAN}`, STOCK_LOOKUP);
         expect(cartNames()).toEqual(['1x milk']);
         expect(input().value).toBe('');
         // The scan box keeps the focus (#421).
@@ -1202,6 +1214,76 @@ describe('Sell stock warning (#422)', () => {
         await scanMilk();
         expect(cartNames()).toEqual(['2x milk']);
         expect(warning()).toContain('Only 1 pc of milk in stock');
+    });
+
+    function button(label: string) {
+        return document.querySelector<HTMLButtonElement>(
+            `button[aria-label="${label}"]`,
+        )!;
+    }
+    function withStock(stock: number) {
+        serve(
+            () => Promise.resolve([]),
+            () => Promise.resolve({ ...PRODUCTS[MILK.EAN], stock }),
+        );
+    }
+
+    it('warns when a typed quantity passes the stock, and clears when it drops back', async () => {
+        withStock(2);
+        mount();
+        await scanMilk();
+        const qty = qtyInputs()[0];
+        qty.focus();
+        qty.value = '3';
+        qty.dispatchEvent(new Event('input'));
+        await press('Enter');
+        expect(cartNames()).toEqual(['3x milk']);
+        expect(warning()).toContain('Only 2 pc of milk in stock');
+        qty.focus();
+        qty.value = '2';
+        qty.dispatchEvent(new Event('input'));
+        await press('Enter');
+        expect(warning()).toBeUndefined();
+    });
+
+    it('+ crosses the stock and warns; − brings it back and clears', async () => {
+        withStock(1);
+        mount();
+        await scanMilk();
+        expect(warning()).toBeUndefined();
+        button('One more milk').click();
+        await flush();
+        expect(warning()).toContain('Only 1 pc of milk in stock');
+        button('One less milk').click();
+        await flush();
+        expect(warning()).toBeUndefined();
+    });
+
+    it('clears the warning when its line is removed', async () => {
+        withStock(0);
+        mount();
+        await scanMilk();
+        expect(warning()).toBeDefined();
+        button('Remove milk').click();
+        await flush();
+        expect(cartNames()).toEqual([]);
+        expect(warning()).toBeUndefined();
+    });
+
+    it('shows nothing for an offline add, even after an online one', async () => {
+        withStock(0);
+        mount();
+        await scanMilk();
+        expect(warning()).toBeDefined();
+        const offline = useOfflineStore();
+        offline.setConnection(false);
+        vi.spyOn(offline, 'product').mockResolvedValue({
+            ...PRODUCTS[MILK.EAN],
+            stock: 0,
+        } as unknown as ProductView);
+        await scanMilk();
+        expect(cartNames()).toEqual(['2x milk']);
+        expect(warning()).toBeUndefined();
     });
 
     it('shows nothing when the lookup names no stock', async () => {

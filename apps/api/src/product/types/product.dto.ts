@@ -152,6 +152,15 @@ export class GetByBarcodeQueryDto {
         return raw === 'true' ? true : raw === 'false' ? false : raw;
     })
     includeArchived?: boolean;
+
+    /** The register's lookup: add the sellable `stock` hint (#422). */
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsBoolean()
+    @Transform(({ obj, key }) => {
+        const raw = (obj as Record<string, unknown>)[key];
+        return raw === 'true' ? true : raw === 'false' ? false : raw;
+    })
+    withStock?: boolean;
 }
 /** A product edit: at least one field, never an empty `$set` (issue #14). */
 @AtLeastOneOf(

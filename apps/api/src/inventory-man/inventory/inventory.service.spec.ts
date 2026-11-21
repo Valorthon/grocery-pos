@@ -4,10 +4,7 @@ import {
     ledgerMock,
 } from '../../common/testing/business-collaborators';
 import { StockMovementService } from '../../stock-movement/stock-movement.service';
-import {
-    InventoryBatchService,
-    UnexpiredStockShortError,
-} from '../batch/batch.service';
+import { InventoryBatchService } from '../batch/batch.service';
 import { SettingsService } from '../../settings/settings.service';
 import { AuditService } from '../../audit/audit.service';
 import { Test } from '@nestjs/testing';
@@ -57,6 +54,7 @@ describe('InventoryService.sell', () => {
     let service: InventoryService;
     let bulkWrite: jest.Mock;
     let find: jest.Mock;
+    let findOne: jest.Mock;
     let moduleBatches: () => ReturnType<typeof batchesMock>;
 
     const session = {} as ClientSession;
@@ -64,6 +62,7 @@ describe('InventoryService.sell', () => {
     beforeEach(async () => {
         bulkWrite = jest.fn();
         find = jest.fn();
+        findOne = jest.fn();
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -79,7 +78,7 @@ describe('InventoryService.sell', () => {
                 InventoryService,
                 {
                     provide: getModelToken(Inventory.name),
-                    useValue: { bulkWrite, find },
+                    useValue: { bulkWrite, find, findOne },
                 },
                 {
                     provide: ProductService,
@@ -217,17 +216,26 @@ describe('InventoryService.sell', () => {
         });
     });
 
-    it('names a tracked product short of unexpired lots with its sellable stock (#422)', async () => {
-        bulkWrite.mockResolvedValue({ matchedCount: 1 });
+    it('names every tracked product short of unexpired lots, netted, before any lot is taken (#422)', async () => {
+        bulkWrite.mockResolvedValue({ matchedCount: 2 });
         find.mockReturnValue(
-            leanChain([{ product: { _id: P1, name: 'yogurt' }, stock: 5 }]),
+            leanChain([
+                { product: { _id: P1, name: 'yogurt' }, stock: 8 },
+                { product: { _id: P2, name: 'cheese' }, stock: 4 },
+            ]),
         );
         const batches = moduleBatches();
-        batches.consume.mockRejectedValueOnce(new UnexpiredStockShortError(2));
+        batches.trackedSellable.mockImplementation((product) =>
+            Promise.resolve(product.toString() === P1 ? 5 : 1),
+        );
 
         const attempt = service.sell(
             ACTOR,
-            sellDto([{ product: P1, quantity: 4 }]),
+            sellDto([
+                { product: P1, quantity: 3 },
+                { product: P2, quantity: 2 },
+                { product: P1, quantity: 3 },
+            ]),
             session,
         );
 
@@ -235,9 +243,48 @@ describe('InventoryService.sell', () => {
         await expect(attempt).rejects.toMatchObject({
             statusCode: 400,
             details: [
-                { product: P1, name: 'yogurt', requested: 4, available: 2 },
+                { product: P1, name: 'yogurt', requested: 6, available: 5 },
+                { product: P2, name: 'cheese', requested: 2, available: 1 },
             ],
         });
+        expect(batches.consume).not.toHaveBeenCalled();
+    });
+
+    it('lets a tracked product with enough unexpired lots through', async () => {
+        bulkWrite.mockResolvedValue({ matchedCount: 1 });
+        find.mockReturnValue(
+            leanChain([{ product: { _id: P1, name: 'yogurt' }, stock: 8 }]),
+        );
+        const batches = moduleBatches();
+        batches.trackedSellable.mockResolvedValue(6);
+        await service.sell(
+            ACTOR,
+            sellDto([
+                { product: P1, quantity: 3 },
+                { product: P1, quantity: 3 },
+            ]),
+            session,
+        );
+        expect(batches.consume).toHaveBeenCalledTimes(2);
+    });
+
+    it('sellableStock: undefined without a row, capped by the aggregate when tracked (#422)', async () => {
+        const id = new Types.ObjectId(P1);
+        const row = (stock: number | null) => ({
+            lean: () => Promise.resolve(stock === null ? null : { stock }),
+        });
+        const batches = moduleBatches() as unknown as {
+            sellableQty: jest.Mock;
+        };
+        batches.sellableQty = jest.fn().mockResolvedValue(5);
+        findOne.mockReturnValueOnce(row(null));
+        await expect(service.sellableStock(id, true)).resolves.toBeUndefined();
+        findOne.mockReturnValueOnce(row(2));
+        await expect(service.sellableStock(id, true)).resolves.toBe(2);
+        findOne.mockReturnValueOnce(row(9));
+        await expect(service.sellableStock(id, true)).resolves.toBe(5);
+        findOne.mockReturnValueOnce(row(-1));
+        await expect(service.sellableStock(id, false)).resolves.toBe(-1);
     });
 
     it('reports pre-sale stock when an earlier line succeeded', async () => {

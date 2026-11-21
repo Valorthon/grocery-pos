@@ -7,10 +7,7 @@ import {
     reorderMatchStage,
     stockScaleExpression,
 } from './reorder-query';
-import {
-    InventoryBatchService,
-    UnexpiredStockShortError,
-} from '../batch/batch.service';
+import { InventoryBatchService } from '../batch/batch.service';
 import { UnitOfMeasure } from '@grocery-pos/contracts';
 import type {
     BatchAllocation,
@@ -498,11 +495,14 @@ export class InventoryService {
         product: Types.ObjectId,
         tracksExpiry: boolean,
     ): Promise<number | undefined> {
-        if (tracksExpiry) return this.batches.sellableQty(product);
         const row = await this.model
             .findOne({ product }, { stock: 1 })
             .lean<{ stock: number }>();
-        return row?.stock;
+        if (!row) return undefined;
+        // Undated reconciliation lots can leave the aggregate below the
+        // unexpired lots; checkout's aggregate guard applies either way.
+        if (!tracksExpiry) return row.stock;
+        return Math.min(await this.batches.sellableQty(product), row.stock);
     }
 
     /**
@@ -560,37 +560,41 @@ export class InventoryService {
                 shortfalls,
             );
         }
-        // After the aggregate guard, so a plain shortfall is named above;
-        // a tracked product short of unexpired lots is named here (#422).
-        const allocations: BatchAllocation[][] = [];
-        for (const line of dto.sellDetails) {
-            try {
-                allocations.push(
-                    await this.batches.consume(
-                        new Types.ObjectId(line.product),
-                        line.quantity,
-                        session,
-                    ),
-                );
-            } catch (error) {
-                if (error instanceof UnexpiredStockShortError) {
-                    const current = stockByProduct.get(line.product);
-                    const short: InsufficientStockLine = {
-                        product: line.product,
-                        name: current?.name,
-                        unit: current?.unit,
-                        requested: line.quantity,
-                        available: error.sellable,
-                    };
-                    throw new ValidationError(
-                        ErrorCode.VALIDATION_INVALID_INPUT,
-                        error.message,
-                        [short],
-                    );
-                }
-                throw error;
-            }
+        // After the aggregate guard, so a plain shortfall is named above.
+        // Tracked products short of unexpired lots are all named here, with
+        // the netted request and the sellable figure before any lot is
+        // taken (#422).
+        const lotShort: InsufficientStockLine[] = [];
+        for (const [product, quantity] of quantityByProduct) {
+            const sellable = await this.batches.trackedSellable(
+                new Types.ObjectId(product),
+                session,
+            );
+            if (sellable === undefined || sellable >= quantity) continue;
+            const current = stockByProduct.get(product);
+            lotShort.push({
+                product,
+                name: current?.name,
+                unit: current?.unit,
+                requested: quantity,
+                available: sellable,
+            });
         }
+        if (lotShort.length)
+            throw new ValidationError(
+                ErrorCode.VALIDATION_INVALID_INPUT,
+                'Insufficient unexpired stock; expired batches cannot be sold',
+                lotShort,
+            );
+        const allocations: BatchAllocation[][] = [];
+        for (const line of dto.sellDetails)
+            allocations.push(
+                await this.batches.consume(
+                    new Types.ObjectId(line.product),
+                    line.quantity,
+                    session,
+                ),
+            );
         {
             const products = await this.productService.getMany(
                 [...quantityByProduct.keys()],

@@ -492,6 +492,8 @@ const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
  * non-blocking warning when a line asks for more. Offline adds none.
  */
 const knownStock = new Map<string, number>();
+/** The register's lookups ask for the stock hint; other callers don't. */
+const STOCK_LOOKUP = { params: { withStock: true } };
 const stockWarning = ref<{ product: string; message: string } | null>(null);
 
 /** Warns (or clears the warning) for one line against its known stock. */
@@ -1075,6 +1077,7 @@ async function lookUpBarcode(
             ? { data: await offline.product(EAN) }
             : await api.get<ProductView>(
                   `/products/${encodeURIComponent(EAN)}`,
+                  STOCK_LOOKUP,
               );
         if (basket !== cartStore.items) return 'failed';
         addProduct(res.data, qty, submitted);
@@ -1114,6 +1117,7 @@ async function selectMatch(
             ? { data: await offline.product(match.EAN) }
             : await api.get<ProductView>(
                   `/products/${encodeURIComponent(match.EAN)}`,
+                  STOCK_LOOKUP,
               );
         if (basket !== cartStore.items) return;
         addProduct(res.data, qty, submitted);

@@ -37,6 +37,7 @@ function fixture(tracked = true) {
         adjust: jest.fn().mockResolvedValue(undefined),
         restore: jest.fn().mockResolvedValue(undefined),
         consume: jest.fn().mockResolvedValue([{ batch, quantity: 1 }]),
+        trackedSellable: jest.fn().mockResolvedValue(tracked ? 1 : undefined),
         assertInvariant: jest.fn().mockResolvedValue(undefined),
     };
     const service = new InventoryService(

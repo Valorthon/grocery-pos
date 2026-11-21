@@ -58,6 +58,7 @@ export function batchesMock(): jest.Mocked<
         | 'assertInvariant'
         | 'reconcileOffline'
         | 'expiringCount'
+        | 'trackedSellable'
     >
 > {
     return {
@@ -109,6 +110,12 @@ export function batchesMock(): jest.Mocked<
                 Parameters<InventoryBatchService['expiringCount']>
             >()
             .mockResolvedValue(0),
+        trackedSellable: jest
+            .fn<
+                ReturnType<InventoryBatchService['trackedSellable']>,
+                Parameters<InventoryBatchService['trackedSellable']>
+            >()
+            .mockResolvedValue(undefined),
     } satisfies jest.Mocked<
         Pick<
             InventoryBatchService,
@@ -120,6 +127,7 @@ export function batchesMock(): jest.Mocked<
             | 'assertInvariant'
             | 'reconcileOffline'
             | 'expiringCount'
+            | 'trackedSellable'
         >
     >;
 }

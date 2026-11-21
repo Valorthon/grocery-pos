@@ -15,15 +15,6 @@ import { ErrorCode, InternalError, ValidationError } from '../../common/errors';
 
 const invalid = (message: string) =>
     new ValidationError(ErrorCode.VALIDATION_INVALID_INPUT, message);
-/** A tracked product is short of unexpired lots; `sellable` is what it had. */
-export class UnexpiredStockShortError extends ValidationError {
-    constructor(public readonly sellable: number) {
-        super(
-            ErrorCode.VALIDATION_INVALID_INPUT,
-            'Insufficient unexpired stock; expired batches cannot be sold',
-        );
-    }
-}
 const id = (value: { toString(): string }) =>
     new Types.ObjectId(value.toString());
 @Injectable()
@@ -117,8 +108,14 @@ export class InventoryBatchService implements OnModuleInit {
                 await this.assertInvariant(id(product), session);
     }
     /** What `consume` could take now: the unexpired dated lots' total (#422). */
-    async sellableQty(product: Types.ObjectId): Promise<number> {
-        const today = this.today(new Date(), await this.settings.timezone());
+    async sellableQty(
+        product: Types.ObjectId,
+        session?: ClientSession,
+    ): Promise<number> {
+        const today = this.today(
+            new Date(),
+            await this.settings.timezone(session),
+        );
         const rows = await this.batches
             .find(
                 {
@@ -129,8 +126,17 @@ export class InventoryBatchService implements OnModuleInit {
                 },
                 { remainingQty: 1 },
             )
+            .session(session ?? null)
             .lean();
         return rows.reduce((sum, row) => sum + row.remainingQty, 0);
+    }
+    /** `sellableQty` for an expiry-tracked product, undefined otherwise. */
+    async trackedSellable(
+        product: Types.ObjectId,
+        session: ClientSession,
+    ): Promise<number | undefined> {
+        if (!(await this.tracked(product, session))) return undefined;
+        return this.sellableQty(product, session);
     }
     /** Consume only unexpired dated lots; aggregate stock guard remains a separate transaction write. */
     async consume(
@@ -169,7 +175,9 @@ export class InventoryBatchService implements OnModuleInit {
             remaining -= take;
         }
         if (remaining !== 0)
-            throw new UnexpiredStockShortError(quantity - remaining);
+            throw invalid(
+                'Insufficient unexpired stock; expired batches cannot be sold',
+            );
         return allocations;
     }
     async restore(

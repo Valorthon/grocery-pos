@@ -449,4 +449,22 @@ describe('Product route access by role (e2e)', () => {
         );
         expect(bad.status).toBe(400);
     });
+
+    it('adds stock only when the register asks withStock=true (#422)', async () => {
+        const lookup = ROUTES[ROUTES.length - 1];
+        service.withSellableStock.mockClear();
+        await call({ ...lookup, path: `/products/${EAN}` }, [Role.Seller]);
+        expect(service.withSellableStock).not.toHaveBeenCalled();
+        const res = await call(
+            { ...lookup, path: `/products/${EAN}?withStock=true` },
+            [Role.Seller],
+        );
+        expect(res.status).toBe(200);
+        expect(service.withSellableStock).toHaveBeenCalledTimes(1);
+        const bad = await call(
+            { ...lookup, path: `/products/${EAN}?withStock=1` },
+            [Role.Seller],
+        );
+        expect(bad.status).toBe(400);
+    });
 });
