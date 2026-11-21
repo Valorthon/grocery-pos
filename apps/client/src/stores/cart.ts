@@ -58,6 +58,7 @@ export const USER_STORAGE_KEY = 'user';
 export interface StoredAttempt {
     idempotencyKey: string;
     ticketSignature: string;
+    claim?: string;
 }
 
 export interface ParkedTicket {
@@ -158,11 +159,13 @@ function parseDiscount(raw: unknown): CartDiscount | null {
 
 function parseAttempt(raw: unknown): StoredAttempt | null {
     if (!isObject(raw)) return null;
-    const { idempotencyKey, ticketSignature } = raw;
+    const { idempotencyKey, ticketSignature, claim } = raw;
     if (!isText(idempotencyKey, 100) || !isText(ticketSignature, 100_000)) {
         return null;
     }
-    return { idempotencyKey, ticketSignature };
+    return isText(claim, 100)
+        ? { idempotencyKey, ticketSignature, claim }
+        : { idempotencyKey, ticketSignature };
 }
 
 /**
@@ -619,7 +622,9 @@ export const useCartStore = defineStore('cart', () => {
         // write must not leave an in-memory key that bypasses saving on Retry.
         if (!persist(next))
             throw new Error(
-                'Checkout could not be saved in this browser. Nothing was charged. Your ticket is kept; restore browser storage and retry.',
+                attempt.value?.idempotencyKey === next.idempotencyKey
+                    ? 'Checkout could not be saved in this browser. This ticket may already be recorded. Your ticket is kept; restore browser storage and retry: Retry will not charge twice.'
+                    : 'Checkout could not be saved in this browser. Nothing was charged. Your ticket is kept; restore browser storage and retry.',
             );
         applyingRemote = true;
         try {
@@ -858,6 +863,15 @@ export const useCartStore = defineStore('cart', () => {
         locked.value = false;
     }
 
+    /** The attempt in storage now, as the last tab to save it left it (#420). */
+    function storedAttempt(): StoredAttempt | null {
+        if (!owner.value) return attempt.value;
+        return (
+            parseStoredCart(readStorage(cartStorageKey(owner.value)))
+                ?.attempt ?? null
+        );
+    }
+
     return {
         items,
         parked,
@@ -867,6 +881,7 @@ export const useCartStore = defineStore('cart', () => {
         finishParkedShift,
         discount,
         attempt,
+        storedAttempt,
         owner,
         remoteChanges,
         locked,

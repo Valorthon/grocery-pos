@@ -10,12 +10,14 @@ import {
 } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import {
+    type AttemptStore,
     type CheckoutAttempt,
     createCheckoutAttempt,
     newIdempotencyKey,
     isRejectedSale,
     saleErrorMessage,
     SaleNotCompletedError,
+    SaleNotSentError,
     useSaleCheckout,
 } from './sale-submission';
 import type {
@@ -105,17 +107,17 @@ describe('createCheckoutAttempt', () => {
     it('keeps the key across retries of the same ticket', () => {
         const attempt = createCheckoutAttempt(generate);
 
-        expect(attempt.keyFor(ticket)).toBe('key-1');
-        expect(attempt.keyFor({ ...ticket })).toBe('key-1');
+        expect(attempt.claim(ticket).key).toBe('key-1');
+        expect(attempt.claim({ ...ticket }).key).toBe('key-1');
     });
 
     it('makes a new key after a successful sale', () => {
         const attempt = createCheckoutAttempt(generate);
-        attempt.keyFor(ticket);
+        attempt.claim(ticket);
 
         attempt.settle();
 
-        expect(attempt.keyFor(ticket)).toBe('key-2');
+        expect(attempt.claim(ticket).key).toBe('key-2');
     });
 
     it.each([
@@ -142,9 +144,9 @@ describe('createCheckoutAttempt', () => {
         ],
     ])('makes a new key when %s changes', (_, changed) => {
         const attempt = createCheckoutAttempt(generate);
-        attempt.keyFor(ticket);
+        attempt.claim(ticket);
 
-        expect(attempt.keyFor(changed)).toBe('key-2');
+        expect(attempt.claim(changed).key).toBe('key-2');
     });
 });
 
@@ -164,11 +166,22 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
 
     it('saves the key with the ticket signature when it is made', () => {
         const store = savedStore();
-        createCheckoutAttempt(() => 'key-1', store).keyFor(ticket);
-        expect(store.peek()).toEqual({
+        createCheckoutAttempt(() => 'key-1', store).claim(ticket);
+        expect(store.peek()).toMatchObject({
             idempotencyKey: 'key-1',
             ticketSignature: JSON.stringify(ticket),
         });
+        expect(store.peek()?.claim).toMatch(UUID);
+    });
+
+    it('stores a new claim each time a reused key is sent again (#420)', () => {
+        const store = savedStore();
+        const attempt = createCheckoutAttempt(() => 'key-1', store);
+        const first = attempt.claim(ticket);
+        const second = attempt.claim(ticket);
+        expect(second).toMatchObject({ key: 'key-1', fresh: false });
+        expect(second.claim).not.toBe(first.claim);
+        expect(store.peek()?.claim).toBe(second.claim);
     });
 
     it('reuses a saved key for the same ticket (a retry after a reload)', () => {
@@ -177,7 +190,7 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
             ticketSignature: JSON.stringify(ticket),
         });
         const generate = vi.fn(() => 'key-new');
-        expect(createCheckoutAttempt(generate, store).keyFor(ticket)).toBe(
+        expect(createCheckoutAttempt(generate, store).claim(ticket).key).toBe(
             'key-before-reload',
         );
         expect(generate).not.toHaveBeenCalled();
@@ -190,14 +203,15 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
         });
         const attempt = createCheckoutAttempt(() => 'key-new', store);
         expect(
-            attempt.keyFor({ sellDetails: [{ product: 'p1', quantity: 3 }] }),
+            attempt.claim({ sellDetails: [{ product: 'p1', quantity: 3 }] })
+                .key,
         ).toBe('key-new');
     });
 
     it('clears the saved attempt when settled', () => {
         const store = savedStore();
         const attempt = createCheckoutAttempt(() => 'key-1', store);
-        attempt.keyFor(ticket);
+        attempt.claim(ticket);
         attempt.settle();
         expect(store.peek()).toBeNull();
     });
@@ -206,7 +220,10 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
 describe('useSaleCheckout', () => {
     beforeEach(() => setActivePinia(createPinia()));
 
-    function setup(post: (body: SaleRequest) => Promise<Receipt>) {
+    function setup(
+        post: (body: SaleRequest) => Promise<Receipt>,
+        attemptStore?: AttemptStore,
+    ) {
         const cart = useCartStore();
         cart.add(
             { product: 'p1', EAN: '1', name: 'bread', unitPrice: 22500 },
@@ -222,6 +239,7 @@ describe('useSaleCheckout', () => {
                 })),
             }),
             post: postSpy,
+            attemptStore,
         });
         return { cart, post: postSpy, checkout };
     }
@@ -262,6 +280,76 @@ describe('useSaleCheckout', () => {
         const [first, second] = post.mock.calls.map(([body]) => body);
         expect(second.idempotencyKey).not.toBe(first.idempotencyKey);
         expect(second.sellDetails).toEqual([{ product: 'p1', quantity: 1 }]);
+    });
+
+    function sharedStore() {
+        const store = { value: null as CheckoutAttempt | null };
+        const attemptStore: AttemptStore = {
+            get: () => store.value,
+            set: (a) => (store.value = a),
+        };
+        return { store, attemptStore };
+    }
+
+    it('drops a new key when the send was stopped before a charge (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        const { checkout } = setup(
+            () => Promise.reject(new SaleNotSentError('cancelled')),
+            attemptStore,
+        );
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value).toBeNull();
+    });
+
+    it('drops a new key the server refused with a 400 (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        const { checkout } = setup(
+            () => Promise.reject(httpError(400, {})),
+            attemptStore,
+        );
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value).toBeNull();
+    });
+
+    it('keeps a key that may be recorded, even after a later 400 (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        const { checkout, post } = setup(
+            () => Promise.reject(httpError(null)),
+            attemptStore,
+        );
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        const key = store.value?.idempotencyKey;
+        expect(key).toBeTruthy();
+        // A 400 on the reused key cannot prove the first try failed.
+        post.mockRejectedValueOnce(httpError(400, {}));
+        await expect(checkout.submit(CASH_PAYMENT)).rejects.toThrow();
+        expect(store.value?.idempotencyKey).toBe(key);
+    });
+
+    it('keeps a new key that another tab reused while this send was refused (#420)', async () => {
+        const { store, attemptStore } = sharedStore();
+        // What the other tab saved last; this tab's memory is stale while locked.
+        let shared: CheckoutAttempt | null = null;
+        const tabA: AttemptStore = {
+            get: attemptStore.get,
+            set: (a) => {
+                attemptStore.set(a);
+                shared = a && { ...a };
+            },
+            latest: () => shared,
+        };
+        let refuse!: (e: unknown) => void;
+        const { checkout } = setup(
+            () => new Promise<Receipt>((_, reject) => (refuse = reject)),
+            tabA,
+        );
+        const pending = checkout.submit(CASH_PAYMENT);
+        const key = store.value!.idempotencyKey;
+        // Tab B sends the same key (new claim); its answer is lost.
+        shared = { ...store.value!, claim: 'tab-b' };
+        refuse(new SaleNotSentError('cancelled'));
+        await expect(pending).rejects.toThrow();
+        expect(store.value?.idempotencyKey).toBe(key);
     });
 
     it('locks the cart while the request is in flight', async () => {

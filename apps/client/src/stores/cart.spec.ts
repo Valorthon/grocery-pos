@@ -380,6 +380,47 @@ describe('the saved checkout attempt (#23 review)', () => {
         },
     );
 
+    it('says a reused key may already be recorded when its new claim cannot be saved (#420)', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        cart.setAttempt(ATTEMPT);
+        const storage = vi
+            .spyOn(Storage.prototype, 'setItem')
+            .mockImplementation(() => {
+                throw new DOMException('unavailable', 'SecurityError');
+            });
+        let message = '';
+        try {
+            cart.setAttempt({ ...ATTEMPT, claim: 'next' });
+        } catch (e) {
+            message = (e as Error).message;
+        }
+        storage.mockRestore();
+        expect(message).toContain('may already be recorded');
+        expect(message).not.toContain('Nothing was charged');
+        expect(cart.attempt).toEqual(ATTEMPT);
+    });
+
+    it('reads the attempt another tab saved while this one is locked (#420)', () => {
+        const cart = useCartStore();
+        cart.setOwner('ana');
+        cart.add(MILK);
+        cart.setAttempt({ ...ATTEMPT, claim: 'tab-a' });
+        cart.lock();
+        // Another tab resends the key; this locked tab ignores the event.
+        const raw = JSON.parse(
+            localStorage.getItem(cartStorageKey('ana'))!,
+        ) as Record<string, unknown>;
+        localStorage.setItem(
+            cartStorageKey('ana'),
+            JSON.stringify({ ...raw, attempt: { ...ATTEMPT, claim: 'tab-b' } }),
+        );
+        expect(cart.attempt?.claim).toBe('tab-a');
+        expect(cart.storedAttempt()).toEqual({ ...ATTEMPT, claim: 'tab-b' });
+        cart.unlock();
+    });
+
     it('refuses an attempt without a cashier to save it for', () => {
         const cart = useCartStore();
         cart.add(MILK);
