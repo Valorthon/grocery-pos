@@ -640,6 +640,14 @@
                             <BaseButton
                                 variant="outline"
                                 class="min-h-11 sm:ml-auto"
+                                :disabled="!summaryReceipt"
+                                data-testid="sale-view-summary"
+                                @click="isSummaryOpen = true"
+                                >View sale summary</BaseButton
+                            >
+                            <BaseButton
+                                variant="outline"
+                                class="min-h-11"
                                 data-testid="sale-close"
                                 @click="isDialogOpen = false"
                                 >Close</BaseButton
@@ -650,6 +658,13 @@
             </BaseModal>
         </PageFrame>
     </div>
+    <ReceiptModal
+        v-model="isSummaryOpen"
+        review
+        :receipt="summaryReceipt"
+        :offline-number="selectedSale?.offlineNumber ?? null"
+        :notice="summaryNotice"
+    />
     <ManagerOverrideDialog
         v-model="isApprovalOpen"
         :request="approvalRequest"
@@ -675,6 +690,8 @@ import PageFrame from '@/components/ui/PageFrame.vue';
 import { Copy, Plus } from '@lucide/vue';
 import api from '@/axios';
 import { useOfflineStore } from '@/stores/offline';
+import ReceiptModal from '@/components/User/Sales/ReceiptModal.vue';
+import { saleSummaryReceipt } from '@/components/User/Sales/receipt';
 import ManagerOverrideDialog from '@/components/User/Sales/ManagerOverrideDialog.vue';
 import { useManagerApproval } from '@/composables/useManagerApproval';
 
@@ -717,6 +734,7 @@ import {
     ReversalType,
     type ReverseSaleRequest,
     Role,
+    type Receipt,
     type SaleLine,
     type SaleReversalView,
     type SaleRow,
@@ -1254,7 +1272,44 @@ async function confirmReversal() {
     }
 }
 
+/** The sale summary reopened from Sale Details (#417). */
+const isSummaryOpen = ref(false);
+
+/**
+ * The selected sale's summary, built from the server's sale and its
+ * loaded lines only; null until the lines are in (#417).
+ */
+const summaryReceipt = computed<Receipt | null>(() => {
+    const sale = selectedSale.value;
+    const row = selectedRow.value;
+    if (!sale || !row || detailsLoading.value || detailsError.value)
+        return null;
+    return saleSummaryReceipt({
+        id: row.id,
+        cashierName: row.cashier,
+        occurredAt: sale.soldAt ?? sale.createdAt,
+        status: sale.status,
+        paymentType: sale.paymentType,
+        referenceNumber: sale.referenceNumber,
+        tenders: sale.tenders,
+        changeGiven: sale.changeGiven,
+        amount: sale.amount,
+        discount: sale.discount,
+        storeIdentity: sale.storeIdentity,
+        lines: details.value,
+    });
+});
+
+/** A reversed sale's summary says so above the paper. */
+const summaryNotice = computed(() => {
+    const reversal = selectedSale.value?.reversal;
+    return reversal
+        ? `${reversedLabel(reversal.type)} on ${receiptDate(reversal.at)}.`
+        : null;
+});
+
 async function showDetails(row: SaleListRow) {
+    isSummaryOpen.value = false;
     cancelReversal();
     selectedId.value = row.id;
     selectedSale.value = row.totals;
