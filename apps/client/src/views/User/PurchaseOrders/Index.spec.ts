@@ -39,6 +39,13 @@ const nav = vi.hoisted(() => ({
 vi.mock('vue-router', async (importOriginal) => ({
     ...(await importOriginal<typeof import('vue-router')>()),
     onBeforeRouteLeave: vi.fn(),
+    // SupplierSelect's "No suppliers yet" link (#424) without a real router.
+    RouterLink: (await import('vue')).defineComponent({
+        setup:
+            (_p, { slots }) =>
+            () =>
+                slots.default?.(),
+    }),
     useRouter: () => ({
         resolve: () => ({ meta: { roles: ['ADMIN', 'RESTOCKER'] } }),
         push: nav.push,

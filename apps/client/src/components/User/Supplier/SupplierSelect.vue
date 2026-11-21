@@ -5,19 +5,58 @@
         :options="options"
         :disabled="disabled || loading"
     />
+    <p
+        v-if="noSuppliers"
+        data-testid="no-suppliers"
+        class="text-sm text-gray-600"
+    >
+        No suppliers yet.
+        <RouterLink
+            v-if="canManage"
+            :to="{ name: 'Suppliers' }"
+            class="font-medium underline"
+            >Add one in Suppliers</RouterLink
+        >
+        <template v-else>Ask an admin or restocker to add one.</template>
+    </p>
+    <p v-if="fieldError" data-testid="supplier-error" :class="FIELD_ERROR_TEXT">
+        {{ fieldError }}
+    </p>
     <p v-if="error" role="alert" class="text-sm text-red-700">
         {{ error }}
         <BaseButton :disabled="disabled" @click="refresh">Retry</BaseButton>
     </p>
 </template>
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import BaseSelect from '@/components/ui/BaseSelect.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
+import { RouterLink } from 'vue-router';
+import { FIELD_ERROR_TEXT } from '@/components/ui/field-style';
+import { Role } from '@grocery-pos/contracts';
 import { useSuppliers } from '@/composables/useSuppliers';
+import { useAuthStore } from '@/stores/auth';
 const model = defineModel<string | number | null>({ default: '' });
-defineProps<{ disabled?: boolean }>();
+/** `fieldError`: the inline reason a submit refused this field. */
+defineProps<{ disabled?: boolean; fieldError?: string }>();
 const { suppliers, loading, error, refresh } = useSuppliers();
+const auth = useAuthStore();
+// Suppliers is a RESTOCKER/ADMIN page (router meta); others get plain text (#424).
+const canManage = computed(
+    () => auth.hasRole(Role.Restocker) || auth.hasRole(Role.Admin),
+);
+// Only after a load finished, never before the first answer.
+const settled = ref(false);
+watch(loading, (busy) => {
+    if (!busy) settled.value = true;
+});
+const noSuppliers = computed(
+    () =>
+        settled.value &&
+        !loading.value &&
+        !error.value &&
+        !suppliers.value.some((row) => row.isActive),
+);
 const options = computed(() => [
     { label: 'Choose an active supplier', value: '' },
     ...suppliers.value

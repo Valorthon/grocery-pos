@@ -17,7 +17,7 @@ vi.mock('@/axios', () => ({
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, ref } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
-import { click, flush, type, field } from '@/testing/form-dom';
+import { click, flush, type, field, fieldError } from '@/testing/form-dom';
 import { useUIStore } from '@/stores/ui';
 import RestockSaveDialog from './SaveDialog.vue';
 import AdjustmentSaveDialog from '../Adjustments/SaveDialog.vue';
@@ -158,5 +158,33 @@ describe.each([
 
         expect(save).not.toHaveBeenCalled();
         expect(isOpen.value).toBe(true);
+    });
+});
+
+describe('restock save dialog required fields (#424)', () => {
+    it('labels Description as required', async () => {
+        await open(
+            RestockSaveDialog,
+            vi.fn(() => Promise.resolve(true)),
+        );
+        expect(document.body.textContent).toContain('Description (required)');
+    });
+
+    it('keeps the description error when the supplier is also missing', async () => {
+        const save = vi.fn(() => Promise.resolve(true));
+        await open(RestockSaveDialog, save);
+        await type('Description', '');
+        const select = document.querySelector<HTMLSelectElement>('select')!;
+        select.value = '';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+        await flush();
+
+        await click('Save');
+
+        expect(save).not.toHaveBeenCalled();
+        expect(fieldError('Description')).toBe('This field is required');
+        expect(
+            document.querySelector('[data-testid=supplier-error]')?.textContent,
+        ).toContain('Choose an active supplier.');
     });
 });
