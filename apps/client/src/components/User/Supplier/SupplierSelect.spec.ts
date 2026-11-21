@@ -67,6 +67,7 @@ describe('no active supplier (#424)', () => {
                     path: '/suppliers',
                     name: 'Suppliers',
                     component: { render: () => null },
+                    meta: { roles: [Role.Restocker, Role.Admin] },
                 },
             ],
         });
@@ -81,14 +82,38 @@ describe('no active supplier (#424)', () => {
     it('links a restocker to Suppliers', async () => {
         const hint = await mountAs([Role.Restocker]);
         expect(hint?.textContent).toContain('No suppliers yet');
-        expect(hint?.querySelector('a')?.getAttribute('href')).toBe(
-            '/suppliers',
-        );
+        const link = hint?.querySelector('a');
+        expect(link?.getAttribute('href')).toBe('/suppliers');
+        expect(link?.getAttribute('target')).toBe('_blank');
+        expect(link?.textContent).toContain('(opens a new tab)');
+        api.get.mockResolvedValue({
+            data: {
+                data: [{ _id: 'one', name: 'Farm', isActive: true }],
+                totalItems: 1,
+            },
+        });
+        [...document.querySelectorAll('button')]
+            .find((b) => b.textContent?.includes('Refresh'))!
+            .click();
+        await flush();
+        expect(document.querySelector('[data-testid=no-suppliers]')).toBeNull();
+        expect(document.body.textContent).toContain('Farm');
     });
     it('shows plain text to a viewer who cannot manage suppliers', async () => {
         const hint = await mountAs([Role.Seller]);
         expect(hint?.textContent).toContain('No suppliers yet');
         expect(hint?.querySelector('a')).toBeNull();
+    });
+    it('shows no hint while the first load is pending', async () => {
+        api.get.mockReturnValue(new Promise(() => {}));
+        await mount();
+        expect(document.querySelector('[data-testid=no-suppliers]')).toBeNull();
+    });
+    it('shows no hint after a failed load', async () => {
+        api.get.mockRejectedValue(new Error('offline'));
+        await mount();
+        expect(document.querySelector('[role=alert]')).not.toBeNull();
+        expect(document.querySelector('[data-testid=no-suppliers]')).toBeNull();
     });
     it('shows no hint while an active supplier exists', async () => {
         await mount();

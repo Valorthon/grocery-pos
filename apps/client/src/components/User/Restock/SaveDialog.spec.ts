@@ -183,8 +183,9 @@ describe('restock save dialog required fields (#424)', () => {
 
         expect(save).not.toHaveBeenCalled();
         expect(fieldError('Description')).toBe('This field is required');
+        expect(fieldError('Supplier')).toBe('Choose an active supplier.');
         expect(
-            document.querySelector('[data-testid=supplier-error]')?.textContent,
-        ).toContain('Choose an active supplier.');
+            document.querySelector('select')?.getAttribute('aria-invalid'),
+        ).toBe('true');
     });
 });
