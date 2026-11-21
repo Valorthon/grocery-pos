@@ -134,7 +134,8 @@ Steps (vendor build machine, then target):
    note the printed `bundle-manifest.json SHA-256` in the build log kept apart
    from the USB stick.
 2. `node packaging/single-pc/acceptance/readiness.mjs --bundle <folder>
---manifest-sha256 <hash>` exits 0.
+--manifest-sha256 <hash> --caddy <caddy 2.11.9>` exits 0 (on Windows the
+   bundle's caddy.exe adapts the configs without `--caddy`).
 3. On the target: `(Get-FileHash .\bundle-manifest.json).Hash` equals the
    recorded hash.
 

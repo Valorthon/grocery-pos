@@ -5,12 +5,20 @@
  * --bundle, verifies a built bundle against its out-of-band manifest hash,
  * the release file list and the pinned components.
  *
- *   node readiness.mjs [--bundle <dir> --manifest-sha256 <hex>] [--json]
+ *   node readiness.mjs [--bundle <dir> --manifest-sha256 <hex>] [--caddy <bin>] [--json]
+ *
+ * The Caddy configs are always checked for unquoted path placeholders. With
+ * --caddy (any caddy of the pinned version), or with --bundle on Windows
+ * (its own caddy.exe), Caddyfile and Caddyfile.lan are also adapted for
+ * real with a client root containing a space, as under C:\Program Files.
  *
  * Exit 0 ready, 1 not ready, 2 usage. Passing is a precondition for a
  * release, not acceptance: the Windows 11 runbook still has to be executed.
  */
-import { readFile, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { promisify } from 'node:util';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -189,16 +197,117 @@ export async function bundleProblems(bundle, manifestSha256, root = SINGLE_PC) {
     return problems;
 }
 
+/** Env placeholders that are always one token (an IPv4 address); every other
+ *  `{$VAR}` / `{env.VAR}` may hold a Windows path with spaces. */
+const SPACE_FREE_PLACEHOLDERS = new Set(['GPOS_LAN_IP']);
+export const CADDY_CONFIGS = Object.freeze([
+    'app.caddy',
+    'Caddyfile',
+    'Caddyfile.lan',
+]);
+
+/** Unquoted path placeholders in a Caddy config: `{$X}` is substituted before
+ *  tokenizing, so a space in the value splits the argument. */
+export function caddyQuotingProblems(name, text) {
+    const problems = [];
+    text.split(/\r?\n/).forEach((line, i) => {
+        const code = line.replace(/(^|\s)#.*$/, '');
+        const unquoted = code.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+        for (const m of unquoted.matchAll(
+            /\{(?:\$|env\.)([A-Za-z0-9_]+)(?::[^}]*)?\}/g,
+        ))
+            if (!SPACE_FREE_PLACEHOLDERS.has(m[1]))
+                problems.push(
+                    `caddy: ${name}:${i + 1} has unquoted {${m[0].slice(1, -1)}}; quote it (a path with spaces splits)`,
+                );
+    });
+    return problems;
+}
+
+export async function caddySourceProblems(root = SINGLE_PC) {
+    const problems = [];
+    for (const name of CADDY_CONFIGS)
+        problems.push(
+            ...caddyQuotingProblems(
+                name,
+                await readFile(join(root, 'caddy', name), 'utf8'),
+            ),
+        );
+    return problems;
+}
+
+/** `caddy adapt` on both service configs with spaced paths. `configDir` holds
+ *  Caddyfile, Caddyfile.lan and app.caddy (the repo's or a release's). */
+export async function caddyAdaptProblems(
+    caddy,
+    configDir,
+    run = promisify(execFile),
+) {
+    const work = await mkdtemp(join(tmpdir(), 'gpos readiness '));
+    const problems = [];
+    try {
+        const client = join(work, 'Program Files', 'client');
+        await mkdir(client, { recursive: true });
+        const env = {
+            ...process.env,
+            GPOS_CLIENT_ROOT: client,
+            GPOS_LAN_IP: '192.168.1.10',
+            XDG_DATA_HOME: join(work, 'data dir'),
+            XDG_CONFIG_HOME: join(work, 'config dir'),
+            AppData: join(work, 'app data'),
+        };
+        for (const file of ['Caddyfile', 'Caddyfile.lan']) {
+            try {
+                const { stdout } = await run(
+                    caddy,
+                    [
+                        'adapt',
+                        '--config',
+                        join(configDir, file),
+                        '--adapter',
+                        'caddyfile',
+                    ],
+                    { env, cwd: configDir, maxBuffer: 1 << 24 },
+                );
+                if (!stdout.includes(JSON.stringify(client).slice(1, -1)))
+                    problems.push(
+                        `caddy: ${file} adapted without the spaced client root`,
+                    );
+            } catch (error) {
+                const detail =
+                    `${error.stderr ?? ''}`.trim().split(/\r?\n/).pop() ||
+                    error.message;
+                problems.push(
+                    `caddy: adapt ${file} with a spaced path failed: ${detail}`,
+                );
+            }
+        }
+    } finally {
+        await rm(work, { recursive: true, force: true });
+    }
+    return problems;
+}
+
 export function parseArgs(args) {
     const out = {};
     for (let i = 0; i < args.length; i++) {
         const a = args[i];
         if (a === '--json') out.json = true;
-        else if (a === '--bundle' || a === '--manifest-sha256') {
+        else if (
+            a === '--bundle' ||
+            a === '--manifest-sha256' ||
+            a === '--caddy'
+        ) {
             const v = args[++i];
             if (v === undefined || v.startsWith('--'))
                 throw new Error(`${a} needs a value.`);
-            out[a === '--bundle' ? 'bundle' : 'manifestSha256'] = v;
+            out[
+                {
+                    '--bundle': 'bundle',
+                    '--manifest-sha256': 'manifestSha256',
+                    '--caddy': 'caddy',
+                }[a]
+            ] = v;
         } else throw new Error(`Unknown option ${a}.`);
     }
     if (Boolean(out.bundle) !== Boolean(out.manifestSha256))
@@ -206,6 +315,7 @@ export function parseArgs(args) {
     if (out.manifestSha256 && !/^[0-9a-f]{64}$/i.test(out.manifestSha256))
         throw new Error('--manifest-sha256 must be 64 hex characters.');
     if (out.bundle) out.bundle = resolve(out.bundle);
+    if (out.caddy) out.caddy = resolve(out.caddy);
     return out;
 }
 
@@ -221,16 +331,36 @@ export async function main(
         return 2;
     }
     const problems = await sourceProblems();
+    problems.push(...(await caddySourceProblems()));
     if (options.bundle)
         problems.push(
             ...(await bundleProblems(options.bundle, options.manifestSha256)),
         );
+    // A real adapt: the given caddy on the repo's configs, else (Windows only)
+    // the bundle's own caddy.exe on the bundle's configs.
+    let caddyAdapted = false;
+    if (options.caddy) {
+        problems.push(
+            ...(await caddyAdaptProblems(
+                options.caddy,
+                join(SINGLE_PC, 'caddy'),
+            )),
+        );
+        caddyAdapted = true;
+    } else if (options.bundle && process.platform === 'win32') {
+        const dir = join(options.bundle, 'release', 'caddy');
+        problems.push(
+            ...(await caddyAdaptProblems(join(dir, 'caddy.exe'), dir)),
+        );
+        caddyAdapted = true;
+    }
     if (options.json)
         print(
             JSON.stringify(
                 {
                     ready: problems.length === 0,
                     bundleChecked: Boolean(options.bundle),
+                    caddyAdapted,
                     problems,
                 },
                 null,
@@ -242,7 +372,7 @@ export async function main(
         print(
             problems.length
                 ? `${problems.length} problem(s).`
-                : `Ready${options.bundle ? ' (bundle verified)' : ''}. Windows 11 acceptance (RUNBOOK.md) is still required.`,
+                : `Ready${options.bundle ? ' (bundle verified)' : ''}${caddyAdapted ? ' (Caddy configs adapted with spaced paths)' : ''}. Windows 11 acceptance (RUNBOOK.md) is still required.`,
         );
     }
     return problems.length ? 1 : 0;

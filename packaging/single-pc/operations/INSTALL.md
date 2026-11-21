@@ -19,8 +19,12 @@ it differs from what you see (B15).
     ```bash
     pnpm install --frozen-lockfile
     node packaging/single-pc/installer/bundle.mjs --out <new folder>
-    node packaging/single-pc/acceptance/readiness.mjs --bundle <new folder> --manifest-sha256 <printed hash>
+    node packaging/single-pc/acceptance/readiness.mjs --bundle <new folder> --manifest-sha256 <printed hash> --caddy <caddy 2.11.9 for this machine>
     ```
+
+    `--caddy` adapts the shipped Caddyfile and Caddyfile.lan with a client
+    folder containing a space, as under `C:\Program Files`. On Windows the
+    bundle's own `caddy.exe` is used without it.
 
 3. Write the printed `bundle-manifest.json SHA-256` in your build log and on
    a note kept **apart from** the USB stick. It is the only proof the bundle

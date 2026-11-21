@@ -110,7 +110,8 @@ describe(
                 res.end(`api ${req.url}`);
             }).listen(0, '127.0.0.1');
             await once(api, 'listening');
-            const client = join(dir, 'client');
+            // A space, like C:\Program Files (the 2026-11-21 Windows install test).
+            const client = join(dir, 'client root');
             await mkdir(client);
             await writeFile(join(client, 'index.html'), 'the app');
             // The release files, moved off the real ports.
