@@ -545,6 +545,27 @@ token refresh (or force one), logout, own password change, a step-up
 Expected: each works; cookies are host-only, Secure, `SameSite=Lax`
 (DevTools > Application > Cookies).
 
+Server role check (#427): log in as a SELLER-only user, open DevTools >
+Console and run (the header is `WIRE_VERSION` in contracts `release.ts`;
+without it every API call is 409 `CLIENT_OUTDATED` before any role check):
+
+```js
+for (const p of [
+    '/v1/users',
+    '/v1/audit',
+    '/v1/suppliers',
+    '/v1/reports/options',
+])
+    console.log(
+        p,
+        (await fetch(p, { headers: { 'x-wire-version': '1' } })).status,
+    );
+console.log('no header', (await fetch('/v1/users')).status);
+```
+
+Expected: 403 for each path, 409 for "no header"; never a 2xx. (The DB
+suite's `seller-refused.db-spec.ts` covers every non-SELLER route.)
+
 Evidence: screenshots `____`. Result (PASS/FAIL): `____`
 
 ### C2. Service registration, accounts, env and TLS state (#360, #362)
