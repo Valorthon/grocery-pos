@@ -41,13 +41,17 @@ async function flush() {
 }
 
 /** Mounts an open receipt; returns the ref that swaps in the next sale. */
-async function mount(receipt: Receipt) {
+async function mount(receipt: Receipt, extra: Record<string, unknown> = {}) {
     const current = ref<Receipt>(receipt);
     const host = document.createElement('div');
     document.body.appendChild(host);
     app = createApp({
         render: () =>
-            h(ReceiptModal, { modelValue: true, receipt: current.value }),
+            h(ReceiptModal, {
+                modelValue: true,
+                receipt: current.value,
+                ...extra,
+            }),
     });
     app.mount(host);
     await flush();
@@ -187,4 +191,25 @@ it('renders the snapshotted weight and price per kg without treating grams as it
     expect(text).toContain('₱180.00/kg');
     expect(text).toContain('₱81.00');
     expect(text).toContain('Subtotal (1 Item)');
+});
+
+describe('ReceiptModal review mode (#417)', () => {
+    it('is titled Sale summary, closes with Close and takes no scan', async () => {
+        const onScan = vi.fn();
+        await mount(RECEIPT, {
+            review: true,
+            offlineNumber: 'BEC8A876',
+            onScan,
+        });
+        expect(dialogText()).toContain('Sale summary');
+        expect(dialogText()).not.toContain('Transaction Complete');
+        expect(dialogText()).not.toContain('Next Sale');
+        expect(byTestId('receipt-offline-number')?.textContent).toContain(
+            'Offline #BEC8A876',
+        );
+        for (const key of ['1', '2', 'Enter'])
+            document.dispatchEvent(new KeyboardEvent('keydown', { key }));
+        expect(onScan).not.toHaveBeenCalled();
+        expect(byTestId('receipt-close')).not.toBeNull();
+    });
 });

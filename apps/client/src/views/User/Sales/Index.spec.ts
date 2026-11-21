@@ -1047,13 +1047,20 @@ describe('sale details receipt (#218)', () => {
         const texts = [...footer.querySelectorAll('button')].map((b) =>
             b.textContent?.trim(),
         );
-        expect(texts).toEqual(['Void sale', 'Refund sale', 'Close']);
+        expect(texts).toEqual([
+            'Void sale',
+            'Refund sale',
+            'View sale summary',
+            'Close',
+        ]);
         for (const b of footer.querySelectorAll('button'))
             expect(b.className).toContain('min-h-11');
         const actions = byTestId('sale-reverse-actions')!;
         for (const b of actions.querySelectorAll('button'))
             expect(b.className).toContain('text-danger');
-        expect(byTestId('sale-close')?.className).toContain('sm:ml-auto');
+        expect(byTestId('sale-view-summary')?.className).toContain(
+            'sm:ml-auto',
+        );
     });
 
     it('shows only Close, on the right, for a reversed sale (#236)', async () => {
@@ -1063,9 +1070,11 @@ describe('sale details receipt (#218)', () => {
             [...footer.querySelectorAll('button')].map((b) =>
                 b.textContent?.trim(),
             ),
-        ).toEqual(['Close']);
+        ).toEqual(['View sale summary', 'Close']);
         expect(byTestId('sale-reverse-actions')).toBeNull();
-        expect(byTestId('sale-close')?.className).toContain('sm:ml-auto');
+        expect(byTestId('sale-view-summary')?.className).toContain(
+            'sm:ml-auto',
+        );
     });
 
     it('shows a zero Change for exact cash', async () => {
@@ -1129,6 +1138,32 @@ describe('sale details receipt (#218)', () => {
         expect(byTestId('sale-offline-number')?.textContent).toBe(
             'Offline #BEC8A876',
         );
+    });
+
+    it('reopens the sale summary from the server sale (#417)', async () => {
+        await openSale({
+            ...CASH_SALE,
+            offline: true,
+            offlineNumber: 'BEC8A876',
+            soldAt: '2026-09-24T01:00:00.000Z',
+        });
+        (byTestId('sale-view-summary') as HTMLButtonElement).click();
+        await flush();
+        const paper = byTestId('receipt-paper')!;
+        expect(paper.textContent).toContain('This is not an official receipt.');
+        expect(byTestId('receipt-offline-number')?.textContent).toContain(
+            'Offline #BEC8A876',
+        );
+        expect(byTestId('receipt-date')?.getAttribute('datetime')).toBe(
+            '2026-09-24T01:00:00.000Z',
+        );
+        expect(byTestId('receipt-change')).not.toBeNull();
+        expect(document.body.textContent).toContain('Sale summary');
+        (byTestId('receipt-close') as HTMLButtonElement).click();
+        await new Promise((r) => setTimeout(r, 100));
+        await flush();
+        expect(byTestId('receipt-paper')).toBeNull();
+        expect(byTestId('sale-receipt')).not.toBeNull();
     });
 
     it('shows the offline number in the history row (#416)', async () => {

@@ -12,7 +12,10 @@
         initial-focus="dialog"
     >
         <template #header>
-            <div class="flex items-center gap-2 text-success-fg">
+            <span v-if="review" class="text-xs font-bold text-ink"
+                >Sale summary</span
+            >
+            <div v-else class="flex items-center gap-2 text-success-fg">
                 <CheckCircle2 class="w-4 h-4 text-success-fg" />
                 <span class="text-xs font-bold">Transaction Complete</span>
             </div>
@@ -78,6 +81,13 @@
                         data-testid="receipt-sale-id"
                     >
                         ID {{ receipt?._id }}
+                    </div>
+                    <div
+                        v-if="offlineNumber"
+                        class="text-right"
+                        data-testid="receipt-offline-number"
+                    >
+                        Offline #{{ offlineNumber }}
                     </div>
                 </div>
 
@@ -211,7 +221,15 @@
         </div>
 
         <template #footer>
-            <BaseButton class="flex-1" @click="nextSale">
+            <BaseButton
+                v-if="review"
+                variant="outline"
+                class="flex-1 min-h-11"
+                data-testid="receipt-close"
+                @click="model = false"
+                >Close</BaseButton
+            >
+            <BaseButton v-else class="flex-1" @click="nextSale">
                 <RotateCcw class="w-3.5 h-3.5" />
                 Next Sale
             </BaseButton>
@@ -248,6 +266,13 @@ const props = defineProps<{
     receipt: Receipt | null;
     /** Shown above the receipt, e.g. when the sale was recorded earlier. */
     notice?: string | null;
+    /** The offline summary's number, on a synced offline sale (#416). */
+    offlineNumber?: string | null;
+    /**
+     * Reopened from Sale Details (#417): titled "Sale summary", closed by
+     * Close, and a typed key is not a scan for the next sale.
+     */
+    review?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -331,7 +356,7 @@ function onKeydown(event: KeyboardEvent) {
 
 function listen(on: boolean) {
     collected = '';
-    if (on) document.addEventListener('keydown', onKeydown);
+    if (on && !props.review) document.addEventListener('keydown', onKeydown);
     else document.removeEventListener('keydown', onKeydown);
 }
 

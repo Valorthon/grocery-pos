@@ -827,6 +827,8 @@ requestId}`. A 5xx never carries details or internals.
   buttons or fake store details (store settings are #47; the settings field
   is "Sale summary footer"). Code/wire names (`Receipt`, `receiptFooter`)
   and restock/PO receipts are unchanged.
+  Sale Details has "View sale summary" (#417): `ReceiptModal review` from
+  the server sale and lines (`saleSummaryReceipt`), offline number, Close.
 - The Roles page is built from contracts `PERMISSIONS`; `role-permissions`
   (API) and `role-pages` (client) specs keep it in step.
 - Denominations are unchanged. Shift In refuses a ₱0/empty float with an
