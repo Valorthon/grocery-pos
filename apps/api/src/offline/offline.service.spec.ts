@@ -412,6 +412,8 @@ describe('offline cash synchronization', () => {
                     amount: 8100,
                     soldAt: new Date(f.body.soldAt),
                     offline: true,
+                    // The summary's number, so history finds it (#416).
+                    offlineNumber: 'E1075103',
                     changeGiven: 1900,
                     stockShortfall: false,
                 }),

@@ -1,7 +1,11 @@
 import { SettingsService } from '../settings/settings.service';
 import { Inject as InjectSettings } from '@nestjs/common';
 import { StockMovementService } from '../stock-movement/stock-movement.service';
-import { StockMovementType, StockMovementSource } from '@grocery-pos/contracts';
+import {
+    offlineSaleNumber,
+    StockMovementType,
+    StockMovementSource,
+} from '@grocery-pos/contracts';
 import { receiptCost } from '../supplier/cost';
 import { OfflineCost } from './offline-cost.schema';
 import { InventoryBatchService } from '../inventory-man/batch/batch.service';
@@ -646,6 +650,9 @@ export class OfflineService {
                             requestHash: hash,
                             soldAt,
                             offline: true,
+                            offlineNumber: offlineSaleNumber(
+                                dto.idempotencyKey,
+                            ),
                             stockShortfall: shortfall,
                             ...(admin
                                 ? {

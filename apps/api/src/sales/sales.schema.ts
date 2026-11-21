@@ -152,6 +152,8 @@ export class Sales {
     /** Original occurrence time for cash collected offline; createdAt remains receipt time. */
     @Prop({ type: Date, index: true }) soldAt?: Date;
     @Prop({ type: Boolean }) offline?: boolean;
+    /** Offline summary number (`offlineSaleNumber` of the receipt id, #416). */
+    @Prop({ type: String }) offlineNumber?: string;
     @Prop({ type: Boolean }) stockShortfall?: boolean;
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name })
     reconciledBy?: Types.ObjectId;
