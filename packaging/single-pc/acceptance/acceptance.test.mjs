@@ -635,3 +635,28 @@ test('readiness: a tampered or incomplete bundle is refused', async () => {
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('readiness: Caddy path placeholders are quoted (a space in C:\\Program Files splits them)', async () => {
+    assert.deepEqual(await readiness.caddySourceProblems(), []);
+    assert.deepEqual(
+        readiness.caddyQuotingProblems(
+            'x',
+            [
+                '\troot * {$GPOS_CLIENT_ROOT}',
+                '\troot * "{$GPOS_CLIENT_ROOT}"',
+                '\tfile {env.LOG_DIR}',
+                '\tbind {$GPOS_LAN_IP}',
+                '\t# root * {$IN_A_COMMENT}',
+            ].join('\n'),
+        ),
+        [
+            'caddy: x:1 has unquoted {$GPOS_CLIENT_ROOT}; quote it (a path with spaces splits)',
+            'caddy: x:3 has unquoted {env.LOG_DIR}; quote it (a path with spaces splits)',
+        ],
+    );
+});
+
+test('readiness: --caddy takes a value', () => {
+    assert.throws(() => readiness.parseArgs(['--caddy']), /needs a value/);
+    assert.match(readiness.parseArgs(['--caddy', 'caddy']).caddy, /caddy$/);
+});
