@@ -99,6 +99,14 @@ describe('saleSummaryReceipt (#417)', () => {
                     unitPrice: 18_000,
                 },
                 {
+                    _id: 'l3',
+                    sales: 'sale1',
+                    product: { _id: 'p3', name: 'Soap' },
+                    quantity: 2,
+                    unit: UnitOfMeasure.PIECE,
+                    unitPrice: 500,
+                },
+                {
                     _id: 'l2',
                     sales: 'sale1',
                     product: null,
@@ -115,9 +123,16 @@ describe('saleSummaryReceipt (#417)', () => {
                 unit: UnitOfMeasure.KG,
                 unitPrice: 18_000,
             },
+            {
+                productName: 'Soap',
+                quantity: 2,
+                amount: 1_000,
+                unit: UnitOfMeasure.PIECE,
+                unitPrice: 500,
+            },
             { productName: 'N/A', quantity: 1, amount: 900 },
         ]);
-        expect(receipt.subtotal).toBe(9_000);
+        expect(receipt.subtotal).toBe(10_000);
         expect(receipt.totalAmount).toBe(8_000);
         expect(receipt.amountTendered).toBe(8_000);
         expect(receipt.discount).toEqual({

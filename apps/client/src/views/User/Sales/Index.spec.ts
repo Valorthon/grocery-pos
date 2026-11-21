@@ -1166,6 +1166,44 @@ describe('sale details receipt (#218)', () => {
         expect(byTestId('sale-receipt')).not.toBeNull();
     });
 
+    it('shows the reversal notice on a reversed sale summary (#417)', async () => {
+        await openSale(APPROVED);
+        byTestId('sale-view-summary')!.click();
+        await flush();
+        expect(byTestId('receipt-notice')?.textContent).toContain(
+            'Refunded on',
+        );
+    });
+
+    it('disables View sale summary while lines load and after an error (#417)', async () => {
+        serve(CASH_SALE, []);
+        const serveRest = api.get.getMockImplementation()!;
+        let fail: (e: unknown) => void = () => {};
+        api.get.mockImplementation((url, config) =>
+            url === '/sales/details/sale1'
+                ? new Promise((_, reject) => (fail = reject))
+                : serveRest(url, config),
+        );
+        await mountAndOpen();
+        const view = byTestId('sale-view-summary') as HTMLButtonElement;
+        expect(view.disabled).toBe(true);
+        fail(new Error('down'));
+        await flush();
+        expect(byTestId('sale-view-summary')).toHaveProperty('disabled', true);
+    });
+
+    it('closes an open summary when another sale opens (#417)', async () => {
+        await openSale(CASH_SALE);
+        byTestId('sale-view-summary')!.click();
+        await flush();
+        expect(byTestId('receipt-close')).not.toBeNull();
+        // Open the sale again from the table behind the summary.
+        document.querySelector<HTMLElement>('tbody tr.cursor-pointer')!.click();
+        await vi.waitFor(() => expect(byTestId('receipt-close')).toBeNull(), {
+            timeout: 2_000,
+        });
+    });
+
     it('shows the offline number in the history row (#416)', async () => {
         await openSale({
             ...CASH_SALE,

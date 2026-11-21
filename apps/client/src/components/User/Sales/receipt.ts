@@ -78,6 +78,17 @@ export function saleSummaryReceipt(sale: StoredSaleSummary): Receipt {
               amount: sale.discount.amount,
           }
         : null;
+    // As the server's receipt: unit and unitPrice whenever the line has a unit.
+    const items = sale.lines.map((line) => ({
+        productName: line.product?.name ?? 'N/A',
+        quantity: line.quantity,
+        amount: quantityAmount(
+            line.unitPrice,
+            line.quantity,
+            line.unit ?? UnitOfMeasure.PIECE,
+        ),
+        ...(line.unit ? { unit: line.unit, unitPrice: line.unitPrice } : {}),
+    }));
     return {
         ...(sale.storeIdentity ? { storeIdentity: sale.storeIdentity } : {}),
         _id: sale.id,
@@ -89,18 +100,8 @@ export function saleSummaryReceipt(sale: StoredSaleSummary): Receipt {
         amountTendered: sale.tenders.reduce((sum, t) => sum + t.amount, 0),
         changeGiven: sale.changeGiven,
         cashierName: sale.cashierName,
-        items: sale.lines.map((line) => {
-            const unit = line.unit ?? UnitOfMeasure.PIECE;
-            return {
-                productName: line.product?.name ?? 'N/A',
-                quantity: line.quantity,
-                amount: quantityAmount(line.unitPrice, line.quantity, unit),
-                ...(unit === UnitOfMeasure.PIECE
-                    ? {}
-                    : { unit, unitPrice: line.unitPrice }),
-            };
-        }),
-        subtotal: sale.amount + (discount?.amount ?? 0),
+        items,
+        subtotal: items.reduce((sum, item) => sum + item.amount, 0),
         discount,
         totalAmount: sale.amount,
     };
