@@ -319,6 +319,26 @@ export function parseArgs(args) {
     return out;
 }
 
+/**
+ * The installer's trusted proxy check (#414) runs `node --use-system-ca`;
+ * a node that refuses the flag could never pass the trust stage.
+ */
+export async function systemCaProblems(node) {
+    try {
+        await promisify(execFile)(node, ['--use-system-ca', '-e', '0'], {
+            timeout: 30_000,
+        });
+        return [];
+    } catch (error) {
+        const detail = String(error?.stderr ?? error?.message ?? error)
+            .trim()
+            .split(/\r?\n/)[0];
+        return [
+            `node: ${node} cannot run the trust check with --use-system-ca: ${detail}`,
+        ];
+    }
+}
+
 export async function main(
     argv,
     print = (l) => process.stdout.write(`${l}\n`),
@@ -336,6 +356,15 @@ export async function main(
         problems.push(
             ...(await bundleProblems(options.bundle, options.manifestSha256)),
         );
+    // The trust stage's probe needs --use-system-ca: the bundle's own node on
+    // Windows, else the node running this check.
+    problems.push(
+        ...(await systemCaProblems(
+            options.bundle && process.platform === 'win32'
+                ? join(options.bundle, 'release', 'node', 'node.exe')
+                : process.execPath,
+        )),
+    );
     // A real adapt: the given caddy on the repo's configs, else (Windows only)
     // the bundle's own caddy.exe on the bundle's configs.
     let caddyAdapted = false;

@@ -660,3 +660,11 @@ test('readiness: --caddy takes a value', () => {
     assert.throws(() => readiness.parseArgs(['--caddy']), /needs a value/);
     assert.match(readiness.parseArgs(['--caddy', 'caddy']).caddy, /caddy$/);
 });
+
+test('readiness: the trust check node accepts --use-system-ca (#414)', async () => {
+    assert.deepEqual(await readiness.systemCaProblems(process.execPath), []);
+    const [problem] = await readiness.systemCaProblems(
+        join(tmpdir(), 'no-such-node'),
+    );
+    assert.match(problem, /--use-system-ca/);
+});
