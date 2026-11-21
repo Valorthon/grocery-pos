@@ -1166,6 +1166,52 @@ describe('Sell scan feedback (#23)', () => {
     });
 });
 
+describe('Sell stock warning (#422)', () => {
+    function warning() {
+        return document
+            .querySelector('[data-testid="stock-warning"]')
+            ?.textContent?.trim();
+    }
+    async function scanMilk() {
+        input().value = MILK.EAN;
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+    }
+
+    it('adds an out-of-stock line and warns with the available stock', async () => {
+        serve(
+            () => Promise.resolve([]),
+            () => Promise.resolve({ ...PRODUCTS[MILK.EAN], stock: 0 }),
+        );
+        mount();
+        await scanMilk();
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(warning()).toBe(
+            'Only 0 pc of milk in stock. Checkout may refuse this line.',
+        );
+    });
+
+    it('warns once a second scan passes the known stock', async () => {
+        serve(
+            () => Promise.resolve([]),
+            () => Promise.resolve({ ...PRODUCTS[MILK.EAN], stock: 1 }),
+        );
+        mount();
+        await scanMilk();
+        expect(warning()).toBeUndefined();
+        await scanMilk();
+        expect(cartNames()).toEqual(['2x milk']);
+        expect(warning()).toContain('Only 1 pc of milk in stock');
+    });
+
+    it('shows nothing when the lookup names no stock', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await scanMilk();
+        expect(warning()).toBeUndefined();
+    });
+});
+
 describe('Sell barcode lookup errors (#27)', () => {
     function apiError(status: number, error: ErrorCode) {
         const config = { headers: new AxiosHeaders() };

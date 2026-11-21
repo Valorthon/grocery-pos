@@ -4,7 +4,10 @@ import {
     ledgerMock,
 } from '../../common/testing/business-collaborators';
 import { StockMovementService } from '../../stock-movement/stock-movement.service';
-import { InventoryBatchService } from '../batch/batch.service';
+import {
+    InventoryBatchService,
+    UnexpiredStockShortError,
+} from '../batch/batch.service';
 import { SettingsService } from '../../settings/settings.service';
 import { AuditService } from '../../audit/audit.service';
 import { Test } from '@nestjs/testing';
@@ -54,6 +57,7 @@ describe('InventoryService.sell', () => {
     let service: InventoryService;
     let bulkWrite: jest.Mock;
     let find: jest.Mock;
+    let moduleBatches: () => ReturnType<typeof batchesMock>;
 
     const session = {} as ClientSession;
 
@@ -87,6 +91,10 @@ describe('InventoryService.sell', () => {
         }).compile();
 
         service = moduleRef.get(InventoryService);
+        moduleBatches = () =>
+            moduleRef.get(InventoryBatchService) as unknown as ReturnType<
+                typeof batchesMock
+            >;
     });
 
     it('guards the decrement in the filter so stock cannot go negative', async () => {
@@ -175,6 +183,59 @@ describe('InventoryService.sell', () => {
                     requested: 4,
                     available: 1,
                 },
+            ],
+        });
+    });
+
+    it('names the unit of a short measured product (#422)', async () => {
+        bulkWrite.mockResolvedValue({ matchedCount: 0 });
+        find.mockReturnValue(
+            leanChain([
+                {
+                    product: { _id: P1, name: 'rice', unit: UnitOfMeasure.KG },
+                    stock: 1500,
+                },
+            ]),
+        );
+
+        await expect(
+            service.sell(
+                ACTOR,
+                sellDto([{ product: P1, quantity: 2000 }]),
+                session,
+            ),
+        ).rejects.toMatchObject({
+            details: [
+                {
+                    product: P1,
+                    name: 'rice',
+                    unit: UnitOfMeasure.KG,
+                    requested: 2000,
+                    available: 1500,
+                },
+            ],
+        });
+    });
+
+    it('names a tracked product short of unexpired lots with its sellable stock (#422)', async () => {
+        bulkWrite.mockResolvedValue({ matchedCount: 1 });
+        find.mockReturnValue(
+            leanChain([{ product: { _id: P1, name: 'yogurt' }, stock: 5 }]),
+        );
+        const batches = moduleBatches();
+        batches.consume.mockRejectedValueOnce(new UnexpiredStockShortError(2));
+
+        const attempt = service.sell(
+            ACTOR,
+            sellDto([{ product: P1, quantity: 4 }]),
+            session,
+        );
+
+        await expect(attempt).rejects.toBeInstanceOf(ValidationError);
+        await expect(attempt).rejects.toMatchObject({
+            statusCode: 400,
+            details: [
+                { product: P1, name: 'yogurt', requested: 4, available: 2 },
             ],
         });
     });

@@ -15,6 +15,15 @@ import { ErrorCode, InternalError, ValidationError } from '../../common/errors';
 
 const invalid = (message: string) =>
     new ValidationError(ErrorCode.VALIDATION_INVALID_INPUT, message);
+/** A tracked product is short of unexpired lots; `sellable` is what it had. */
+export class UnexpiredStockShortError extends ValidationError {
+    constructor(public readonly sellable: number) {
+        super(
+            ErrorCode.VALIDATION_INVALID_INPUT,
+            'Insufficient unexpired stock; expired batches cannot be sold',
+        );
+    }
+}
 const id = (value: { toString(): string }) =>
     new Types.ObjectId(value.toString());
 @Injectable()
@@ -107,6 +116,22 @@ export class InventoryBatchService implements OnModuleInit {
             if (await this.tracked(id(product), session))
                 await this.assertInvariant(id(product), session);
     }
+    /** What `consume` could take now: the unexpired dated lots' total (#422). */
+    async sellableQty(product: Types.ObjectId): Promise<number> {
+        const today = this.today(new Date(), await this.settings.timezone());
+        const rows = await this.batches
+            .find(
+                {
+                    product,
+                    remainingQty: { $gt: 0 },
+                    reconciliation: { $ne: true },
+                    expiryDate: { $gte: today },
+                },
+                { remainingQty: 1 },
+            )
+            .lean();
+        return rows.reduce((sum, row) => sum + row.remainingQty, 0);
+    }
     /** Consume only unexpired dated lots; aggregate stock guard remains a separate transaction write. */
     async consume(
         product: Types.ObjectId,
@@ -144,9 +169,7 @@ export class InventoryBatchService implements OnModuleInit {
             remaining -= take;
         }
         if (remaining !== 0)
-            throw invalid(
-                'Insufficient unexpired stock; expired batches cannot be sold',
-            );
+            throw new UnexpiredStockShortError(quantity - remaining);
         return allocations;
     }
     async restore(

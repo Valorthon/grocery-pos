@@ -69,9 +69,11 @@ export class ProductController {
         @Param() dto: GetDto,
         @Query() query: GetByBarcodeQueryDto,
     ): Promise<ProductView> {
-        return asJson(
-            await this.service.getByBarcode(dto, query.includeArchived),
+        const product = await this.service.getByBarcode(
+            dto,
+            query.includeArchived,
         );
+        return asJson(await this.service.withSellableStock(product));
     }
 
     // Non-price fields: Restocker. `price`: Admin only; the whole batch is a

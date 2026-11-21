@@ -138,6 +138,7 @@ describe('Product route access by role (e2e)', () => {
         update: jest.fn(realUpdate),
         getAll: jest.fn().mockResolvedValue({ data: [], totalItems: 0 }),
         addMany: jest.fn().mockResolvedValue(undefined),
+        withSellableStock: jest.fn(async (product: unknown) => product),
     };
 
     function call(route: Route, roles: Role[]): Promise<Response> {

@@ -98,3 +98,28 @@ export function reorderQuantityOf(product: {
 }): number {
     return product.reorderQuantity ?? 10 * quantityScale(product.unit);
 }
+
+/**
+ * One short product in the `details` of a refused sale's insufficient-stock
+ * error (#422). Quantities are minor units of `unit` (missing = PIECE).
+ * For an expiry-tracked product `available` is its unexpired sellable stock.
+ */
+export interface InsufficientStockLine {
+    product: string;
+    name?: string;
+    unit?: UnitOfMeasure;
+    requested: number;
+    available: number;
+}
+
+/** "Rice: 2.000 kg requested, 1.500 kg available" per short line, joined by "; ". */
+export function insufficientStockText(
+    lines: readonly InsufficientStockLine[],
+): string {
+    return lines
+        .map(
+            (line) =>
+                `${line.name ?? 'Unknown product'}: ${formatQuantity(line.requested, line.unit)} requested, ${formatQuantity(Math.max(0, line.available), line.unit)} available`,
+        )
+        .join('; ');
+}

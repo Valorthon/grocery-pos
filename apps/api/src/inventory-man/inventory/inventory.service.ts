@@ -7,8 +7,15 @@ import {
     reorderMatchStage,
     stockScaleExpression,
 } from './reorder-query';
-import { InventoryBatchService } from '../batch/batch.service';
-import type { BatchAllocation } from '@grocery-pos/contracts';
+import {
+    InventoryBatchService,
+    UnexpiredStockShortError,
+} from '../batch/batch.service';
+import { UnitOfMeasure } from '@grocery-pos/contracts';
+import type {
+    BatchAllocation,
+    InsufficientStockLine,
+} from '@grocery-pos/contracts';
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Inventory, type InventoryRowDoc } from './inventory.schema';
@@ -483,6 +490,22 @@ export class InventoryService {
     }
 
     /**
+     * The stock a register can sell of one product (#422): unexpired lots
+     * for an expiry-tracked product, else the aggregate. Undefined without
+     * an inventory row. A hint for the cashier; `sell` stays the check.
+     */
+    async sellableStock(
+        product: Types.ObjectId,
+        tracksExpiry: boolean,
+    ): Promise<number | undefined> {
+        if (tracksExpiry) return this.batches.sellableQty(product);
+        const row = await this.model
+            .findOne({ product }, { stock: 1 })
+            .lean<{ stock: number }>();
+        return row?.stock;
+    }
+
+    /**
      * Sells stock. Quantities are summed per product so each product gets a
      * single guarded decrement, and shortfalls are reported against stock
      * read before the write (see adjust() for why). `userId` is the
@@ -514,27 +537,20 @@ export class InventoryService {
             },
         }));
 
-        const allocations: BatchAllocation[][] = [];
-        for (const line of dto.sellDetails)
-            allocations.push(
-                await this.batches.consume(
-                    new Types.ObjectId(line.product),
-                    line.quantity,
-                    session,
-                ),
-            );
         const result = await this.model.bulkWrite(updates, { session });
 
         if (result.matchedCount !== updates.length) {
             const shortfalls = [...quantityByProduct]
                 .map(([product, quantity]) => {
                     const current = stockByProduct.get(product);
-                    return {
+                    const line: InsufficientStockLine = {
                         product,
                         name: current?.name,
+                        unit: current?.unit,
                         requested: quantity,
                         available: current?.stock ?? 0,
                     };
+                    return line;
                 })
                 .filter((item) => item.available < item.requested);
 
@@ -543,6 +559,37 @@ export class InventoryService {
                 'Insufficient stock for one or more products',
                 shortfalls,
             );
+        }
+        // After the aggregate guard, so a plain shortfall is named above;
+        // a tracked product short of unexpired lots is named here (#422).
+        const allocations: BatchAllocation[][] = [];
+        for (const line of dto.sellDetails) {
+            try {
+                allocations.push(
+                    await this.batches.consume(
+                        new Types.ObjectId(line.product),
+                        line.quantity,
+                        session,
+                    ),
+                );
+            } catch (error) {
+                if (error instanceof UnexpiredStockShortError) {
+                    const current = stockByProduct.get(line.product);
+                    const short: InsufficientStockLine = {
+                        product: line.product,
+                        name: current?.name,
+                        unit: current?.unit,
+                        requested: line.quantity,
+                        available: error.sellable,
+                    };
+                    throw new ValidationError(
+                        ErrorCode.VALIDATION_INVALID_INPUT,
+                        error.message,
+                        [short],
+                    );
+                }
+                throw error;
+            }
         }
         {
             const products = await this.productService.getMany(
@@ -575,15 +622,23 @@ export class InventoryService {
     private async getStockByProduct(
         products: string[],
         session: ClientSession,
-    ): Promise<Map<string, { name: string; stock: number }>> {
+    ): Promise<
+        Map<string, { name: string; unit?: UnitOfMeasure; stock: number }>
+    > {
         const rows = await this.model
             .find(
                 { product: { $in: products } },
                 { stock: 1, product: 1, offlineShortfall: 1 },
             )
-            .populate<{ product: { _id: Types.ObjectId; name: string } }>({
+            .populate<{
+                product: {
+                    _id: Types.ObjectId;
+                    name: string;
+                    unit?: UnitOfMeasure;
+                };
+            }>({
                 path: 'product',
-                select: 'name',
+                select: 'name unit',
             })
             .session(session)
             .lean();
@@ -602,7 +657,11 @@ export class InventoryService {
                 .filter((row) => row.product?._id)
                 .map((row) => [
                     row.product._id.toString(),
-                    { name: row.product.name, stock: row.stock },
+                    {
+                        name: row.product.name,
+                        unit: row.product.unit,
+                        stock: row.stock,
+                    },
                 ]),
         );
     }
