@@ -567,6 +567,63 @@ describe('CheckoutModal', () => {
             );
         });
 
+        it('shows GCash and Split as unavailable offline, and F3/F6/click say why (#425)', async () => {
+            mount(vi.fn(), { cashOnly: true });
+            await flush();
+            const notice = () =>
+                document.querySelector('[data-testid="method-notice"]')!;
+            for (const t of [PaymentType.GCASH, PaymentType.SPLIT]) {
+                expect(radio(t).getAttribute('aria-disabled')).toBe('true');
+                expect(radio(t).disabled).toBe(false);
+                expect(radio(t).className).toContain('opacity-60');
+                expect(radio(t).textContent).toContain('Not available offline');
+            }
+            expect(radio(PaymentType.CASH).hasAttribute('aria-disabled')).toBe(
+                false,
+            );
+            expect(notice().getAttribute('role')).toBe('status');
+            expect(notice().textContent?.trim()).toBe('');
+
+            amountInput().focus();
+            expect(key(amountInput(), 'F3').defaultPrevented).toBe(true);
+            await flush();
+            expect(notice().textContent).toContain(
+                'GCash: Not available offline',
+            );
+            expect(document.activeElement).toBe(amountInput());
+
+            key(amountInput(), 'F6');
+            await flush();
+            expect(notice().textContent).toContain(
+                'Split: Not available offline',
+            );
+
+            radio(PaymentType.GCASH).click();
+            await flush();
+            expect(notice().textContent).toContain('GCash');
+            expect(radio(PaymentType.CASH).getAttribute('aria-checked')).toBe(
+                'true',
+            );
+            expect(errorText()).toBeNull();
+
+            amountInput().focus();
+            key(amountInput(), 'F1');
+            await flush();
+            expect(notice().textContent?.trim()).toBe('');
+        });
+
+        it('shows no offline reason online (#425)', async () => {
+            mount(vi.fn());
+            await flush();
+            for (const t of [PaymentType.GCASH, PaymentType.SPLIT]) {
+                expect(radio(t).hasAttribute('aria-disabled')).toBe(false);
+                expect(radio(t).textContent).not.toContain('offline');
+            }
+            expect(
+                document.querySelector('[data-testid="method-offline-reason"]'),
+            ).toBeNull();
+        });
+
         it('switches with F1/F3/F6 from the amount field and focuses the field', async () => {
             mount(vi.fn());
             await flush();

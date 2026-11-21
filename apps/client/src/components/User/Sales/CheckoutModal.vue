@@ -64,13 +64,23 @@
                         :class="
                             method === option.type
                                 ? 'bg-leaf-800 text-white border-ink shadow-2xs'
-                                : 'bg-surface text-muted border-line hover:bg-leaf-50'
+                                : isMethodDisabled(option.type)
+                                  ? 'bg-paper text-muted border-line opacity-60 cursor-not-allowed'
+                                  : 'bg-surface text-muted border-line hover:bg-leaf-50'
                         "
-                        :disabled="isMethodDisabled(option.type)"
+                        :aria-disabled="
+                            isMethodDisabled(option.type) ? 'true' : undefined
+                        "
                         @click="selectMethod(option.type)"
                     >
                         <component :is="option.icon" class="w-5 h-5" />
                         <span>{{ option.label }}</span>
+                        <span
+                            v-if="isMethodDisabled(option.type)"
+                            class="text-xs font-semibold"
+                            data-testid="method-offline-reason"
+                            >{{ OFFLINE_REASON }}</span
+                        >
                         <!-- Hidden on phones, like the scan box's F2 (#89). -->
                         <span class="hidden sm:inline-flex">
                             <KeyHint
@@ -82,6 +92,18 @@
                         </span>
                     </button>
                 </div>
+                <!--
+                    Offline (#425): GCash and Split stay visible but
+                    aria-disabled; a click or F3/F6 says why here.
+                -->
+                <p
+                    role="status"
+                    class="text-xs font-semibold text-danger-fg"
+                    :class="{ 'mt-2': methodNotice }"
+                    data-testid="method-notice"
+                >
+                    {{ methodNotice }}
+                </p>
             </div>
 
             <!-- CASH -->
@@ -560,6 +582,10 @@ function isMethodDisabled(type: PaymentType): boolean {
     return !!props.cashOnly && type !== PaymentType.CASH;
 }
 
+const OFFLINE_REASON = 'Not available offline';
+/** Why the last picked method was refused (#425), shown inline. */
+const methodNotice = ref<string | null>(null);
+
 /**
  * Picks a method. A click or F1/F3/F6 goes on to its amount or reference
  * field; ←/→ (`focus: 'radio'`) keep the focus on the radio, as native
@@ -569,7 +595,12 @@ async function selectMethod(
     next: PaymentType,
     focus: 'field' | 'radio' = 'field',
 ) {
-    if (isMethodDisabled(next)) return;
+    if (isMethodDisabled(next)) {
+        const label = methodOptions.find((o) => o.type === next)?.label;
+        methodNotice.value = `${label}: ${OFFLINE_REASON}. Offline sales are cash only.`;
+        return;
+    }
+    methodNotice.value = null;
     method.value = next;
     if (next === PaymentType.CASH && !amountTendered.value) {
         amountTendered.value = centavosToPesoInput(total.value);
@@ -606,7 +637,8 @@ function onMethodKeydown(event: KeyboardEvent) {
 /**
  * F1/F3/F6 anywhere in this dialog (#324). The default is always
  * prevented there, so the browser's Help, Find and address-bar keys never
- * fire; mid-sale or for a disabled method the key does nothing else.
+ * fire; mid-sale the key does nothing else, and for a method disabled
+ * offline it says why (#425).
  */
 function onDialogKeydown(event: KeyboardEvent) {
     if (!props.modelValue || hasModifier(event)) return;
@@ -663,6 +695,7 @@ function reset() {
     referenceNumber.value = '';
     processing.value = false;
     error.value = null;
+    methodNotice.value = null;
 }
 
 watch(
