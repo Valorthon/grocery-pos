@@ -202,7 +202,9 @@ from the new release's bundle folder: `Install.ps1 -ManifestSha256 <hash>
 -Mode upgrade-status`. Re-running `-Mode upgrade` resumes it; if the status
 says a restore is required, `-Mode upgrade-rollback -RestoreBackup <id>`
 restores the pre-upgrade backup and the previous release. See the upgrade
-README (#364). Before an upgrade, close every Grocery POS tab in Chrome. If a page shows
+README (#364). Every install, repair, upgrade or handover-done run writes
+`state\installer-<UTC time>.log` in the data folder and prints its path
+as `Installer log:`; keep it with any failure report. Before an upgrade, close every Grocery POS tab in Chrome. If a page shows
 "Grocery POS was updated", press Reload; the basket and queued cash sales
 stay on this PC and upload after the reload.
 
