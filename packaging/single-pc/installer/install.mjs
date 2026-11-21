@@ -577,22 +577,18 @@ async function installOrRepair(options, ctx, log) {
             // run stops here (a service stuck "marked for deletion"), the
             // journal and the log say which ones are gone (#412).
             log(`services: removing ${removing.join(', ')} to re-register`);
-            await done('services-removed', { servicesRemoved: removing });
         }
-        for (const name of stopOrder()) {
-            if (facts.servicesInstalled.includes(name)) {
-                await runSteps(
-                    [
-                        {
-                            kind: 'exec',
-                            file: 'sc.exe',
-                            args: ['delete', name],
-                        },
-                        { kind: 'gone', name },
-                    ],
-                    ctx,
-                );
-            }
+        const removed = [];
+        for (const name of removing) {
+            await runSteps(
+                [{ kind: 'exec', file: 'sc.exe', args: ['delete', name] }],
+                ctx,
+            );
+            // Journaled after each delete: the list is what is really gone
+            // (or marked for deletion) if the run stops here.
+            removed.push(name);
+            await done('services-removed', { servicesRemoved: [...removed] });
+            await runSteps([{ kind: 'gone', name }], ctx);
         }
         // Without LAN terminals the LAN proxy's wrapper goes too (#396).
         if (!lanIp)
@@ -1116,9 +1112,12 @@ export function windowsContext(env = process.env, out) {
                     timeoutMs: 60_000,
                     intervalMs: 1000,
                 },
-            ).catch(() => {
+            ).catch((error) => {
+                if (error?.message !== 'Proof readiness deadline exceeded.')
+                    throw error;
                 throw new Error(
                     `${name} is marked for deletion but Windows has not removed it yet (an open Services, Event Viewer or Task Manager window keeps it). Close those windows, or restart the PC, then resume`,
+                    { cause: error },
                 );
             });
         },
@@ -1234,7 +1233,7 @@ export async function readinessFailure(name, paths, tail, lines = 20) {
         .slice(-lines)
         .map((l) => `    ${redact(l)}`);
     return last.length
-        ? `${name} did not become ready in time. Last lines of ${file}:\n${last.join('\n')}\n`
+        ? `${name} did not become ready in time; last lines of ${file}:\n${last.join('\n')}\n  (end of log)`
         : `${name} did not become ready in time (${file} is empty or missing)`;
 }
 
@@ -1243,7 +1242,7 @@ export function scrubSecrets(text) {
     return String(text)
         .replace(/(mongodb(?:\+srv)?:\/\/)[^@\s/]+@/gi, '$1[redacted]@')
         .replace(
-            /(\b(?:password|passwd|secret|token|database[-_]?url)\b["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)/gi,
+            /([A-Za-z_-]*(?:password|passwd|secret|token|database[-_]?url)["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;}]+)/gi,
             '$1[redacted]',
         );
 }
@@ -1327,7 +1326,7 @@ async function main() {
                 error instanceof Error &&
                 !/mongodb(\+srv)?:\/\//.test(error.message);
             say(
-                `Failed: ${safe ? error.message : 'unexpected error'}. Data, secrets and backups were kept. To resume, run: ${resumeCommand(options.mode, options.manifestSha256, ctx.progress)}`,
+                `Failed: ${safe ? error.message : 'unexpected error'}. Data, secrets and backups were kept. To resume, run: ${resumeCommand(options.mode, options.manifestSha256, ctx.progress, options)}`,
                 process.stderr,
             );
             // The stack goes to the log only (it never quotes secrets:

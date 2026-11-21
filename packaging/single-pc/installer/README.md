@@ -242,7 +242,7 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   the data folder exists) and prints its path. A readiness timeout quotes
   the service's last 20 error-log lines, redacted like a support file.
 - Re-registration deletes the installed services first and journals
-  `servicesRemoved` in `installer.json` before it does (#412): a service
+  `servicesRemoved` in `installer.json` after each delete (#412): a service
   stuck "marked for deletion" (an open Services or Event Viewer window)
   stops the run with API/proxy unregistered and the record incomplete;
   close those windows and run `-Mode repair`.

@@ -1728,11 +1728,8 @@ test('a failure while re-registering journals removed services and sets the resu
         ),
     );
     assert.equal(state.complete, false);
-    assert.deepEqual(state.servicesRemoved, [
-        SERVICES.proxy,
-        SERVICES.api,
-        SERVICES.mongo,
-    ]);
+    // The API was deleted (marked) when the wait failed; MongoDB never was.
+    assert.deepEqual(state.servicesRemoved, [SERVICES.proxy, SERVICES.api]);
     // Repair finishes it and clears the note.
     ctx.waitServiceGone = async () => {};
     await runInstaller({ mode: 'repair', ...pinned }, ctx);
@@ -1768,13 +1765,17 @@ test('the run log buffers until the state folder exists and scrubs secrets (#412
     await mkdir(join(root, 'state'), { recursive: true });
     runLog.write('DATABASE_URL=mongodb://root:hunter2@127.0.0.1:27017/x');
     runLog.write('password: s3cret');
+    runLog.write('JWT_SECRET=abc1');
+    runLog.write('MONGO_PASSWORD=x2y');
+    runLog.write('{"cookieSecret":"zz9"}');
     assert.equal(runLog.flush(), true);
     assert.equal(runLog.path, join(root, 'state', installerLogName(now)));
     const text = await readFile(runLog.path, 'utf8');
     assert.match(text, /preflight\n/);
     assert.ok(!text.includes('hunter2'));
-    assert.ok(!text.includes('s3cret'));
-    assert.equal(text.trim().split('\n').length, 3);
+    for (const secret of ['s3cret', 'abc1', 'x2y', 'zz9'])
+        assert.ok(!text.includes(secret), secret);
+    assert.equal(text.trim().split('\n').length, 6);
 });
 
 test('a readiness timeout quotes the service error log, redacted (#412)', async () => {
@@ -1794,8 +1795,51 @@ test('a readiness timeout quotes the service error log, redacted (#412)', async 
     assert.ok(!message.includes('abcdef'));
     assert.ok(!message.includes('line 10\n'));
     assert.match(message, /line 11/);
+    assert.ok(!message.endsWith('\n'));
     assert.match(
         await readinessFailure(SERVICES.api, paths, async () => null),
         /empty or missing/,
+    );
+});
+
+test('the resume command carries the operator flags (#412)', async () => {
+    const hash = 'cd'.repeat(32);
+    assert.equal(
+        resumeCommand(
+            'install',
+            hash,
+            {},
+            {
+                adminUsername: 'owner',
+                storeTimezone: 'Asia/Manila',
+                lanIp: '192.168.1.10',
+                backupTime: '21:30',
+            },
+        ),
+        `.\\Install.ps1 -ManifestSha256 ${hash} -Mode install -AdminUsername owner -StoreTimezone Asia/Manila -LanIp 192.168.1.10 -BackupTime 21:30`,
+    );
+    assert.equal(
+        resumeCommand(
+            'install',
+            hash,
+            { servicesTouched: true },
+            {
+                adminUsername: 'owner',
+                lanIp: null,
+            },
+        ),
+        `.\\Install.ps1 -ManifestSha256 ${hash} -Mode repair -LanIp none`,
+    );
+    // A failure before any state exists still resumes as the same install.
+    const dir = await scratch();
+    const bundle = await makeBundle(dir);
+    const pinned = await pin(bundle);
+    const ctx = recordingContext(dir, { failProvisionOnce: true });
+    const options = { mode: 'install', ...pinned, adminUsername: 'owner' };
+    await assert.rejects(runInstaller(options, ctx), /power cut/);
+    assert.equal(ctx.progress, undefined);
+    assert.match(
+        resumeCommand('install', pinned.manifestSha256, ctx.progress, options),
+        /-Mode install -AdminUsername owner$/,
     );
 });

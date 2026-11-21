@@ -987,8 +987,26 @@ export function resumeMode(mode, { servicesTouched = false } = {}) {
 }
 
 /** The exact command an operator runs next after exit 1 (#412). */
-export function resumeCommand(mode, manifestSha256, state = {}) {
-    return `.\\Install.ps1 -ManifestSha256 ${manifestSha256 ?? '<hash>'} -Mode ${resumeMode(mode, state)}`;
+export function resumeCommand(mode, manifestSha256, state = {}, flags = {}) {
+    const next = resumeMode(mode, state);
+    const parts = [
+        `.\\Install.ps1 -ManifestSha256 ${manifestSha256 ?? '<hash>'} -Mode ${next}`,
+    ];
+    // The operator's own choices, as Install.ps1 accepts them per mode: a
+    // resume without them would be refused (install needs the username) or
+    // silently keep the old setting (repair without the new -LanIp).
+    if (next === 'install') {
+        if (flags.adminUsername)
+            parts.push(`-AdminUsername ${flags.adminUsername}`);
+        if (flags.storeTimezone)
+            parts.push(`-StoreTimezone ${flags.storeTimezone}`);
+    }
+    if (next === 'install' || next === 'repair') {
+        if (flags.lanIp !== undefined)
+            parts.push(`-LanIp ${flags.lanIp ?? 'none'}`);
+        if (flags.backupTime) parts.push(`-BackupTime ${flags.backupTime}`);
+    }
+    return parts.join(' ');
 }
 
 /** The installer log of one run (#412): state\installer-<UTC time>.log. */
