@@ -99,7 +99,8 @@ verified admin-only copy as every other mode (the copy also holds the
 release's `mongodb\` and `api\`, each file hashed). `-From` must be a full
 path; `-Confirm` and the `-Accept…` flags go with `restore` only.
 
-Exit codes: 0 done, 1 failed (nothing removed, re-run resumes), 2 usage,
+Exit codes: 0 done, 1 failed (data kept; run the printed resume command:
+`-Mode repair` once an install has registered services, else the same mode), 2 usage,
 3 refused (nothing changed).
 
 | Location                                                  | Contents                                                                |
@@ -233,8 +234,18 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   upgrade tool.
 
 - An interrupted run (power cut, crash) leaves no partial release under the
-  real name, no regenerated secret and no second admin. Re-running the same
-  mode resumes; provisioning resumes from its own journal.
+  real name, no regenerated secret and no second admin. The failure message
+  prints the resume command: `-Mode repair` once an install has registered
+  services, else the same mode; provisioning resumes from its own journal.
+  Every run writes `state\installer-<UTC time>.log` (console lines and
+  error stacks, connection strings and passwords scrubbed; buffered until
+  the data folder exists) and prints its path. A readiness timeout quotes
+  the service's last 20 error-log lines, redacted like a support file.
+- Re-registration deletes the installed services first and journals
+  `servicesRemoved` in `installer.json` after each delete (#412): a service
+  stuck "marked for deletion" (an open Services or Event Viewer window)
+  stops the run with API/proxy unregistered and the record incomplete;
+  close those windows and run `-Mode repair`.
 - `repair` re-verifies/replaces the release, re-provisions, re-registers
   services, ACLs, tasks and shortcuts, keeps the admin and secrets.
 - LAN terminals (#396, ARCHITECTURE.md "LAN terminals (#402)"): `-LanIp
