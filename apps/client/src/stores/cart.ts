@@ -622,7 +622,9 @@ export const useCartStore = defineStore('cart', () => {
         // write must not leave an in-memory key that bypasses saving on Retry.
         if (!persist(next))
             throw new Error(
-                'Checkout could not be saved in this browser. Nothing was charged. Your ticket is kept; restore browser storage and retry.',
+                attempt.value?.idempotencyKey === next.idempotencyKey
+                    ? 'Checkout could not be saved in this browser. This ticket may already be recorded. Your ticket is kept; restore browser storage and retry: Retry will not charge twice.'
+                    : 'Checkout could not be saved in this browser. Nothing was charged. Your ticket is kept; restore browser storage and retry.',
             );
         applyingRemote = true;
         try {

@@ -107,17 +107,17 @@ describe('createCheckoutAttempt', () => {
     it('keeps the key across retries of the same ticket', () => {
         const attempt = createCheckoutAttempt(generate);
 
-        expect(attempt.keyFor(ticket)).toBe('key-1');
-        expect(attempt.keyFor({ ...ticket })).toBe('key-1');
+        expect(attempt.claim(ticket).key).toBe('key-1');
+        expect(attempt.claim({ ...ticket }).key).toBe('key-1');
     });
 
     it('makes a new key after a successful sale', () => {
         const attempt = createCheckoutAttempt(generate);
-        attempt.keyFor(ticket);
+        attempt.claim(ticket);
 
         attempt.settle();
 
-        expect(attempt.keyFor(ticket)).toBe('key-2');
+        expect(attempt.claim(ticket).key).toBe('key-2');
     });
 
     it.each([
@@ -144,9 +144,9 @@ describe('createCheckoutAttempt', () => {
         ],
     ])('makes a new key when %s changes', (_, changed) => {
         const attempt = createCheckoutAttempt(generate);
-        attempt.keyFor(ticket);
+        attempt.claim(ticket);
 
-        expect(attempt.keyFor(changed)).toBe('key-2');
+        expect(attempt.claim(changed).key).toBe('key-2');
     });
 });
 
@@ -166,12 +166,22 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
 
     it('saves the key with the ticket signature when it is made', () => {
         const store = savedStore();
-        createCheckoutAttempt(() => 'key-1', store).keyFor(ticket);
+        createCheckoutAttempt(() => 'key-1', store).claim(ticket);
         expect(store.peek()).toMatchObject({
             idempotencyKey: 'key-1',
             ticketSignature: JSON.stringify(ticket),
         });
         expect(store.peek()?.claim).toMatch(UUID);
+    });
+
+    it('stores a new claim each time a reused key is sent again (#420)', () => {
+        const store = savedStore();
+        const attempt = createCheckoutAttempt(() => 'key-1', store);
+        const first = attempt.claim(ticket);
+        const second = attempt.claim(ticket);
+        expect(second).toMatchObject({ key: 'key-1', fresh: false });
+        expect(second.claim).not.toBe(first.claim);
+        expect(store.peek()?.claim).toBe(second.claim);
     });
 
     it('reuses a saved key for the same ticket (a retry after a reload)', () => {
@@ -180,7 +190,7 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
             ticketSignature: JSON.stringify(ticket),
         });
         const generate = vi.fn(() => 'key-new');
-        expect(createCheckoutAttempt(generate, store).keyFor(ticket)).toBe(
+        expect(createCheckoutAttempt(generate, store).claim(ticket).key).toBe(
             'key-before-reload',
         );
         expect(generate).not.toHaveBeenCalled();
@@ -193,14 +203,15 @@ describe('createCheckoutAttempt with a saved attempt (#23 review)', () => {
         });
         const attempt = createCheckoutAttempt(() => 'key-new', store);
         expect(
-            attempt.keyFor({ sellDetails: [{ product: 'p1', quantity: 3 }] }),
+            attempt.claim({ sellDetails: [{ product: 'p1', quantity: 3 }] })
+                .key,
         ).toBe('key-new');
     });
 
     it('clears the saved attempt when settled', () => {
         const store = savedStore();
         const attempt = createCheckoutAttempt(() => 'key-1', store);
-        attempt.keyFor(ticket);
+        attempt.claim(ticket);
         attempt.settle();
         expect(store.peek()).toBeNull();
     });

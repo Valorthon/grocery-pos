@@ -66,9 +66,6 @@ export function createCheckoutAttempt(
             store.set({ idempotencyKey, ticketSignature: signature, claim });
             return { key: idempotencyKey, claim, fresh: !reuse };
         },
-        keyFor(ticket: SaleTicketRequest): string {
-            return this.claim(ticket).key;
-        },
         /** The sale went through (or was dropped): the next checkout gets a new key. */
         settle() {
             store.set(null);
