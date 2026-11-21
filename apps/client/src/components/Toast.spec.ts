@@ -9,6 +9,7 @@ import {
     useUIStore,
 } from '@/stores/ui';
 import Toast from './Toast.vue';
+import { type ModalEntry, pushModal, removeModal } from './ui/modal-stack';
 
 let app: App | null = null;
 
@@ -34,31 +35,63 @@ const toasts = () => [
     ...document.querySelectorAll<HTMLElement>('[data-testid="toast"]'),
 ];
 
-describe('Toast clicks (issue #423)', () => {
-    it('lets clicks pass through except the close button', async () => {
+describe('Toast over an open modal (issue #423)', () => {
+    const stack = () =>
+        document.querySelector<HTMLElement>('[data-testid="toast-stack"]')!;
+
+    function openModal(): ModalEntry {
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        const entry: ModalEntry = {
+            root: () => host,
+            panel: () => host,
+            closable: () => true,
+            close: () => undefined,
+            opener: null,
+        };
+        pushModal(entry);
+        return entry;
+    }
+
+    it('moves the stack to the top while a modal is open', async () => {
         const ui = useUIStore();
-        ui.queueMessage(Color.INFO, 'You do not have access to that page');
+        ui.toastPlacement = 'bottom-center';
+        ui.queueMessage(Color.ERROR, 'Save failed');
         await nextTick();
-        const stack = document.querySelector<HTMLElement>(
-            '[data-testid="toast-stack"]',
-        );
-        expect(stack?.className).toContain('pointer-events-none');
-        const toast = toasts()[0];
-        expect(toast.className).not.toContain('pointer-events-auto');
-        const close = toast.querySelector<HTMLElement>(
-            '[aria-label="Dismiss notification"]',
-        );
-        expect(close?.className).toContain('pointer-events-auto');
+        expect(stack().className).toContain('bottom-4');
+
+        const entry = openModal();
+        await nextTick();
+        expect(stack().className).toContain('top-4');
+        expect(stack().className).not.toMatch(/\bbottom-/);
+
+        removeModal(entry);
+        await nextTick();
+        expect(stack().className).toContain('bottom-4');
     });
 
-    it('closes an info toast by itself', async () => {
+    it('moves the register stack to the top while a modal is open', async () => {
         const ui = useUIStore();
-        ui.queueMessage(Color.INFO, 'You do not have access to that page');
+        ui.toastPlacement = 'register';
+        ui.queueMessage(Color.ERROR, 'Charge failed');
         await nextTick();
-        expect(toasts()).toHaveLength(1);
-        vi.advanceTimersByTime(TOAST_DURATION_MS + 500);
+        expect(stack().className).toMatch(/\bbottom-24\b/);
+
+        const entry = openModal();
         await nextTick();
-        expect(ui.toasts).toHaveLength(0);
+        expect(stack().className).toContain('top-4');
+        expect(stack().className).not.toMatch(/\bbottom-/);
+        removeModal(entry);
+    });
+
+    it('gives the close button a 44px target', async () => {
+        useUIStore().queueMessage(Color.INFO, 'No access');
+        await nextTick();
+        const close = toasts()[0].querySelector<HTMLElement>(
+            '[aria-label="Dismiss notification"]',
+        )!;
+        expect(close.className).toContain('min-h-11');
+        expect(close.className).toContain('min-w-11');
     });
 });
 

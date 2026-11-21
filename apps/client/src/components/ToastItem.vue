@@ -31,7 +31,7 @@
         </template>
         <button
             type="button"
-            class="pointer-events-auto ml-1 shrink-0 rounded-control text-current opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-ring"
+            class="-my-3 -mr-3 ml-1 inline-flex min-h-11 min-w-11 items-center justify-center shrink-0 rounded-control text-current opacity-60 hover:opacity-100 focus-visible:opacity-100 focus-ring"
             aria-label="Dismiss notification"
             @click="emit('dismiss')"
         >
