@@ -8,7 +8,7 @@
         <div
             data-inert-exempt
             :class="[
-                'fixed z-[60] flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-md overflow-y-auto',
+                'pointer-events-none fixed z-[60] flex flex-col gap-2 max-w-[calc(100vw-2rem)] sm:max-w-md overflow-y-auto',
                 placement.stack,
             ]"
             :style="placement.style"
@@ -69,6 +69,9 @@ import { toastPlacement } from './toast-placement';
  * it never covers the register's scan box or the top of the ticket. On
  * the register it also keeps clear of the tender sheet's Tender & Charge
  * and the Undo bar (`uiStore.registerToast`, see toast-placement.ts).
+ *
+ * Clicks pass through a toast (#423): only its close button takes them,
+ * so a toast over an open dialog never blocks its footer buttons.
  */
 const uiStore = useUIStore();
 

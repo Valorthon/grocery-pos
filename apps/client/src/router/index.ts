@@ -388,10 +388,7 @@ router.beforeEach(async (to) => {
     if (
         !canOpenRoute(to.meta as RouteAccessMeta, authStore.user?.roles ?? [])
     ) {
-        uiStore.queueMessage(
-            Color.ERROR,
-            'You do not have access to that page',
-        );
+        uiStore.queueMessage(Color.INFO, 'You do not have access to that page');
         return homeFor(authStore);
     }
 

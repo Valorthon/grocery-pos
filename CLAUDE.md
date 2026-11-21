@@ -597,6 +597,7 @@ requestId}`. A 5xx never carries details or internals.
   list and dashboard load failures are an inline error with Retry via
   `useListFetch` (BaseTable `error`/`@retry`), and only the latest load
   writes.
+- Toasts pass clicks through except their close button (`pointer-events-none`), so they never block a dialog's footer; the router's "no access" notice is an info toast (#423).
 - Error toasts stay until dismissed (`role=alert`); success/info close by
   themselves. The stack is capped at 5 and cleared when the session changes.
 - The one exception: `queueMessage(color, text, { sticky: true })` keeps a

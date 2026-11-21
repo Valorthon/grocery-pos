@@ -34,6 +34,34 @@ const toasts = () => [
     ...document.querySelectorAll<HTMLElement>('[data-testid="toast"]'),
 ];
 
+describe('Toast clicks (issue #423)', () => {
+    it('lets clicks pass through except the close button', async () => {
+        const ui = useUIStore();
+        ui.queueMessage(Color.INFO, 'You do not have access to that page');
+        await nextTick();
+        const stack = document.querySelector<HTMLElement>(
+            '[data-testid="toast-stack"]',
+        );
+        expect(stack?.className).toContain('pointer-events-none');
+        const toast = toasts()[0];
+        expect(toast.className).not.toContain('pointer-events-auto');
+        const close = toast.querySelector<HTMLElement>(
+            '[aria-label="Dismiss notification"]',
+        );
+        expect(close?.className).toContain('pointer-events-auto');
+    });
+
+    it('closes an info toast by itself', async () => {
+        const ui = useUIStore();
+        ui.queueMessage(Color.INFO, 'You do not have access to that page');
+        await nextTick();
+        expect(toasts()).toHaveLength(1);
+        vi.advanceTimersByTime(TOAST_DURATION_MS + 500);
+        await nextTick();
+        expect(ui.toasts).toHaveLength(0);
+    });
+});
+
 describe('Toast (issue #18)', () => {
     it('renders every message queued in the same tick', async () => {
         const ui = useUIStore();
