@@ -1109,6 +1109,8 @@ describe('Sell quantity multiplier (decision 2026-09-25)', () => {
         await pressEnter();
         expect(cartNames()).toEqual(['24x milk']);
         expect(badge()).toBeNull();
+        expect(document.activeElement).toBe(input());
+        expect(line(0).getAttribute('aria-current')).toBe('true');
 
         input().value = MINTS.EAN;
         input().dispatchEvent(new Event('input'));
@@ -1493,6 +1495,15 @@ describe('Sell match grid keys (#322)', () => {
         expect(document.activeElement).toBe(input());
         expect(line(0).getAttribute('aria-current')).toBe('true');
         expect(input().value).toBe('');
+    });
+
+    it('Space adds the focused match and the scan box takes the focus (#421)', async () => {
+        await listed(2);
+        await keyOnFocus('ArrowRight');
+        await keyOnFocus(' ');
+        expect(cartNames()).toEqual(['1x mints']);
+        expect(document.activeElement).toBe(input());
+        expect(line(0).getAttribute('aria-current')).toBe('true');
     });
 
     it('↓ does nothing while the search for the current text is pending', async () => {
@@ -3064,6 +3075,26 @@ describe('Sell add keeps the scan box focus (#421); F4 edits the quantity (#323)
         expect(cartNames()).toEqual(['1x milk']);
         expect(document.activeElement).toBe(input());
         expect(input().value).toBe('200');
+    });
+
+    it('a slow scan does not take the focus from a field moved to meanwhile', async () => {
+        let resolve!: (p: unknown) => void;
+        serve(
+            () => Promise.resolve([]),
+            (EAN) =>
+                EAN === MINTS.EAN
+                    ? new Promise((r) => (resolve = r))
+                    : Promise.resolve(PRODUCTS[EAN]),
+        );
+        mount();
+        await scanBox(MILK.EAN);
+        await scanBox(MINTS.EAN);
+        const qty = qtyInputs()[0];
+        qty.focus();
+        resolve(PRODUCTS[MINTS.EAN]);
+        await flush();
+        expect(cartNames()).toEqual(['1x milk', '1x mints']);
+        expect(document.activeElement).toBe(qty);
     });
 
     it('a failed add leaves the focus where it was', async () => {

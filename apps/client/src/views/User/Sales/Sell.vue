@@ -683,7 +683,7 @@ function onQtyEnter(product: string) {
 function onQtyScan(product: string, code: string) {
     commitQuantity(product);
     searchQuery.value = code;
-    void onScanSubmit();
+    void onScanSubmit(qtyEls.get(product) ?? null);
 }
 
 /** Escape: back to the line's quantity, and the focus to the line. */
@@ -966,7 +966,11 @@ watch(
  *    A barcode that missed and matches nothing says "Barcode … not found".
  * Nothing happens while the ticket is locked for checkout.
  */
-async function onScanSubmit() {
+/** The quantity field a burst scan came from, which may give the focus up. */
+let scanSource: Element | null = null;
+
+async function onScanSubmit(source: Element | null = null) {
+    scanSource = source;
     if (cartStore.locked) return;
     const submitted = searchQuery.value;
     const { qty, query } = parseScan(submitted, 1);
@@ -1116,8 +1120,28 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
         'success',
         `Scanned: ${quantity > 1 ? `${quantity}x ` : ''}${product.name}`,
     );
+    const from = scanSource;
+    scanSource = null;
+    const canRefocus =
+        focusIsScanOrMatches() ||
+        (from !== null && document.activeElement === from);
     resetQuery(submitted);
-    void focusAddedLine(product._id);
+    if (canRefocus) void refocusScanBoxAfterAdd(product._id);
+}
+
+function qtyFields(): Element[] {
+    return [...qtyEls.values()];
+}
+
+/**
+ * Whether the focus is where an add starts: the scan box, the matches,
+ * or nowhere. A field the cashier moved to during a slow lookup keeps it.
+ */
+function focusIsScanOrMatches(): boolean {
+    const active = document.activeElement;
+    if (!active || active === document.body) return true;
+    if (active === scanInput.value) return true;
+    return active.closest('[role="listbox"]') !== null;
 }
 
 /**
@@ -1126,10 +1150,20 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
  * next text goes to the box; F4 edits the selected line's quantity. Not
  * while a modal is open or the ticket is locked.
  */
-async function focusAddedLine(product: string) {
+async function refocusScanBoxAfterAdd(product: string) {
     await nextTick();
     if (anyModalOpen.value || isTicketLocked.value) return;
     if (selectedLine.value !== product) return;
+    const active = document.activeElement;
+    // Only a focus that is gone (the match unmounted) or still in the box.
+    if (
+        active &&
+        active !== document.body &&
+        active !== scanInput.value &&
+        active.isConnected &&
+        !qtyFields().includes(active)
+    )
+        return;
     scanInput.value?.focus();
 }
 
