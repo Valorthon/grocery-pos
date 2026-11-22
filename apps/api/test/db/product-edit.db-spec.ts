@@ -212,3 +212,33 @@ it('rejects null archival state rather than returning a non-boolean wire field',
         ).status,
     ).toBe(400);
 });
+it('the inventory list hides archived products unless asked (#445)', async () => {
+    const docs = await fixture();
+    const id = String(docs.product._id);
+    await db
+        .model('Product')
+        .updateOne({ _id: id }, { $set: { isActive: false } });
+    const listed = async (query: string) =>
+        (
+            await read<Paginated<{ product: { _id: string } }>>(
+                await db.call(
+                    admin,
+                    'GET',
+                    `/inventories?page=1&limit=100&EAN=${docs.product.EAN}${query}`,
+                ),
+            )
+        ).body.data.some((row) => row.product._id === id);
+    expect(await listed('')).toBe(false);
+    expect(await listed('&status=active')).toBe(false);
+    expect(await listed('&status=archived')).toBe(true);
+    expect(await listed('&status=all')).toBe(true);
+    expect(
+        (
+            await db.call(
+                admin,
+                'GET',
+                '/inventories?page=1&limit=100&status=deleted',
+            )
+        ).status,
+    ).toBe(400);
+});

@@ -56,3 +56,14 @@ describe('GetAllDto search', () => {
         expect(fromQuery({ EAN: ' 480 ' }).EAN).toBe('480');
     });
 });
+
+describe('GetAllDto.status (#445)', () => {
+    it.each(['active', 'archived', 'all'])('accepts %s', async (status) => {
+        expect(await validate(fromQuery({ status }))).toHaveLength(0);
+    });
+
+    it('refuses another value', async () => {
+        const errors = await validate(fromQuery({ status: 'deleted' }));
+        expect(errors.map((e) => e.property)).toEqual(['status']);
+    });
+});

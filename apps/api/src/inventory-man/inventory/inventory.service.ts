@@ -63,6 +63,19 @@ export function inventoryListPipeline(dto: GetAllDto): PipelineStage[] {
         // No preserveNullAndEmptyArrays: an orphan row (its product gone)
         // is dropped here, before both the count and the page.
         { $unwind: '$product' },
+        // Archived products are hidden unless asked for (#445).
+        ...(dto.status === 'all'
+            ? []
+            : [
+                  {
+                      $match: {
+                          'product.isActive':
+                              dto.status === 'archived'
+                                  ? false
+                                  : { $ne: false },
+                      },
+                  },
+              ]),
         ...(dto.outOfStock
             ? [
                   {

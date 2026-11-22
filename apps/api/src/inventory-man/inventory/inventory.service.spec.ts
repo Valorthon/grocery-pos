@@ -1183,9 +1183,25 @@ describe('InventoryService.getAll (issue #14)', () => {
     });
 
     it('has no stock filter when maxStock is absent', () => {
-        const pipeline = inventoryListPipeline({ ...page });
+        const pipeline = inventoryListPipeline({ ...page, status: 'all' });
 
         expect(stage(pipeline, '$match')).toEqual([]);
+    });
+
+    it('lists active products by default, archived or all on request (#445)', () => {
+        const statusMatch = (status?: 'active' | 'archived' | 'all') => {
+            const pipeline = inventoryListPipeline({ ...page, status });
+            const unwindAt = pipeline.findIndex((s) => '$unwind' in s);
+            return pipeline[unwindAt + 1];
+        };
+        expect(statusMatch()).toEqual({
+            $match: { 'product.isActive': { $ne: false } },
+        });
+        expect(statusMatch('active')).toEqual(statusMatch());
+        expect(statusMatch('archived')).toEqual({
+            $match: { 'product.isActive': false },
+        });
+        expect(statusMatch('all')).not.toHaveProperty('$match');
     });
 
     it('drops orphans before counting, and counts through the same pipeline as the page', () => {
@@ -1216,6 +1232,7 @@ describe('InventoryService.getAll (issue #14)', () => {
             ...page,
             name: 'c++ (1',
             EAN: '480',
+            status: 'all',
         });
 
         expect(stage(pipeline, '$match')).toEqual([

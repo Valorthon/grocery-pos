@@ -689,8 +689,10 @@ describe('inventory list scans (#214)', () => {
             ([url]) => url === '/inventories',
         );
         expect(lists).toHaveLength(2);
+        // The scanned product is archived: its row shows under All (#445).
         expect(lists[lists.length - 1]?.[1]?.params).toMatchObject({
             EAN: '12345670',
+            status: 'all',
         });
         expect(lists[lists.length - 1]?.[1]?.params?.name).toBeFalsy();
         // Clear Filters drops the scanned code with one load.
@@ -702,6 +704,7 @@ describe('inventory list scans (#214)', () => {
         );
         expect(cleared).toHaveLength(1);
         expect(cleared[0]?.[1]?.params?.EAN).toBeFalsy();
+        expect(cleared[0]?.[1]?.params?.status).toBe('active');
         await type('Search name or barcode', '4006381333931');
         field('Search name or barcode').form!.requestSubmit();
         await flush();
@@ -724,5 +727,52 @@ describe('inventory list scans (#214)', () => {
         )?.[1]?.params;
         expect(params).toMatchObject({ name: 'RICE' });
         expect(params?.EAN).toBeFalsy();
+    });
+});
+
+describe('product status filter (#445)', () => {
+    const statusSegment = (label: string) =>
+        [
+            ...document.querySelectorAll<HTMLButtonElement>(
+                '[data-testid="status-filter"] button',
+            ),
+        ].find((b) => b.textContent?.trim() === label)!;
+    const listCalls = () =>
+        api.get.mock.calls.filter(([url]) => url === '/inventories');
+    const clearButton = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+
+    it('lists active products by default; Archived and All apply once on page 1, Clear goes back', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({ status: 'active' });
+        expect(statusSegment('Active').getAttribute('aria-pressed')).toBe(
+            'true',
+        );
+        expect(clearButton().disabled).toBe(true);
+
+        api.get.mockClear();
+        statusSegment('Archived').click();
+        await flush();
+        expect(listCalls()).toHaveLength(1);
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            status: 'archived',
+        });
+        expect(clearButton().disabled).toBe(false);
+
+        api.get.mockClear();
+        statusSegment('All').click();
+        await flush();
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({ status: 'all' });
+
+        api.get.mockClear();
+        clearButton().click();
+        await flush();
+        expect(listCalls()).toHaveLength(1);
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({ status: 'active' });
+        expect(clearButton().disabled).toBe(true);
     });
 });

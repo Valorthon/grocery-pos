@@ -8,6 +8,7 @@ import {
     IsNotEmpty,
     MaxLength,
     IsInt,
+    IsEnum,
     Min,
     Max,
 } from 'class-validator';
@@ -38,6 +39,12 @@ export class GetAllDto {
     @IsInt()
     @Min(NUMERIC_LIMITS.STOCK_MIN)
     maxStock?: number;
+
+    /** Product status (#445): active by default, like Products (#38). */
+    @IsOptional()
+    @IsEnum(['active', 'archived', 'all'])
+    @Trim()
+    status?: 'active' | 'archived' | 'all';
 
     /** Matched anywhere in the product name. */
     @IsString()

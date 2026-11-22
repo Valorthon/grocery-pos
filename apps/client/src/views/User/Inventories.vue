@@ -41,6 +41,13 @@
                     data-testid="stock-filter"
                     @update:model-value="setStockFilter"
                 />
+                <SegmentedFilter
+                    :model-value="productStatus"
+                    :options="PRODUCT_STATUS_FILTERS"
+                    label="Product status"
+                    data-testid="status-filter"
+                    @update:model-value="setProductStatus"
+                />
             </FilterBar>
             <p
                 v-if="route?.query.expiring === 'true'"
@@ -174,6 +181,19 @@ function setStockFilter(value: StockFilter) {
     outOfStock.value = value === 'out';
     syncStockQuery();
 }
+// Active / Archived / All like Products (#38, #445); active by default.
+type ProductStatusFilter = 'active' | 'archived' | 'all';
+const PRODUCT_STATUS_FILTERS: { value: ProductStatusFilter; label: string }[] =
+    [
+        { value: 'active', label: 'Active' },
+        { value: 'archived', label: 'Archived' },
+        { value: 'all', label: 'All' },
+    ];
+const productStatus = ref<ProductStatusFilter>('active');
+function setProductStatus(value: ProductStatusFilter) {
+    productStatus.value = value;
+    applySearch();
+}
 const sourceRows = ref<InventoryRow[]>([]);
 async function createRestock() {
     if (
@@ -232,6 +252,7 @@ const { applied, apply: applySearch } = useAppliedFilters(
         EAN: searchEAN.value,
         lowStock: lowStock.value,
         outOfStock: outOfStock.value,
+        status: productStatus.value,
     }),
     search,
 );
@@ -257,6 +278,8 @@ async function onSearch() {
                 EAN: found.EAN,
                 reorderLevel: formatQuantity(reorderLevelOf(found), found.unit),
             };
+            // An archived product's row shows under All (#444, #445).
+            if (found.isActive === false) productStatus.value = 'all';
         }
         // Found or not, the list is searched for the code (#444).
         searchEAN.value = code;
@@ -326,6 +349,8 @@ const filtersActive = computed(
             searchTerm.value ||
             lowStock.value ||
             outOfStock.value ||
+            productStatus.value !== 'active' ||
+            applied.value.status !== 'active' ||
             applied.value.name ||
             applied.value.EAN ||
             applied.value.lowStock ||
@@ -340,6 +365,7 @@ const resetFilters = () => {
     searchTerm.value = '';
     lowStock.value = false;
     outOfStock.value = false;
+    productStatus.value = 'active';
     // The `?expiring=` deep link (dashboard) is cleared too; the panel stays.
     applySearch();
     void router.replace({
@@ -366,6 +392,7 @@ const {
                 EAN: applied.value.EAN,
                 lowStock: applied.value.lowStock || undefined,
                 outOfStock: applied.value.outOfStock || undefined,
+                status: applied.value.status,
             },
         }),
     (result) => {
