@@ -84,7 +84,9 @@ describe('productErrors (#17)', () => {
         expect(productErrors({ ...VALID, name: 'ß'.repeat(30) }).name).toBe(
             'At most 50 characters',
         );
-        expect(productErrors({ ...VALID, name: 'ß'.repeat(25) }).name).toBe('');
+        expect(
+            productErrors({ ...VALID, name: 'ß'.repeat(25) }).name,
+        ).toBeUndefined();
     });
 
     it('rejects a bad barcode unless auto-generated', () => {
