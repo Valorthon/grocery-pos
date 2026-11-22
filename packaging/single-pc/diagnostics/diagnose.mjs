@@ -89,6 +89,7 @@ export const CHECK_IDS = Object.freeze([
     'lanProxy',
     'lanNetwork',
     'timeServer',
+    'clockSync',
     'disk',
     'backups',
     'clock',
@@ -230,6 +231,10 @@ export const GUIDANCE = Object.freeze({
     ],
     backupStatusUnreadable: [
         'The backup status file is unreadable. Run a backup (the tool keeps the damaged file aside) or contact your vendor.',
+    ],
+    clockSync: [
+        "Windows is not keeping this PC's clock in sync, (Set time automatically is off or the time service is disabled), so it can drift (on a dual-boot PC by hours), which puts sales on the wrong day and may refuse offline cash sales.",
+        'Turn on Set time automatically in Windows Settings > Time & language > Date & time, then press Sync now. See RECOVERY.md "Clock sync".',
     ],
     clock: [
         'The PC clock is behind the last recorded activity. Fix the date and time in Windows Settings > Time & language, then restart the PC.',
@@ -909,6 +914,57 @@ export async function checkBackups(paths, now) {
     );
 }
 
+/**
+ * Windows must keep this PC's own clock in sync (#446), LAN or not. On a
+ * workgroup PC w32time is trigger-start and often stopped, which is fine;
+ * it warns when the service is disabled or absent, when Set time
+ * automatically is off (Type NoSync), or when the running service reads a
+ * local clock source. Read-only; unreadable facts are `unknown`.
+ */
+export async function checkClockSync(ctx) {
+    const title = 'Clock sync';
+    const facts = (await ctx.clockSync?.()) ?? null;
+    const state = facts?.state ?? null;
+    const startType = facts?.startType ?? null;
+    const syncType = facts?.syncType ?? null;
+    const source = facts?.source ?? null;
+    const details = { service: state, startType, syncType, source };
+    const warn = (summary) =>
+        result('clockSync', title, 'warn', summary, {
+            details,
+            steps: GUIDANCE.clockSync,
+        });
+    if (state === 'absent' || startType === 'Disabled')
+        return warn(
+            'The Windows Time service is disabled, so this PC clock is not kept in sync.',
+        );
+    if (syncType === 'NoSync')
+        return warn(
+            'Set time automatically is off, so this PC clock is not kept in sync.',
+        );
+    if (state === 'RUNNING' && syncedSource(source) === false)
+        return warn('Windows is not syncing this PC clock with a time server.');
+    if (state === null || startType === null || syncType === null)
+        return result(
+            'clockSync',
+            title,
+            'unknown',
+            'Could not read the Windows time sync settings.',
+            {
+                details,
+            },
+        );
+    return result(
+        'clockSync',
+        title,
+        'ok',
+        'Windows keeps this PC clock in sync.',
+        {
+            details,
+        },
+    );
+}
+
 /** The clock must not be behind anything this installation recorded. */
 export async function checkClock(ctx, paths, now) {
     const stamps = [];
@@ -1061,6 +1117,7 @@ export async function diagnose(options, ctx = realContext()) {
         await checkLanProxy(ctx, paths),
         await checkLanNetwork(ctx, paths),
         await checkTimeServer(ctx, paths),
+        await checkClockSync(ctx),
         await checkDisk(ctx, paths, programDir),
         await checkBackups(paths, now),
         await checkClock(ctx, paths, now),
@@ -1271,6 +1328,47 @@ export async function tailFile(path, bytes) {
     }
 }
 
+/**
+ * The clock-sync facts printed by realContext().clockSync, one marker per
+ * line: `svc=<Status>` (or notfound/error), `start=<StartType>` (or error),
+ * `type=<W32Time Parameters\Type>` (or error) and `sync=<first line of
+ * w32tm /query /source>` (or error; w32tm fails while the service is
+ * stopped). Missing or `error` values are null (unknown).
+ */
+export function parseClockSync(stdout) {
+    const values = {};
+    for (const line of String(stdout ?? '').split(/\r?\n/)) {
+        const m = /^(svc|start|type|sync)=(.*)$/.exec(line.trim());
+        if (m) values[m[1]] = m[2].trim();
+    }
+    const read = (k) =>
+        !values[k] || values[k] === 'error' ? null : values[k];
+    const svc = read('svc');
+    return {
+        state: !svc
+            ? null
+            : svc === 'notfound'
+              ? 'absent'
+              : serviceStateFromStatus(svc),
+        startType: read('start'),
+        syncType: read('type'),
+        source: read('sync'),
+    };
+}
+
+/**
+ * Whether a w32tm source names a real time source, without reading
+ * localized text: a peer name (optionally `,0x<flags>`) or the Hyper-V
+ * provider. "Local CMOS Clock" in any language has spaces, so it is not.
+ */
+export function syncedSource(source) {
+    if (source == null) return null;
+    return (
+        /^[^\s,]+(,0x[0-9a-f]+)?$/i.test(source) ||
+        source === 'VM IC Time Synchronization Provider'
+    );
+}
+
 /** Get-Service Status names (a locale-independent enum) to sc.exe's. */
 /**
  * The time-server facts printed by realContext().timeServer: `svc=<Status>`
@@ -1365,6 +1463,18 @@ export function realContext() {
                       .map((l) => l.trim())
                       .filter(Boolean)
                 : null;
+        },
+        async clockSync() {
+            if (!windows) return null;
+            // Read-only: Get-Service, the W32Time Type value and w32tm's
+            // source query (only the source text is localized; see syncedSource).
+            const { code, stdout } = await execCapture('powershell.exe', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                "try { $s = Get-Service -Name 'w32time' -ErrorAction Stop; 'svc=' + [string]$s.Status; 'start=' + [string]$s.StartType } catch [Microsoft.PowerShell.Commands.ServiceCommandException] { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'svc=notfound' } else { 'svc=error' } } catch { 'svc=error' }; try { 'type=' + [string](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\Parameters' -Name Type -ErrorAction Stop).Type } catch { 'type=error' }; $o = & w32tm.exe /query /source 2>$null; if ($LASTEXITCODE -eq 0 -and $o) { 'sync=' + [string]($o | Select-Object -First 1) } else { 'sync=error' }",
+            ]);
+            return code === 0 ? parseClockSync(stdout) : null;
         },
         async timeServer() {
             if (!windows) return null;
