@@ -250,17 +250,27 @@ const { applied, apply: applySearch } = useAppliedFilters(
 /**
  * A scan (a barcode-shaped term + Enter) opens its one exact product,
  * archived too: Edit for product editors, else Stock history (#214).
- * Anything else, or no single exact match, is the normal search.
+ * The list is searched for it too (#444). Anything else, or no single
+ * exact match, is the normal search.
  */
+// Only the latest search acts: a late exact lookup is dropped (#444).
+let searchSeq = 0;
 async function onSearch() {
+    const seq = ++searchSeq;
     const code = scannedTerm(searchName.value, searchEAN.value);
     if (code) {
         const found = await findExactProduct(code).catch(() => null);
+        if (seq !== searchSeq) return;
         if (found) {
             const row = { ...found, id: found._id };
             if (canAddProducts.value) editing.value = row;
             else history.value = row;
-            return;
+            // The list shows that row too, behind the dialog and after it
+            // closes (#444): the code is searched as a barcode.
+            searchName.value = '';
+            searchEAN.value = code;
+            // An archived product shows under All (owner decision, #444).
+            if (found.isActive === false) status.value = 'all';
         }
     }
     applySearch();
@@ -339,6 +349,7 @@ const filtersActive = computed(
 );
 
 const resetFilters = () => {
+    searchSeq++; // a pending scan lookup no longer acts
     searchEAN.value = '';
     status.value = 'active';
     categoryFilter.value = null;

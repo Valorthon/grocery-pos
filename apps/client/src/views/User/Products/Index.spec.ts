@@ -556,6 +556,10 @@ describe('product list scans (#214)', () => {
         price: 5000,
         isActive: false,
     };
+    const listParams = () =>
+        api.get.mock.calls
+            .filter(([url]) => url === '/products')
+            .map(([, config]) => config?.params);
     async function scanInto(label: string) {
         await type(label, SCAN);
         api.get.mockClear();
@@ -563,16 +567,130 @@ describe('product list scans (#214)', () => {
         await flush();
     }
 
-    it('opens Edit for a product editor, archived too, without filtering', async () => {
+    it('opens Edit for a product editor, archived too, and searches the list once', async () => {
         useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
         answer(archived);
         await mount();
         await scanInto('EAN / Barcode');
         expect(document.body.textContent).toContain('Edit Product');
         expect(params()[0]).toEqual({ includeArchived: true });
-        expect(params()).not.toContainEqual(
-            expect.objectContaining({ status: 'active' }),
+        // An archived product switches the status to All (#444).
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 1, EAN: SCAN, status: 'all' }),
+        ]);
+    });
+
+    it('shows an archived scanned row under All; Clear Filters returns to Active', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        api.get.mockImplementation((url, config) =>
+            url === `/products/${SCAN}`
+                ? Promise.resolve({ data: archived })
+                : Promise.resolve({
+                      data:
+                          config?.params?.EAN &&
+                          config?.params?.status === 'all'
+                              ? { data: [archived], totalItems: 1 }
+                              : { data: [], totalItems: 0 },
+                  }),
         );
+        await mount();
+        await scanInto('EAN / Barcode');
+        expect(listParams()).toHaveLength(1);
+        await click('Cancel');
+        expect(
+            document.querySelector('[data-testid=row-ean]')?.textContent,
+        ).toBe(SCAN);
+        api.get.mockClear();
+        await click('Clear Filters');
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 1, status: 'active' }),
+        ]);
+        expect(listParams()[0]?.EAN).toBeFalsy();
+    });
+
+    it('pages with the scanned code after a scan', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        api.get.mockImplementation((url) =>
+            url === `/products/${SCAN}`
+                ? Promise.resolve({ data: { ...archived, isActive: true } })
+                : Promise.resolve({ data: { data: [], totalItems: 40 } }),
+        );
+        await mount();
+        await scanInto('Product Name');
+        await click('Cancel');
+        api.get.mockClear();
+        await click('Next');
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 2, EAN: SCAN }),
+        ]);
+        expect(listParams()[0]?.name).toBeFalsy();
+    });
+
+    it('drops a late lookup after a newer search', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        const OTHER = '4006381333948';
+        const late: Record<
+            string,
+            { ok: (v: { data: unknown }) => void; fail: (e: unknown) => void }
+        > = {};
+        api.get.mockImplementation((url) =>
+            url.startsWith('/products/')
+                ? new Promise((ok, fail) => {
+                      late[url] = { ok, fail };
+                  })
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        await type('EAN / Barcode', SCAN);
+        api.get.mockClear();
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        await type('EAN / Barcode', OTHER);
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        // The newer lookup answers first: nothing found, so it searches.
+        late[`/products/${OTHER}`]!.fail(notFound());
+        await flush();
+        late[`/products/${SCAN}`]!.ok({ data: archived });
+        await flush();
+        expect(document.body.textContent).not.toContain('Edit Product');
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 1, EAN: OTHER }),
+        ]);
+    });
+
+    it('shows the opened row in the list; Clear Filters clears it (#444)', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        const active = { ...archived, isActive: true };
+        api.get.mockImplementation((url, config) =>
+            url === `/products/${SCAN}`
+                ? Promise.resolve({ data: active })
+                : Promise.resolve({
+                      data: config?.params?.EAN
+                          ? { data: [active], totalItems: 1 }
+                          : { data: [], totalItems: 0 },
+                  }),
+        );
+        await mount();
+        await scanInto('Product Name');
+        expect(document.body.textContent).toContain('Edit Product');
+        const lists = listParams();
+        expect(lists).toEqual([
+            expect.objectContaining({ page: 1, EAN: SCAN }),
+        ]);
+        expect(lists[0]?.name).toBeFalsy();
+        expect(
+            document.querySelector('[data-testid=row-ean]')?.textContent,
+        ).toBe(SCAN);
+        await click('Cancel');
+        expect(
+            document.querySelector('[data-testid=row-ean]')?.textContent,
+        ).toBe(SCAN);
+        api.get.mockClear();
+        await click('Clear Filters');
+        expect(listParams()).toHaveLength(1);
+        expect(listParams()[0]?.EAN).toBeFalsy();
+        expect(document.querySelector('[data-testid=row-ean]')).toBeNull();
     });
 
     it('opens Stock history for an Adjuster, from the name box too', async () => {

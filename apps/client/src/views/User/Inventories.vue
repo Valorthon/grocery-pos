@@ -240,11 +240,15 @@ const { applied, apply: applySearch } = useAppliedFilters(
  * A scan (a barcode-shaped term + Enter) opens its one exact product's
  * Stock history, archived too (#214); otherwise the normal search.
  */
+// Only the latest search acts: a late exact lookup is dropped (#444).
+let searchSeq = 0;
 async function onSearch() {
+    const seq = ++searchSeq;
     const code = scannedTerm(searchTerm.value);
     searchEAN.value = '';
     if (code) {
         const found = await findExactProduct(code).catch(() => null);
+        if (seq !== searchSeq) return;
         if (found) {
             history.value = {
                 _id: found._id,
@@ -253,8 +257,8 @@ async function onSearch() {
                 EAN: found.EAN,
                 reorderLevel: formatQuantity(reorderLevelOf(found), found.unit),
             };
-            return;
         }
+        // Found or not, the list is searched for the code (#444).
         searchEAN.value = code;
     }
     applySearch();
@@ -331,6 +335,7 @@ const filtersActive = computed(
 );
 
 const resetFilters = () => {
+    searchSeq++; // a pending scan lookup no longer acts
     searchEAN.value = '';
     searchTerm.value = '';
     lowStock.value = false;
