@@ -247,7 +247,7 @@ describe('product editing and archival', () => {
         await click('Save');
         expect(api.patch).toHaveBeenCalledWith('/products', {
             updates: [
-                { product: 'p1', update: { name: 'new milk', price: 6525 } },
+                { product: 'p1', update: { name: 'NEW MILK', price: 6525 } },
             ],
         });
         expect(document.querySelector('[role=dialog]')).toBeNull();
@@ -314,7 +314,7 @@ describe('product editing and archival', () => {
         await type('Product name', 'renamed milk');
         await click('Save');
         expect(api.patch).toHaveBeenCalledWith('/products', {
-            updates: [{ product: 'p1', update: { name: 'renamed milk' } }],
+            updates: [{ product: 'p1', update: { name: 'RENAMED MILK' } }],
         });
     });
     it('keeps failed edits open with an error', async () => {
@@ -425,7 +425,7 @@ it('restocker sets measured reorder settings without gaining price permission', 
             {
                 product: 'rice',
                 update: {
-                    name: 'rice',
+                    name: 'RICE',
                     reorderLevel: 450,
                     reorderQuantity: 2500,
                 },

@@ -56,6 +56,7 @@ import { MIN_FREE, stopOrder } from '../installer/plan.mjs';
 import { diagnose } from '../diagnostics/diagnose.mjs';
 import {
     MIGRATIONS,
+    migrationRefusals,
     pendingMigrations,
     validateRegistry,
     DATA_VERSION_COLLECTION,
@@ -524,12 +525,22 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                 );
             const from = describe(fromInfo, state.version);
             const apiDir = ctx.apiDir(state.release);
-            const db = await withRoot(paths, apiDir, async (root) => ({
-                database: await databaseFacts(root),
-                ...(await lossChecks(root, {
-                    createdAt: new Date().toISOString(),
-                })),
-            }));
+            const db = await withRoot(paths, apiDir, async (root) => {
+                const database = await databaseFacts(root);
+                return {
+                    database,
+                    ...(await lossChecks(root, {
+                        createdAt: new Date().toISOString(),
+                    })),
+                    // Data a pending migration would refuse (#443).
+                    migrationRefusals: await migrationRefusals(
+                        root.db(APP_DATABASE),
+                        migrations,
+                        database.dataVersion,
+                        to.data.dataVersion,
+                    ),
+                };
+            });
             const backup = statusSummary(await readStatus(paths));
             const refusals = evaluateUpgrade({
                 from,
@@ -544,6 +555,7 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                 },
                 releaseBytes: bundle.releaseBytes,
             });
+            refusals.push(...db.migrationRefusals);
             if (refusals.length) throw new RefusedError(refusals.join(' '));
             // LAN terminals (#396): a kept LAN IP that is absent right now is
             // a warning only; the switch's repair keeps it either way.

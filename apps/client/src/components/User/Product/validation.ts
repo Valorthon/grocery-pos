@@ -1,4 +1,4 @@
-import { STRING_LIMITS } from '@grocery-pos/contracts';
+import { STRING_LIMITS, normalizeProductName } from '@grocery-pos/contracts';
 import {
     barcodeFieldError,
     fieldErrors,
@@ -24,7 +24,11 @@ export interface ProductFormInput {
 export function productErrors(form: ProductFormInput): Record<string, string> {
     return fieldErrors({
         EAN: barcodeFieldError(form.EAN, form.autoGenerateEAN),
-        name: textError(form.name, STRING_LIMITS.PRODUCT_NAME),
+        // Measured as stored (#443), as the DTO does.
+        name: textError(
+            normalizeProductName(form.name),
+            STRING_LIMITS.PRODUCT_NAME,
+        ),
         price: moneyError(form.price),
     });
 }

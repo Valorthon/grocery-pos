@@ -30,7 +30,7 @@ import {
     IsCalendarDate,
     IsNotBefore,
     Trim,
-    TrimLowercase,
+    TrimUppercase,
 } from '../../../common/validators';
 
 export class GetDetailsParamDto {
@@ -44,7 +44,7 @@ export class GetDetailsQueryDto {
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name!: string;
 
     /** Matched as a barcode prefix. */

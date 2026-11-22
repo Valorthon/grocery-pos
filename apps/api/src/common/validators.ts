@@ -4,7 +4,11 @@ import {
     ValidationArguments,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
-import { BARCODE_MESSAGES, barcodeError } from '@grocery-pos/contracts';
+import {
+    BARCODE_MESSAGES,
+    barcodeError,
+    normalizeProductName,
+} from '@grocery-pos/contracts';
 import { parseIsoDate } from './utils/timezone';
 
 /** A value counts as provided unless it is undefined, null or ''. */
@@ -130,13 +134,13 @@ export function Trim() {
 }
 
 /**
- * Trims and lowercases a string field, as product names are stored, so a
- * name search matches regardless of the case typed.
+ * Trims and uppercases a string field, as product names are stored (#443),
+ * so a name search matches regardless of the case typed.
  */
-export function TrimLowercase() {
+export function TrimUppercase() {
     return Transform(({ value }) =>
         typeof value === 'string'
-            ? value.trim().toLowerCase()
+            ? normalizeProductName(value)
             : (value as unknown),
     );
 }

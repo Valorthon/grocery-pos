@@ -1,4 +1,8 @@
-import { NUMERIC_LIMITS, STRING_LIMITS } from '@grocery-pos/contracts';
+import {
+    NUMERIC_LIMITS,
+    STRING_LIMITS,
+    normalizeProductName,
+} from '@grocery-pos/contracts';
 import type { ConfirmRequest } from '@/composables/useConfirm';
 import { countOf } from '@/utils/plural';
 import {
@@ -26,7 +30,11 @@ export function restockLineErrors(form: AddFormInput): Errors {
             ? barcodeFieldError(form.EAN, form.autoGenerateEAN)
             : productPickError(form.product),
         name: form.isNewProduct
-            ? textError(form.name, STRING_LIMITS.PRODUCT_NAME)
+            ? // Measured as stored (#443), as the DTO does.
+              textError(
+                  normalizeProductName(form.name),
+                  STRING_LIMITS.PRODUCT_NAME,
+              )
             : '',
         price: form.isNewProduct ? moneyError(form.price) : '',
         quantity: quantityError(form.quantity, form.unit),

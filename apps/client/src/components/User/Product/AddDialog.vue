@@ -85,6 +85,7 @@ import BaseCheckbox from '@/components/ui/BaseCheckbox.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import {
+    normalizeProductName,
     STRING_LIMITS,
     UnitOfMeasure,
     unitLabel,
@@ -171,6 +172,8 @@ const submitProduct = async () => {
     const { tracksExpiry, ...fields } = formData;
     const payload = {
         ...fields,
+        // Shown in the draft list as it will be stored (#443).
+        name: normalizeProductName(fields.name),
         ...(tracksExpiry && { tracksExpiry }),
         price: pesosToCentavos(formData.price),
     };

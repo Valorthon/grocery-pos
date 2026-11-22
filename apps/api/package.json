@@ -24,6 +24,7 @@
         "lint:fix": "eslint . --fix",
         "migrate:categories": "ts-node migrate-categories.ts",
         "migrate:stock-ledger": "ts-node migrate-stock-ledger.ts",
+        "migrate:uppercase-product-names": "ts-node migrate-uppercase-product-names.ts",
         "bootstrap:initial-admin": "node dist/bootstrap/initial-admin.cli.js"
     },
     "dependencies": {

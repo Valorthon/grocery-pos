@@ -101,12 +101,12 @@ describe('restock and adjustment details routes', () => {
         ['restocks', restockService, 'restock'],
         ['adjustments', adjustmentService, 'adjustment'],
     ] as const)(
-        'GET /%s/details/:id passes the id, the paging and the lowercased search on',
+        'GET /%s/details/:id passes the id, the paging and the uppercased search on',
         async (base, service, param) => {
             const res = await harness.call(
                 caller(Role.Admin),
                 'GET',
-                `/${base}/details/${ID}?page=2&limit=25&name=%20MILK%20&EAN=480`,
+                `/${base}/details/${ID}?page=2&limit=25&name=%20milk%20&EAN=480`,
             );
 
             expect(res.status).toBe(200);
@@ -115,7 +115,7 @@ describe('restock and adjustment details routes', () => {
                 [param]: ID,
                 page: 2,
                 limit: 25,
-                name: 'milk',
+                name: 'MILK',
                 EAN: '480',
             });
         },

@@ -29,6 +29,7 @@ import { after, before, describe, test } from 'node:test';
 import { waitPortsFree } from '../runtime/ports-helper.test.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { DB_USERS, ORIGIN, PORTS, layout } from '../runtime/layout.mjs';
+import { DATA_VERSION } from '../upgrade/migrations.mjs';
 
 const MONGOD = process.env.GPOS_TEST_MONGOD;
 const TOOLS = process.env.GPOS_TEST_MONGO_TOOLS;
@@ -164,7 +165,46 @@ function http(path, { method = 'GET', body, cookie } = {}) {
     });
 }
 
+/**
+ * The installer stamps a new database at the release's data version
+ * (#364); the provision CLI these tests run passes none (absent = 1).
+ * Stamp the version the API enforces when no marker exists yet.
+ */
+async function stampDataVersion(paths) {
+    const client = new MongoClient(
+        `mongodb://127.0.0.1:${PORTS.mongo}/?directConnection=true`,
+        {
+            auth: {
+                username: DB_USERS.root,
+                password: (
+                    await readFile(paths.secrets.mongoRootPassword, 'utf8')
+                ).trim(),
+            },
+            authSource: 'admin',
+            serverSelectionTimeoutMS: 5000,
+        },
+    );
+    try {
+        await client
+            .db('grocery')
+            .collection('systemdataversion')
+            .updateOne(
+                { _id: 'data' },
+                {
+                    $setOnInsert: {
+                        dataVersion: DATA_VERSION,
+                        state: 'ready',
+                    },
+                },
+                { upsert: true },
+            );
+    } finally {
+        await client.close();
+    }
+}
+
 async function withApi(paths, fn) {
+    await stampDataVersion(paths);
     const cwd = await mkdtemp(join(tmpdir(), 'gpos-backup-api-'));
     const api = spawn(
         process.execPath,
@@ -191,8 +231,12 @@ async function withApi(paths, fn) {
         );
         return await fn();
     } finally {
-        api.kill('SIGINT');
-        await once(api, 'exit');
+        // An API that already exited emits no further 'exit'.
+        if (api.exitCode === null && api.signalCode === null) {
+            const exited = once(api, 'exit');
+            api.kill('SIGINT');
+            await exited;
+        }
         await rm(cwd, { recursive: true, force: true });
     }
 }

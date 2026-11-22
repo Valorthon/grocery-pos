@@ -24,6 +24,13 @@ const NEW: AddFormInput = {
 };
 
 describe('restockLineErrors (#17)', () => {
+    it('measures a new product name as stored, uppercased (#443)', () => {
+        expect(restockLineErrors({ ...NEW, name: 'ß'.repeat(30) }).name).toBe(
+            'At most 50 characters',
+        );
+        expect(restockLineErrors({ ...NEW, name: 'ß'.repeat(25) })).toEqual({});
+    });
+
     it('accepts a picked product and a complete new product', () => {
         expect(restockLineErrors(EXISTING)).toEqual({});
         expect(restockLineErrors(NEW)).toEqual({});

@@ -153,6 +153,7 @@ import { RESTOCK_HELP } from './restock-help';
 import {
     EXPIRY_LIMITS,
     isExpiryDate,
+    normalizeProductName,
     UnitOfMeasure,
     unitOf,
     quantityInput,
@@ -448,7 +449,8 @@ const handleSubmit = async () => {
                   ...(formData.category && { category: formData.category }),
                   autoGenerateEAN: formData.autoGenerateEAN,
                   EAN: formData.EAN,
-                  name: formData.name,
+                  // Shown in the draft list as it will be stored (#443).
+                  name: normalizeProductName(formData.name),
                   price: pesosToCentavos(formData.price),
                   ...amounts,
               }

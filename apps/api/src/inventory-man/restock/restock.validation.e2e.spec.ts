@@ -170,15 +170,15 @@ describe('Restock and inventory validation (e2e, issue #14)', () => {
         expect(inventoryService.getAll).not.toHaveBeenCalled();
     });
 
-    it('lowercases the name the inventory screen sends upper-cased', async () => {
+    it('uppercases the name the inventory screen sends lower-cased (#443)', async () => {
         await harness.call(
             caller(Role.Restocker),
             'GET',
-            '/inventories?page=1&limit=5&name=MILK',
+            '/inventories?page=1&limit=5&name=milk',
         );
 
         expect(inventoryService.getAll).toHaveBeenCalledWith(
-            expect.objectContaining({ name: 'milk' }),
+            expect.objectContaining({ name: 'MILK' }),
         );
     });
 });

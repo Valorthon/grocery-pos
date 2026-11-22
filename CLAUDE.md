@@ -370,6 +370,14 @@ requestId}`. A 5xx never carries details or internals.
   matching line. Never mounted on the register.
 - Name search is "contains" and barcode search is prefix, via
   `common/utils/regex.ts` and `product/product-search.ts`.
+- Product names are stored and shown in UPPERCASE (#443, owner decision
+  2026-11-22, replacing `lowercase: true`): contracts `normalizeProductName`
+  (trim + uppercase) in the schema (`uppercase: true`), the DTOs'
+  `TrimUppercase` and the client dialogs, so uniqueness and search key on
+  it and a search is case-insensitive. Existing names: cloud
+  `migrate:uppercase-product-names` (dry run/`--apply`), single-PC data
+  version 2 `uppercase-product-names` (preflight `check`); both refuse
+  case collisions before any write. Historical snapshots aren't rewritten.
 - `Inventory.updatedBy` means the last writer.
 
 **Reporting** (#16)

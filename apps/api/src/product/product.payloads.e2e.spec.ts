@@ -111,11 +111,11 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
             expect(res.status).toBe(200);
             expect(service.ensureValid).toHaveBeenCalledWith({
                 EAN: '4006381333931',
-                name: 'bread',
+                name: 'BREAD',
                 autoGenerateEAN: false,
             });
             expect(findOne).toHaveBeenCalledWith({
-                $or: [{ EAN: '4006381333931' }, { name: 'bread' }],
+                $or: [{ EAN: '4006381333931' }, { name: 'BREAD' }],
             });
         });
 
@@ -123,13 +123,13 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
             const res = await ensureValid(ENSURE_AUTO);
 
             expect(res.status).toBe(200);
-            expect(findOne).toHaveBeenCalledWith({ $or: [{ name: 'milk' }] });
+            expect(findOne).toHaveBeenCalledWith({ $or: [{ name: 'MILK' }] });
         });
 
         it('says which field already exists', async () => {
             findOne.mockReturnValue({
                 lean: () =>
-                    Promise.resolve({ EAN: '2000000000015', name: 'milk' }),
+                    Promise.resolve({ EAN: '2000000000015', name: 'MILK' }),
             });
 
             const res = await ensureValid(ENSURE_AUTO);
@@ -226,8 +226,8 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
             expect(res.status).toBe(201);
             expect(service.addMany).toHaveBeenCalledWith(expect.anything(), {
                 newProducts: [
-                    { EAN: '4006381333931', name: 'bread', price: 1999 },
-                    { name: 'milk', price: 5000 },
+                    { EAN: '4006381333931', name: 'BREAD', price: 1999 },
+                    { name: 'MILK', price: 5000 },
                 ],
             });
         });

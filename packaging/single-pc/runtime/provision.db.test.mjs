@@ -25,6 +25,7 @@ import { after, before, describe, test } from 'node:test';
 import { waitPortsFree } from './ports-helper.test.mjs';
 import { boundedWait } from '../proof/policy.mjs';
 import { DB_USERS, ORIGIN, PORTS, layout } from './layout.mjs';
+import { DATA_VERSION } from '../upgrade/migrations.mjs';
 
 const MONGOD = process.env.GPOS_TEST_MONGOD;
 const repo = fileURLToPath(new URL('../../..', import.meta.url));
@@ -330,6 +331,32 @@ describe(
             'the compiled API waits for the database, serves health and bootstraps the first ADMIN',
             { skip: !existsSync(join(apiDir, 'dist', 'main.js')) },
             async () => {
+                // The installer stamps a new database at the release's data
+                // version (#364); this CLI run passed none, so the marker is
+                // absent (version 1). Stamp the version the API enforces.
+                const rootClient = mongo({
+                    username: DB_USERS.root,
+                    password: (
+                        await readFile(paths.secrets.mongoRootPassword, 'utf8')
+                    ).trim(),
+                });
+                try {
+                    await rootClient
+                        .db('grocery')
+                        .collection('systemdataversion')
+                        .updateOne(
+                            { _id: 'data' },
+                            {
+                                $setOnInsert: {
+                                    dataVersion: DATA_VERSION,
+                                    state: 'ready',
+                                },
+                            },
+                            { upsert: true },
+                        );
+                } finally {
+                    await rootClient.close();
+                }
                 const cwd = await mkdtemp(join(dir, 'api-cwd-'));
                 const api = spawn(
                     process.execPath,
@@ -392,8 +419,13 @@ describe(
                     ).trim();
                     assert.ok(!logs.includes(secret));
                 } finally {
-                    api.kill('SIGINT');
-                    await once(api, 'exit');
+                    // An API that already exited (e.g. refused to start)
+                    // emits no further 'exit': waiting would hang the run.
+                    if (api.exitCode === null && api.signalCode === null) {
+                        const exited = once(api, 'exit');
+                        api.kill('SIGINT');
+                        await exited;
+                    }
                 }
             },
         );

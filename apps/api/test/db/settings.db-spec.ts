@@ -206,7 +206,7 @@ it('reads committed timezone across API consumers without process-local settings
 it('uses the new-product reorder default without altering explicit or legacy existing levels', async () => {
     await patch({ defaultReorderLevel: 7 });
     const old = await seedProduct(db, 100, 10);
-    const suffix = randomUUID().slice(0, 8);
+    const suffix = randomUUID().slice(0, 8).toUpperCase();
     const response = await db.call(admin, 'POST', '/products/bulk', {
         newProducts: [
             { name: `Default pieces ${suffix}`, price: 100 },
