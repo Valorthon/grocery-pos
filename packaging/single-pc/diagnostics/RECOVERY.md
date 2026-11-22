@@ -86,10 +86,12 @@ from the backup tool's own status, never from files on disk.
 | other                                                               | Call the vendor with the code and time shown.                       |
 
 "Overdue" means no verified backup for 36 hours: the PC was probably off at
-22:00. The backup runs at the next start; leave the PC on, or make a manual
-backup now with **Back up to USB drive** (labelled `manual`). Running the
-daily task by hand (`schtasks /Run /TN "\GroceryPOS\Daily backup"`) also
-works and is labelled `scheduled`. There is no "Back up now" button in the
+22:00. The backup runs at the next start; leave the PC on, or plug in the backup
+USB drive and make a manual backup now with **Back up to USB drive**
+(labelled `manual`; without a drive it stops with "No USB drive was found"
+and makes no backup). Running the daily task by hand from an administrator
+Command Prompt (`schtasks /Run /TN "\GroceryPOS\Daily backup"`, it runs as
+SYSTEM) also works and is labelled `scheduled`. There is no "Back up now" button in the
 app: by design the app can't read the secrets or run the backup tool.
 
 ## USB drive not available
