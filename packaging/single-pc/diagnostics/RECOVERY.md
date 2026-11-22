@@ -196,10 +196,11 @@ turned off: ask your vendor to run repair.
 
 ## Clock sync
 
-"Check Grocery POS" warns about **Clock sync** when the Windows Time service
-is stopped or Windows has never synced the clock with a time server. The
-clock can then drift (on a PC that also starts another system, by hours),
-which puts sales on the wrong day and may refuse offline cash sales. Turn on
+"Check Grocery POS" warns about **Clock sync** when Set time automatically
+is off, the Windows Time service is disabled, or Windows is not syncing the
+clock with a time server. (A stopped time service on its own is normal:
+Windows starts it when needed.) The clock can then drift (on a PC that also
+starts another system, by hours), which puts sales on the wrong day and may refuse offline cash sales. Turn on
 Set time automatically: Windows Settings > Time & language > Date & time,
 switch on "Set time automatically", then press "Sync now". Run the check
 again. If it still warns, restart the PC; if it stays, ask your vendor.

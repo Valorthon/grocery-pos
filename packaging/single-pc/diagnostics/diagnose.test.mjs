@@ -77,7 +77,12 @@ function healthy(overrides = {}) {
             Object.fromEntries(
                 Object.values(SERVICES).map((n) => [n, 'RUNNING']),
             ),
-        clockSync: async () => ({ state: 'RUNNING', synced: true }),
+        clockSync: async () => ({
+            state: 'RUNNING',
+            startType: 'Manual',
+            syncType: 'NTP',
+            source: 'time.windows.com,0x9',
+        }),
         freeSpace: async () => ({
             free: 100 * 1024 ** 3,
             total: 200 * 1024 ** 3,
@@ -681,7 +686,7 @@ describe('diagnose', () => {
         );
     });
 
-    test('clockSync: stopped, never synced, synced, unreadable (#446)', async () => {
+    test('clockSync: trigger-start, NoSync, disabled, localized, Hyper-V, unreadable (#446)', async () => {
         const run = async (facts) =>
             byId(
                 await diagnose(
@@ -690,11 +695,40 @@ describe('diagnose', () => {
                 ),
                 'clockSync',
             );
-        for (const facts of [
-            { state: 'STOPPED', synced: null },
-            { state: 'absent', synced: null },
-            { state: 'RUNNING', synced: false },
-        ]) {
+        const base = {
+            state: 'RUNNING',
+            startType: 'Manual',
+            syncType: 'NTP',
+            source: 'time.windows.com,0x9',
+        };
+        const ok = [
+            base,
+            // A stopped trigger-start service is normal on a workgroup PC.
+            {
+                state: 'STOPPED',
+                startType: 'Manual',
+                syncType: 'NTP',
+                source: null,
+            },
+            { ...base, syncType: 'NT5DS', source: 'dc01.store.local' },
+            { ...base, syncType: 'AllSync' },
+            { ...base, source: 'VM IC Time Synchronization Provider' },
+        ];
+        for (const facts of ok)
+            assert.equal(
+                (await run(facts)).status,
+                'ok',
+                JSON.stringify(facts),
+            );
+        const warns = [
+            { ...base, syncType: 'NoSync' },
+            { ...base, state: 'STOPPED', startType: 'Disabled', source: null },
+            { state: 'absent', startType: null, syncType: null, source: null },
+            { ...base, source: 'Local CMOS Clock' },
+            { ...base, source: 'Horloge CMOS locale' },
+            { ...base, source: 'Free-running System Clock' },
+        ];
+        for (const facts of warns) {
             const warn = await run(facts);
             assert.equal(warn.status, 'warn', JSON.stringify(facts));
             assert.deepEqual(warn.steps, GUIDANCE.clockSync);
@@ -703,44 +737,59 @@ describe('diagnose', () => {
                 /Turn on Set time automatically/,
             );
         }
-        assert.equal(
-            (await run({ state: 'RUNNING', synced: true })).status,
-            'ok',
-        );
         for (const facts of [
             null,
-            { state: null, synced: true },
-            { state: 'RUNNING', synced: null },
+            { ...base, state: null },
+            { ...base, startType: null },
+            { ...base, syncType: null },
         ])
             assert.equal(
                 (await run(facts)).status,
                 'unknown',
                 JSON.stringify(facts),
             );
+        // A running service whose source is unreadable is not a warning.
+        assert.equal((await run({ ...base, source: null })).status, 'ok');
     });
 
     test('parseClockSync', () => {
         assert.deepEqual(
-            parseClockSync('svc=Running\r\nsync=time.windows.com,0x9\r\n'),
-            { state: 'RUNNING', synced: true },
+            parseClockSync(
+                'svc=Running\r\nstart=Manual\r\ntype=NTP\r\nsync=time.windows.com,0x9\r\n',
+            ),
+            {
+                state: 'RUNNING',
+                startType: 'Manual',
+                syncType: 'NTP',
+                source: 'time.windows.com,0x9',
+            },
         );
-        assert.deepEqual(parseClockSync('svc=Running\nsync=Local CMOS Clock'), {
-            state: 'RUNNING',
-            synced: false,
-        });
         assert.deepEqual(
-            parseClockSync('svc=Running\nsync=Free-running System Clock'),
-            { state: 'RUNNING', synced: false },
+            parseClockSync(
+                'svc=Stopped\nstart=Disabled\ntype=error\nsync=error',
+            ),
+            {
+                state: 'STOPPED',
+                startType: 'Disabled',
+                syncType: null,
+                source: null,
+            },
         );
-        assert.deepEqual(parseClockSync('svc=Stopped\nsync=error'), {
-            state: 'STOPPED',
-            synced: null,
+        assert.deepEqual(
+            parseClockSync('svc=notfound\ntype=NoSync\nsync=error'),
+            {
+                state: 'absent',
+                startType: null,
+                syncType: 'NoSync',
+                source: null,
+            },
+        );
+        assert.deepEqual(parseClockSync(''), {
+            state: null,
+            startType: null,
+            syncType: null,
+            source: null,
         });
-        assert.deepEqual(parseClockSync('svc=notfound\nsync=error'), {
-            state: 'absent',
-            synced: null,
-        });
-        assert.deepEqual(parseClockSync(''), { state: null, synced: null });
     });
 
     test('clock behind recorded activity', async () => {
