@@ -187,7 +187,10 @@ Preferred`, so a conflicting address is not present) and port 1443 free
     (a missed run happens at next boot), 2 h limit, 3 retries 30 min apart;
     `\GroceryPOS\Weekly export reminder` shows a message to the logged-on
     user (Users group, least privilege) every Monday 09:00, pointing to the
-    "Back up to USB drive" shortcut (owner decisions 2026-11-15);
+    "Back up to USB drive" shortcut (owner decisions 2026-11-15). A manual
+    backup is that shortcut (`--kind manual`); `schtasks /Run` of the daily
+    task is labelled `scheduled`. There is no in-app Back up now: the API
+    service account can't read `secrets\` or run mongodump (#447);
     `\GroceryPOS\Nightly log rotation` runs `diagnose.mjs rotate-logs` as
     SYSTEM 30 minutes after the backup time (default 22:30),
     `StartWhenAvailable`, 10 min limit: it rotates `mongod.log` and keeps

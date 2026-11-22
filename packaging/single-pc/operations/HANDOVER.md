@@ -51,7 +51,10 @@ official receipt."
 - Every Monday a reminder asks you to copy a backup to a USB drive. Double
   click **Back up to USB drive**, answer Yes to the administrator prompt
   (an administrator password of this PC may be needed), pick the drive and
-  wait for the success message.
+  wait for the success message. This is also how to make a backup at any
+  other time; the app itself has no "Back up now" button.
+- Restarting the PC or the Grocery POS services does not log anyone out:
+  a login lasts 7 days.
 - The USB copy contains all store data and can be read without a password:
   keep it locked away, ideally away from the store, and use more than one
   drive in turn.

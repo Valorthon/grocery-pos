@@ -261,9 +261,11 @@ Evidence: installer console `____`, screenshots `____`, harness file
 
 Steps: restart Windows; do not log in for 3 minutes; from the lock screen
 check nothing (or from another admin session: `Get-Service GroceryPOS-*`);
-then log in, open the shortcut, log in to the app; harness again.
+then log in to Windows, open the shortcut; harness again.
 
-Expected: services Running before Windows logon; data intact.
+Expected: services Running before Windows logon; data intact; the app is
+still logged in (no new login: a session lasts a fixed 7 days from login and
+survives a service or PC restart by design, #21).
 
 Evidence: service start times (`Get-WinEvent -LogName System
 -FilterXPath "*[System[EventID=7036]]"`) `____`, harness `____`.
@@ -293,7 +295,8 @@ checkout and stop the API right after pressing Charge (or block the
 response), restart, let the register retry.
 
 Expected: refusals as designed; queued receipt syncs exactly once; the
-retried checkout yields one sale (same idempotency key), no duplicate.
+retried checkout yields one sale (same idempotency key), no duplicate; no
+new login after the API restarts (sessions survive restarts, #21).
 
 Evidence: screenshots `____`, Sales list before/after `____`.
 Result (PASS/FAIL): `____`
@@ -464,7 +467,8 @@ Steps: End task on `mongod.exe`, then on the API's `node.exe`, then on
 mid-session.
 
 Expected: SCM recovery restarts each (10 s / 30 s / 60 s); committed data
-intact; no partial sale; RECOVERY.md "Interrupted shutdown" holds.
+intact; no partial sale; no new login (sessions survive restarts, #21);
+RECOVERY.md "Interrupted shutdown" holds.
 
 Evidence: restart times `____`, harness `____`. Result (PASS/FAIL): `____`
 
@@ -528,8 +532,10 @@ Steps: as the owner, "Back up to USB drive": with one USB stick, with two
 with a full stick; accept and decline the UAC prompt; with a standard daily
 account note that an administrator password is needed.
 
-Expected: elevation asked; a fresh verified backup exported; plain
-success/failure messages.
+Expected: elevation asked; a fresh verified backup, labelled `manual`,
+exported; plain success/failure messages. There is no "Back up now" button
+in the app by design (its service account can't read `secrets\` or run
+mongodump).
 
 Evidence: screenshots `____`, export folder listing `____`.
 Result (PASS/FAIL): `____`
@@ -602,7 +608,8 @@ Evidence: harness (running, stopped) `____`. Result (PASS/FAIL): `____`
 ### C4. Tasks, Windows backup tools and media checks (#362, #363)
 
 Steps: harness `tasks` and `backup-status`; run `\GroceryPOS\Daily backup`
-now (`schtasks /Run`) and check it writes a verified backup as SYSTEM; time
+now (`schtasks /Run`) and check it writes a verified backup as SYSTEM,
+labelled `scheduled` (only "Back up to USB drive" makes `manual` ones); time
 backup and restore on the 4 GB PC; the Monday export reminder appears;
 `backup.mjs export` to a USB stick, a USB hard disk, an SD card (accepted)
 and a second internal disk, a folder mount and a `subst` drive onto C:

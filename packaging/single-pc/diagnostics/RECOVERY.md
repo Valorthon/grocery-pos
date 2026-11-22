@@ -36,7 +36,8 @@ Signs: the page says it cannot reach the server; the check shows **Services**,
 **Database** or **Application** as FAIL.
 
 1. Restart the PC. The services start by themselves (MongoDB, then the API,
-   then the browser address) and retry every minute.
+   then the browser address) and retry every minute. Nobody needs to log in
+   again: sessions last 7 days from login and survive restarts.
 2. Wait 5 minutes after the restart; a database recovering from a power cut
    can take that long. Run the check again.
 3. If a service is "STOPPED": open Services (`services.msc`), right-click
@@ -85,8 +86,11 @@ from the backup tool's own status, never from files on disk.
 | other                                                               | Call the vendor with the code and time shown.                       |
 
 "Overdue" means no verified backup for 36 hours: the PC was probably off at
-22:00. The backup runs at the next start; leave the PC on, or the vendor runs
-a manual backup (`backup.mjs create --kind manual`, backup README).
+22:00. The backup runs at the next start; leave the PC on, or make a manual
+backup now with **Back up to USB drive** (labelled `manual`). Running the
+daily task by hand (`schtasks /Run /TN "\GroceryPOS\Daily backup"`) also
+works and is labelled `scheduled`. There is no "Back up now" button in the
+app: by design the app can't read the secrets or run the backup tool.
 
 ## USB drive not available
 
