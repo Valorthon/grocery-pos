@@ -684,9 +684,13 @@ describe('inventory list scans (#214)', () => {
         field('Search name or barcode').form!.requestSubmit();
         await flush();
         expect(document.body.textContent).toContain('Stock history — bread');
-        expect(
-            api.get.mock.calls.filter(([url]) => url === '/inventories'),
-        ).toHaveLength(1);
+        // The list is searched for the code too, once (#444).
+        const lists = api.get.mock.calls.filter(
+            ([url]) => url === '/inventories',
+        );
+        expect(lists).toHaveLength(2);
+        expect(lists[1]?.[1]?.params).toMatchObject({ EAN: '12345670' });
+        expect(lists[1]?.[1]?.params?.name).toBeFalsy();
         await type('Search name or barcode', '4006381333931');
         field('Search name or barcode').form!.requestSubmit();
         await flush();

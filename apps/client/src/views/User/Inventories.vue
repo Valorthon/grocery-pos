@@ -253,8 +253,8 @@ async function onSearch() {
                 EAN: found.EAN,
                 reorderLevel: formatQuantity(reorderLevelOf(found), found.unit),
             };
-            return;
         }
+        // Found or not, the list is searched for the code (#444).
         searchEAN.value = code;
     }
     applySearch();

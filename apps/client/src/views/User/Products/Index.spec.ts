@@ -556,6 +556,10 @@ describe('product list scans (#214)', () => {
         price: 5000,
         isActive: false,
     };
+    const listParams = () =>
+        api.get.mock.calls
+            .filter(([url]) => url === '/products')
+            .map(([, config]) => config?.params);
     async function scanInto(label: string) {
         await type(label, SCAN);
         api.get.mockClear();
@@ -563,16 +567,50 @@ describe('product list scans (#214)', () => {
         await flush();
     }
 
-    it('opens Edit for a product editor, archived too, without filtering', async () => {
+    it('opens Edit for a product editor, archived too, and searches the list once', async () => {
         useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
         answer(archived);
         await mount();
         await scanInto('EAN / Barcode');
         expect(document.body.textContent).toContain('Edit Product');
         expect(params()[0]).toEqual({ includeArchived: true });
-        expect(params()).not.toContainEqual(
-            expect.objectContaining({ status: 'active' }),
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 1, EAN: SCAN }),
+        ]);
+    });
+
+    it('shows the opened row in the list; Clear Filters clears it (#444)', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        const active = { ...archived, isActive: true };
+        api.get.mockImplementation((url, config) =>
+            url === `/products/${SCAN}`
+                ? Promise.resolve({ data: active })
+                : Promise.resolve({
+                      data: config?.params?.EAN
+                          ? { data: [active], totalItems: 1 }
+                          : { data: [], totalItems: 0 },
+                  }),
         );
+        await mount();
+        await scanInto('Product Name');
+        expect(document.body.textContent).toContain('Edit Product');
+        const lists = listParams();
+        expect(lists).toEqual([
+            expect.objectContaining({ page: 1, EAN: SCAN }),
+        ]);
+        expect(lists[0]?.name).toBeFalsy();
+        expect(
+            document.querySelector('[data-testid=row-ean]')?.textContent,
+        ).toBe(SCAN);
+        await click('Cancel');
+        expect(
+            document.querySelector('[data-testid=row-ean]')?.textContent,
+        ).toBe(SCAN);
+        api.get.mockClear();
+        await click('Clear Filters');
+        expect(listParams()).toHaveLength(1);
+        expect(listParams()[0]?.EAN).toBeFalsy();
+        expect(document.querySelector('[data-testid=row-ean]')).toBeNull();
     });
 
     it('opens Stock history for an Adjuster, from the name box too', async () => {

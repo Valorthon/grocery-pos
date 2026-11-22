@@ -250,7 +250,8 @@ const { applied, apply: applySearch } = useAppliedFilters(
 /**
  * A scan (a barcode-shaped term + Enter) opens its one exact product,
  * archived too: Edit for product editors, else Stock history (#214).
- * Anything else, or no single exact match, is the normal search.
+ * The list is searched for it too (#444). Anything else, or no single
+ * exact match, is the normal search.
  */
 async function onSearch() {
     const code = scannedTerm(searchName.value, searchEAN.value);
@@ -260,7 +261,10 @@ async function onSearch() {
             const row = { ...found, id: found._id };
             if (canAddProducts.value) editing.value = row;
             else history.value = row;
-            return;
+            // The list shows that row too, behind the dialog and after it
+            // closes (#444): the code is searched as a barcode.
+            searchName.value = '';
+            searchEAN.value = code;
         }
     }
     applySearch();
