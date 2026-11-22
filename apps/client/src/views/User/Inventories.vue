@@ -34,13 +34,28 @@
                 @search="onSearch"
                 @clear="resetFilters"
             >
-                <SegmentedFilter
-                    :model-value="stockFilter"
-                    :options="STOCK_FILTERS"
-                    label="Stock status"
-                    data-testid="stock-filter"
-                    @update:model-value="setStockFilter"
-                />
+                <div class="flex flex-col gap-1 self-end">
+                    <SegmentedFilter
+                        :model-value="stockFilter"
+                        :options="stockFilterOptions"
+                        label="Stock status"
+                        data-testid="stock-filter"
+                        :aria-describedby="
+                            productStatus === 'archived'
+                                ? 'stock-filter-reason'
+                                : undefined
+                        "
+                        @update:model-value="setStockFilter"
+                    />
+                    <p
+                        v-if="productStatus === 'archived'"
+                        id="stock-filter-reason"
+                        class="text-xs text-muted"
+                        data-testid="stock-filter-reason"
+                    >
+                        Low and out of stock count active products only.
+                    </p>
+                </div>
                 <SegmentedFilter
                     :model-value="productStatus"
                     :options="PRODUCT_STATUS_FILTERS"
@@ -71,8 +86,14 @@
                 @retry="fetchInventory"
             >
                 <template #cell-name="{ item }"
-                    ><ProductCell :name="item.name" :ean="item.EAN"
-                /></template>
+                    ><ProductCell :name="item.name" :ean="item.EAN" /><span
+                        v-if="item.archived"
+                        class="mt-1 block"
+                        ><StatusBadge
+                            status="archived"
+                            :map="PRODUCT_STATUS"
+                            data-testid="product-status" /></span
+                ></template>
                 <template #cell-stock="{ item }"
                     ><span class="block">{{ item.stock }}</span
                     ><StatusBadge
@@ -120,6 +141,7 @@ import { formatQuantity, reorderLevelOf } from '@grocery-pos/contracts';
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Pencil } from '@lucide/vue';
+import { PRODUCT_STATUS } from '@/views/User/list-help';
 import StatusBadge from '@/components/ui/StatusBadge.vue';
 import ProductCell from '@/components/ui/ProductCell.vue';
 import SegmentedFilter from '@/components/ui/SegmentedFilter.vue';
@@ -192,8 +214,22 @@ const PRODUCT_STATUS_FILTERS: { value: ProductStatusFilter; label: string }[] =
 const productStatus = ref<ProductStatusFilter>('active');
 function setProductStatus(value: ProductStatusFilter) {
     productStatus.value = value;
+    // Low and out of stock are active-only (#40): Archived resets them to
+    // All in the same load (owner decision, #445).
+    if (value === 'archived' && (lowStock.value || outOfStock.value)) {
+        lowStock.value = false;
+        outOfStock.value = false;
+        syncStockQuery();
+        return;
+    }
     applySearch();
 }
+const stockFilterOptions = computed(() =>
+    STOCK_FILTERS.map((option) => ({
+        ...option,
+        disabled: productStatus.value === 'archived' && option.value !== 'all',
+    })),
+);
 const sourceRows = ref<InventoryRow[]>([]);
 async function createRestock() {
     if (
@@ -328,6 +364,7 @@ interface InventoryListRow {
     status: StockStatus;
     unit?: UnitOfMeasure;
     reorderLevel: string;
+    archived: boolean;
 }
 
 function openHistory(item: InventoryListRow) {
@@ -402,6 +439,7 @@ const {
             unit: inventory.product.unit,
             EAN: inventory.product.EAN,
             name: inventory.product.name,
+            archived: inventory.product.isActive === false,
             stock: formatQuantity(inventory.stock, inventory.product.unit),
             status: stockStatus(
                 inventory.stock,

@@ -1204,6 +1204,23 @@ describe('InventoryService.getAll (issue #14)', () => {
         expect(statusMatch('all')).not.toHaveProperty('$match');
     });
 
+    it('archived plus lowStock ANDs with the active-only reorder match, so it lists nothing (#40, #445)', () => {
+        const pipeline = inventoryListPipeline({
+            ...page,
+            status: 'archived',
+            lowStock: true,
+        });
+        const matches = stage(pipeline, '$match').map((s) => JSON.stringify(s));
+        expect(matches[0]).toBe(
+            JSON.stringify({ $match: { 'product.isActive': false } }),
+        );
+        expect(
+            matches
+                .slice(1)
+                .some((m) => m.includes('"product.isActive":{"$ne":false}')),
+        ).toBe(true);
+    });
+
     it('drops orphans before counting, and counts through the same pipeline as the page', () => {
         const pipeline = inventoryListPipeline({ ...page, maxStock: 3 });
 
