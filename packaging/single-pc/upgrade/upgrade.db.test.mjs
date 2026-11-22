@@ -20,6 +20,7 @@ import { SERVICES, layout } from '../runtime/layout.mjs';
 import { createBackup, readRootPassword, rootUri } from '../backup/backup.mjs';
 import { restore } from '../backup/restore.mjs';
 import { runInstaller } from '../installer/install.mjs';
+import { DATA_VERSION } from './migrations.mjs';
 import {
     readJournal,
     runRollback,
@@ -593,7 +594,7 @@ await runUpgrade(${JSON.stringify(b)}, ctx);
                 .collection('systemdataversion')
                 .updateOne(
                     { _id: 'data' },
-                    { $set: { dataVersion: 2, state: 'ready' } },
+                    { $set: { dataVersion: DATA_VERSION + 1, state: 'ready' } },
                     { upsert: true },
                 ),
         );
@@ -612,7 +613,12 @@ await runUpgrade(${JSON.stringify(b)}, ctx);
         const [code] = await once(child, 'exit');
         clearTimeout(timer);
         assert.notEqual(code, 0);
-        assert.match(out, /data version 2; this release needs 1/);
+        assert.ok(
+            out.includes(
+                `data version ${DATA_VERSION + 1}; this release needs ${DATA_VERSION}`,
+            ),
+            out,
+        );
         assert.equal(await health(), undefined);
     });
 });
