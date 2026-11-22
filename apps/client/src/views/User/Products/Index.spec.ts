@@ -574,10 +574,38 @@ describe('product list scans (#214)', () => {
         await scanInto('EAN / Barcode');
         expect(document.body.textContent).toContain('Edit Product');
         expect(params()[0]).toEqual({ includeArchived: true });
-        // The Active status filter is kept (owner decision pending).
+        // An archived product switches the status to All (#444).
         expect(listParams()).toEqual([
-            expect.objectContaining({ page: 1, EAN: SCAN, status: 'active' }),
+            expect.objectContaining({ page: 1, EAN: SCAN, status: 'all' }),
         ]);
+    });
+
+    it('shows an archived scanned row under All; Clear Filters returns to Active', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        api.get.mockImplementation((url, config) =>
+            url === `/products/${SCAN}`
+                ? Promise.resolve({ data: archived })
+                : Promise.resolve({
+                      data:
+                          config?.params?.EAN &&
+                          config?.params?.status === 'all'
+                              ? { data: [archived], totalItems: 1 }
+                              : { data: [], totalItems: 0 },
+                  }),
+        );
+        await mount();
+        await scanInto('EAN / Barcode');
+        expect(listParams()).toHaveLength(1);
+        await click('Cancel');
+        expect(
+            document.querySelector('[data-testid=row-ean]')?.textContent,
+        ).toBe(SCAN);
+        api.get.mockClear();
+        await click('Clear Filters');
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 1, status: 'active' }),
+        ]);
+        expect(listParams()[0]?.EAN).toBeFalsy();
     });
 
     it('pages with the scanned code after a scan', async () => {

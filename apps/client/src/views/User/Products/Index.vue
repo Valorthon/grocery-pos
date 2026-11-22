@@ -269,6 +269,8 @@ async function onSearch() {
             // closes (#444): the code is searched as a barcode.
             searchName.value = '';
             searchEAN.value = code;
+            // An archived product shows under All (owner decision, #444).
+            if (found.isActive === false) status.value = 'all';
         }
     }
     applySearch();
