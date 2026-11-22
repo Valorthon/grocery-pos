@@ -112,6 +112,12 @@ export const UPPERCASE_PRODUCT_NAMES = Object.freeze({
     },
     async up(db, { log = () => {} } = {}) {
         const plan = planProductNames(await readProductNames(db));
+        // Re-check of preflight's `check`. It can't fire in practice: the
+        // API has been stopped since preflight, so no product can be renamed
+        // in between. If it did, nothing is written, but the journal already
+        // marks data as changed (onDataChange runs first), so the upgrade
+        // stops as `needs-recovery`: rename and re-run, or restore the
+        // pre-upgrade backup with upgrade-rollback.
         const refusals = productNameRefusals(plan);
         if (refusals.length) throw new Error(refusals.join(' '));
         // Each write filters on the old name, so a re-run skips done rows

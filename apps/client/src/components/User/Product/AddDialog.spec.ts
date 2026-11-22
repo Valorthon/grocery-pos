@@ -79,6 +79,14 @@ describe('productErrors (#17)', () => {
         ).toBeTruthy();
     });
 
+    it('measures the name as stored, uppercased (#443)', () => {
+        // 30 'ß' uppercase to 60 letters, past the 50 the DTO allows.
+        expect(productErrors({ ...VALID, name: 'ß'.repeat(30) }).name).toBe(
+            'At most 50 characters',
+        );
+        expect(productErrors({ ...VALID, name: 'ß'.repeat(25) }).name).toBe('');
+    });
+
     it('rejects a bad barcode unless auto-generated', () => {
         expect(productErrors({ ...VALID, EAN: '123' }).EAN).toBeTruthy();
     });
