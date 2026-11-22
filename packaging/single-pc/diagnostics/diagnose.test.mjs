@@ -33,6 +33,7 @@ import {
     firewallState,
     parseLanAddress,
     parseTimeServer,
+    parseClockSync,
     parseArgs,
     redact,
     renderText,
@@ -76,6 +77,7 @@ function healthy(overrides = {}) {
             Object.fromEntries(
                 Object.values(SERVICES).map((n) => [n, 'RUNNING']),
             ),
+        clockSync: async () => ({ state: 'RUNNING', synced: true }),
         freeSpace: async () => ({
             free: 100 * 1024 ** 3,
             total: 200 * 1024 ** 3,
@@ -679,6 +681,68 @@ describe('diagnose', () => {
         );
     });
 
+    test('clockSync: stopped, never synced, synced, unreadable (#446)', async () => {
+        const run = async (facts) =>
+            byId(
+                await diagnose(
+                    { dataRoot: root },
+                    healthy({ clockSync: async () => facts }),
+                ),
+                'clockSync',
+            );
+        for (const facts of [
+            { state: 'STOPPED', synced: null },
+            { state: 'absent', synced: null },
+            { state: 'RUNNING', synced: false },
+        ]) {
+            const warn = await run(facts);
+            assert.equal(warn.status, 'warn', JSON.stringify(facts));
+            assert.deepEqual(warn.steps, GUIDANCE.clockSync);
+            assert.match(
+                warn.steps.join(' '),
+                /Turn on Set time automatically/,
+            );
+        }
+        assert.equal(
+            (await run({ state: 'RUNNING', synced: true })).status,
+            'ok',
+        );
+        for (const facts of [
+            null,
+            { state: null, synced: true },
+            { state: 'RUNNING', synced: null },
+        ])
+            assert.equal(
+                (await run(facts)).status,
+                'unknown',
+                JSON.stringify(facts),
+            );
+    });
+
+    test('parseClockSync', () => {
+        assert.deepEqual(
+            parseClockSync('svc=Running\r\nsync=time.windows.com,0x9\r\n'),
+            { state: 'RUNNING', synced: true },
+        );
+        assert.deepEqual(parseClockSync('svc=Running\nsync=Local CMOS Clock'), {
+            state: 'RUNNING',
+            synced: false,
+        });
+        assert.deepEqual(
+            parseClockSync('svc=Running\nsync=Free-running System Clock'),
+            { state: 'RUNNING', synced: false },
+        );
+        assert.deepEqual(parseClockSync('svc=Stopped\nsync=error'), {
+            state: 'STOPPED',
+            synced: null,
+        });
+        assert.deepEqual(parseClockSync('svc=notfound\nsync=error'), {
+            state: 'absent',
+            synced: null,
+        });
+        assert.deepEqual(parseClockSync(''), { state: null, synced: null });
+    });
+
     test('clock behind recorded activity', async () => {
         await writeStatus({
             updatedAt: new Date(NOW.getTime() + 3600e3).toISOString(),
@@ -904,6 +968,7 @@ describe('review fixes and owner decisions (#365)', () => {
             'lanProxy',
             'lanNetwork',
             'timeServer',
+            'clockSync',
             'disk',
             'backups',
             'clock',

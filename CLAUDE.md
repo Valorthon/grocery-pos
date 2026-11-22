@@ -1356,6 +1356,10 @@ on upstream fixes).
 - LAN terminals (#399): `lanNetwork` checks the LAN IP is still on an
   adapter, its network is Private, the `GroceryPOS-LAN-HTTPS` rule is on and
   a verified TLS handshake to the IP passes (unread = `unknown`).
+- Clock sync (#446): `clockSync` (always on, warn) warns when w32time is
+  stopped/absent or never synced (`w32tm /query /source` a local clock),
+  step "Turn on Set time automatically"; unreadable is `unknown`.
+  `timeServer` (LAN only) is unchanged.
 
 **Single-PC upgrades** (#364, `packaging/single-pc/upgrade/`)
 
