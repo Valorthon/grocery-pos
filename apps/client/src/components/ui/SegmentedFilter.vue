@@ -11,11 +11,14 @@
             type="button"
             :aria-pressed="modelValue === option.value"
             :data-value="option.value"
+            :disabled="option.disabled"
             :class="[
                 'focus-ring min-h-11 flex-1 px-3 text-sm font-semibold whitespace-nowrap',
                 modelValue === option.value
                     ? 'bg-leaf-600 text-white'
-                    : 'bg-surface text-ink hover:bg-paper',
+                    : option.disabled
+                      ? 'bg-surface text-muted cursor-not-allowed'
+                      : 'bg-surface text-ink hover:bg-paper',
             ]"
             @click="select(option.value)"
         >
@@ -30,7 +33,7 @@
  * a line between rows and no stray left border. */
 const props = defineProps<{
     modelValue: V;
-    options: readonly { value: V; label: string }[];
+    options: readonly { value: V; label: string; disabled?: boolean }[];
     label: string;
 }>();
 const emit = defineEmits<{ (e: 'update:modelValue', value: V): void }>();

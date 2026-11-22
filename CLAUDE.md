@@ -1207,6 +1207,12 @@ on upstream fixes).
 - Low-stock list includes zero/negative levels and sorts by displayed-unit
   shortfall descending, then product name and row id. Paging preserves that order.
   Dashboard counts, sidebar badge and list use the same per-product thresholds.
+- Inventory list (#445): `GET /inventories` `status` (active default,
+  archived, all), a "Product status" SegmentedFilter like Products (#38),
+  in Clear Filters; archived rows show an "Archived" badge in the Product
+  cell. Under Archived the Low/Out of stock options are disabled with a
+  visible reason (active only); picking Archived resets them to All in one
+  load. An archived scan switches to All (#444).
 - Restock listed items transfers the current page into an unsaved draft with the
   configured quantities. It never reserves/writes stock and cannot replace an
   existing draft silently. Handoff is in memory, consumed once and cleared on

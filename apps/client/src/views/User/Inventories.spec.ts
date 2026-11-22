@@ -689,8 +689,10 @@ describe('inventory list scans (#214)', () => {
             ([url]) => url === '/inventories',
         );
         expect(lists).toHaveLength(2);
+        // The scanned product is archived: its row shows under All (#445).
         expect(lists[lists.length - 1]?.[1]?.params).toMatchObject({
             EAN: '12345670',
+            status: 'all',
         });
         expect(lists[lists.length - 1]?.[1]?.params?.name).toBeFalsy();
         // Clear Filters drops the scanned code with one load.
@@ -702,6 +704,7 @@ describe('inventory list scans (#214)', () => {
         );
         expect(cleared).toHaveLength(1);
         expect(cleared[0]?.[1]?.params?.EAN).toBeFalsy();
+        expect(cleared[0]?.[1]?.params?.status).toBe('active');
         await type('Search name or barcode', '4006381333931');
         field('Search name or barcode').form!.requestSubmit();
         await flush();
@@ -724,5 +727,119 @@ describe('inventory list scans (#214)', () => {
         )?.[1]?.params;
         expect(params).toMatchObject({ name: 'RICE' });
         expect(params?.EAN).toBeFalsy();
+    });
+});
+
+describe('product status filter (#445)', () => {
+    const statusSegment = (label: string) =>
+        [
+            ...document.querySelectorAll<HTMLButtonElement>(
+                '[data-testid="status-filter"] button',
+            ),
+        ].find((b) => b.textContent?.trim() === label)!;
+    const listCalls = () =>
+        api.get.mock.calls.filter(([url]) => url === '/inventories');
+    const clearButton = () =>
+        [...document.querySelectorAll('button')].find((b) =>
+            b.textContent?.includes('Clear Filters'),
+        )!;
+
+    it('lists active products by default; Archived and All apply once on page 1, Clear goes back', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        await mount();
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({ status: 'active' });
+        expect(statusSegment('Active').getAttribute('aria-pressed')).toBe(
+            'true',
+        );
+        expect(clearButton().disabled).toBe(true);
+
+        api.get.mockClear();
+        statusSegment('Archived').click();
+        await flush();
+        expect(listCalls()).toHaveLength(1);
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            status: 'archived',
+        });
+        expect(clearButton().disabled).toBe(false);
+
+        api.get.mockClear();
+        statusSegment('All').click();
+        await flush();
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({ status: 'all' });
+
+        api.get.mockClear();
+        clearButton().click();
+        await flush();
+        expect(listCalls()).toHaveLength(1);
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({ status: 'active' });
+        expect(clearButton().disabled).toBe(true);
+    });
+});
+
+describe('archived rows and stock filters (#445)', () => {
+    const seg = (testid: string, label: string) =>
+        [
+            ...document.querySelectorAll<HTMLButtonElement>(
+                `[data-testid="${testid}"] button`,
+            ),
+        ].find((b) => b.textContent?.trim() === label)!;
+    const listCalls = () =>
+        api.get.mock.calls.filter(([url]) => url === '/inventories');
+
+    it('badges archived rows as Archived', async () => {
+        route = reactive({ name: 'Inventories', query: {} });
+        api.get.mockImplementation((url: string) => {
+            const data = rows();
+            data[1].product.isActive = false;
+            return Promise.resolve({
+                data:
+                    url === '/inventories'
+                        ? { data, totalItems: 2 }
+                        : { data: [], totalItems: 0 },
+            });
+        });
+        await mount();
+        const badges = [
+            ...document.querySelectorAll('[data-testid="product-status"]'),
+        ];
+        expect(badges.map((b) => b.textContent?.trim())).toEqual(['Archived']);
+    });
+
+    it('Archived resets low stock to All in one load and disables Low/Out with a reason', async () => {
+        route = reactive({ name: 'Inventories', query: { lowStock: 'true' } });
+        await mount();
+        expect(
+            document.querySelector('[data-testid="stock-filter-reason"]'),
+        ).toBeNull();
+        api.get.mockClear();
+        nav.replace.mockClear();
+        seg('status-filter', 'Archived').click();
+        await flush();
+        expect(listCalls()).toHaveLength(1);
+        expect(listCalls()[0]?.[1]?.params).toMatchObject({
+            page: 1,
+            status: 'archived',
+            lowStock: undefined,
+            outOfStock: undefined,
+        });
+        expect(nav.replace).toHaveBeenCalledTimes(1);
+        expect(seg('stock-filter', 'All').getAttribute('aria-pressed')).toBe(
+            'true',
+        );
+        expect(seg('stock-filter', 'Low stock').disabled).toBe(true);
+        expect(seg('stock-filter', 'Out of stock').disabled).toBe(true);
+        const reason = document.querySelector(
+            '[data-testid="stock-filter-reason"]',
+        )!;
+        expect(reason.textContent).toContain('active products only');
+        expect(
+            document
+                .querySelector('[data-testid="stock-filter"]')!
+                .getAttribute('aria-describedby'),
+        ).toBe(reason.id);
+        seg('status-filter', 'All').click();
+        await flush();
+        expect(seg('stock-filter', 'Low stock').disabled).toBe(false);
     });
 });
