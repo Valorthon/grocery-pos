@@ -38,7 +38,7 @@ import {
     AtLeastOneOf,
     IsBarcode,
     Trim,
-    TrimLowercase,
+    TrimUppercase,
 } from '../../common/validators';
 
 export class EnsureValidDto {
@@ -51,7 +51,7 @@ export class EnsureValidDto {
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name!: string;
 
     @IsOptional()
@@ -109,7 +109,7 @@ export class NewProductFields implements NewProductRequest {
     @IsNotEmpty()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name!: string;
 
     @ValidateIf((_o, value: unknown) => value !== undefined)
@@ -204,7 +204,7 @@ export class UpdateFields implements ProductUpdateRequest {
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     @IsNotEmpty()
     name?: string;
 
@@ -251,7 +251,7 @@ export class GetAllDto {
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name!: string;
 
     /** Matched as a barcode prefix. */
@@ -287,6 +287,6 @@ export class MatchesDto {
     @IsOptional()
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name!: string;
 }

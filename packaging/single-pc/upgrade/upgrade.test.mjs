@@ -17,6 +17,10 @@ import {
     dataCompatibility,
     pendingMigrations,
     validateRegistry,
+    planProductNames,
+    PRODUCT_NAME_MAX,
+    UPPERCASE_PRODUCT_NAMES,
+    migrationRefusals,
 } from './migrations.mjs';
 import {
     STAGES,
@@ -56,7 +60,82 @@ test('the registry data version is the one the API enforces (contracts)', async 
         'migrate:decode-entities',
         'migrate:stock-ledger',
     ]);
-    assert.deepEqual(dataCompatibility().migrations, []);
+    assert.deepEqual(dataCompatibility().migrations, [
+        { id: 'uppercase-product-names', from: 1, to: 2, changesData: true },
+    ]);
+});
+
+/** A products collection over plain rows (find/updateOne only). */
+function fakeDb(rows) {
+    const collection = {
+        find: () => ({ toArray: async () => rows.map((r) => ({ ...r })) }),
+        updateOne: async (filter, update) => {
+            const row = rows.find(
+                (r) => r._id === filter._id && r.name === filter.name,
+            );
+            if (row) Object.assign(row, update.$set);
+            return { matchedCount: row ? 1 : 0 };
+        },
+    };
+    return { collection: () => collection };
+}
+
+test('uppercase-product-names (#443) mirrors the contracts limit', async () => {
+    const source = await readFile(
+        join(repo, 'packages', 'contracts', 'src', 'limits.ts'),
+        'utf8',
+    );
+    assert.equal(
+        PRODUCT_NAME_MAX,
+        Number(/PRODUCT_NAME: (\d+),/.exec(source)?.[1]),
+    );
+});
+
+test('uppercase-product-names (#443) uppercases and converges on re-run', async () => {
+    const rows = [
+        { _id: 'a', name: 'e2e test rice 1kg' },
+        { _id: 'b', name: 'MILK' },
+    ];
+    const db = fakeDb(rows);
+    assert.deepEqual(await UPPERCASE_PRODUCT_NAMES.check(db), []);
+    await UPPERCASE_PRODUCT_NAMES.up(db);
+    assert.deepEqual(
+        rows.map((r) => r.name),
+        ['E2E TEST RICE 1KG', 'MILK'],
+    );
+    await UPPERCASE_PRODUCT_NAMES.up(db);
+    assert.equal(planProductNames(rows).updates.length, 0);
+});
+
+test('uppercase-product-names (#443) refuses collisions before any write', async () => {
+    const rows = [
+        { _id: 'a', name: 'rice' },
+        { _id: 'b', name: 'Rice' },
+    ];
+    const db = fakeDb(rows);
+    const refusals = await migrationRefusals(
+        db,
+        [UPPERCASE_PRODUCT_NAMES],
+        1,
+        2,
+    );
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0], /RICE \(a, b\)/);
+    await assert.rejects(UPPERCASE_PRODUCT_NAMES.up(db), /collide/);
+    assert.deepEqual(
+        rows.map((r) => r.name),
+        ['rice', 'Rice'],
+    );
+    // Not pending once the data is at version 2.
+    assert.deepEqual(
+        await migrationRefusals(db, [UPPERCASE_PRODUCT_NAMES], 2, 2),
+        [],
+    );
+});
+
+test('uppercase-product-names (#443) refuses a name that grows past the limit', () => {
+    const plan = planProductNames([{ _id: 'a', name: 'ß'.repeat(30) }]);
+    assert.equal(plan.tooLong.length, 1);
 });
 
 test('migrations must be unique, ordered, contiguous and reach the data version', () => {

@@ -43,10 +43,10 @@ async function propertyErrors<T extends object>(
 }
 
 describe('MatchesDto', () => {
-    it('lowercases and trims the name, as names are stored', () => {
-        const dto = plainToInstance(MatchesDto, { name: '  MILK ' });
+    it('uppercases and trims the name, as names are stored (#443)', () => {
+        const dto = plainToInstance(MatchesDto, { name: '  milk ' });
 
-        expect(dto.name).toBe('milk');
+        expect(dto.name).toBe('MILK');
     });
 
     it('accepts a name up to the product-name limit', async () => {

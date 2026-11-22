@@ -71,7 +71,11 @@ sales without `-AcceptNewerSales`. A restore ends every session (#363).
 ## Data migrations
 
 `migrations.mjs` holds the registry and `DATA_VERSION` (pinned equal to
-contracts' `SINGLE_PC_DATA_VERSION`). Today it is empty at version 1. The
+contracts' `SINGLE_PC_DATA_VERSION`), now at version 2. Its one entry,
+`uppercase-product-names` (1 → 2, #443), uppercases every product name;
+its read-only `check(db)` runs in `preflight`, so names that would collide
+after uppercasing (or grow past 50 characters) refuse the upgrade before
+anything changes: rename them in the installed release and re-run. The
 cloud's legacy backfills (`migrate:categories`, `migrate:stock-ledger`,
 `migrate:decode-entities`) are recorded as not applicable: every single-PC
 database was created at version 1 by #360 provisioning and the current
@@ -81,7 +85,8 @@ stamped with the installing release's data version.
 A schema change that needs a migration bumps both versions and adds an
 entry (`id`, `from`, `to = from + 1`, `changesData`, `up(db, { log })`)
 that is idempotent, offline and uses only the release (its node and the
-API's `node_modules`). The bundle manifest's `data` block
+API's `node_modules`), plus an optional read-only `check(db)` returning
+refusal strings for `preflight`. The bundle manifest's `data` block
 (`dataVersion`, `minUpgradeFromDataVersion`, `migrations`,
 `legacyMigrationsNotApplicable`) records it.
 

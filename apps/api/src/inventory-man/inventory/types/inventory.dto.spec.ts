@@ -47,9 +47,9 @@ describe('GetAllDto.maxStock (issue #14)', () => {
 });
 
 describe('GetAllDto search', () => {
-    it('lowercases and trims the name, as names are stored', () => {
+    it('uppercases and trims the name, as names are stored (#443)', () => {
         // The inventory screen sends the name upper-cased.
-        expect(fromQuery({ name: '  FRESH MILK ' }).name).toBe('fresh milk');
+        expect(fromQuery({ name: '  fresh Milk ' }).name).toBe('FRESH MILK');
     });
 
     it('trims the barcode prefix', () => {

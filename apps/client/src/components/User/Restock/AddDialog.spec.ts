@@ -185,7 +185,7 @@ describe('Restock AddDialog (#17)', () => {
         expect(added[0]).toMatchObject({
             isNewProduct: true,
             autoGenerateEAN: true,
-            name: 'Coffee',
+            name: 'COFFEE',
             price: 975,
             quantity: 2,
             unitCost: 500,
@@ -324,7 +324,7 @@ describe('Restock AddDialog (#17)', () => {
         expect(updated[0]).toMatchObject({
             isNewProduct: true,
             EAN: '4006381333931',
-            name: 'Pens',
+            name: 'PENS',
             price: 2100,
         });
     });

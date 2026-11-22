@@ -402,6 +402,23 @@ New assignments require an active category. A category referenced by **any** pro
 including an archived product, cannot be deleted: archive it instead. This preserves
 history and avoids dangling references. An unreferenced category may be deleted.
 
+### Uppercase product names before deploying (#443)
+
+Product names are stored and shown in UPPERCASE. Stop the API, back up, build
+contracts and point `DATABASE_URL` at the intended database:
+
+```bash
+pnpm migrate:uppercase-product-names           # dry run; counts names to change
+pnpm migrate:uppercase-product-names --apply   # one transaction; requires replica set
+```
+
+The plan reads every product first. Two names that only differ by case (or a
+name longer than 50 characters once uppercased) are listed with their ids and
+refused before any write: rename one and rerun. Reruns change nothing. Sale,
+restock and other historical records that copied a name are not rewritten.
+Deploy the matching API/client afterwards. Single-PC installations run the
+same change as the `uppercase-product-names` upgrade migration (data version 2).
+
 ### Migrate legacy category enum values before deploying
 
 The new product category is an ObjectId reference instead of an enum string.

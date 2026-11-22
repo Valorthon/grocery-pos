@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { NUMERIC_LIMITS, STRING_LIMITS, PAGINATION } from '../../../constants';
-import { Trim, TrimLowercase } from '../../../common/validators';
+import { Trim, TrimUppercase } from '../../../common/validators';
 
 export class GetAllDto {
     @ValidateIf((_object, value: unknown) => value !== undefined)
@@ -43,7 +43,7 @@ export class GetAllDto {
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name?: string;
 
     /** Matched as a barcode prefix. */

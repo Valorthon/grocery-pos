@@ -29,3 +29,4 @@ export * from './audit.js';
 export * from './settings.js';
 export * from './purchase-order.js';
 export * from './release.js';
+export * from './product-name.js';

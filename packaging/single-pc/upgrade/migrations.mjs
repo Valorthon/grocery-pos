@@ -17,6 +17,9 @@
 //   the release's node.exe and the API's own node_modules).
 // - It declares `changesData: true` unless it only builds indexes or
 //   reads; the upgrade's rollback then needs the pre-upgrade backup.
+// - An optional `check(db)` (read-only) returns refusal strings; the
+//   upgrade's preflight runs it for every pending migration, so data the
+//   migration would refuse stops the upgrade before anything changes.
 //
 // The cloud's legacy migrations (README: migrate:categories,
 // migrate:stock-ledger, migrate:decode-entities) are not part of this
@@ -35,7 +38,7 @@ export const DATA_VERSION_ID = 'data';
  *  the pre-upgrade backup takes it back with the data it describes). */
 export const MIGRATION_COLLECTION = 'systemmigrations';
 
-export const DATA_VERSION = 1;
+export const DATA_VERSION = 2;
 /** The oldest data version this release can upgrade from. */
 export const MIN_UPGRADE_FROM = 1;
 
@@ -45,8 +48,95 @@ export const LEGACY_NOT_APPLICABLE = Object.freeze([
     'migrate:decode-entities',
 ]);
 
-/** Ordered: `from` → `to`. Empty while the data version is 1. */
-export const MIGRATIONS = Object.freeze([]);
+/** contracts STRING_LIMITS.PRODUCT_NAME. */
+export const PRODUCT_NAME_MAX = 50;
+
+/**
+ * #443: plans uppercasing every product name, as contracts'
+ * `planProductNameUppercase` does (the release's tools import nothing
+ * from the workspace). Pure; an already-uppercased set plans no updates.
+ */
+export function planProductNames(rows, maxLength = PRODUCT_NAME_MAX) {
+    const byName = new Map();
+    const updates = [];
+    const tooLong = [];
+    for (const { _id, name } of rows) {
+        const to = String(name).trim().toUpperCase();
+        byName.set(to, [...(byName.get(to) ?? []), String(_id)]);
+        if (to.length > maxLength) tooLong.push({ id: String(_id), to });
+        if (to !== name) updates.push({ _id, from: name, to });
+    }
+    const collisions = [...byName]
+        .filter(([, ids]) => ids.length > 1)
+        .map(([name, ids]) => ({ name, ids }));
+    return { updates, collisions, tooLong };
+}
+
+function productNameRefusals(plan) {
+    const out = [];
+    if (plan.collisions.length)
+        out.push(
+            `Product names collide after uppercasing: ${plan.collisions
+                .map((c) => `${c.name} (${c.ids.join(', ')})`)
+                .join(
+                    '; ',
+                )}. Rename them in the current release before upgrading.`,
+        );
+    if (plan.tooLong.length)
+        out.push(
+            `Product names exceed ${PRODUCT_NAME_MAX} characters after uppercasing: ${plan.tooLong
+                .map((t) => t.id)
+                .join(
+                    ', ',
+                )}. Rename them in the current release before upgrading.`,
+        );
+    return out;
+}
+
+async function readProductNames(db) {
+    return db
+        .collection('products')
+        .find({}, { projection: { name: 1 } })
+        .toArray();
+}
+
+export const UPPERCASE_PRODUCT_NAMES = Object.freeze({
+    id: 'uppercase-product-names',
+    from: 1,
+    to: 2,
+    changesData: true,
+    async check(db) {
+        return productNameRefusals(
+            planProductNames(await readProductNames(db)),
+        );
+    },
+    async up(db, { log = () => {} } = {}) {
+        const plan = planProductNames(await readProductNames(db));
+        const refusals = productNameRefusals(plan);
+        if (refusals.length) throw new Error(refusals.join(' '));
+        // Each write filters on the old name, so a re-run skips done rows
+        // and converges (the unique name index can't clash: no collisions).
+        for (const u of plan.updates)
+            await db
+                .collection('products')
+                .updateOne(
+                    { _id: u._id, name: u.from },
+                    { $set: { name: u.to } },
+                );
+        log(`migrate: uppercased ${plan.updates.length} product name(s)`);
+    },
+});
+
+/** Ordered: `from` → `to`. */
+export const MIGRATIONS = Object.freeze([UPPERCASE_PRODUCT_NAMES]);
+
+/** Refusals from the pending migrations' read-only `check(db)`. */
+export async function migrationRefusals(db, migrations, from, to) {
+    const out = [];
+    for (const m of pendingMigrations(migrations, from, to))
+        if (typeof m.check === 'function') out.push(...(await m.check(db)));
+    return out;
+}
 
 /** Throws if the registry is not ordered, contiguous and unique. */
 export function validateRegistry(

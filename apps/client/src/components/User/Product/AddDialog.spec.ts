@@ -118,7 +118,7 @@ describe('Product AddDialog (#17)', () => {
             {
                 EAN: VALID.EAN,
                 unit: 'PIECE',
-                name: 'Pens',
+                name: 'PENS',
                 price: 1999,
                 autoGenerateEAN: false,
             },

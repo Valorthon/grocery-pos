@@ -111,13 +111,13 @@ describe('RestockFields: exactly one of newProduct and product (issue #14)', () 
 });
 
 describe('GetDetailsQueryDto search', () => {
-    it('lowercases and trims the name, as names are stored', () => {
+    it('uppercases and trims the name, as names are stored (#443)', () => {
         const dto = plainToInstance(GetDetailsQueryDto, {
-            name: '  MILK ',
+            name: '  milk ',
             EAN: ' 480 ',
         });
 
-        expect(dto.name).toBe('milk');
+        expect(dto.name).toBe('MILK');
         expect(dto.EAN).toBe('480');
     });
 });

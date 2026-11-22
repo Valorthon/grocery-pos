@@ -74,7 +74,7 @@ export class Product {
         type: String,
         required: true,
         unique: true,
-        lowercase: true,
+        uppercase: true,
         maxLength: STRING_LIMITS.PRODUCT_NAME,
     })
     name!: string;

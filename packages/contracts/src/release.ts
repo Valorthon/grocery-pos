@@ -21,7 +21,7 @@ export const WIRE_VERSION_HEADER = 'x-wire-version';
  * The single-PC API refuses to start against any other one (an absent
  * marker is version 1, the #360 baseline).
  */
-export const SINGLE_PC_DATA_VERSION = 1;
+export const SINGLE_PC_DATA_VERSION = 2;
 
 /** Collection (in the app database) holding the data-version marker. */
 export const DATA_VERSION_COLLECTION = 'systemdataversion';

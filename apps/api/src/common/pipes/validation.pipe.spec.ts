@@ -89,15 +89,15 @@ describe('createValidationPipe: text is stored as typed (#15)', () => {
         });
 
         expect(dto.newProducts.map((p) => p.name)).toEqual([
-            'm&m peanut',
-            'a<b>c',
+            'M&M PEANUT',
+            'A<B>C',
         ]);
 
         const updates = await body(UpdateProductsDto, {
             updates: [{ product: ID, update: { name: ` ${TYPED} ` } }],
         });
 
-        expect(updates.updates[0].update.name).toBe(TYPED.toLowerCase());
+        expect(updates.updates[0].update.name).toBe(TYPED.toUpperCase());
     });
 
     it('trims the restock description, which had no DTO trim before', async () => {
@@ -116,8 +116,8 @@ describe('createValidationPipe: text is stored as typed (#15)', () => {
             metatype: MatchesDto,
         } as ArgumentMetadata)) as MatchesDto;
 
-        // A search for `m&m` now matches a stored `m&m`.
-        expect(dto.name).toBe('m&m');
+        // A search for `M&M` matches a stored `M&M`.
+        expect(dto.name).toBe('M&M');
     });
 
     it('leaves a body without a DTO class untouched', async () => {
@@ -138,7 +138,7 @@ describe('createValidationPipe: MaxLength sees the text as typed (#15)', () => {
             newProducts: [{ name: `  ${name}  `, price: 100 }],
         });
 
-        expect(dto.newProducts[0].name).toBe(name);
+        expect(dto.newProducts[0].name).toBe(name.toUpperCase());
     });
 
     it('still rejects a 51-character product name', async () => {
@@ -331,10 +331,11 @@ describe('body DTO string fields (#15)', () => {
         '%s: trimmed, or verbatim if it is a secret',
         (_label, target, field) => {
             const padded = '  ab  ';
+            const out = transformed(target, field, padded);
 
-            expect(transformed(target, field, padded)).toBe(
-                VERBATIM_FIELDS.has(field) ? padded : 'ab',
-            );
+            // Product names are also uppercased, as they are stored (#443).
+            if (VERBATIM_FIELDS.has(field)) expect(out).toBe(padded);
+            else expect(String(out).toLowerCase()).toBe('ab');
         },
     );
 });

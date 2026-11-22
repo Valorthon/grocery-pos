@@ -442,7 +442,7 @@ export class ProductService {
         if (EAN) {
             query = { EAN: prefixRegex(EAN) };
         } else if (name) {
-            // Names are stored lowercase and MatchesDto lowercases the term,
+            // Names are stored uppercase and MatchesDto uppercases the term,
             // so a plain substring match is already case-insensitive.
             const byName = { name: containsRegex(name) };
             // A digits-only term may also be part of a barcode, e.g. the

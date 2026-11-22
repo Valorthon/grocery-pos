@@ -304,15 +304,13 @@ describe('Product route access by role (e2e)', () => {
                 'POST',
                 '/products/bulk',
                 {
-                    newProducts: [
-                        { name: `  ${name.toUpperCase()} `, price: 1 },
-                    ],
+                    newProducts: [{ name: `  ${name} `, price: 1 }],
                 },
             );
 
             expect(res.status).toBe(201);
             expect(service.addMany).toHaveBeenCalledWith(expect.anything(), {
-                newProducts: [{ name, price: 1 }],
+                newProducts: [{ name: name.toUpperCase(), price: 1 }],
             });
         });
 
@@ -322,11 +320,11 @@ describe('Product route access by role (e2e)', () => {
             const res = await harness.call(
                 caller(Role.Seller),
                 'GET',
-                `/products/matches?name=${encodeURIComponent('M&M')}`,
+                `/products/matches?name=${encodeURIComponent('m&M')}`,
             );
 
             expect(res.status).toBe(200);
-            expect(service.getMatches).toHaveBeenCalledWith({ name: 'm&m' });
+            expect(service.getMatches).toHaveBeenCalledWith({ name: 'M&M' });
         });
     });
 
@@ -368,7 +366,7 @@ describe('Product route access by role (e2e)', () => {
 
             expect(res.status).toBe(201);
             expect(service.addMany).toHaveBeenCalledWith(expect.anything(), {
-                newProducts: [{ name: 'milk', price: 1, EAN: '036000291452' }],
+                newProducts: [{ name: 'MILK', price: 1, EAN: '036000291452' }],
             });
         });
 

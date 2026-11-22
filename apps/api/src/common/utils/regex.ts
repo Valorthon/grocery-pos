@@ -5,8 +5,8 @@ export function escapeRegex(value: string): string {
 
 /**
  * A `$regex` matching `term` anywhere in the field, literally. Product
- * names are searched this way (issue #14): names are stored lowercase and
- * the search DTOs lowercase the term, so the match is case-insensitive.
+ * names are searched this way (issue #14): names are stored uppercase (#443)
+ * and the search DTOs uppercase the term, so the match is case-insensitive.
  */
 export function containsRegex(term: string): { $regex: string } {
     return { $regex: escapeRegex(term) };

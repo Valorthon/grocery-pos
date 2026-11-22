@@ -93,14 +93,14 @@ describe('Restock and adjustment payloads from the client (e2e, issue #33)', () 
                         {
                             newProduct: {
                                 EAN: '4006381333931',
-                                name: 'bread',
+                                name: 'BREAD',
                                 price: 1999,
                             },
                             quantity: 2,
                             unitCost: 3500,
                         },
                         {
-                            newProduct: { name: 'milk', price: 5000 },
+                            newProduct: { name: 'MILK', price: 5000 },
                             quantity: 1,
                             unitCost: 4000,
                         },

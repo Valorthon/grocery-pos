@@ -134,6 +134,7 @@ import {
     unitLabel,
     quantityInput,
     parseQuantity,
+    normalizeProductName,
     reorderLevelOf,
     reorderQuantityOf,
     type ProductView,
@@ -236,7 +237,7 @@ watch(
 );
 async function save() {
     if (saving.value) return;
-    const normalized = name.value.trim().toLowerCase();
+    const normalized = normalizeProductName(name.value);
     const amount = typedPrice.value;
     const level = parseQuantity(reorderLevel.value, props.product.unit);
     const quantity = parseQuantity(reorderQuantity.value, props.product.unit);

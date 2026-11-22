@@ -20,7 +20,7 @@ import {
     IsCalendarDate,
     IsNotBefore,
     Trim,
-    TrimLowercase,
+    TrimUppercase,
 } from '../../../common/validators';
 import { EXPIRY_LIMITS, SUPPLIER_LIMITS } from '@grocery-pos/contracts';
 import type {
@@ -46,7 +46,7 @@ export class GetDetailsQueryDto {
     @IsString()
     @IsOptional()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
-    @TrimLowercase()
+    @TrimUppercase()
     name!: string;
 
     /** Matched as a barcode prefix. */
