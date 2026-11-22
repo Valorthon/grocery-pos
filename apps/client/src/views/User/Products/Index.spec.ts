@@ -574,8 +574,60 @@ describe('product list scans (#214)', () => {
         await scanInto('EAN / Barcode');
         expect(document.body.textContent).toContain('Edit Product');
         expect(params()[0]).toEqual({ includeArchived: true });
+        // The Active status filter is kept (owner decision pending).
         expect(listParams()).toEqual([
-            expect.objectContaining({ page: 1, EAN: SCAN }),
+            expect.objectContaining({ page: 1, EAN: SCAN, status: 'active' }),
+        ]);
+    });
+
+    it('pages with the scanned code after a scan', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        api.get.mockImplementation((url) =>
+            url === `/products/${SCAN}`
+                ? Promise.resolve({ data: { ...archived, isActive: true } })
+                : Promise.resolve({ data: { data: [], totalItems: 40 } }),
+        );
+        await mount();
+        await scanInto('Product Name');
+        await click('Cancel');
+        api.get.mockClear();
+        await click('Next');
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 2, EAN: SCAN }),
+        ]);
+        expect(listParams()[0]?.name).toBeFalsy();
+    });
+
+    it('drops a late lookup after a newer search', async () => {
+        useAuthStore().user = { username: 'r', roles: [Role.Restocker] };
+        const OTHER = '4006381333948';
+        const late: Record<
+            string,
+            { ok: (v: { data: unknown }) => void; fail: (e: unknown) => void }
+        > = {};
+        api.get.mockImplementation((url) =>
+            url.startsWith('/products/')
+                ? new Promise((ok, fail) => {
+                      late[url] = { ok, fail };
+                  })
+                : Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        await mount();
+        await type('EAN / Barcode', SCAN);
+        api.get.mockClear();
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        await type('EAN / Barcode', OTHER);
+        field('EAN / Barcode').form!.requestSubmit();
+        await flush();
+        // The newer lookup answers first: nothing found, so it searches.
+        late[`/products/${OTHER}`]!.fail(notFound());
+        await flush();
+        late[`/products/${SCAN}`]!.ok({ data: archived });
+        await flush();
+        expect(document.body.textContent).not.toContain('Edit Product');
+        expect(listParams()).toEqual([
+            expect.objectContaining({ page: 1, EAN: OTHER }),
         ]);
     });
 

@@ -689,8 +689,19 @@ describe('inventory list scans (#214)', () => {
             ([url]) => url === '/inventories',
         );
         expect(lists).toHaveLength(2);
-        expect(lists[1]?.[1]?.params).toMatchObject({ EAN: '12345670' });
-        expect(lists[1]?.[1]?.params?.name).toBeFalsy();
+        expect(lists[lists.length - 1]?.[1]?.params).toMatchObject({
+            EAN: '12345670',
+        });
+        expect(lists[lists.length - 1]?.[1]?.params?.name).toBeFalsy();
+        // Clear Filters drops the scanned code with one load.
+        await closeDialog();
+        api.get.mockClear();
+        await click('Clear Filters');
+        const cleared = api.get.mock.calls.filter(
+            ([url]) => url === '/inventories',
+        );
+        expect(cleared).toHaveLength(1);
+        expect(cleared[0]?.[1]?.params?.EAN).toBeFalsy();
         await type('Search name or barcode', '4006381333931');
         field('Search name or barcode').form!.requestSubmit();
         await flush();
