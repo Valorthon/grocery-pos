@@ -138,6 +138,11 @@ export interface DrawerMovementView {
     at: string;
     /** Username of who recorded it. */
     byName: string;
+    /**
+     * For REVERSAL_PAYOUT: username of the approving manager (#458).
+     * Absent on payouts recorded before it was kept.
+     */
+    approvedByName?: string;
     /** For REVERSAL_PAYOUT: the reversed sale's id. */
     sale: string | null;
 }

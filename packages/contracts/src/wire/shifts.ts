@@ -26,6 +26,7 @@ export const DRAWER_MOVEMENT_VIEW_SHAPE: WireShape<DrawerMovementView> = {
     reason: 'required',
     at: 'required',
     byName: 'required',
+    approvedByName: 'optional',
     sale: 'required',
 };
 

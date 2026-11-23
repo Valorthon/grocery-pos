@@ -37,7 +37,11 @@ function query<T>(value: T) {
 }
 let count: StockCount;
 let service: ManagerOverrideService;
-const users = { findOne: jest.fn(), updateOne: jest.fn() },
+const users = {
+        findOne: jest.fn(),
+        updateOne: jest.fn(),
+        findOneAndUpdate: jest.fn(),
+    },
     counts = { findById: jest.fn() },
     grants = { create: jest.fn(), findOneAndUpdate: jest.fn() };
 const manager = {
@@ -81,6 +85,7 @@ beforeEach(() => {
     };
     users.findOne.mockReturnValue(query(manager));
     users.updateOne.mockResolvedValue({ matchedCount: 1 });
+    users.findOneAndUpdate.mockReturnValue(query(manager));
     counts.findById.mockImplementation(() => query(count));
     grants.create.mockResolvedValue([{ _id: id() }]);
     grants.findOneAndUpdate.mockReturnValue(

@@ -85,6 +85,7 @@ describe('manager approvals (#34)', () => {
         findOne: jest.Mock;
         findById: jest.Mock;
         updateOne: jest.Mock;
+        findOneAndUpdate: jest.Mock;
     };
     let grants: { create: jest.Mock; findOneAndUpdate: jest.Mock };
     let sales: { findOne: jest.Mock };
@@ -111,6 +112,7 @@ describe('manager approvals (#34)', () => {
             findOne: jest.fn(() => query(manager)),
             findById: jest.fn(() => query(manager)),
             updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
+            findOneAndUpdate: jest.fn(() => query({ name: 'boss' })),
         };
         grants = {
             create: jest.fn().mockResolvedValue([{ _id: GRANT }]),
@@ -388,7 +390,7 @@ describe('manager approvals (#34)', () => {
             expect.anything(),
             { session, new: true },
         );
-        expect(users.updateOne).toHaveBeenCalledWith(
+        expect(users.findOneAndUpdate).toHaveBeenCalledWith(
             expect.objectContaining({
                 _id: MANAGER,
                 overridePinVersion: 'pin-v1',
@@ -396,8 +398,19 @@ describe('manager approvals (#34)', () => {
                 roles: { $in: [Role.Admin] },
             }),
             expect.anything(),
-            { session },
+            { session, projection: { name: 1 } },
         );
+    });
+    it('names the approving manager for a reversal payout (#458)', async () => {
+        expect(
+            await service.consumeApproval(
+                token(),
+                actor,
+                OverrideAction.REFUND,
+                'ctx',
+                session,
+            ),
+        ).toEqual({ approvedBy: MANAGER, approvedByName: 'boss' });
     });
     it('refuses spent, changed or unmatched grants and absent requester session', async () => {
         grants.findOneAndUpdate.mockReturnValue(query(null));
@@ -417,7 +430,7 @@ describe('manager approvals (#34)', () => {
         );
     });
     it('refuses revocation or deactivation after approval', async () => {
-        users.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        users.findOneAndUpdate.mockReturnValueOnce(query(null));
         await expect(
             service.consume(
                 token(),
@@ -427,9 +440,7 @@ describe('manager approvals (#34)', () => {
                 session,
             ),
         ).rejects.toMatchObject({ code: ErrorCode.OVERRIDE_INVALID });
-        users.updateOne
-            .mockResolvedValueOnce({ matchedCount: 1 })
-            .mockResolvedValueOnce({ matchedCount: 0 });
+        users.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
         await expect(
             service.consume(
                 token(),
@@ -448,7 +459,7 @@ describe('manager approvals (#34)', () => {
             'ctx',
             session,
         );
-        expect(users.updateOne).toHaveBeenCalledWith(
+        expect(users.findOneAndUpdate).toHaveBeenCalledWith(
             expect.objectContaining({
                 _id: MANAGER,
                 roles: { $in: [Role.Admin, Role.Supervisor] },

@@ -151,7 +151,7 @@
             >
                 <span class="truncate"
                     >{{ formatStoreTime(m.at) }} {{ movementLabel(m.type) }} ·
-                    {{ m.reason }} ({{ m.byName }})</span
+                    {{ m.reason }} ({{ movementBy(m) }})</span
                 >
                 <span class="shrink-0">{{ currency(m.amount) }}</span>
             </div>
@@ -167,7 +167,11 @@
 import { receiptStoreIdentity } from '@grocery-pos/contracts';
 import { storePresentation } from '@/settings/presentation';
 import { computed, defineComponent, h } from 'vue';
-import { DrawerMovementType, type ZReadReport } from '@grocery-pos/contracts';
+import {
+    DrawerMovementType,
+    type DrawerMovementView,
+    type ZReadReport,
+} from '@grocery-pos/contracts';
 import { formatCurrency } from '@/utils/currency';
 import { formatStoreDateTime, formatStoreTime } from '@/utils/datetime';
 
@@ -236,6 +240,13 @@ const MOVEMENT_LABELS: Record<DrawerMovementType, string> = {
 
 function movementLabel(type: DrawerMovementType): string {
     return MOVEMENT_LABELS[type] ?? type;
+}
+
+/** Who recorded it, and the approving manager when another person (#458). */
+function movementBy(m: DrawerMovementView): string {
+    return m.approvedByName && m.approvedByName !== m.byName
+        ? `${m.byName}, approved by ${m.approvedByName}`
+        : m.byName;
 }
 const identity = computed(
     () =>

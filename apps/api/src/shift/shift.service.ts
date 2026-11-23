@@ -72,6 +72,7 @@ function toMovementView(m: DrawerMovement): DrawerMovementView {
         reason: m.reason,
         at: new Date(m.at).toISOString(),
         byName: m.byName,
+        ...(m.approvedByName ? { approvedByName: m.approvedByName } : {}),
         sale: m.sale ? String(m.sale) : null,
     };
 }
@@ -403,6 +404,8 @@ export class ShiftService {
             type,
             reason,
             admin,
+            approvedBy,
+            approvedByName,
         }: {
             saleId: string;
             saleShift: Types.ObjectId | null;
@@ -412,6 +415,9 @@ export class ShiftService {
             type: ReversalType;
             reason: string;
             admin: AuthUser;
+            /** The manager who approved the reversal (#458). */
+            approvedBy?: string;
+            approvedByName?: string;
         },
         session: ClientSession,
     ): Promise<Types.ObjectId | null> {
@@ -437,6 +443,12 @@ export class ShiftService {
             at: new Date(),
             by: new Types.ObjectId(admin.userId),
             byName: admin.username,
+            ...(approvedBy && approvedByName
+                ? {
+                      approvedBy: new Types.ObjectId(approvedBy),
+                      approvedByName,
+                  }
+                : {}),
             sale: new Types.ObjectId(saleId),
         };
 

@@ -791,18 +791,19 @@ export class SalesService {
                     type === ReversalType.VOID
                         ? OverrideAction.VOID
                         : OverrideAction.REFUND;
-                const approvedBy = await this.overrides.consume(
-                    approvalToken,
-                    user,
-                    action,
-                    this.overrides.reversalContext(
+                const { approvedBy, approvedByName } =
+                    await this.overrides.consumeApproval(
+                        approvalToken,
+                        user,
                         action,
-                        visibleSale,
-                        reason,
-                        payoutShiftId,
-                    ),
-                    session,
-                );
+                        this.overrides.reversalContext(
+                            action,
+                            visibleSale,
+                            reason,
+                            payoutShiftId,
+                        ),
+                        session,
+                    );
                 // The status filter makes the reversal a single atomic claim:
                 // of two concurrent voids, only one can match.
                 const sale = await this.model
@@ -863,6 +864,8 @@ export class SalesService {
                         type,
                         reason,
                         admin: user,
+                        approvedBy,
+                        approvedByName,
                     },
                     session,
                 );

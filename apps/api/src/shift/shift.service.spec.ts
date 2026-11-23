@@ -873,6 +873,49 @@ describe('ShiftService.payOutReversal', () => {
         ]);
     });
 
+    it('records the approving manager on the payout and in the Z-read (#458)', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        const approver = new Types.ObjectId();
+
+        await inTransaction((session) =>
+            service.payOutReversal(
+                {
+                    saleId: String(new Types.ObjectId()),
+                    saleShift: new Types.ObjectId(_id),
+                    amount: 10_000,
+                    type: ReversalType.REFUND,
+                    reason: 'damaged',
+                    admin: ANA,
+                    approvedBy: String(approver),
+                    approvedByName: 'owner',
+                },
+                session,
+            ),
+        );
+
+        expect(payouts(_id)).toEqual([
+            expect.objectContaining({
+                byName: 'ana',
+                approvedBy: approver,
+                approvedByName: 'owner',
+            }),
+        ]);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        expect(report.movements).toEqual([
+            expect.objectContaining({
+                byName: 'ana',
+                approvedByName: 'owner',
+            }),
+        ]);
+    });
+
+    it('leaves approvedByName off a legacy payout without an approver (#458)', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        await payOut(new Types.ObjectId(_id), 30_000);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        expect('approvedByName' in report.movements[0]).toBe(false);
+    });
+
     it('refuses a different payout shift while the sale’s own is open, and rolls back', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         const { _id: other } = await service.open(BEN, FLOAT_COUNTS);
