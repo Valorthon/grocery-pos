@@ -138,8 +138,8 @@ it('refreshes periodically and removes its listeners/timer after unmount', async
     await vi.advanceTimersByTimeAsync(30000);
     expect(status.sync).toHaveBeenCalledTimes(1);
 });
-// #459: a failed probe retries at 2 s, 5 s, 10 s, then every 30 s.
-it('backs off after a failed probe and returns to 30 s after a success', async () => {
+// #459 (owner 2026-11-23): a failed probe retries every 5 s flat.
+it('retries every 5 s while offline and returns to 30 s after a success', async () => {
     status.probe.mockResolvedValue(false);
     mount();
     await flush();
@@ -150,19 +150,39 @@ it('backs off after a failed probe and returns to 30 s after a success', async (
         await vi.advanceTimersByTimeAsync(1);
         expect(status.probe).toHaveBeenCalledTimes(calls);
     };
-    await after(2000, 2);
-    await after(5000, 3);
-    await after(10000, 4);
-    await after(30000, 5);
-    await after(30000, 6);
+    // After 1, 3 and 10 consecutive failures the next probe is 5 s later.
+    for (let calls = 2; calls <= 11; calls++) await after(5000, calls);
     status.probe.mockResolvedValue(true);
-    await after(30000, 7);
+    await after(5000, 12);
     expect(status.sync).toHaveBeenCalledTimes(1);
-    await after(30000, 8);
-    // A new failure starts the backoff over.
+    await after(30000, 13);
+    await after(30000, 14);
     status.probe.mockResolvedValue(false);
-    await after(30000, 9);
-    await after(2000, 10);
+    await after(30000, 15);
+    await after(5000, 16);
+});
+it('notices a recovery after a 60 s outage within 5 s', async () => {
+    status.probe.mockResolvedValue(false);
+    mount();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(status.sync).not.toHaveBeenCalled();
+    status.probe.mockResolvedValue(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(status.sync).toHaveBeenCalledTimes(1);
+});
+it('counts the retry delay after a slow failed probe finishes', async () => {
+    let resolve!: (ok: boolean) => void;
+    status.probe.mockImplementation(
+        () => new Promise<boolean>((r) => (resolve = r)),
+    );
+    mount();
+    await vi.advanceTimersByTimeAsync(8000);
+    resolve(false);
+    await flush();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(status.probe).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(status.probe).toHaveBeenCalledTimes(2);
 });
 it('never overlaps probes and runs one queued follow-up', async () => {
     let resolve!: (ok: boolean) => void;

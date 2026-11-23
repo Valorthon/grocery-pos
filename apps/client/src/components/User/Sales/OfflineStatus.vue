@@ -182,8 +182,9 @@ async function reconcile(entry: OfflinePendingSale) {
         working.value = false;
     }
 }
-// Probe schedule (#459): every 30 s while the API answers; after a failed
-// probe 2 s, 5 s, 10 s, then every 30 s. One probe at a time; every
+// Probe schedule (#459): every 30 s while the API answers; from the first
+// failed probe every 5 s for as long as it fails. One probe at a time, the
+// delay counted after the previous one finishes; every
 // verdict (timer or browser event) reschedules from its outcome.
 let timer: ReturnType<typeof setTimeout> | undefined;
 let failures = 0;
