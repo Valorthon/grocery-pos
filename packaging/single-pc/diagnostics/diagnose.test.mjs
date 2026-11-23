@@ -38,6 +38,9 @@ import {
     parseArgs,
     redact,
     renderText,
+    checkExitCode,
+    onlyAdminUnverified,
+    EXIT,
 } from './diagnose.mjs';
 
 const NOW = new Date('2026-11-15T03:00:00.000Z');
@@ -754,6 +757,81 @@ describe('diagnose', () => {
                 await chmod(status, 0o600);
             }
         }
+    });
+
+    const ADMIN_FOOTER =
+        'Some checks need administrator rights; run as administrator for a full check.';
+    const ATTENTION_FOOTER =
+        'Something needs attention: follow the steps above.';
+    const healthyBackups = () =>
+        writeStatus({
+            lastAttempt: { at: hoursAgo(5) },
+            lastSuccess: { at: hoursAgo(5) },
+            lastVerifiedSuccess: { at: hoursAgo(5), backupId: 'b1' },
+            lastExport: { at: hoursAgo(24) },
+        });
+    const deniedInstallRecord = (extra = {}) =>
+        healthy({
+            readText: async (path) => {
+                if (path.endsWith('installer.json'))
+                    throw Object.assign(new Error('EACCES'), {
+                        code: 'EACCES',
+                    });
+                return readFile(path, 'utf8');
+            },
+            ...extra,
+        });
+
+    test('only admin-unverified checks: admin footer, exit 3 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            deniedInstallRecord(),
+        );
+        assert.equal(report.overall, 'unknown');
+        assert.ok(onlyAdminUnverified(report));
+        const text = renderText(report);
+        assert.ok(text.includes(ADMIN_FOOTER));
+        assert.ok(!text.includes(ATTENTION_FOOTER));
+        assert.equal(checkExitCode(report), EXIT.UNVERIFIED);
+        assert.equal(EXIT.UNVERIFIED, 3);
+        // The marker never reaches the JSON.
+        assert.deepEqual(Object.keys(report), [...REPORT_KEYS]);
+        assert.ok(!JSON.stringify(report).includes('dmin_'));
+    });
+
+    test('a non-admin unknown alone is attention, exit 1 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({ clockSync: async () => null }),
+        );
+        assert.equal(byId(report, 'clockSync').status, 'unknown');
+        assert.equal(report.overall, 'unknown');
+        const text = renderText(report);
+        assert.ok(text.includes(ATTENTION_FOOTER));
+        assert.ok(!text.includes(ADMIN_FOOTER));
+        assert.equal(checkExitCode(report), EXIT.ATTENTION);
+    });
+
+    test('admin unknown plus another unknown is attention, exit 1 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            deniedInstallRecord({ clockSync: async () => null }),
+        );
+        assert.equal(byId(report, 'versions').status, 'unknown');
+        assert.ok(renderText(report).includes(ATTENTION_FOOTER));
+        assert.equal(checkExitCode(report), EXIT.ATTENTION);
+    });
+
+    test('proxy probe without the root alone: exit 3; all ok: exit 0 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose({ dataRoot: root }, healthy());
+        assert.equal(byId(report, 'proxy').status, 'unknown');
+        assert.equal(checkExitCode(report), EXIT.UNVERIFIED);
+        for (const c of report.checks) c.status = 'ok';
+        assert.equal(checkExitCode({ ...report, overall: 'ok' }), EXIT.OK);
     });
 
     test('clockSync: Set time automatically off names the setting (#456)', async () => {

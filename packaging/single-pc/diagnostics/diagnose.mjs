@@ -11,8 +11,10 @@
 // log lines) into a folder the owner picks; see README.md "Support export".
 //
 // `check` exits 0 when everything is OK, 1 when something needs attention
-// (warn or fail), 2 on a usage error. `rotate-logs` is a maintenance
-// command (reads the MongoDB root password; run it elevated or as SYSTEM).
+// (warn, fail or another unknown), 2 on a usage error, 3 when the only
+// non-OK checks are unverified for lack of administrator rights.
+// `rotate-logs` is a maintenance command (reads the MongoDB root password;
+// run it elevated or as SYSTEM).
 // See README.md and RECOVERY.md.
 import { execFile } from 'node:child_process';
 import { X509Certificate } from 'node:crypto';
@@ -52,7 +54,7 @@ import {
     layout,
 } from '../runtime/layout.mjs';
 
-export const EXIT = { OK: 0, ATTENTION: 1, USAGE: 2 };
+export const EXIT = { OK: 0, ATTENTION: 1, USAGE: 2, UNVERIFIED: 3 };
 export const STATUS_RANK = { ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 };
 /** Bytes of each log read from its end; error lines kept per source. */
 export const LOG_TAIL_BYTES = 256 * 1024;
@@ -251,6 +253,23 @@ function result(id, title, status, summary, extra = {}) {
     return { id, title, status, summary, steps: [], ...extra };
 }
 
+/** #456: `unknown` results caused only by missing administrator rights.
+ *  Kept out of the report object so its JSON stays pinned. */
+const ADMIN_UNVERIFIED = new WeakSet();
+function adminUnverified(check) {
+    ADMIN_UNVERIFIED.add(check);
+    return check;
+}
+
+/** True when some check is not OK and every such check is an
+ *  administrator-rights unknown (versions, backups, proxy probe). */
+export function onlyAdminUnverified(report) {
+    const notOk = report.checks.filter(
+        (c) => c.status !== 'ok' && c.status !== 'info',
+    );
+    return notOk.length > 0 && notOk.every((c) => ADMIN_UNVERIFIED.has(c));
+}
+
 async function readJson(ctx, path) {
     try {
         return JSON.parse(await ctx.readText(path));
@@ -310,12 +329,14 @@ export async function checkVersions(ctx, paths, release) {
             : null,
     };
     if (denied)
-        return result(
-            'versions',
-            'Installed version',
-            'unknown',
-            `The installation record could not be read: ${UNVERIFIED_ADMIN}.`,
-            { details },
+        return adminUnverified(
+            result(
+                'versions',
+                'Installed version',
+                'unknown',
+                `The installation record could not be read: ${UNVERIFIED_ADMIN}.`,
+                { details },
+            ),
         );
     if (!state?.complete) {
         return result(
@@ -743,7 +764,7 @@ export async function checkProxy(ctx, paths, now) {
         // Without the local root nothing can be verified: only check that
         // the port answers, and never talk HTTPS to an unverified peer.
         const open = await ctx.tcp('localhost', PORTS.proxy);
-        return result(
+        const probe = result(
             'proxy',
             'Browser address (https://localhost:1443)',
             open ? 'unknown' : 'fail',
@@ -755,6 +776,7 @@ export async function checkProxy(ctx, paths, now) {
                 steps: open ? [] : GUIDANCE.proxy,
             },
         );
+        return open ? adminUnverified(probe) : probe;
     }
     const res = await ctx.https(`${ORIGIN}/v1/health/ready`, pem);
     const details = {
@@ -864,11 +886,13 @@ export async function checkBackups(paths, now) {
         summary = statusSummary(await readStatus(paths), now);
     } catch (error) {
         if (isAccessDenied(error))
-            return result(
-                'backups',
-                'Backups',
-                'unknown',
-                `The backup status could not be read: ${UNVERIFIED_ADMIN}.`,
+            return adminUnverified(
+                result(
+                    'backups',
+                    'Backups',
+                    'unknown',
+                    `The backup status could not be read: ${UNVERIFIED_ADMIN}.`,
+                ),
             );
         return result(
             'backups',
@@ -1179,6 +1203,14 @@ const LABEL = {
     fail: 'FAIL',
 };
 
+/** #456: exit code of `check` for a report. Only unverified (`unknown`)
+ *  lines is its own code, so a caller can tell it from a real warn/fail. */
+export function checkExitCode(report) {
+    if (report.overall === 'ok' || report.overall === 'info') return EXIT.OK;
+    if (onlyAdminUnverified(report)) return EXIT.UNVERIFIED;
+    return EXIT.ATTENTION;
+}
+
 export function renderText(report) {
     const out = [
         'Grocery POS diagnostics',
@@ -1199,7 +1231,9 @@ export function renderText(report) {
     out.push(
         report.overall === 'ok' || report.overall === 'info'
             ? 'Everything checked is OK.'
-            : 'Something needs attention: follow the steps above.',
+            : onlyAdminUnverified(report)
+              ? 'Some checks need administrator rights; run as administrator for a full check.'
+              : 'Something needs attention: follow the steps above.',
     );
     out.push(
         report.guide
@@ -1799,9 +1833,7 @@ async function main() {
             ? JSON.stringify(report, null, 2) + '\n'
             : renderText(report),
     );
-    return report.overall === 'ok' || report.overall === 'info'
-        ? EXIT.OK
-        : EXIT.ATTENTION;
+    return checkExitCode(report);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
