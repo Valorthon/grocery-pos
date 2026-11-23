@@ -850,6 +850,11 @@ describe('Sell line removal with Undo (decision 2026-09-25)', () => {
         await clickButton(buttonNamed('One less mints'));
         expect(cartNames()).toEqual(['2x milk']);
         expect(undoBar()).not.toBeNull();
+        // #471: like the trash button, the scan box takes the focus back.
+        expect(document.activeElement).toBe(input());
+
+        await clickButton(buttonNamed('Undo'));
+        expect(cartNames()).toEqual(['2x milk', '1x mints']);
     });
 
     it('offers Undo for a few seconds only', async () => {
