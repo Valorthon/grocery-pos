@@ -692,8 +692,17 @@ describe('ShiftService.closeById (admin force-close)', () => {
             active: true,
         });
 
+        const updateMany = jest.spyOn(leaseModel, 'updateMany');
+
         await service.closeById(BOSS, _id, FLOAT_COUNTS);
 
+        // In the close transaction: the session is passed through.
+        expect(updateMany).toHaveBeenCalledWith(
+            { shift, active: true },
+            { $set: { active: false }, $inc: { syncLock: 1 } },
+            { session: expect.anything() },
+        );
+        expect(leaseModel.byId(a._id)!.syncLock).toBe(1);
         expect(leaseModel.byId(a._id)!.active).toBe(false);
         expect(leaseModel.byId(b._id)!.active).toBe(false);
         expect(leaseModel.byId(other._id)!.active).toBe(true);

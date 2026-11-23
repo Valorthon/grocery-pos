@@ -42,11 +42,7 @@ import {
     readStatus,
     statusSummary,
 } from '../backup/backup.mjs';
-import {
-    describeLeaseTerminals,
-    lossChecks,
-    restore,
-} from '../backup/restore.mjs';
+import { leaseRefusal, lossChecks, restore } from '../backup/restore.mjs';
 import { verifyTree } from '../installer/bundle.mjs';
 import {
     lanAddressFacts,
@@ -225,7 +221,7 @@ export function evaluateUpgrade(facts) {
         );
     if (facts.activeLeases)
         refusals.push(
-            `${facts.activeLeases} terminal(s) still hold offline cash leases${facts.leaseTerminals?.length ? ` (${describeLeaseTerminals(facts.leaseTerminals)})` : ''}; synchronize their pending cash sales and close those shifts first.`,
+            `${leaseRefusal(facts.activeLeases, facts.leaseTerminals)}; synchronize their pending cash sales and close those shifts first.`,
         );
     const backup = facts.backup;
     if (backup) {

@@ -138,7 +138,7 @@ export async function lossChecks(root, manifest) {
     });
     return {
         openShifts,
-        activeLeases: leaseTerminals.length,
+        activeLeases: leaseTerminalCount(leaseTerminals),
         leaseTerminals,
         newerSales,
     };
@@ -149,7 +149,8 @@ export async function lossChecks(root, manifest) {
  * not expired, and on a shift that is still OPEN. An expired lease or one
  * on a closed (e.g. force-closed) shift can take no new offline sale; its
  * queued cash still needs ADMIN reconciliation (#37). One entry per
- * terminal and shift, with the shift's terminal label and cashier.
+ * terminal and shift, with the shift's terminal label and cashier; a
+ * lease whose shift is missing or that has no `expiresAt` never blocks.
  */
 export async function blockingLeases(db, now = new Date()) {
     const rows = await db
@@ -183,7 +184,12 @@ export async function blockingLeases(db, now = new Date()) {
     }));
 }
 
-/** "Till 1 (terminal 3f2a…, cashier ana); …" for a refusal message. */
+/** Distinct terminals: one PC with two cashiers' shifts is one terminal. */
+export function leaseTerminalCount(terminals = []) {
+    return new Set(terminals.map((t) => t.terminalId)).size;
+}
+
+/** "Till 1 (terminal 3f2a…, cashier ana), terminal 9c…" for a refusal. */
 export function describeLeaseTerminals(terminals = []) {
     return terminals
         .map(({ terminalId, label, cashier }) => {
@@ -191,12 +197,16 @@ export function describeLeaseTerminals(terminals = []) {
             if (cashier) parts.push(`cashier ${cashier}`);
             return label ? `${label} (${parts.join(', ')})` : parts.join(', ');
         })
-        .join('; ');
+        .join(', ');
 }
 
-function leaseSuffix(found) {
-    const named = describeLeaseTerminals(found.leaseTerminals);
-    return named ? `: ${named}` : '';
+/**
+ * The one lease refusal wording (#453), shared by restore, upgrade and the
+ * installer: "N terminal(s) still hold offline cash leases: Till 7 (…)".
+ */
+export function leaseRefusal(count, terminals = []) {
+    const named = describeLeaseTerminals(terminals);
+    return `${count} terminal(s) still hold offline cash leases${named ? `: ${named}` : ''}`;
 }
 
 export function lossRefusals(found, options) {
@@ -207,7 +217,7 @@ export function lossRefusals(found, options) {
         );
     if (found.activeLeases && !options.acceptPendingOffline)
         out.push(
-            `${found.activeLeases} terminal(s) hold offline cash leases that may have unsynchronized receipts${leaseSuffix(found)}; synchronize them first or pass --accept-pending-offline`,
+            `${leaseRefusal(found.activeLeases, found.leaseTerminals)}; they may have unsynchronized receipts: synchronize them first or pass --accept-pending-offline`,
         );
     if (found.newerSales && !options.acceptNewerSales)
         out.push(

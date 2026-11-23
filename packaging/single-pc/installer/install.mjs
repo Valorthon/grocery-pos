@@ -56,7 +56,11 @@ import {
 } from '../backup/backup.mjs';
 import { sha256, verifyTree } from './bundle.mjs';
 import { readStoredLanIp } from './terminal.mjs';
-import { blockingLeases, describeLeaseTerminals } from '../backup/restore.mjs';
+import {
+    blockingLeases,
+    leaseRefusal,
+    leaseTerminalCount,
+} from '../backup/restore.mjs';
 import {
     DEFAULT_BACKUP_TIME,
     HANDOVER_FILE,
@@ -493,7 +497,7 @@ async function installOrRepair(options, ctx, log) {
                     blockers.push(`${found.openShifts} shift(s) are open`);
                 if (found.activeLeases)
                     blockers.push(
-                        `${found.activeLeases} terminal(s) hold offline cash leases${found.leaseTerminals?.length ? ` (${describeLeaseTerminals(found.leaseTerminals)})` : ''}`,
+                        leaseRefusal(found.activeLeases, found.leaseTerminals),
                     );
                 return blockers;
             };
@@ -1141,7 +1145,7 @@ export function windowsContext(env = process.env, out) {
                     openShifts: await db
                         .collection('shifts')
                         .countDocuments({ status: 'OPEN' }),
-                    activeLeases: leaseTerminals.length,
+                    activeLeases: leaseTerminalCount(leaseTerminals),
                     leaseTerminals,
                 };
             } catch (error) {

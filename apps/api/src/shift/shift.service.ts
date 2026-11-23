@@ -584,7 +584,9 @@ export class ShiftService {
                 // those terminals still needs ADMIN reconciliation (#37).
                 await this.offlineLeases.updateMany(
                     { shift: shift._id, active: true },
-                    { $set: { active: false } },
+                    // As releaseLease does: bumps syncLock so an upload
+                    // racing the close write-conflicts.
+                    { $set: { active: false }, $inc: { syncLock: 1 } },
                     { session },
                 );
                 return report;

@@ -40,6 +40,7 @@ import {
     SESSION_COLLECTIONS,
     blockingLeases,
     describeLeaseTerminals,
+    leaseTerminalCount,
     lossRefusals,
     parseArgs as parseRestoreArgs,
 } from './restore.mjs';
@@ -245,7 +246,18 @@ test('restore names the terminals whose leases block (#453)', () => {
         },
         {},
     );
-    assert.match(refusal, /Till 1 \(terminal t-1, cashier ana\); terminal t-2/);
+    assert.match(
+        refusal,
+        /^2 terminal\(s\) still hold offline cash leases: Till 1 \(terminal t-1, cashier ana\), terminal t-2;/,
+    );
+    // One PC with two cashiers' shifts is one terminal, listed twice.
+    assert.equal(
+        leaseTerminalCount([
+            { terminalId: 'pc', label: 'Till 1', cashier: 'ana' },
+            { terminalId: 'pc', label: 'Till 1', cashier: 'bo' },
+        ]),
+        1,
+    );
     assert.equal(
         describeLeaseTerminals([{ terminalId: '', label: '', cashier: 'bo' }]),
         'terminal unknown, cashier bo',
@@ -280,6 +292,9 @@ test('blockingLeases asks only for active, unexpired leases on OPEN shifts (#453
     assert.deepEqual(pipeline[0], {
         $match: { active: true, expiresAt: { $gt: now } },
     });
+    // `$gt` skips a lease without expiresAt, and a plain $unwind (no
+    // preserveNullAndEmptyArrays) drops one whose shift doc is missing.
+    assert.deepEqual(pipeline[2], { $unwind: '$shiftDoc' });
     assert.deepEqual(pipeline[3], { $match: { 'shiftDoc.status': 'OPEN' } });
 });
 

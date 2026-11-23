@@ -42,7 +42,7 @@ const skip =
     (!MONGOD && 'GPOS_TEST_MONGOD not set') ||
     (!TOOLS && 'GPOS_TEST_MONGO_TOOLS not set') ||
     (!compiledApi && 'apps/api is not built');
-const { MongoClient } = createRequire(join(repoApi, 'package.json'))(
+const { MongoClient, ObjectId } = createRequire(join(repoApi, 'package.json'))(
     'mongoose',
 ).mongo;
 
@@ -236,32 +236,48 @@ describe('single-PC upgrade on real MongoDB', { skip }, () => {
         );
         // Only an active, unexpired lease on an OPEN shift blocks, and the
         // refusal names it; expired leases and leases of a closed
-        // (force-closed) shift do not (#453). The open shift refuses too.
+        // (force-closed) shift, a lease whose shift is missing and one
+        // without expiresAt do not (#453). The open shift refuses too.
         const hour = 3600 * 1000;
+        const live = new ObjectId();
+        const done = new ObjectId();
         await withDb(paths, async (db) => {
             await db.collection('shifts').insertMany([
                 {
-                    _id: 'live',
+                    _id: live,
                     status: 'OPEN',
                     terminal: 'Till 7',
                     cashierName: 'ana',
                 },
-                { _id: 'done', status: 'CLOSED' },
+                { _id: done, status: 'CLOSED' },
             ]);
             await db.collection('offlineleases').insertMany([
                 {
                     _id: 'expired',
                     active: true,
-                    shift: 'live',
+                    shift: live,
                     terminalId: 'old',
                     expiresAt: new Date(Date.now() - hour),
                 },
                 {
                     _id: 'closed',
                     active: true,
-                    shift: 'done',
+                    shift: done,
                     terminalId: 'gone',
                     expiresAt: new Date(Date.now() + hour),
+                },
+                {
+                    _id: 'orphan',
+                    active: true,
+                    shift: new ObjectId(),
+                    terminalId: 'orphan',
+                    expiresAt: new Date(Date.now() + hour),
+                },
+                {
+                    _id: 'undated',
+                    active: true,
+                    shift: live,
+                    terminalId: 'undated',
                 },
             ]);
         });
@@ -274,14 +290,14 @@ describe('single-PC upgrade on real MongoDB', { skip }, () => {
             db.collection('offlineleases').insertOne({
                 _id: 'l',
                 active: true,
-                shift: 'live',
+                shift: live,
                 terminalId: 't-7',
                 expiresAt: new Date(Date.now() + hour),
             }),
         );
         await refused(
             b,
-            /1 terminal\(s\) still hold offline cash leases \(Till 7 \(terminal t-7, cashier ana\)\)/,
+            /1 terminal\(s\) still hold offline cash leases: Till 7 \(terminal t-7, cashier ana\);/,
         );
         await withDb(paths, async (db) => {
             await db.collection('offlineleases').deleteMany({});
