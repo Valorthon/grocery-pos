@@ -755,7 +755,8 @@ function increment(item: CartItem) {
 function decrement(item: CartItem) {
     selectedLine.value = item.product;
     delete qtyDrafts[item.product];
-    if (item.quantity <= quantityScale(item.unit)) removeLine(item.product);
+    if (item.quantity <= quantityScale(item.unit))
+        removeLine(item.product, true);
     else
         cartStore.setQuantity(
             item.product,
@@ -776,7 +777,7 @@ function dismissUndo() {
 }
 
 /**
- * The trash button (#460): like any click on the ticket, the scan box
+ * The trash and minus buttons (#460, #471): like any click on the ticket, the scan box
  * takes the focus back afterwards (#421), not the next line.
  */
 function removeWithTrash(product: string) {
