@@ -180,7 +180,7 @@ describe('Add Products save, every clash at once (#470)', () => {
             'A product with this name already exists',
             '',
             'A product with this name already exists',
-            'An earlier draft has this name',
+            'Another draft above already uses this name',
         ]);
         expect(eanErrors()).toEqual([
             '',
@@ -227,7 +227,7 @@ describe('Add Products save, every clash at once (#470)', () => {
         expect(nameErrors()).toEqual([
             '',
             'A product with this name already exists',
-            'An earlier draft has this name',
+            'Another draft above already uses this name',
         ]);
         document
             .querySelector<HTMLButtonElement>(

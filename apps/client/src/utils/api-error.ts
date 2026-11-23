@@ -174,7 +174,7 @@ export const PRODUCT_NAME_TAKEN = 'A product with this name already exists';
 export const PRODUCT_EAN_TAKEN = 'A product with this barcode already exists';
 
 /** Inline texts for a draft repeating an earlier draft's name/barcode (#470). */
-export const DRAFT_NAME_REPEATED = 'An earlier draft has this name';
+export const DRAFT_NAME_REPEATED = 'Another draft above already uses this name';
 export const DRAFT_EAN_REPEATED = 'An earlier draft has this barcode';
 
 /**
