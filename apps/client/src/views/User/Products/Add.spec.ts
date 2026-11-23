@@ -18,12 +18,14 @@ vi.mock('vue-router', async (importOriginal) => ({
 // The dialog is covered by AddDialog.spec.ts; here it only adds drafts.
 const dialog = vi.hoisted(() => ({
     add: null as null | ((p: ProductDraft) => void),
+    update: null as null | ((p: ProductDraft) => void),
 }));
 vi.mock('@/components/User/Product/AddDialog.vue', () => ({
     default: defineComponent({
         emits: ['add', 'update', 'update:modelValue'],
         setup(_props, { emit }) {
             dialog.add = (p) => emit('add', p);
+            dialog.update = (p) => emit('update', p);
             return () => null;
         },
     }),
@@ -89,6 +91,34 @@ describe('Add Products save, a taken name (#455)', () => {
             '',
         ]);
         expect(toasts()).toEqual([]);
+    });
+
+    it('clears it when that draft is edited', async () => {
+        await mount(['MILK', 'BREAD']);
+        api.post.mockRejectedValue(
+            failure('DB_002', [
+                { msg: 'Already exists', property: 'name', index: 1 },
+            ]),
+        );
+        await click('Save All');
+        expect(nameErrors()).toEqual([
+            '',
+            'A product with this name already exists',
+        ]);
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Edit draft BREAD"]',
+            )!
+            .click();
+        await flush();
+        dialog.update!({
+            EAN: '',
+            name: 'RYE BREAD',
+            price: 1000,
+            autoGenerateEAN: true,
+        });
+        await flush();
+        expect(nameErrors()).toEqual(['', '']);
     });
 
     it('clears it when that draft is deleted', async () => {

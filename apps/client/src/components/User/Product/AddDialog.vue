@@ -157,6 +157,18 @@ watch(
     },
 );
 
+// A field's error clears once it is edited (a taken name too, #455).
+watch(
+    () => formData.name,
+    () => {
+        if (errors.value.name) {
+            const rest = { ...errors.value };
+            delete rest.name;
+            errors.value = rest;
+        }
+    },
+);
+
 const submitProduct = async () => {
     errors.value = productErrors(formData);
     if (Object.keys(errors.value).length) return;

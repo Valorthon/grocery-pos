@@ -176,6 +176,9 @@ describe('Product AddDialog (#17)', () => {
             );
             expect(toasts()).toEqual([]);
             expect(added).toEqual([]);
+
+            await type('Product Name', 'Pencils');
+            expect(fieldError('Product Name')).toBe('');
         });
 
         it('keeps a taken barcode a toast', async () => {
