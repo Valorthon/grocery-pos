@@ -162,7 +162,7 @@
                 @qty-enter="onQtyEnter"
                 @qty-scan="onQtyScan"
                 @qty-cancel="cancelQuantity"
-                @remove="removeLine"
+                @remove="removeWithTrash"
                 @undo="undoRemove"
             />
 
@@ -775,8 +775,16 @@ function dismissUndo() {
     undo.value = null;
 }
 
+/**
+ * The trash button (#460): like any click on the ticket, the scan box
+ * takes the focus back afterwards (#421), not the next line.
+ */
+function removeWithTrash(product: string) {
+    removeLine(product, true);
+}
+
 /** Removes a line at once; it can be put back for UNDO_MS. */
-function removeLine(product: string) {
+function removeLine(product: string, toScanBox = false) {
     if (cartStore.locked) return;
     const hadFocus = lineEls.get(product)?.contains(document.activeElement);
     const removed = cartStore.remove(product);
@@ -792,7 +800,9 @@ function removeLine(product: string) {
     const items = cartStore.items;
     const next = items[removed.index] ?? items[removed.index - 1] ?? null;
     selectedLine.value = next?.product ?? null;
-    if (hadFocus) {
+    if (toScanBox) {
+        void nextTick(() => scanInput.value?.focus());
+    } else if (hadFocus) {
         void nextTick(() => {
             const el = next && lineEls.get(next.product);
             if (el) el.focus({ preventScroll: true });
