@@ -1237,7 +1237,7 @@ test('single-PC docs stop the API with -Force and restart the proxies (#457)', (
         // A lone `Stop-Service GroceryPOS-API` fails: the proxy depends on it.
         assert.doesNotMatch(
             inline,
-            /Stop-Service GroceryPOS-API(?! -Force)(?!-)/,
+            /Stop-Service (?:-Name )?GroceryPOS-API(?! -Force)(?!-)/,
             `${doc} stops the API without -Force`,
         );
     }

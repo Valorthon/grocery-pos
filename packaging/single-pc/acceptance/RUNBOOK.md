@@ -431,8 +431,10 @@ with an open shift and "Offline cash ready":
 SilentlyContinue; Stop-Service GroceryPOS-Proxy, GroceryPOS-API`) and record
    two offline cash sales: R1 and R2. Note their receipt numbers and the
    register's pending count (2).
-3. Start the API and let only R1 upload (stop it again right after R1
-   shows as synced; pending count 1). R1 is now a server sale made after
+3. Start the API and proxies (`Start-Service GroceryPOS-API,
+GroceryPOS-Proxy`, plus `GroceryPOS-ProxyLan` with a LAN IP) and let only
+   R1 upload (stop them again right after R1 shows as synced, in the step 2
+   order or with `Stop-Service GroceryPOS-API -Force`; pending count 1). R1 is now a server sale made after
    the backup.
 4. With the services stopped, restore the backup with
    `Install.ps1 -Mode restore -From <full path> -Confirm <id>`: it must
