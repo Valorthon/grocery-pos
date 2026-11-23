@@ -837,6 +837,8 @@ describe('Sell line removal with Undo (decision 2026-09-25)', () => {
         mount();
         await clickButton(buttonNamed('Remove milk'));
         expect(cartNames()).toEqual(['1x mints']);
+        // #460: the scan box takes the focus back, not the next line.
+        expect(document.activeElement).toBe(input());
 
         await clickButton(buttonNamed('Undo'));
         expect(cartNames()).toEqual(['2x milk', '1x mints']);
