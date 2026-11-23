@@ -164,7 +164,7 @@ it('backs off after a failed probe and returns to 30 s after a success', async (
     await after(30000, 9);
     await after(2000, 10);
 });
-it('never overlaps probes and reschedules after a browser event', async () => {
+it('never overlaps probes and runs one queued follow-up', async () => {
     let resolve!: (ok: boolean) => void;
     status.probe.mockImplementation(
         () => new Promise<boolean>((r) => (resolve = r)),
@@ -172,24 +172,48 @@ it('never overlaps probes and reschedules after a browser event', async () => {
     mount();
     window.dispatchEvent(new Event('offline'));
     window.dispatchEvent(new Event('online'));
+    window.dispatchEvent(new Event('offline'));
     await vi.advanceTimersByTimeAsync(60000);
     expect(status.probe).toHaveBeenCalledTimes(1);
+    // The queued follow-up (the online retry wins) runs at once.
     resolve(false);
     await flush();
-    await vi.advanceTimersByTimeAsync(2000);
     expect(status.probe).toHaveBeenCalledTimes(2);
     resolve(true);
     await flush();
     await flush();
-    // The event's success resets the cadence to 30 s.
+    expect(status.sync).toHaveBeenCalledTimes(1);
+    // Its success resets the cadence to 30 s.
+    status.probe.mockResolvedValue(true);
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(status.probe).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(status.probe).toHaveBeenCalledTimes(3);
+});
+it('syncs an online event that arrives mid-probe without waiting 30 s', async () => {
+    let resolve!: (ok: boolean) => void;
+    status.probe.mockImplementation(
+        () => new Promise<boolean>((r) => (resolve = r)),
+    );
+    mount();
+    window.dispatchEvent(new Event('online'));
+    resolve(true);
+    await flush();
+    resolve(true);
+    await flush();
+    await flush();
+    expect(status.sync).toHaveBeenCalledTimes(1);
+});
+it('syncs at once when a plain probe succeeds after failures', async () => {
+    status.probe.mockResolvedValue(false);
+    mount();
+    await flush();
     status.probe.mockResolvedValue(true);
     window.dispatchEvent(new Event('offline'));
     await flush();
-    expect(status.probe).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(29999);
-    expect(status.probe).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(status.probe).toHaveBeenCalledTimes(4);
+    await flush();
+    await flush();
+    expect(status.sync).toHaveBeenCalledTimes(1);
 });
 it('stops probing on logout', async () => {
     const auth = mock.auth as { user: typeof mock.auth.user | null };

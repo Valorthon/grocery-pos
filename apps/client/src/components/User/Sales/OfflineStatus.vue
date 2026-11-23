@@ -189,6 +189,10 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let failures = 0;
 let running = false;
 let stopped = false;
+// A plain probe only learns the verdict; a retry also prepares and syncs.
+type Check = 'probe' | 'retry';
+// One queued follow-up for an event that arrived mid-probe; retry wins.
+let queued: Check | undefined;
 function stopTimer() {
     if (timer) clearTimeout(timer);
     timer = undefined;
@@ -196,37 +200,47 @@ function stopTimer() {
 function schedule() {
     stopTimer();
     if (stopped || !auth.user) return;
-    timer = setTimeout(() => void run(retry), nextProbeDelay(failures));
+    timer = setTimeout(() => void run('retry'), nextProbeDelay(failures));
 }
-async function run(check: () => Promise<boolean>) {
-    if (running || stopped) return;
+async function run(check: Check): Promise<void> {
+    if (stopped) return;
+    if (running) {
+        if (queued !== 'retry') queued = check;
+        return;
+    }
     running = true;
     stopTimer();
     let ok: boolean;
     try {
-        ok = await check();
+        ok = check === 'retry' ? await retry() : await status.probe();
     } catch {
         ok = false;
     } finally {
         running = false;
     }
-    // A run that outlived a logout keeps the timer off.
-    if (!auth.user) return;
+    let next = queued;
+    queued = undefined;
+    // A run that outlived a logout or unmount keeps the timer off.
+    if (stopped || !auth.user) return;
+    // The API came back after failures: sync now rather than in 30 s.
+    if (ok && check === 'probe' && failures > 0) next = 'retry';
     failures = ok ? 0 : failures + 1;
-    schedule();
+    if (next) void run(next);
+    else schedule();
 }
 const offline = () => {
-    void run(() => status.probe());
+    void run('probe');
 };
 const online = () => {
-    void run(retry);
+    void run('retry');
 };
 // Logout stops the timer; a later login on this mount starts over.
 watch(
-    () => auth.user,
+    () => auth.user?.userId,
     (user) => {
         failures = 0;
-        if (user) void run(() => status.probe());
+        queued = undefined;
+        if (user) void run('probe');
         else stopTimer();
     },
 );
@@ -234,7 +248,7 @@ onMounted(() => {
     window.addEventListener('offline', offline);
     window.addEventListener('online', online);
     // Learn the API's state once now rather than waiting for the timer.
-    void run(() => status.probe());
+    void run('probe');
 });
 onBeforeUnmount(() => {
     stopped = true;
