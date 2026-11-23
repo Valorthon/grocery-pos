@@ -21,6 +21,9 @@
             }}
             · {{ status.pending.length }} sales pending</span
         >
+        <span v-if="terminal" class="text-xs" data-testid="offline-terminal-id"
+            >Terminal {{ terminal }}</span
+        >
         <span v-if="status.offline">{{
             status.ready
                 ? 'Cached prices; no discounts, GCash, voids or refunds.'
@@ -127,6 +130,7 @@ import { useOfflineStore } from '@/stores/offline';
 import { useAuthStore } from '@/stores/auth';
 import { useShiftStore } from '@/stores/shift';
 import {
+    offlineTerminalSuffix,
     Role,
     STRING_LIMITS,
     type OfflinePendingSale,
@@ -142,6 +146,11 @@ const clockDrift = computed(() => {
     return seconds < 60
         ? `${seconds} seconds`
         : `${Math.round(seconds / 60)} min`;
+});
+/** This browser's own id, as the End-shift refusal names it (#454). */
+const terminal = computed(() => {
+    const id = status.state?.terminalId;
+    return id ? offlineTerminalSuffix(id) : '';
 });
 const auth = useAuthStore();
 const shifts = useShiftStore();
