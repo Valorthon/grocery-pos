@@ -686,6 +686,66 @@ describe('diagnose', () => {
         );
     });
 
+    test('access denied is unverified, never a repair (#456)', async () => {
+        const denied = (path) =>
+            Object.assign(new Error(`EACCES: ${path}`), { code: 'EACCES' });
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({
+                readText: async (path) => {
+                    if (path.endsWith('installer.json')) throw denied(path);
+                    const { readFile } = await import('node:fs/promises');
+                    return readFile(path, 'utf8');
+                },
+            }),
+        );
+        const versions = byId(report, 'versions');
+        assert.equal(versions.status, 'unknown');
+        assert.match(versions.summary, /unverified \(run as administrator\)/);
+        assert.deepEqual(versions.steps ?? [], []);
+
+        if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+            const { chmod } = await import('node:fs/promises');
+            const status = layout(root).backupStatus;
+            await writeStatus({ lastExport: { at: hoursAgo(1) } });
+            await chmod(status, 0o000);
+            try {
+                const backups = byId(
+                    await diagnose({ dataRoot: root }, healthy()),
+                    'backups',
+                );
+                assert.equal(backups.status, 'unknown');
+                assert.match(
+                    backups.summary,
+                    /unverified \(run as administrator\)/,
+                );
+                assert.deepEqual(backups.steps ?? [], []);
+            } finally {
+                await chmod(status, 0o600);
+            }
+        }
+    });
+
+    test('clockSync: Set time automatically off names the setting (#456)', async () => {
+        const check = byId(
+            await diagnose(
+                { dataRoot: root },
+                healthy({
+                    clockSync: async () => ({
+                        state: 'STOPPED',
+                        startType: 'Disabled',
+                        syncType: 'NoSync',
+                        source: null,
+                    }),
+                }),
+            ),
+            'clockSync',
+        );
+        assert.equal(check.status, 'warn');
+        assert.match(check.summary, /^Set time automatically is off/);
+        assert.doesNotMatch(GUIDANCE.clockSync.join(' '), /sync, \(/);
+    });
+
     test('clockSync: trigger-start, NoSync, disabled, localized, Hyper-V, unreadable (#446)', async () => {
         const run = async (facts) =>
             byId(

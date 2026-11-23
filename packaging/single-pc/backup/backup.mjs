@@ -433,8 +433,11 @@ export async function readStatus(paths) {
         return { ...emptyStatus(), ...status };
     } catch (error) {
         if (error.code === 'ENOENT') return emptyStatus();
-        throw new RefusedError(
-            `Backup status file ${paths.backupStatus} is unreadable.`,
+        throw Object.assign(
+            new RefusedError(
+                `Backup status file ${paths.backupStatus} is unreadable.`,
+            ),
+            { cause: error },
         );
     }
 }
