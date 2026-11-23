@@ -190,14 +190,14 @@ export class OfflineService {
                 .session(session)
                 .lean<LeaseDoc>();
             const terminalLabel = dto.terminalLabel;
-            if (
-                existing &&
-                terminalLabel &&
-                existing.terminalLabel !== terminalLabel
-            )
+            // A request without a label clears a stored one, so a label
+            // removed on the device is no longer shown (#454).
+            if (existing && existing.terminalLabel !== terminalLabel)
                 await this.leases.updateOne(
                     { _id: existing._id },
-                    { $set: { terminalLabel } },
+                    terminalLabel
+                        ? { $set: { terminalLabel } }
+                        : { $unset: { terminalLabel: 1 } },
                     { session },
                 );
             const doc =

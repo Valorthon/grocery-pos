@@ -418,6 +418,18 @@ describe('a close refused by offline terminals (#143)', () => {
         expect(text).toContain('2 terminals still have');
     });
 
+    it('names at most five terminals, then counts the rest', () => {
+        const blocking = Array.from({ length: 7 }, (_, i) => ({
+            terminal: `T000000${i}`,
+            leasedAt: 'x',
+        }));
+        const text = offlinePendingText(7, blocking);
+        expect(text).toContain(
+            'Still on: Terminal T0000000; Terminal T0000001; Terminal T0000002; Terminal T0000003; Terminal T0000004; and 2 more.',
+        );
+        expect(text).not.toContain('T0000005');
+    });
+
     it('drops malformed blocking entries', () => {
         expect(
             blockingTerminalList(

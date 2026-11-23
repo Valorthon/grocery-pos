@@ -124,6 +124,9 @@ export function blockingTerminalText(entry: OfflinePendingTerminal): string {
     return since ? `${name}, offline mode on since ${since}` : name;
 }
 
+/** At most this many blocking terminals are named; the rest are counted. */
+export const BLOCKING_SHOWN_MAX = 5;
+
 /** Why the server refused the close because terminals are still offline. */
 export function offlinePendingText(
     terminals: number,
@@ -133,9 +136,12 @@ export function offlinePendingText(
         terminals === 1
             ? '1 terminal still has'
             : `${terminals.toLocaleString('en-PH')} terminals still have`;
-    const which = blocking.length
-        ? ` Still on: ${blocking.map(blockingTerminalText).join('; ')}.`
-        : '';
+    const shown = blocking
+        .slice(0, BLOCKING_SHOWN_MAX)
+        .map(blockingTerminalText);
+    const more = blocking.length - shown.length;
+    if (more > 0) shown.push(`and ${more.toLocaleString('en-PH')} more`);
+    const which = shown.length ? ` Still on: ${shown.join('; ')}.` : '';
     return `${who} offline mode on for this shift.${which} Sync their pending cash sales and turn offline mode off there, then close. If a terminal's browser data is gone, ask an admin to force-close the shift.`;
 }
 
