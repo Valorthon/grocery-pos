@@ -39,6 +39,7 @@ import {
     redact,
     renderText,
     checkExitCode,
+    onlyAdminUnverified,
     EXIT,
 } from './diagnose.mjs';
 
@@ -758,6 +759,81 @@ describe('diagnose', () => {
         }
     });
 
+    const ADMIN_FOOTER =
+        'Some checks need administrator rights; run as administrator for a full check.';
+    const ATTENTION_FOOTER =
+        'Something needs attention: follow the steps above.';
+    const healthyBackups = () =>
+        writeStatus({
+            lastAttempt: { at: hoursAgo(5) },
+            lastSuccess: { at: hoursAgo(5) },
+            lastVerifiedSuccess: { at: hoursAgo(5), backupId: 'b1' },
+            lastExport: { at: hoursAgo(24) },
+        });
+    const deniedInstallRecord = (extra = {}) =>
+        healthy({
+            readText: async (path) => {
+                if (path.endsWith('installer.json'))
+                    throw Object.assign(new Error('EACCES'), {
+                        code: 'EACCES',
+                    });
+                return readFile(path, 'utf8');
+            },
+            ...extra,
+        });
+
+    test('only admin-unverified checks: admin footer, exit 3 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            deniedInstallRecord(),
+        );
+        assert.equal(report.overall, 'unknown');
+        assert.ok(onlyAdminUnverified(report));
+        const text = renderText(report);
+        assert.ok(text.includes(ADMIN_FOOTER));
+        assert.ok(!text.includes(ATTENTION_FOOTER));
+        assert.equal(checkExitCode(report), EXIT.UNVERIFIED);
+        assert.equal(EXIT.UNVERIFIED, 3);
+        // The marker never reaches the JSON.
+        assert.deepEqual(Object.keys(report), [...REPORT_KEYS]);
+        assert.ok(!JSON.stringify(report).includes('dmin_'));
+    });
+
+    test('a non-admin unknown alone is attention, exit 1 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({ clockSync: async () => null }),
+        );
+        assert.equal(byId(report, 'clockSync').status, 'unknown');
+        assert.equal(report.overall, 'unknown');
+        const text = renderText(report);
+        assert.ok(text.includes(ATTENTION_FOOTER));
+        assert.ok(!text.includes(ADMIN_FOOTER));
+        assert.equal(checkExitCode(report), EXIT.ATTENTION);
+    });
+
+    test('admin unknown plus another unknown is attention, exit 1 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            deniedInstallRecord({ clockSync: async () => null }),
+        );
+        assert.equal(byId(report, 'versions').status, 'unknown');
+        assert.ok(renderText(report).includes(ATTENTION_FOOTER));
+        assert.equal(checkExitCode(report), EXIT.ATTENTION);
+    });
+
+    test('proxy probe without the root alone: exit 3; all ok: exit 0 (#456)', async () => {
+        await healthyBackups();
+        const report = await diagnose({ dataRoot: root }, healthy());
+        assert.equal(byId(report, 'proxy').status, 'unknown');
+        assert.equal(checkExitCode(report), EXIT.UNVERIFIED);
+        for (const c of report.checks) c.status = 'ok';
+        assert.equal(checkExitCode({ ...report, overall: 'ok' }), EXIT.OK);
+    });
+
     test('clockSync: Set time automatically off names the setting (#456)', async () => {
         const check = byId(
             await diagnose(
@@ -1254,53 +1330,4 @@ test('single-PC docs stop the API with -Force and restart the proxies (#457)', (
         recovery,
         /diagnose\.mjs" \^ check --data-root \S+ \^ --release /,
     );
-});
-
-describe('#456 unverified-only footer and exit code', () => {
-    const report = (statuses) => ({
-        generatedAt: NOW.toISOString(),
-        overall: statuses.reduce(
-            (w, s) =>
-                ({ ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 })[s] >
-                { ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 }[w]
-                    ? s
-                    : w,
-            'ok',
-        ),
-        guide: null,
-        checks: statuses.map((status, i) => ({
-            id: `c${i}`,
-            title: `Check ${i}`,
-            status,
-            summary: 's',
-            steps: [],
-        })),
-        notObserved: [],
-    });
-    const ADMIN =
-        'Some checks need administrator rights; run as administrator for a full check.';
-    const ATTENTION = 'Something needs attention: follow the steps above.';
-
-    test('only unverified: admin footer, exit 3', () => {
-        const r = report(['ok', 'unknown', 'info', 'unknown']);
-        const text = renderText(r);
-        assert.ok(text.includes(ADMIN));
-        assert.ok(!text.includes(ATTENTION));
-        assert.equal(checkExitCode(r), EXIT.UNVERIFIED);
-        assert.equal(EXIT.UNVERIFIED, 3);
-    });
-    for (const bad of ['warn', 'fail']) {
-        test(`unverified plus ${bad}: attention footer, exit 1`, () => {
-            const r = report(['unknown', bad]);
-            const text = renderText(r);
-            assert.ok(text.includes(ATTENTION));
-            assert.ok(!text.includes(ADMIN));
-            assert.equal(checkExitCode(r), EXIT.ATTENTION);
-        });
-    }
-    test('all ok/info: exit 0', () => {
-        const r = report(['ok', 'info']);
-        assert.ok(renderText(r).includes('Everything checked is OK.'));
-        assert.equal(checkExitCode(r), EXIT.OK);
-    });
 });
