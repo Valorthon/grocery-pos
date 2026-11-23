@@ -134,6 +134,7 @@ import {
 import BaseModal from '@/components/ui/BaseModal.vue';
 import BaseButton from '@/components/ui/BaseButton.vue';
 import { formatCurrency } from '@/utils/currency';
+import { nextProbeDelay } from './probe-backoff';
 const status = useOfflineStore();
 /** The offset in whole minutes, or seconds below a minute. */
 const clockDrift = computed(() => {
@@ -156,12 +157,13 @@ watch(
 );
 // The browser's online/offline events are hints only: the API itself
 // decides (#359), so a local API keeps working without internet.
-async function retry() {
-    if (!(await status.probe())) return;
+async function retry(): Promise<boolean> {
+    if (!(await status.probe())) return false;
     if (shifts.activeShift && auth.user?.roles.includes(Role.Seller))
         await status.prepare(shifts.activeShift);
     await status.sync();
     await status.refreshPending().catch(() => undefined);
+    return true;
 }
 async function reconcile(entry: OfflinePendingSale) {
     working.value = true;
@@ -180,25 +182,78 @@ async function reconcile(entry: OfflinePendingSale) {
         working.value = false;
     }
 }
+// Probe schedule (#459): every 30 s while the API answers; after a failed
+// probe 2 s, 5 s, 10 s, then every 30 s. One probe at a time; every
+// verdict (timer or browser event) reschedules from its outcome.
+let timer: ReturnType<typeof setTimeout> | undefined;
+let failures = 0;
+let running = false;
+let stopped = false;
+// A plain probe only learns the verdict; a retry also prepares and syncs.
+type Check = 'probe' | 'retry';
+// One queued follow-up for an event that arrived mid-probe; retry wins.
+let queued: Check | undefined;
+function stopTimer() {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+}
+function schedule() {
+    stopTimer();
+    if (stopped || !auth.user) return;
+    timer = setTimeout(() => void run('retry'), nextProbeDelay(failures));
+}
+async function run(check: Check): Promise<void> {
+    if (stopped) return;
+    if (running) {
+        if (queued !== 'retry') queued = check;
+        return;
+    }
+    running = true;
+    stopTimer();
+    let ok: boolean;
+    try {
+        ok = check === 'retry' ? await retry() : await status.probe();
+    } catch {
+        ok = false;
+    } finally {
+        running = false;
+    }
+    let next = queued;
+    queued = undefined;
+    // A run that outlived a logout or unmount keeps the timer off.
+    if (stopped || !auth.user) return;
+    // The API came back after failures: sync now rather than in 30 s.
+    if (ok && check === 'probe' && failures > 0) next = 'retry';
+    failures = ok ? 0 : failures + 1;
+    if (next) void run(next);
+    else schedule();
+}
 const offline = () => {
-    void status.probe();
+    void run('probe');
 };
 const online = () => {
-    void retry();
+    void run('retry');
 };
-let timer: ReturnType<typeof setInterval> | undefined;
+// Logout stops the timer; a later login on this mount starts over.
+watch(
+    () => auth.user?.userId,
+    (user) => {
+        failures = 0;
+        queued = undefined;
+        if (user) void run('probe');
+        else stopTimer();
+    },
+);
 onMounted(() => {
     window.addEventListener('offline', offline);
     window.addEventListener('online', online);
     // Learn the API's state once now rather than waiting for the timer.
-    void status.probe();
-    timer = setInterval(() => {
-        void retry();
-    }, 30000);
+    void run('probe');
 });
 onBeforeUnmount(() => {
+    stopped = true;
     window.removeEventListener('offline', offline);
     window.removeEventListener('online', online);
-    if (timer) clearInterval(timer);
+    stopTimer();
 });
 </script>
