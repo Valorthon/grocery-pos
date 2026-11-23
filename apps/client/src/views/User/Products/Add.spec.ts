@@ -170,6 +170,7 @@ describe('Add Products save, every clash at once (#470)', () => {
         { property: 'EAN', msg: 'Already exists', index: 1 },
         { property: 'name', msg: 'Already exists', index: 2 },
         { property: 'name', msg: 'Repeated in this list', index: 3 },
+        { property: 'EAN', msg: 'Repeated in this list', index: 3 },
     ];
 
     it('flags every draft, with no toast; an edit clears its own and the repeats', async () => {
@@ -186,7 +187,7 @@ describe('Add Products save, every clash at once (#470)', () => {
             '',
             'A product with this barcode already exists',
             '',
-            '',
+            'Another draft above already uses this barcode',
         ]);
         expect(toasts()).toEqual([]);
 

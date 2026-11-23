@@ -1,7 +1,11 @@
 import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { inFooter } from '@/testing/form-dom';
-import { Role, STRING_LIMITS } from '@grocery-pos/contracts';
+import {
+    offlineTerminalSuffix,
+    Role,
+    STRING_LIMITS,
+} from '@grocery-pos/contracts';
 import OfflineStatus from './OfflineStatus.vue';
 
 const mock = vi.hoisted(() => ({
@@ -28,6 +32,7 @@ function fixture() {
         busy: false,
         admin: false,
         clockOffset: 0,
+        state: null as { terminalId: string; lease?: object } | null,
         clockWarning: false,
         setConnection: vi.fn(),
         probe: vi.fn().mockResolvedValue(true),
@@ -332,4 +337,32 @@ it('warns when the terminal clock is far off the main PC (#398)', async () => {
     status.clockOffset = 300_000;
     await flush();
     expect(warning?.textContent).toContain('5 min off');
+});
+
+it("shows this browser's terminal id as the End-shift refusal names it (#454)", () => {
+    const terminalId = '3f2a1b4c-0000-4000-8000-00ab12cd34ef';
+    status.state = { terminalId };
+    mount();
+    const shown = root.querySelector('[data-testid="offline-terminal-id"]');
+    expect(shown?.textContent).toBe(
+        `Your terminal id ${offlineTerminalSuffix(terminalId)}`,
+    );
+    expect(shown?.textContent).toBe('Your terminal id 12CD34EF');
+});
+it('shows no terminal id before offline mode created one (#454)', () => {
+    mount();
+    expect(
+        root.querySelector('[data-testid="offline-terminal-id"]'),
+    ).toBeNull();
+});
+it('shows the id while a lease exists before the catalogue is ready (#454)', () => {
+    status.ready = false;
+    status.state = {
+        terminalId: '3f2a1b4c-0000-4000-8000-00ab12cd34ef',
+        lease: {},
+    };
+    mount();
+    expect(
+        root.querySelector('[data-testid="offline-terminal-id"]')?.textContent,
+    ).toBe('Your terminal id 12CD34EF');
 });

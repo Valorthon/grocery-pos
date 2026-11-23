@@ -5,7 +5,8 @@
             status.ready ||
             status.pending.length ||
             status.error ||
-            status.clockWarning
+            status.clockWarning ||
+            status.state?.lease
         "
         class="shrink-0 px-3 py-2 bg-amber-50 border-b border-amber-200 text-sm flex flex-wrap items-center gap-2"
         role="status"
@@ -20,6 +21,9 @@
                       : 'Offline cash sync'
             }}
             · {{ status.pending.length }} sales pending</span
+        >
+        <span v-if="terminal" class="text-xs" data-testid="offline-terminal-id"
+            >Your terminal id {{ terminal }}</span
         >
         <span v-if="status.offline">{{
             status.ready
@@ -127,6 +131,7 @@ import { useOfflineStore } from '@/stores/offline';
 import { useAuthStore } from '@/stores/auth';
 import { useShiftStore } from '@/stores/shift';
 import {
+    offlineTerminalSuffix,
     Role,
     STRING_LIMITS,
     type OfflinePendingSale,
@@ -142,6 +147,11 @@ const clockDrift = computed(() => {
     return seconds < 60
         ? `${seconds} seconds`
         : `${Math.round(seconds / 60)} min`;
+});
+/** This browser's own id, as the End-shift refusal names it (#454). */
+const terminal = computed(() => {
+    const id = status.state?.terminalId;
+    return id ? offlineTerminalSuffix(id) : '';
 });
 const auth = useAuthStore();
 const shifts = useShiftStore();
