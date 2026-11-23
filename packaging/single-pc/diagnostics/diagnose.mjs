@@ -233,7 +233,7 @@ export const GUIDANCE = Object.freeze({
         'The backup status file is unreadable. Run a backup (the tool keeps the damaged file aside) or contact your vendor.',
     ],
     clockSync: [
-        "Windows is not keeping this PC's clock in sync, (Set time automatically is off or the time service is disabled), so it can drift (on a dual-boot PC by hours), which puts sales on the wrong day and may refuse offline cash sales.",
+        "Windows is not keeping this PC's clock in sync (Set time automatically is off or the time service is disabled), so it can drift (on a dual-boot PC by hours), which puts sales on the wrong day and may refuse offline cash sales.",
         'Turn on Set time automatically in Windows Settings > Time & language > Date & time, then press Sync now. See RECOVERY.md "Clock sync".',
     ],
     clock: [
@@ -259,6 +259,14 @@ async function readJson(ctx, path) {
     }
 }
 
+/** Access denied (not elevated), as opposed to a missing or corrupt file. */
+export function isAccessDenied(error) {
+    const code = error?.code ?? error?.cause?.code;
+    return code === 'EACCES' || code === 'EPERM';
+}
+
+const UNVERIFIED_ADMIN = 'unverified (run as administrator)';
+
 function gb(bytes) {
     return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
@@ -271,7 +279,16 @@ function isLoopback(address) {
 // ------------------------------------------------------------ checks
 
 export async function checkVersions(ctx, paths, release) {
-    const state = await readJson(ctx, join(paths.dirs.state, 'installer.json'));
+    let state;
+    let denied = false;
+    try {
+        state = JSON.parse(
+            await ctx.readText(join(paths.dirs.state, 'installer.json')),
+        );
+    } catch (error) {
+        denied = isAccessDenied(error);
+        state = undefined;
+    }
     const releaseDir = release ?? state?.release;
     const info = releaseDir
         ? await readJson(ctx, join(releaseDir, 'VERSION.json'))
@@ -292,6 +309,14 @@ export async function checkVersions(ctx, paths, release) {
               )
             : null,
     };
+    if (denied)
+        return result(
+            'versions',
+            'Installed version',
+            'unknown',
+            `The installation record could not be read: ${UNVERIFIED_ADMIN}.`,
+            { details },
+        );
     if (!state?.complete) {
         return result(
             'versions',
@@ -837,7 +862,14 @@ export async function checkBackups(paths, now) {
     let summary;
     try {
         summary = statusSummary(await readStatus(paths), now);
-    } catch {
+    } catch (error) {
+        if (isAccessDenied(error))
+            return result(
+                'backups',
+                'Backups',
+                'unknown',
+                `The backup status could not be read: ${UNVERIFIED_ADMIN}.`,
+            );
         return result(
             'backups',
             'Backups',
@@ -934,13 +966,13 @@ export async function checkClockSync(ctx) {
             details,
             steps: GUIDANCE.clockSync,
         });
-    if (state === 'absent' || startType === 'Disabled')
-        return warn(
-            'The Windows Time service is disabled, so this PC clock is not kept in sync.',
-        );
     if (syncType === 'NoSync')
         return warn(
             'Set time automatically is off, so this PC clock is not kept in sync.',
+        );
+    if (state === 'absent' || startType === 'Disabled')
+        return warn(
+            'The Windows Time service is disabled, so this PC clock is not kept in sync.',
         );
     if (state === 'RUNNING' && syncedSource(source) === false)
         return warn('Windows is not syncing this PC clock with a time server.');

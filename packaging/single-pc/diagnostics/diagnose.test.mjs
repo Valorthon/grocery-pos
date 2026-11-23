@@ -29,6 +29,7 @@ import {
     supportExport,
     tailFile,
     diagnose,
+    isAccessDenied,
     errorLines,
     firewallState,
     parseLanAddress,
@@ -684,6 +685,95 @@ describe('diagnose', () => {
             byId(report, 'backups').steps,
             GUIDANCE.backupStatusUnreadable,
         );
+    });
+
+    test('EPERM and EACCES are access denied, directly or as cause (#456)', () => {
+        for (const code of ['EACCES', 'EPERM']) {
+            assert.equal(isAccessDenied({ code }), true);
+            assert.equal(isAccessDenied({ cause: { code } }), true);
+        }
+        for (const e of [{ code: 'ENOENT' }, new SyntaxError('x'), null])
+            assert.equal(isAccessDenied(e), false);
+    });
+
+    for (const code of ['EACCES', 'EPERM'])
+        test(`${code} on the install record is unverified (#456)`, async () => {
+            const report = await diagnose(
+                { dataRoot: root, release },
+                healthy({
+                    readText: async (path) => {
+                        if (path.endsWith('installer.json'))
+                            throw Object.assign(new Error(code), { code });
+                        return readFile(path, 'utf8');
+                    },
+                }),
+            );
+            const versions = byId(report, 'versions');
+            assert.equal(versions.status, 'unknown');
+            assert.deepEqual(versions.steps, []);
+            // The release passed in is still read.
+            assert.equal(versions.details.appVersion, '0.0.1');
+            assert.equal(versions.details.installedVersion, null);
+        });
+
+    test('access denied is unverified, never a repair (#456)', async () => {
+        const denied = (path) =>
+            Object.assign(new Error(`EACCES: ${path}`), { code: 'EACCES' });
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({
+                readText: async (path) => {
+                    if (path.endsWith('installer.json')) throw denied(path);
+                    const { readFile } = await import('node:fs/promises');
+                    return readFile(path, 'utf8');
+                },
+            }),
+        );
+        const versions = byId(report, 'versions');
+        assert.equal(versions.status, 'unknown');
+        assert.match(versions.summary, /unverified \(run as administrator\)/);
+        assert.deepEqual(versions.steps ?? [], []);
+
+        if (process.platform !== 'win32' && process.getuid?.() !== 0) {
+            const { chmod } = await import('node:fs/promises');
+            const status = layout(root).backupStatus;
+            await writeStatus({ lastExport: { at: hoursAgo(1) } });
+            await chmod(status, 0o000);
+            try {
+                const backups = byId(
+                    await diagnose({ dataRoot: root }, healthy()),
+                    'backups',
+                );
+                assert.equal(backups.status, 'unknown');
+                assert.match(
+                    backups.summary,
+                    /unverified \(run as administrator\)/,
+                );
+                assert.deepEqual(backups.steps ?? [], []);
+            } finally {
+                await chmod(status, 0o600);
+            }
+        }
+    });
+
+    test('clockSync: Set time automatically off names the setting (#456)', async () => {
+        const check = byId(
+            await diagnose(
+                { dataRoot: root },
+                healthy({
+                    clockSync: async () => ({
+                        state: 'STOPPED',
+                        startType: 'Disabled',
+                        syncType: 'NoSync',
+                        source: null,
+                    }),
+                }),
+            ),
+            'clockSync',
+        );
+        assert.equal(check.status, 'warn');
+        assert.match(check.summary, /^Set time automatically is off/);
+        assert.doesNotMatch(GUIDANCE.clockSync.join(' '), /sync, \(/);
     });
 
     test('clockSync: trigger-start, NoSync, disabled, localized, Hyper-V, unreadable (#446)', async () => {
