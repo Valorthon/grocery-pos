@@ -132,13 +132,71 @@ export async function lossChecks(root, manifest) {
     const openShifts = await db
         .collection('shifts')
         .countDocuments({ status: 'OPEN' });
-    const activeLeases = await db
-        .collection('offlineleases')
-        .countDocuments({ active: true });
+    const leaseTerminals = await blockingLeases(db);
     const newerSales = await db.collection('sales').countDocuments({
         createdAt: { $gt: new Date(manifest.createdAt) },
     });
-    return { openShifts, activeLeases, newerSales };
+    return {
+        openShifts,
+        activeLeases: leaseTerminals.length,
+        leaseTerminals,
+        newerSales,
+    };
+}
+
+/**
+ * The terminals whose offline cash leases still block (#453): active,
+ * not expired, and on a shift that is still OPEN. An expired lease or one
+ * on a closed (e.g. force-closed) shift can take no new offline sale; its
+ * queued cash still needs ADMIN reconciliation (#37). One entry per
+ * terminal and shift, with the shift's terminal label and cashier.
+ */
+export async function blockingLeases(db, now = new Date()) {
+    const rows = await db
+        .collection('offlineleases')
+        .aggregate([
+            { $match: { active: true, expiresAt: { $gt: now } } },
+            {
+                $lookup: {
+                    from: 'shifts',
+                    localField: 'shift',
+                    foreignField: '_id',
+                    as: 'shiftDoc',
+                },
+            },
+            { $unwind: '$shiftDoc' },
+            { $match: { 'shiftDoc.status': 'OPEN' } },
+            {
+                $group: {
+                    _id: { terminalId: '$terminalId', shift: '$shift' },
+                    label: { $first: '$shiftDoc.terminal' },
+                    cashier: { $first: '$shiftDoc.cashierName' },
+                },
+            },
+            { $sort: { '_id.terminalId': 1, '_id.shift': 1 } },
+        ])
+        .toArray();
+    return rows.map((row) => ({
+        terminalId: String(row._id.terminalId ?? ''),
+        label: typeof row.label === 'string' ? row.label : '',
+        cashier: typeof row.cashier === 'string' ? row.cashier : '',
+    }));
+}
+
+/** "Till 1 (terminal 3f2a…, cashier ana); …" for a refusal message. */
+export function describeLeaseTerminals(terminals = []) {
+    return terminals
+        .map(({ terminalId, label, cashier }) => {
+            const parts = [`terminal ${terminalId || 'unknown'}`];
+            if (cashier) parts.push(`cashier ${cashier}`);
+            return label ? `${label} (${parts.join(', ')})` : parts.join(', ');
+        })
+        .join('; ');
+}
+
+function leaseSuffix(found) {
+    const named = describeLeaseTerminals(found.leaseTerminals);
+    return named ? `: ${named}` : '';
 }
 
 export function lossRefusals(found, options) {
@@ -149,7 +207,7 @@ export function lossRefusals(found, options) {
         );
     if (found.activeLeases && !options.acceptPendingOffline)
         out.push(
-            `${found.activeLeases} terminal(s) hold offline cash leases that may have unsynchronized receipts; synchronize them first or pass --accept-pending-offline`,
+            `${found.activeLeases} terminal(s) hold offline cash leases that may have unsynchronized receipts${leaseSuffix(found)}; synchronize them first or pass --accept-pending-offline`,
         );
     if (found.newerSales && !options.acceptNewerSales)
         out.push(

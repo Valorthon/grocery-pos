@@ -201,6 +201,15 @@ export class FakeModel {
         applyUpdate(row, update);
         return Promise.resolve({ matchedCount: 1 });
     }
+
+    updateMany(
+        filter: Filter,
+        update: Parameters<typeof applyUpdate>[1],
+    ): Promise<{ matchedCount: number }> {
+        const rows = this.rows.filter((r) => matches(r, filter));
+        for (const row of rows) applyUpdate(row, update);
+        return Promise.resolve({ matchedCount: rows.length });
+    }
 }
 
 /** A Shift model with the one-open-shift-per-cashier unique index. */

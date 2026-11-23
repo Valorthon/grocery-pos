@@ -356,6 +356,12 @@ it('requires admin reconciliation after force close and keeps the original Z-rea
             })
         ).status,
     ).toBe(201);
+    // The force-close ended the shift's lease in its transaction (#453).
+    const ended = await db
+        .model<{ active: boolean }>('OfflineLease')
+        .findById(lease._id)
+        .lean();
+    expect(ended?.active).toBe(false);
     const original = await db
         .model<Shift>('Shift')
         .findById(lease.shift._id)

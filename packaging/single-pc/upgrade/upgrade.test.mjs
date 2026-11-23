@@ -247,6 +247,15 @@ test('preflight refuses every unsafe upgrade and passes a safe one', () => {
     refused({ openShifts: 2 }, /2 shift\(s\) are open/);
     refused({ activeLeases: 1 }, /offline cash leases/);
     refused(
+        {
+            activeLeases: 1,
+            leaseTerminals: [
+                { terminalId: 't-9', label: 'Till 2', cashier: 'ana' },
+            ],
+        },
+        /offline cash leases \(Till 2 \(terminal t-9, cashier ana\)\)/,
+    );
+    refused(
         { backup: { ...okFacts.backup, lastVerifiedSuccess: null } },
         /no verified backup/,
     );
