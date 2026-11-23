@@ -61,7 +61,7 @@ const pending = () => ({
 beforeEach(() => {
     status = fixture();
     mock.status = status;
-    mock.auth.user.roles = [Role.Seller];
+    mock.auth = reactive({ user: { userId: 'seller', roles: [Role.Seller] } });
     vi.useFakeTimers();
 });
 afterEach(() => {
@@ -137,6 +137,68 @@ it('refreshes periodically and removes its listeners/timer after unmount', async
     app.unmount();
     await vi.advanceTimersByTimeAsync(30000);
     expect(status.sync).toHaveBeenCalledTimes(1);
+});
+// #459: a failed probe retries at 2 s, 5 s, 10 s, then every 30 s.
+it('backs off after a failed probe and returns to 30 s after a success', async () => {
+    status.probe.mockResolvedValue(false);
+    mount();
+    await flush();
+    expect(status.probe).toHaveBeenCalledTimes(1);
+    const after = async (ms: number, calls: number) => {
+        await vi.advanceTimersByTimeAsync(ms - 1);
+        expect(status.probe).toHaveBeenCalledTimes(calls - 1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(status.probe).toHaveBeenCalledTimes(calls);
+    };
+    await after(2000, 2);
+    await after(5000, 3);
+    await after(10000, 4);
+    await after(30000, 5);
+    await after(30000, 6);
+    status.probe.mockResolvedValue(true);
+    await after(30000, 7);
+    expect(status.sync).toHaveBeenCalledTimes(1);
+    await after(30000, 8);
+    // A new failure starts the backoff over.
+    status.probe.mockResolvedValue(false);
+    await after(30000, 9);
+    await after(2000, 10);
+});
+it('never overlaps probes and reschedules after a browser event', async () => {
+    let resolve!: (ok: boolean) => void;
+    status.probe.mockImplementation(
+        () => new Promise<boolean>((r) => (resolve = r)),
+    );
+    mount();
+    window.dispatchEvent(new Event('offline'));
+    window.dispatchEvent(new Event('online'));
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(status.probe).toHaveBeenCalledTimes(1);
+    resolve(false);
+    await flush();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(status.probe).toHaveBeenCalledTimes(2);
+    resolve(true);
+    await flush();
+    await flush();
+    // The event's success resets the cadence to 30 s.
+    status.probe.mockResolvedValue(true);
+    window.dispatchEvent(new Event('offline'));
+    await flush();
+    expect(status.probe).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(status.probe).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(status.probe).toHaveBeenCalledTimes(4);
+});
+it('stops probing on logout', async () => {
+    const auth = mock.auth as { user: typeof mock.auth.user | null };
+    mount();
+    await flush();
+    auth.user = null;
+    await flush();
+    await vi.advanceTimersByTimeAsync(120000);
+    expect(status.probe).toHaveBeenCalledTimes(1);
 });
 it('lets an admin explicitly reconcile a collected cash record with a required reason', async () => {
     status.admin = true;
