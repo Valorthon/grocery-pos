@@ -3,8 +3,16 @@ import { type App, createApp, h, ref } from 'vue';
 import { type Pinia, createPinia } from 'pinia';
 import { AxiosError, AxiosHeaders } from 'axios';
 import { useUIStore } from '@/stores/ui';
-import { click, field, fieldError, flush, type } from '@/testing/form-dom';
+import {
+    check,
+    click,
+    field,
+    fieldError,
+    flush,
+    type,
+} from '@/testing/form-dom';
 import type { ProductDraft } from '@/utils/payloads';
+import type { WithDraftId } from '@/composables/useDrafts';
 import AddDialog from './AddDialog.vue';
 import { productErrors, type ProductFormInput } from './validation';
 
@@ -13,12 +21,14 @@ vi.mock('@/axios', () => ({ default: api }));
 
 let app: App | null = null;
 let added: ProductDraft[];
+let opened: [string, boolean][];
 let pinia: Pinia;
 
 beforeEach(() => {
     api.get.mockReset();
     api.get.mockResolvedValue({ data: {} });
     added = [];
+    opened = [];
 });
 
 afterEach(() => {
@@ -27,7 +37,11 @@ afterEach(() => {
     document.body.innerHTML = '';
 });
 
-async function open(item?: Partial<ProductDraft>) {
+async function open(
+    item?: Partial<ProductDraft>,
+    drafts: WithDraftId<ProductDraft>[] = [],
+    editingId: string | null = null,
+) {
     const isOpen = ref(false);
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -39,6 +53,10 @@ async function open(item?: Partial<ProductDraft>) {
                 item,
                 onAdd: (p: ProductDraft) => added.push(p),
                 onUpdate: (p: ProductDraft) => added.push(p),
+                drafts,
+                editingId,
+                onEditDraft: (id: string, dirty: boolean) =>
+                    opened.push([id, dirty]),
             }),
     });
     pinia = createPinia();
@@ -210,6 +228,127 @@ describe('Product AddDialog (#17)', () => {
             expect(fieldError('Product Name')).toBe('');
             expect(fieldError('EAN / Barcode')).toBe('');
             expect(toasts()).toEqual(['something else']);
+        });
+    });
+
+    describe('a repeat of another draft (#478)', () => {
+        const DRAFTS: WithDraftId<ProductDraft>[] = [
+            {
+                draftId: 'd1',
+                EAN: '4006381333931',
+                name: 'PENS',
+                price: 2000,
+                autoGenerateEAN: false,
+            },
+            {
+                draftId: 'd2',
+                EAN: '',
+                name: 'MILK',
+                price: 1000,
+                autoGenerateEAN: true,
+            },
+        ];
+        const blur = (label: string) =>
+            field(label).dispatchEvent(new Event('blur'));
+        const enter = (label: string) =>
+            field(label).dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Enter' }),
+            );
+        const repeatButton = (which: 'ean' | 'name') =>
+            document.body.querySelector<HTMLButtonElement>(
+                `[data-testid="edit-repeat-${which}"]`,
+            );
+
+        it('flags a repeated barcode at scan Enter and on blur', async () => {
+            await open(undefined, DRAFTS);
+            await type('EAN / Barcode', '4006381333931');
+            expect(fieldError('EAN / Barcode')).toBe('');
+            enter('EAN / Barcode');
+            await flush();
+            expect(fieldError('EAN / Barcode')).toBe(
+                'Another draft above already uses this barcode',
+            );
+            await type('EAN / Barcode', '036000291452');
+            expect(fieldError('EAN / Barcode')).toBe('');
+            await type('EAN / Barcode', '4006381333931');
+            blur('EAN / Barcode');
+            await flush();
+            expect(repeatButton('ean')?.textContent).toContain(
+                'Edit that draft',
+            );
+        });
+
+        it('flags a repeated name as stored, and refuses Add', async () => {
+            await open(undefined, DRAFTS);
+            await type('EAN / Barcode', '036000291452');
+            await type('Product Name', '  milk ');
+            await type('Selling Price', '10');
+            await click('Add to Draft');
+            expect(fieldError('Product Name')).toBe(
+                'Another draft above already uses this name',
+            );
+            expect(added).toEqual([]);
+            expect(api.get).not.toHaveBeenCalledWith(
+                'products/ensureValid',
+                expect.anything(),
+            );
+        });
+
+        it('refuses Add while the barcode repeats', async () => {
+            await open(undefined, DRAFTS);
+            await type('EAN / Barcode', '4006381333931');
+            await type('Product Name', 'Other');
+            await type('Selling Price', '10');
+            await click('Add to Draft');
+            expect(fieldError('EAN / Barcode')).toBe(
+                'Another draft above already uses this barcode',
+            );
+            expect(added).toEqual([]);
+        });
+
+        it('Edit that draft names the earlier draft and whether input is discarded', async () => {
+            await open(undefined, DRAFTS);
+            await type('Product Name', 'pens');
+            blur('Product Name');
+            await flush();
+            repeatButton('name')!.click();
+            await flush();
+            expect(opened).toEqual([['d1', true]]);
+        });
+
+        it('reports nothing typed when the edit dialog is unchanged', async () => {
+            await open(
+                DRAFTS[0],
+                [...DRAFTS, { ...DRAFTS[0]!, draftId: 'd3' }],
+                'd1',
+            );
+            blur('EAN / Barcode');
+            await flush();
+            repeatButton('ean')!.click();
+            await flush();
+            expect(opened).toEqual([['d3', false]]);
+        });
+
+        it('never flags the draft being edited', async () => {
+            await open(DRAFTS[0], DRAFTS, 'd1');
+            blur('EAN / Barcode');
+            blur('Product Name');
+            await click('Update Draft');
+            expect(fieldError('EAN / Barcode')).toBe('');
+            expect(fieldError('Product Name')).toBe('');
+            expect(added).toHaveLength(1);
+        });
+
+        it('ignores auto-generated barcodes', async () => {
+            await open(undefined, DRAFTS);
+            await type('EAN / Barcode', '4006381333931');
+            blur('EAN / Barcode');
+            await flush();
+            expect(repeatButton('ean')).not.toBeNull();
+            await check('Auto-generate EAN', true);
+            await flush();
+            expect(fieldError('EAN / Barcode')).toBe('');
+            expect(repeatButton('ean')).toBeNull();
         });
     });
 });
