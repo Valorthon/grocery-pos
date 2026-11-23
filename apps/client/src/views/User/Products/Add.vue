@@ -79,15 +79,22 @@
                                     >[Auto-Generated]</span
                                 >
                                 <span v-else>{{ item.EAN }}</span>
+                                <p
+                                    v-if="draftErrors[item.draftId]?.EAN"
+                                    :class="FIELD_ERROR_TEXT"
+                                    data-testid="draft-ean-error"
+                                >
+                                    {{ draftErrors[item.draftId]?.EAN }}
+                                </p>
                             </td>
                             <td :class="draftTable.tdName">
                                 {{ item.name }}
                                 <p
-                                    v-if="nameErrors[item.draftId]"
+                                    v-if="draftErrors[item.draftId]?.name"
                                     :class="FIELD_ERROR_TEXT"
                                     data-testid="draft-name-error"
                                 >
-                                    {{ nameErrors[item.draftId] }}
+                                    {{ draftErrors[item.draftId]?.name }}
                                 </p>
                             </td>
                             <td :class="draftTable.tdNum">
@@ -141,8 +148,12 @@ import { formatCurrency } from '@/utils/currency';
 import { FIELD_ERROR_TEXT } from '@/components/ui/field-style';
 import {
     apiErrorMessages,
-    duplicateNameIndexes,
+    DRAFT_EAN_REPEATED,
+    DRAFT_NAME_REPEATED,
+    duplicateKeyIndexes,
+    PRODUCT_EAN_TAKEN,
     PRODUCT_NAME_TAKEN,
+    repeatedKeyIndexes,
 } from '@/utils/api-error';
 import { toNewProductsBody, type ProductDraft } from '@/utils/payloads';
 import { useConfirm } from '@/composables/useConfirm';
@@ -162,12 +173,29 @@ const { items, add, replace, remove, clear } = useDraftList<ProductDraft>();
 const editItem = ref<Partial<ProductDraft>>({});
 const editingId = ref<string | null>(null);
 const saving = ref(false);
-/** A taken name per draft (#455), cleared when that draft changes. */
-const nameErrors = ref<Record<string, string>>({});
-const clearNameError = (draftId: string) => {
-    const rest = { ...nameErrors.value };
-    delete rest[draftId];
-    nameErrors.value = rest;
+/**
+ * A taken name or barcode per draft (#455, #470), cleared when that draft
+ * changes.
+ */
+const draftErrors = ref<Record<string, { name?: string; EAN?: string }>>({});
+/**
+ * Clears a changed or removed draft's errors, and every other draft's
+ * "an earlier draft has this …" error: the earlier draft it repeated may
+ * be the one that changed (#470).
+ */
+const clearDraftError = (draftId: string) => {
+    const next: typeof draftErrors.value = {};
+    for (const [id, errors] of Object.entries(draftErrors.value)) {
+        if (id === draftId) continue;
+        const kept = {
+            ...(errors.name &&
+                errors.name !== DRAFT_NAME_REPEATED && { name: errors.name }),
+            ...(errors.EAN &&
+                errors.EAN !== DRAFT_EAN_REPEATED && { EAN: errors.EAN }),
+        };
+        if (kept.name || kept.EAN) next[id] = kept;
+    }
+    draftErrors.value = next;
 };
 const router = useRouter();
 
@@ -209,7 +237,7 @@ const saveToDB = async () => {
     }
 
     saving.value = true;
-    nameErrors.value = {};
+    draftErrors.value = {};
     // The body lists the drafts in this order, so a detail's `index` is
     // the position of its draft here.
     const sent = items.value.map((i) => i.draftId);
@@ -217,16 +245,28 @@ const saveToDB = async () => {
         await api.post('/products/bulk', toNewProductsBody(items.value));
     } catch (err: unknown) {
         if (unmounted) return;
-        // A taken name is inline under the draft's name (#455). The
-        // server's duplicate-key details carry the draft's position;
-        // without one the draft can't be known, so it stays a toast.
-        const taken = duplicateNameIndexes(err)
-            .map((index) => sent[index])
-            .filter((id): id is string => id !== undefined);
-        if (taken.length > 0) {
-            nameErrors.value = Object.fromEntries(
-                taken.map((id) => [id, PRODUCT_NAME_TAKEN]),
-            );
+        // A taken name or barcode is inline on its draft (#455, #470).
+        // The server checks the whole batch, so every clash carries its
+        // draft's position; without one the draft can't be known, so it
+        // stays a toast.
+        const flagged: Record<string, { name?: string; EAN?: string }> = {};
+        const texts = {
+            name: [PRODUCT_NAME_TAKEN, DRAFT_NAME_REPEATED],
+            EAN: [PRODUCT_EAN_TAKEN, DRAFT_EAN_REPEATED],
+        } as const;
+        for (const field of ['name', 'EAN'] as const) {
+            const repeated = repeatedKeyIndexes(err, field);
+            for (const index of duplicateKeyIndexes(err, field)) {
+                const id = sent[index];
+                if (id === undefined) continue;
+                flagged[id] = {
+                    ...flagged[id],
+                    [field]: texts[field][repeated.includes(index) ? 1 : 0],
+                };
+            }
+        }
+        if (Object.keys(flagged).length > 0) {
+            draftErrors.value = flagged;
             return;
         }
         uiStore.queueMessage(
@@ -272,7 +312,7 @@ const editDraft = (item: Row) => {
 const updateDraft = (updatedProduct: ProductDraft) => {
     if (editingId.value) {
         replace(editingId.value, updatedProduct);
-        clearNameError(editingId.value);
+        clearDraftError(editingId.value);
     }
     editingId.value = null;
     isAddDialogOpen.value = false;
@@ -280,6 +320,6 @@ const updateDraft = (updatedProduct: ProductDraft) => {
 
 const deleteDraft = (item: Row) => {
     remove(item.draftId);
-    clearNameError(item.draftId);
+    clearDraftError(item.draftId);
 };
 </script>

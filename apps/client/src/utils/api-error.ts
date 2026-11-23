@@ -170,19 +170,29 @@ export function isDuplicateName(error: unknown): boolean {
 /** The inline text for a taken product name (#282, #455). */
 export const PRODUCT_NAME_TAKEN = 'A product with this name already exists';
 
+/** The inline text for a taken product barcode (#470). */
+export const PRODUCT_EAN_TAKEN = 'A product with this barcode already exists';
+
+/** Inline texts for a draft repeating an earlier draft's name/barcode (#470). */
+export const DRAFT_NAME_REPEATED = 'An earlier draft has this name';
+export const DRAFT_EAN_REPEATED = 'An earlier draft has this barcode';
+
 /**
- * The positions in a bulk insert (`POST /products/bulk`) whose taken name
- * a `DB_DUPLICATE_KEY` reports (#455): the `name` details' `index`, the
- * position in the request body. Empty for another error or when no detail
- * carries an index.
+ * The positions in a bulk insert (`POST /products/bulk`) whose `property`
+ * (`name` or `EAN`) a `DB_DUPLICATE_KEY` reports (#455, #470): the
+ * details' `index`, the position in the request body. Empty for another
+ * error or when no such detail carries an index.
  */
-export function duplicateNameIndexes(error: unknown): number[] {
-    if (!isDuplicateName(error)) return [];
-    const details = apiErrorBody(error)?.details;
-    if (!Array.isArray(details)) return [];
-    const indexes = details
+export function duplicateKeyIndexes(
+    error: unknown,
+    property: 'name' | 'EAN',
+): number[] {
+    const body = apiErrorBody(error);
+    if (body?.error !== ErrorCode.DB_DUPLICATE_KEY) return [];
+    if (!Array.isArray(body.details)) return [];
+    const indexes = body.details
         .filter(isObject)
-        .filter((d) => d.property === 'name')
+        .filter((d) => d.property === property)
         .map((d) => d.index)
         .filter(
             (i): i is number => typeof i === 'number' && Number.isInteger(i),
@@ -190,16 +200,45 @@ export function duplicateNameIndexes(error: unknown): number[] {
     return [...new Set(indexes)];
 }
 
-const NAME_EXISTS = 'name already exists';
+/** The server's detail for an entry repeating an earlier one (#470). */
+const REPEATED_IN_LIST = 'Repeated in this list';
 
 /**
- * `ensureValid`'s PRODUCT_DUPLICATE answer split into a taken name (inline
- * under the name, #455) and its other lines (e.g. a taken barcode), which
- * stay a toast. Null for any other error.
+ * The bulk-insert positions whose `property` repeats an earlier entry of
+ * the same request rather than an existing product (#470).
+ */
+export function repeatedKeyIndexes(
+    error: unknown,
+    property: 'name' | 'EAN',
+): number[] {
+    const details = apiErrorBody(error)?.details;
+    if (!Array.isArray(details)) return [];
+    const repeated = new Set(
+        details
+            .filter(isObject)
+            .filter(
+                (d) => d.property === property && d.msg === REPEATED_IN_LIST,
+            )
+            .map((d) => d.index),
+    );
+    return duplicateKeyIndexes(error, property).filter((i) => repeated.has(i));
+}
+
+/** `duplicateKeyIndexes` for the `name` field (#455). */
+export const duplicateNameIndexes = (error: unknown): number[] =>
+    duplicateKeyIndexes(error, 'name');
+
+const NAME_EXISTS = 'name already exists';
+const EAN_EXISTS = 'EAN already exists';
+
+/**
+ * `ensureValid`'s PRODUCT_DUPLICATE answer split into a taken name and a
+ * taken barcode (each inline under its field, #455, #470) and its other
+ * lines, which stay a toast. Null for any other error.
  */
 export function productDuplicate(
     error: unknown,
-): { nameTaken: boolean; others: string[] } | null {
+): { nameTaken: boolean; eanTaken: boolean; others: string[] } | null {
     const body = apiErrorBody(error);
     if (body?.error !== ErrorCode.PRODUCT_DUPLICATE) return null;
     const lines = Array.isArray(body.details)
@@ -207,6 +246,7 @@ export function productDuplicate(
         : [];
     return {
         nameTaken: lines.includes(NAME_EXISTS),
-        others: lines.filter((l) => l !== NAME_EXISTS),
+        eanTaken: lines.includes(EAN_EXISTS),
+        others: lines.filter((l) => l !== NAME_EXISTS && l !== EAN_EXISTS),
     };
 }

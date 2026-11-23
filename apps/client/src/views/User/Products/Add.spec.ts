@@ -74,6 +74,13 @@ const nameErrors = () =>
                 .querySelector('[data-testid="draft-name-error"]')
                 ?.textContent?.trim() ?? '',
     );
+const eanErrors = () =>
+    [...document.querySelectorAll('tbody tr')].map(
+        (row) =>
+            row
+                .querySelector('[data-testid="draft-ean-error"]')
+                ?.textContent?.trim() ?? '',
+    );
 const toasts = () => useUIStore(pinia).toasts.flatMap((t) => t.lines);
 
 describe('Add Products save, a taken name (#455)', () => {
@@ -149,12 +156,88 @@ describe('Add Products save, a taken name (#455)', () => {
 
         useUIStore(pinia).toasts.splice(0);
         api.post.mockRejectedValue(
-            failure('DB_002', [
-                { property: 'EAN', msg: 'Already exists', index: 0 },
-            ]),
+            failure('DB_001', [{ field: 'name', message: 'bad' }]),
         );
         await click('Save All');
         expect(nameErrors()).toEqual(['']);
         expect(toasts().length).toBeGreaterThan(0);
+    });
+});
+
+describe('Add Products save, every clash at once (#470)', () => {
+    const CLASHES = [
+        { property: 'name', msg: 'Already exists', index: 0 },
+        { property: 'EAN', msg: 'Already exists', index: 1 },
+        { property: 'name', msg: 'Already exists', index: 2 },
+        { property: 'name', msg: 'Repeated in this list', index: 3 },
+    ];
+
+    it('flags every draft, with no toast; an edit clears its own and the repeats', async () => {
+        await mount(['MILK', 'BREAD', 'EGGS', 'MILK']);
+        api.post.mockRejectedValue(failure('DB_002', CLASHES));
+        await click('Save All');
+        expect(nameErrors()).toEqual([
+            'A product with this name already exists',
+            '',
+            'A product with this name already exists',
+            'An earlier draft has this name',
+        ]);
+        expect(eanErrors()).toEqual([
+            '',
+            'A product with this barcode already exists',
+            '',
+            '',
+        ]);
+        expect(toasts()).toEqual([]);
+
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Edit draft EGGS"]',
+            )!
+            .click();
+        await flush();
+        dialog.update!({
+            EAN: '',
+            name: 'DUCK EGGS',
+            price: 1000,
+            autoGenerateEAN: true,
+        });
+        await flush();
+        expect(nameErrors()).toEqual([
+            'A product with this name already exists',
+            '',
+            '',
+            // Any edit may resolve a repeat, so repeats clear too.
+            '',
+        ]);
+        expect(eanErrors()[1]).toBe(
+            'A product with this barcode already exists',
+        );
+    });
+
+    it("clears a later draft's repeat error when the earlier one is deleted", async () => {
+        await mount(['MILK', 'BREAD', 'MILK']);
+        api.post.mockRejectedValue(
+            failure('DB_002', [
+                { property: 'name', msg: 'Already exists', index: 1 },
+                { property: 'name', msg: 'Repeated in this list', index: 2 },
+            ]),
+        );
+        await click('Save All');
+        expect(nameErrors()).toEqual([
+            '',
+            'A product with this name already exists',
+            'An earlier draft has this name',
+        ]);
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Delete draft MILK"]',
+            )!
+            .click();
+        await flush();
+        expect(nameErrors()).toEqual([
+            'A product with this name already exists',
+            '',
+        ]);
     });
 });

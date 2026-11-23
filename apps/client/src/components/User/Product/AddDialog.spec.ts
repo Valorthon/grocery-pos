@@ -181,7 +181,7 @@ describe('Product AddDialog (#17)', () => {
             expect(fieldError('Product Name')).toBe('');
         });
 
-        it('keeps a taken barcode a toast', async () => {
+        it('shows a taken barcode under EAN / Barcode too (#470)', async () => {
             await open();
             api.get.mockRejectedValue(
                 duplicate(['EAN already exists', 'name already exists']),
@@ -190,15 +190,26 @@ describe('Product AddDialog (#17)', () => {
             expect(fieldError('Product Name')).toBe(
                 'A product with this name already exists',
             );
-            expect(toasts()).toEqual(['EAN already exists']);
+            expect(fieldError('EAN / Barcode')).toBe(
+                'A product with this barcode already exists',
+            );
+            expect(toasts()).toEqual([]);
+            expect(added).toEqual([]);
+
+            await type('EAN / Barcode', '036000291452');
+            expect(fieldError('EAN / Barcode')).toBe('');
+            expect(fieldError('Product Name')).toBe(
+                'A product with this name already exists',
+            );
         });
 
         it('keeps other failures toasts', async () => {
             await open();
-            api.get.mockRejectedValue(duplicate(['EAN already exists']));
+            api.get.mockRejectedValue(duplicate(['something else']));
             await submit();
             expect(fieldError('Product Name')).toBe('');
-            expect(toasts()).toEqual(['EAN already exists']);
+            expect(fieldError('EAN / Barcode')).toBe('');
+            expect(toasts()).toEqual(['something else']);
         });
     });
 });

@@ -94,6 +94,7 @@ import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { productErrors, type ProductFormInput } from './validation';
 import {
     apiErrorMessages,
+    PRODUCT_EAN_TAKEN,
     PRODUCT_NAME_TAKEN,
     productDuplicate,
 } from '@/utils/api-error';
@@ -157,17 +158,20 @@ watch(
     },
 );
 
-// A field's error clears once it is edited (a taken name too, #455).
-watch(
-    () => formData.name,
-    () => {
-        if (errors.value.name) {
-            const rest = { ...errors.value };
-            delete rest.name;
-            errors.value = rest;
-        }
-    },
-);
+// A field's error clears once it is edited (a taken name or barcode too,
+// #455, #470).
+for (const field of ['name', 'EAN'] as const) {
+    watch(
+        () => formData[field],
+        () => {
+            if (errors.value[field]) {
+                const rest = { ...errors.value };
+                delete rest[field];
+                errors.value = rest;
+            }
+        },
+    );
+}
 
 const submitProduct = async () => {
     errors.value = productErrors(formData);
@@ -178,11 +182,15 @@ const submitProduct = async () => {
             params: toEnsureValidQuery(formData),
         });
     } catch (err) {
-        // A taken name is inline under Product Name (#455); anything else
-        // (a taken barcode too) stays a toast.
+        // A taken name or barcode is inline under its field (#455, #470);
+        // anything else stays a toast.
         const duplicate = productDuplicate(err);
-        if (duplicate?.nameTaken) {
-            errors.value = { ...errors.value, name: PRODUCT_NAME_TAKEN };
+        if (duplicate && (duplicate.nameTaken || duplicate.eanTaken)) {
+            errors.value = {
+                ...errors.value,
+                ...(duplicate.nameTaken && { name: PRODUCT_NAME_TAKEN }),
+                ...(duplicate.eanTaken && { EAN: PRODUCT_EAN_TAKEN }),
+            };
             if (duplicate.others.length > 0)
                 uiStore.queueMessage(Color.ERROR, duplicate.others);
             return;
