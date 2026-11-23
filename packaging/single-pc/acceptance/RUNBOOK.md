@@ -288,9 +288,10 @@ Result (PASS/FAIL): `____`
 ### B4. Real API outage and recovery
 
 Steps: with a shift open and "Offline cash ready" shown, `Stop-Service
-GroceryPOS-API` (elevated); record a cash sale offline (permitted path
-only); try a discount and GCash (expect refusal); `Start-Service
-GroceryPOS-API`; watch the queue upload. Then a lost response: start a
+GroceryPOS-API -Force` (elevated; also stops the proxies that depend on it);
+record a cash sale offline (permitted path only); try a discount and GCash
+(expect refusal); `Start-Service GroceryPOS-API, GroceryPOS-Proxy` (plus
+`GroceryPOS-ProxyLan` with a LAN IP); watch the queue upload. Then a lost response: start a
 checkout and stop the API right after pressing Charge (or block the
 response), restart, let the register retry.
 

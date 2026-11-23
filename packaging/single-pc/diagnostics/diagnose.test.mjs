@@ -1217,3 +1217,39 @@ describe('review fixes and owner decisions (#365)', () => {
         );
     });
 });
+
+test('single-PC docs stop the API with -Force and restart the proxies (#457)', () => {
+    const docs = [
+        'diagnostics/RECOVERY.md',
+        'acceptance/RUNBOOK.md',
+        'operations/REPLACEMENT-PC.md',
+        'installer/README.md',
+        'runtime/README.md',
+        'upgrade/README.md',
+        'backup/README.md',
+    ];
+    for (const doc of docs) {
+        const text = readFileSync(
+            new URL(`../${doc}`, import.meta.url),
+            'utf8',
+        );
+        const inline = text.replace(/\s+/g, ' ');
+        // A lone `Stop-Service GroceryPOS-API` fails: the proxy depends on it.
+        assert.doesNotMatch(
+            inline,
+            /Stop-Service GroceryPOS-API(?! -Force)(?!-)/,
+            `${doc} stops the API without -Force`,
+        );
+    }
+    const recovery = readFileSync(
+        new URL('../diagnostics/RECOVERY.md', import.meta.url),
+        'utf8',
+    ).replace(/\s+/g, ' ');
+    assert.match(recovery, /Stop-Service GroceryPOS-API -Force/);
+    assert.match(recovery, /Start-Service GroceryPOS-API, GroceryPOS-Proxy/);
+    assert.match(recovery, /GroceryPOS-ProxyLan/);
+    assert.match(
+        recovery,
+        /diagnose\.mjs" \^ check --data-root \S+ \^ --release /,
+    );
+});

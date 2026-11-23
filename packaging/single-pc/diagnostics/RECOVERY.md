@@ -11,7 +11,8 @@ The vendor can run the same check from a command prompt:
 ```text
 "%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>\node\node.exe" ^
   "%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>\tools\diagnostics\diagnose.mjs" ^
-  check --data-root "%ProgramData%\Valorthon\GroceryPOS"
+  check --data-root "%ProgramData%\Valorthon\GroceryPOS" ^
+  --release "%ProgramFiles%\Valorthon\GroceryPOS\releases\<version>"
 ```
 
 Run it from an administrator Command Prompt to see everything. It only
@@ -54,6 +55,14 @@ Signs: the page says it cannot reach the server; the check shows **Services**,
 
 Vendor: service logs are in `logs\api\` and `logs\proxy\`, the database's in
 `logs\mongod.log`. The check prints their last errors with secrets removed.
+
+Vendor, stopping and starting the API by hand (elevated PowerShell): the
+proxy depends on the API, so stopping the API without `-Force` refuses
+("has dependent services"). Use `Stop-Service GroceryPOS-API -Force`, which
+also stops the proxy (and `GroceryPOS-ProxyLan` when a LAN IP is set). The
+proxy does not come back by itself, so start them all again:
+`Start-Service GroceryPOS-API, GroceryPOS-Proxy`, plus
+`Start-Service GroceryPOS-ProxyLan` when a LAN IP is set.
 
 ## Disk full
 
