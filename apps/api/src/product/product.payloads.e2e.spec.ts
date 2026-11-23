@@ -49,9 +49,14 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
     let harness: AccessHarness;
 
     const findOne = jest.fn();
+    const find = jest.fn();
+    const found = (...docs: object[]) =>
+        find.mockReturnValue({
+            limit: () => ({ lean: () => Promise.resolve(docs) }),
+        });
     // The real ensureValid over a faked model: the lookup is under test too.
     const realEnsureValid = ProductService.prototype.ensureValid.bind({
-        model: { findOne },
+        model: { find },
     } as unknown as ProductService);
 
     // The real barcode lookup over the same faked model (issue #87).
@@ -80,6 +85,7 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         findOne.mockReturnValue({ lean: () => Promise.resolve(null) });
+        found();
     });
 
     const restocker = () => caller(Role.Restocker);
@@ -114,23 +120,24 @@ describe('Product payloads from the client (e2e, issue #33)', () => {
                 name: 'BREAD',
                 autoGenerateEAN: false,
             });
-            expect(findOne).toHaveBeenCalledWith({
-                $or: [{ EAN: '4006381333931' }, { name: 'BREAD' }],
-            });
+            expect(find).toHaveBeenCalledWith(
+                { $or: [{ EAN: '4006381333931' }, { name: 'BREAD' }] },
+                { name: 1, EAN: 1 },
+            );
         });
 
         it('accepts an auto-generated draft and looks up the name only', async () => {
             const res = await ensureValid(ENSURE_AUTO);
 
             expect(res.status).toBe(200);
-            expect(findOne).toHaveBeenCalledWith({ $or: [{ name: 'MILK' }] });
+            expect(find).toHaveBeenCalledWith(
+                { $or: [{ name: 'MILK' }] },
+                { name: 1, EAN: 1 },
+            );
         });
 
         it('says which field already exists', async () => {
-            findOne.mockReturnValue({
-                lean: () =>
-                    Promise.resolve({ EAN: '2000000000015', name: 'MILK' }),
-            });
+            found({ EAN: '2000000000015', name: 'MILK' });
 
             const res = await ensureValid(ENSURE_AUTO);
             const body = (await res.json()) as {

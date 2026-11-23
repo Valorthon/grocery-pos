@@ -61,6 +61,11 @@ describe('Error responses (e2e, issue #8)', () => {
     let errorLog: jest.SpyInstance;
     let warnLog: jest.SpyInstance;
     const insertMany = jest.fn();
+    // The batch pre-check (#470) finds nothing, so the unique index is
+    // the guard that answers here.
+    const find = jest.fn(() => ({
+        session: () => ({ lean: () => Promise.resolve([]) }),
+    }));
     const findOne = jest.fn();
     const inventoryCreateMany = jest.fn().mockResolvedValue(undefined);
 
@@ -76,7 +81,7 @@ describe('Error responses (e2e, issue #8)', () => {
 
     const service = new ProductService(
         connection,
-        { insertMany, findOne } as unknown as Model<Product>,
+        { insertMany, findOne, find } as unknown as Model<Product>,
         {
             createMany: inventoryCreateMany,
             sellableStock: jest.fn().mockResolvedValue(undefined),

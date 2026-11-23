@@ -77,3 +77,38 @@ it('migrates legacy names: dry run, apply, idempotent rerun, collisions refused'
     expect((await products.findOne({ _id: b._id }))?.name).toBe('legacy jam');
     expect((await products.findOne({ _id: c._id }))?.name).toBe('Legacy Jam');
 });
+
+it('refuses a bulk save naming every clash, inserting nothing (#470)', async () => {
+    const takenEAN = nextEan();
+    const seeded = await db.call(restocker, 'POST', '/products/bulk', {
+        newProducts: [
+            { name: 'CLASH SUGAR', price: 100 },
+            { name: 'CLASH SALT', price: 100, EAN: takenEAN },
+        ],
+    });
+    expect(seeded.status).toBe(201);
+
+    const res = await read<{ error: string; details: unknown }>(
+        await db.call(restocker, 'POST', '/products/bulk', {
+            newProducts: [
+                { name: 'clash sugar', price: 100 },
+                { name: 'CLASH NEW', price: 100, EAN: takenEAN },
+                { name: 'CLASH SALT', price: 100 },
+                { name: 'CLASH NEW', price: 100 },
+            ],
+        }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(ErrorCode.DB_DUPLICATE_KEY);
+    expect(res.body.details).toEqual([
+        { property: 'name', msg: 'Already exists', index: 0 },
+        { property: 'EAN', msg: 'Already exists', index: 1 },
+        { property: 'name', msg: 'Already exists', index: 2 },
+        { property: 'name', msg: 'Repeated in this list', index: 3 },
+    ]);
+    expect(
+        await db
+            .model<Product>('Product')
+            .countDocuments({ name: 'CLASH NEW' }),
+    ).toBe(0);
+});

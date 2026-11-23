@@ -247,6 +247,11 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
     let insertMany: jest.Mock;
     let generate: jest.Mock;
     let inventoryCreateMany: jest.Mock;
+    let find: jest.Mock;
+    const existing = (...docs: { name: string; EAN: string }[]) =>
+        find.mockReturnValue({
+            session: () => ({ lean: () => Promise.resolve(docs) }),
+        });
 
     /** Runs the callback twice, as a transaction retry after a transient error. */
     function retryingSession() {
@@ -271,6 +276,8 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
         let counter = 0;
         generate = jest.fn(() => Promise.resolve(`generated-${++counter}`));
         inventoryCreateMany = jest.fn().mockResolvedValue(undefined);
+        find = jest.fn();
+        existing();
 
         const moduleRef = await Test.createTestingModule({
             providers: [
@@ -290,7 +297,7 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
                 },
                 {
                     provide: getModelToken(Product.name),
-                    useValue: { insertMany },
+                    useValue: { insertMany, find },
                 },
                 {
                     provide: InventoryService,
@@ -402,6 +409,57 @@ describe('ProductService.createMany / addMany (issue #14)', () => {
         },
     );
 
+    it('addMany reports every clash in the batch, inserting nothing (#470)', async () => {
+        existing(
+            { name: 'BREAD', EAN: '036000291452' },
+            { name: 'MILK', EAN: '96385074' },
+        );
+        const newProducts = [
+            { name: 'BREAD', price: 100 },
+            { name: 'EGGS', price: 100, EAN: '4006381333931' },
+            { name: 'MILK', price: 100 },
+            { name: 'EGGS', price: 100, EAN: '4006381333931' },
+            { name: 'RICE', price: 100, EAN: '036000291452' },
+        ] as NewProductFields[];
+
+        await expect(
+            service.addMany(ADMIN, { newProducts }),
+        ).rejects.toMatchObject({
+            code: ErrorCode.DB_DUPLICATE_KEY,
+            statusCode: 400,
+            details: [
+                { property: 'name', msg: 'Already exists', index: 0 },
+                { property: 'name', msg: 'Already exists', index: 2 },
+                { property: 'name', msg: 'Repeated in this list', index: 3 },
+                { property: 'EAN', msg: 'Repeated in this list', index: 3 },
+                { property: 'EAN', msg: 'Already exists', index: 4 },
+            ],
+        });
+        expect(find).toHaveBeenCalledWith(
+            {
+                $or: [
+                    {
+                        name: {
+                            $in: ['BREAD', 'EGGS', 'MILK', 'EGGS', 'RICE'],
+                        },
+                    },
+                    {
+                        EAN: {
+                            $in: [
+                                '4006381333931',
+                                '4006381333931',
+                                '036000291452',
+                            ],
+                        },
+                    },
+                ],
+            },
+            { name: 1, EAN: 1 },
+        );
+        expect(insertMany).not.toHaveBeenCalled();
+        expect(inventoryCreateMany).not.toHaveBeenCalled();
+    });
+
     it('creates nothing for an empty list', async () => {
         await expect(
             service.createMany([], {} as ClientSession),
@@ -416,7 +474,7 @@ describe('ProductService.ensureValid (issue #14)', () => {
 
     beforeEach(async () => {
         findOne = jest.fn().mockReturnValue({
-            lean: () => Promise.resolve(null),
+            limit: () => ({ lean: () => Promise.resolve([]) }),
         });
 
         const moduleRef = await Test.createTestingModule({
@@ -432,7 +490,7 @@ describe('ProductService.ensureValid (issue #14)', () => {
                 { provide: getConnectionToken(), useValue: {} },
                 {
                     provide: getModelToken(Product.name),
-                    useValue: { findOne },
+                    useValue: { find: findOne },
                 },
                 { provide: InventoryService, useValue: {} },
                 { provide: EanCounterService, useValue: {} },
@@ -478,8 +536,10 @@ describe('ProductService.ensureValid (issue #14)', () => {
     });
 
     describe('the duplicate lookup (issue #33)', () => {
-        const foundProduct = (doc: Record<string, unknown> | null) =>
-            findOne.mockReturnValue({ lean: () => Promise.resolve(doc) });
+        const foundProduct = (...docs: Record<string, unknown>[]) =>
+            findOne.mockReturnValue({
+                limit: () => ({ lean: () => Promise.resolve(docs) }),
+            });
 
         it('looks up only the name when the barcode is auto-generated', async () => {
             await service.ensureValid({
@@ -488,9 +548,12 @@ describe('ProductService.ensureValid (issue #14)', () => {
             } as EnsureValidDto);
 
             // Never `{ EAN: undefined }`: sent as `{}`, it matches everything.
-            expect(findOne).toHaveBeenCalledWith({
-                $or: [{ name: 'bread' }],
-            });
+            expect(findOne).toHaveBeenCalledWith(
+                {
+                    $or: [{ name: 'bread' }],
+                },
+                { name: 1, EAN: 1 },
+            );
         });
 
         it('ignores a leftover typed barcode when auto-generating', async () => {
@@ -500,9 +563,12 @@ describe('ProductService.ensureValid (issue #14)', () => {
                 autoGenerateEAN: true,
             } as EnsureValidDto);
 
-            expect(findOne).toHaveBeenCalledWith({
-                $or: [{ name: 'bread' }],
-            });
+            expect(findOne).toHaveBeenCalledWith(
+                {
+                    $or: [{ name: 'bread' }],
+                },
+                { name: 1, EAN: 1 },
+            );
         });
 
         it('looks up both the typed barcode and the name', async () => {
@@ -511,9 +577,12 @@ describe('ProductService.ensureValid (issue #14)', () => {
                 name: 'bread',
             } as EnsureValidDto);
 
-            expect(findOne).toHaveBeenCalledWith({
-                $or: [{ EAN: '4006381333931' }, { name: 'bread' }],
-            });
+            expect(findOne).toHaveBeenCalledWith(
+                {
+                    $or: [{ EAN: '4006381333931' }, { name: 'bread' }],
+                },
+                { name: 1, EAN: 1 },
+            );
         });
 
         it('says which field already exists', async () => {
@@ -527,6 +596,23 @@ describe('ProductService.ensureValid (issue #14)', () => {
             ).rejects.toMatchObject({
                 code: ErrorCode.PRODUCT_DUPLICATE,
                 details: ['EAN already exists'],
+            });
+        });
+
+        it('reports both when the name and barcode belong to two products (#470)', async () => {
+            foundProduct(
+                { EAN: '4006381333931', name: 'MILK' },
+                { EAN: '036000291452', name: 'BREAD' },
+            );
+
+            await expect(
+                service.ensureValid({
+                    EAN: '4006381333931',
+                    name: 'BREAD',
+                } as EnsureValidDto),
+            ).rejects.toMatchObject({
+                code: ErrorCode.PRODUCT_DUPLICATE,
+                details: ['EAN already exists', 'name already exists'],
             });
         });
 

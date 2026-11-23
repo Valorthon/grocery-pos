@@ -366,6 +366,7 @@ export class ProductService {
     ) {
         await runInTransaction(
             async (session) => {
+                await this.assertNoClashes(dto.newProducts, session);
                 const newProducts = await this.withEANs(
                     dto.newProducts,
                     session,
@@ -385,6 +386,68 @@ export class ProductService {
             this.connection,
             session,
         );
+    }
+
+    /**
+     * Refuses a bulk create naming every clash at once (#470): a name or
+     * typed barcode another product already has, or one an earlier entry
+     * of the batch has (reported on the later entry). The details have the
+     * DB_DUPLICATE_KEY shape, `{ property, msg, index }` per clash, so the
+     * client flags every draft; the unique indexes stay the final guard.
+     */
+    private async assertNoClashes(
+        products: NewProductFields[],
+        session: ClientSession,
+    ): Promise<void> {
+        const names = products.map((p) => p.name);
+        const EANs = products.map((p) => p.EAN).filter((e): e is string => !!e);
+        const existing = await this.model
+            .find(
+                { $or: [{ name: { $in: names } }, { EAN: { $in: EANs } }] },
+                { name: 1, EAN: 1 },
+            )
+            .session(session)
+            .lean();
+        const takenNames = new Set(existing.map((p) => p.name));
+        const takenEANs = new Set(existing.map((p) => p.EAN));
+
+        const clashes: { property: string; msg: string; index: number }[] = [];
+        const seenNames = new Set<string>();
+        const seenEANs = new Set<string>();
+        products.forEach((product, index) => {
+            if (takenNames.has(product.name))
+                clashes.push({
+                    property: 'name',
+                    msg: 'Already exists',
+                    index,
+                });
+            else if (seenNames.has(product.name))
+                clashes.push({
+                    property: 'name',
+                    msg: 'Repeated in this list',
+                    index,
+                });
+            seenNames.add(product.name);
+
+            if (!product.EAN) return;
+            if (takenEANs.has(product.EAN))
+                clashes.push({ property: 'EAN', msg: 'Already exists', index });
+            else if (seenEANs.has(product.EAN))
+                clashes.push({
+                    property: 'EAN',
+                    msg: 'Repeated in this list',
+                    index,
+                });
+            seenEANs.add(product.EAN);
+        });
+
+        if (clashes.length > 0) {
+            throw new ValidationError(
+                ErrorCode.DB_DUPLICATE_KEY,
+                'Duplicate key',
+                clashes,
+            );
+        }
     }
 
     /**
@@ -417,14 +480,19 @@ export class ProductService {
         if (name) clauses.push({ name });
         if (clauses.length === 0) return;
 
-        const found = await this.model.findOne({ $or: clauses }).lean();
+        // Every match: the name and the barcode may belong to two
+        // different products, and both are reported (#470).
+        const found = await this.model
+            .find({ $or: clauses }, { name: 1, EAN: 1 })
+            .limit(2)
+            .lean();
 
-        if (found) {
+        if (found.length > 0) {
             const duplicates: string[] = [];
-            if (checkEAN && found.EAN === EAN)
+            if (checkEAN && found.some((p) => p.EAN === EAN))
                 duplicates.push('EAN already exists');
 
-            if (name && found.name === name)
+            if (name && found.some((p) => p.name === name))
                 duplicates.push('name already exists');
 
             throw new ValidationError(
