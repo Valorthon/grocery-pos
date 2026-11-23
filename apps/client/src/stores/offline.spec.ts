@@ -15,6 +15,10 @@ import {
 } from '@grocery-pos/contracts';
 import api from '@/axios';
 import {
+    refreshSavedTerminalLabel,
+    saveTerminalLabel,
+} from '@/settings/presentation';
+import {
     closeOfflineDatabase,
     pendingOffline,
     readOfflineState,
@@ -840,4 +844,25 @@ it('reads no iat from an unreadable proof', async () => {
     expect(proofIat('server-proof')).toBeUndefined();
     expect(proofIat('a.!!!.c')).toBeUndefined();
     expect(proofIat(proofWith(42))).toBe(42);
+});
+it('sends the saved terminal label with the lease, never the default (#454)', async () => {
+    await store.prepare(lease().shift);
+    expect(
+        vi
+            .mocked(api.post)
+            .mock.calls.find(([p]) => p === '/offline/lease')?.[1],
+    ).not.toHaveProperty('terminalLabel');
+    expect(saveTerminalLabel('Counter 2')).toBe(true);
+    try {
+        vi.mocked(api.post).mockClear();
+        await store.prepare(lease().shift);
+        expect(
+            vi
+                .mocked(api.post)
+                .mock.calls.find(([p]) => p === '/offline/lease')?.[1],
+        ).toMatchObject({ terminalLabel: 'Counter 2' });
+    } finally {
+        localStorage.clear();
+        refreshSavedTerminalLabel();
+    }
 });

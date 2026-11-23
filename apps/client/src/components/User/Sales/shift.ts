@@ -6,9 +6,11 @@ import {
     ErrorCode,
     NUMERIC_LIMITS,
     type OfflinePendingDetails,
+    type OfflinePendingTerminal,
     SHIFT_LIMITS,
 } from '@grocery-pos/contracts';
 import { apiErrorBody, apiErrorText } from '@/utils/api-error';
+import { formatStoreDateTime } from '@/utils/datetime';
 
 export type { BillCounts };
 
@@ -91,13 +93,50 @@ export function blockingTerminals(error: unknown): number | null {
         : null;
 }
 
+/**
+ * Which terminals block the close (#454): the well-formed entries of an
+ * OFFLINE_PENDING refusal's `details.blocking`, else an empty list.
+ */
+export function blockingTerminalList(error: unknown): OfflinePendingTerminal[] {
+    const body = apiErrorBody(error);
+    if (body?.error !== ErrorCode.OFFLINE_PENDING) return [];
+    const details = body.details as Partial<OfflinePendingDetails> | null;
+    const list: unknown = details?.blocking;
+    if (!Array.isArray(list)) return [];
+    return list.filter(
+        (entry): entry is OfflinePendingTerminal =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            typeof (entry as OfflinePendingTerminal).terminal === 'string' &&
+            typeof (entry as OfflinePendingTerminal).leasedAt === 'string' &&
+            ['string', 'undefined'].includes(
+                typeof (entry as OfflinePendingTerminal).label,
+            ),
+    );
+}
+
+/** One blocking terminal as the cashier reads it (#454). */
+export function blockingTerminalText(entry: OfflinePendingTerminal): string {
+    const name = entry.label
+        ? `${entry.label} (terminal ${entry.terminal})`
+        : `Terminal ${entry.terminal}`;
+    const since = formatStoreDateTime(entry.leasedAt);
+    return since ? `${name}, offline mode on since ${since}` : name;
+}
+
 /** Why the server refused the close because terminals are still offline. */
-export function offlinePendingText(terminals: number): string {
+export function offlinePendingText(
+    terminals: number,
+    blocking: readonly OfflinePendingTerminal[] = [],
+): string {
     const who =
         terminals === 1
             ? '1 terminal still has'
             : `${terminals.toLocaleString('en-PH')} terminals still have`;
-    return `${who} offline mode on for this shift. Sync their pending cash sales and turn offline mode off there, then close. If a terminal's browser data is gone, ask an admin to force-close the shift.`;
+    const which = blocking.length
+        ? ` Still on: ${blocking.map(blockingTerminalText).join('; ')}.`
+        : '';
+    return `${who} offline mode on for this shift.${which} Sync their pending cash sales and turn offline mode off there, then close. If a terminal's browser data is gone, ask an admin to force-close the shift.`;
 }
 
 /**
@@ -108,5 +147,5 @@ export function closeErrorText(error: unknown, fallback: string): string {
     const terminals = blockingTerminals(error);
     return terminals === null
         ? apiErrorText(error, fallback)
-        : offlinePendingText(terminals);
+        : offlinePendingText(terminals, blockingTerminalList(error));
 }

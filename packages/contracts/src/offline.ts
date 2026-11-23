@@ -18,6 +18,8 @@ export interface OfflineProduct {
 }
 export interface OfflineLeaseRequest {
     terminalId: string;
+    /** The device's saved terminal label, shown when it blocks a close (#454). */
+    terminalLabel?: string;
 }
 export interface OfflineLeaseView {
     storeIdentity?: ReceiptStoreIdentity;

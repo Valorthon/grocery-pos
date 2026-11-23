@@ -17,6 +17,8 @@ import {
     type DrawerMovementView,
     DrawerMovementType,
     type OfflinePendingDetails,
+    type OfflinePendingTerminal,
+    offlineTerminalSuffix,
     type Paginated,
     ReversalType,
     SHIFT_LIMITS,
@@ -525,13 +527,37 @@ export class ShiftService {
                     .lean<ShiftDoc>();
                 if (!shift) throw this.notOpen();
                 // One terminal may hold several leases (one per login
-                // session): count terminals, never name them.
-                const terminalIds: unknown[] = await this.offlineLeases
-                    .distinct('terminalId', { shift: shift._id, active: true })
-                    .session(session);
+                // session): one entry per terminal, with its latest lease
+                // and the label it last sent (#454).
+                const leases = await this.offlineLeases
+                    .find({ shift: shift._id, active: true })
+                    .sort({ issuedAt: 1 })
+                    .session(session)
+                    .lean<
+                        {
+                            terminalId: string;
+                            terminalLabel?: string;
+                            issuedAt: Date;
+                        }[]
+                    >();
+                const byTerminal = new Map<string, OfflinePendingTerminal>();
+                for (const lease of leases) {
+                    const label =
+                        lease.terminalLabel ??
+                        byTerminal.get(lease.terminalId)?.label;
+                    byTerminal.set(lease.terminalId, {
+                        terminal: offlineTerminalSuffix(lease.terminalId),
+                        ...(label ? { label } : {}),
+                        leasedAt: new Date(lease.issuedAt).toISOString(),
+                    });
+                }
+                const terminalIds = [...byTerminal.keys()];
                 if (terminalIds.length > 0) {
                     const details: OfflinePendingDetails = {
                         terminals: terminalIds.length,
+                        blocking: [...byTerminal.values()].sort((a, b) =>
+                            b.leasedAt.localeCompare(a.leasedAt),
+                        ),
                     };
                     throw new ConflictError(
                         ErrorCode.OFFLINE_PENDING,

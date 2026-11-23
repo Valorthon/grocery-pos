@@ -189,6 +189,17 @@ export class OfflineService {
                 .findOne(filter)
                 .session(session)
                 .lean<LeaseDoc>();
+            const terminalLabel = dto.terminalLabel;
+            if (
+                existing &&
+                terminalLabel &&
+                existing.terminalLabel !== terminalLabel
+            )
+                await this.leases.updateOne(
+                    { _id: existing._id },
+                    { $set: { terminalLabel } },
+                    { session },
+                );
             const doc =
                 existing ??
                 (
@@ -196,6 +207,7 @@ export class OfflineService {
                         [
                             {
                                 ...filter,
+                                ...(terminalLabel ? { terminalLabel } : {}),
                                 issuedAt: new Date(),
                                 expiresAt: auth.expiry,
                                 securityVersion: user.overridePinVersion,

@@ -14,6 +14,7 @@ import { useShiftStore } from '@/stores/shift';
 import ShiftOutModal from './ShiftOutModal.vue';
 import ZReadReportView from './ZReadReportView.vue';
 import {
+    blockingTerminalList,
     blockingTerminals,
     closeErrorText,
     COUNTS_INVALID,
@@ -392,6 +393,47 @@ describe('a close refused by offline terminals (#143)', () => {
         expect(closeErrorText(refusal({ terminals: 2 }), 'x')).toBe(
             offlinePendingText(2),
         );
+    });
+
+    it('names each blocking terminal with its label or short id and lease time (#454)', async () => {
+        const text = await refusedWith(
+            refusal({
+                terminals: 2,
+                blocking: [
+                    {
+                        terminal: 'AAAA0001',
+                        label: 'Counter 2',
+                        leasedAt: '2026-11-23T03:00:00.000Z',
+                    },
+                    {
+                        terminal: 'BBBB0002',
+                        leasedAt: '2026-11-23T02:00:00.000Z',
+                    },
+                ],
+            }),
+        );
+        expect(text).toContain(
+            'Still on: Counter 2 (terminal AAAA0001), offline mode on since Nov 23, 2026, 11:00 AM; Terminal BBBB0002, offline mode on since Nov 23, 2026, 10:00 AM.',
+        );
+        expect(text).toContain('2 terminals still have');
+    });
+
+    it('drops malformed blocking entries', () => {
+        expect(
+            blockingTerminalList(
+                refusal({
+                    terminals: 1,
+                    blocking: [
+                        null,
+                        { terminal: 1, leasedAt: 'x' },
+                        { terminal: 'A', leasedAt: 'x', label: 3 },
+                        { terminal: 'OK', leasedAt: 'x' },
+                    ],
+                }),
+            ),
+        ).toEqual([{ terminal: 'OK', leasedAt: 'x' }]);
+        expect(blockingTerminalList(refusal({ terminals: 1 }))).toEqual([]);
+        expect(blockingTerminalList(new Error('x'))).toEqual([]);
     });
 });
 

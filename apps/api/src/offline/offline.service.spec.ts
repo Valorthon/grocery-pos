@@ -275,6 +275,28 @@ describe('offline lease and signed catalogue', () => {
         ).toHaveProperty('_id');
         expect(f.leases.create).toHaveBeenCalled();
     });
+    it('stores the saved terminal label on a new or existing lease (#454)', async () => {
+        f.leases.findOne.mockReturnValue(new Query(null));
+        await f.service.lease(f.actor, {
+            terminalId: 'terminal',
+            terminalLabel: 'Counter 2',
+        });
+        expect(f.leases.create).toHaveBeenCalledWith(
+            [expect.objectContaining({ terminalLabel: 'Counter 2' })],
+            expect.anything(),
+        );
+        f.leases.findOne.mockReturnValue(new Query(f.lease));
+        f.leases.updateOne.mockClear();
+        await f.service.lease(f.actor, {
+            terminalId: 'terminal',
+            terminalLabel: 'Counter 3',
+        });
+        expect(f.leases.updateOne).toHaveBeenCalledWith(
+            { _id: f.lease._id },
+            { $set: { terminalLabel: 'Counter 3' } },
+            expect.anything(),
+        );
+    });
     it.each([
         'no-sid',
         'invalid-sid',

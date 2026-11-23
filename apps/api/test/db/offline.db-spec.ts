@@ -315,8 +315,14 @@ it('blocks own close while a terminal lease is active and permits close after sy
     );
     expect(blocked.body.error).toBe(ErrorCode.OFFLINE_PENDING);
     expect(blocked.body.message).toMatch(/ask an admin to force-close/);
-    // A count only (#143): the one terminal holding a lease, no ids.
-    expect(blocked.body.details).toEqual({ terminals: 1 });
+    // The one terminal holding a lease (#143), by short id only (#454).
+    const pending = blocked.body.details as {
+        terminals: number;
+        blocking: { terminal: string; leasedAt: string }[];
+    };
+    expect(pending.terminals).toBe(1);
+    expect(pending.blocking).toHaveLength(1);
+    expect(pending.blocking[0].terminal).toMatch(/^[0-9A-F-]{8}$/);
     expect(
         wireShapeDiff(blocked.body.details, OFFLINE_PENDING_DETAILS_SHAPE),
     ).toEqual({ missing: [], unexpected: [] });

@@ -2,6 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { isAxiosError } from 'axios';
 import api from '@/axios';
+import { hasSavedTerminalLabel, terminalLabel } from '@/settings/presentation';
 import { requireOfflineConfirmation } from '@/offline/confirmation';
 import { apiErrorCode, apiErrorText } from '@/utils/api-error';
 import { newIdempotencyKey } from '@/components/User/Sales/sale-submission';
@@ -18,6 +19,7 @@ import {
     OFFLINE_CLOCK_WARN_MS,
     type CurrentShiftView,
     type OfflineCatalogPage,
+    type OfflineLeaseRequest,
     type OfflineLeaseView,
     type OfflinePendingSale,
     type OfflineProduct,
@@ -192,7 +194,12 @@ export const useOfflineStore = defineStore('offline', () => {
             const { data: lease, offset } = await timed(() =>
                 api.post<OfflineLeaseView>('/offline/lease', {
                     terminalId,
-                }),
+                    // The saved label names this terminal if it blocks a
+                    // shift close (#454); the default label isn't sent.
+                    ...(hasSavedTerminalLabel()
+                        ? { terminalLabel: terminalLabel.value }
+                        : {}),
+                } satisfies OfflineLeaseRequest),
             );
             if (gen !== generation) return;
             const active = await activateOfflineLease(previous, lease, offset);
