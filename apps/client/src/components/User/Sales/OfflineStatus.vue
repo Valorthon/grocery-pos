@@ -157,11 +157,17 @@ watch(
 );
 // The browser's online/offline events are hints only: the API itself
 // decides (#359), so a local API keeps working without internet.
+// The verdict is the probe's alone (#459): a failing prepare or sync on a
+// reachable API keeps the 30 s cadence and is tried again then.
 async function retry(): Promise<boolean> {
     if (!(await status.probe())) return false;
-    if (shifts.activeShift && auth.user?.roles.includes(Role.Seller))
-        await status.prepare(shifts.activeShift);
-    await status.sync();
+    try {
+        if (shifts.activeShift && auth.user?.roles.includes(Role.Seller))
+            await status.prepare(shifts.activeShift);
+        await status.sync();
+    } catch {
+        // Not a connection verdict; the next 30 s retry syncs again.
+    }
     await status.refreshPending().catch(() => undefined);
     return true;
 }

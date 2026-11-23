@@ -170,6 +170,17 @@ it('notices a recovery after a 60 s outage within 5 s', async () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(status.sync).toHaveBeenCalledTimes(1);
 });
+it('keeps the 30 s cadence when the API answers but sync fails', async () => {
+    status.sync.mockRejectedValue(new Error('409'));
+    mount();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(status.sync).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(status.probe).toHaveBeenCalledTimes(2);
+    expect(status.sync).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(status.sync).toHaveBeenCalledTimes(2);
+});
 it('counts the retry delay after a slow failed probe finishes', async () => {
     let resolve!: (ok: boolean) => void;
     status.probe.mockImplementation(
