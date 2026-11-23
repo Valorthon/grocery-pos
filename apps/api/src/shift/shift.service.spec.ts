@@ -681,6 +681,33 @@ describe('ShiftService.closeById (admin force-close)', () => {
         });
     });
 
+    it('ends the shift’s active offline leases and leaves other shifts’ leases alone (#453)', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        const shift = new Types.ObjectId(_id);
+        const a = leaseModel.seed({ shift, terminalId: 'A', active: true });
+        const b = leaseModel.seed({ shift, terminalId: 'B', active: true });
+        const other = leaseModel.seed({
+            shift: new Types.ObjectId(),
+            terminalId: 'C',
+            active: true,
+        });
+
+        const updateMany = jest.spyOn(leaseModel, 'updateMany');
+
+        await service.closeById(BOSS, _id, FLOAT_COUNTS);
+
+        // In the close transaction: the session is passed through.
+        expect(updateMany).toHaveBeenCalledWith(
+            { shift, active: true },
+            { $set: { active: false }, $inc: { syncLock: 1 } },
+            { session: expect.anything() },
+        );
+        expect(leaseModel.byId(a._id)!.syncLock).toBe(1);
+        expect(leaseModel.byId(a._id)!.active).toBe(false);
+        expect(leaseModel.byId(b._id)!.active).toBe(false);
+        expect(leaseModel.byId(other._id)!.active).toBe(true);
+    });
+
     it('does not mark an admin closing their own shift as a force-close', async () => {
         const { _id } = await service.open(BOSS, FLOAT_COUNTS);
 

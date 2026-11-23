@@ -778,12 +778,16 @@ describe(
             const client = await apiClient(paths);
             try {
                 const db = client.db('grocery');
-                await db
+                const { insertedId: lateShift } = await db
                     .collection('shifts')
                     .insertOne({ status: 'OPEN', late: true });
-                await db
-                    .collection('offlineleases')
-                    .insertOne({ active: true, late: true });
+                await db.collection('offlineleases').insertOne({
+                    active: true,
+                    late: true,
+                    shift: lateShift,
+                    terminalId: 'late',
+                    expiresAt: new Date(Date.now() + 3600 * 1000),
+                });
                 await db
                     .collection('sales')
                     .insertOne({ createdAt: new Date(), late: true });

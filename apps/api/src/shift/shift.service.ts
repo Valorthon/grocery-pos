@@ -571,7 +571,7 @@ export class ShiftService {
                     );
                 }
                 if (shift.status !== ShiftStatus.OPEN) throw this.closed(id);
-                return this.close(
+                const report = await this.close(
                     shift,
                     admin,
                     counts,
@@ -579,6 +579,17 @@ export class ShiftService {
                     session,
                     true,
                 );
+                // A force-close ends the shift's offline leases (#453), so no
+                // terminal keeps a lease on a closed shift. Queued cash on
+                // those terminals still needs ADMIN reconciliation (#37).
+                await this.offlineLeases.updateMany(
+                    { shift: shift._id, active: true },
+                    // As releaseLease does: bumps syncLock so an upload
+                    // racing the close write-conflicts.
+                    { $set: { active: false }, $inc: { syncLock: 1 } },
+                    { session },
+                );
+                return report;
             },
             this.connection,
             session,

@@ -57,6 +57,11 @@ import {
 import { sha256, verifyTree } from './bundle.mjs';
 import { readStoredLanIp } from './terminal.mjs';
 import {
+    blockingLeases,
+    leaseRefusal,
+    leaseTerminalCount,
+} from '../backup/restore.mjs';
+import {
     DEFAULT_BACKUP_TIME,
     HANDOVER_FILE,
     HANDOVER_NOTE,
@@ -492,7 +497,7 @@ async function installOrRepair(options, ctx, log) {
                     blockers.push(`${found.openShifts} shift(s) are open`);
                 if (found.activeLeases)
                     blockers.push(
-                        `${found.activeLeases} terminal(s) hold offline cash leases`,
+                        leaseRefusal(found.activeLeases, found.leaseTerminals),
                     );
                 return blockers;
             };
@@ -1135,13 +1140,13 @@ export function windowsContext(env = process.env, out) {
                     await readRootPassword(paths),
                 );
                 const db = root.db(APP_DATABASE);
+                const leaseTerminals = await blockingLeases(db);
                 return {
                     openShifts: await db
                         .collection('shifts')
                         .countDocuments({ status: 'OPEN' }),
-                    activeLeases: await db
-                        .collection('offlineleases')
-                        .countDocuments({ active: true }),
+                    activeLeases: leaseTerminalCount(leaseTerminals),
+                    leaseTerminals,
                 };
             } catch (error) {
                 if (error?.name === 'RefusedError') throw error;

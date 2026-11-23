@@ -38,6 +38,9 @@ import {
 } from './backup.mjs';
 import {
     SESSION_COLLECTIONS,
+    blockingLeases,
+    describeLeaseTerminals,
+    leaseTerminalCount,
     lossRefusals,
     parseArgs as parseRestoreArgs,
 } from './restore.mjs';
@@ -228,6 +231,71 @@ test('restore refuses each kind of loss until it is accepted on its own', () => 
         lossRefusals({ openShifts: 0, activeLeases: 0, newerSales: 0 }, {}),
         [],
     );
+});
+
+test('restore names the terminals whose leases block (#453)', () => {
+    const [refusal] = lossRefusals(
+        {
+            openShifts: 0,
+            activeLeases: 2,
+            leaseTerminals: [
+                { terminalId: 't-1', label: 'Till 1', cashier: 'ana' },
+                { terminalId: 't-2', label: '', cashier: '' },
+            ],
+            newerSales: 0,
+        },
+        {},
+    );
+    assert.match(
+        refusal,
+        /^2 terminal\(s\) still hold offline cash leases: Till 1 \(terminal t-1, cashier ana\), terminal t-2;/,
+    );
+    // One PC with two cashiers' shifts is one terminal, listed twice.
+    assert.equal(
+        leaseTerminalCount([
+            { terminalId: 'pc', label: 'Till 1', cashier: 'ana' },
+            { terminalId: 'pc', label: 'Till 1', cashier: 'bo' },
+        ]),
+        1,
+    );
+    assert.equal(
+        describeLeaseTerminals([{ terminalId: '', label: '', cashier: 'bo' }]),
+        'terminal unknown, cashier bo',
+    );
+});
+
+test('blockingLeases asks only for active, unexpired leases on OPEN shifts (#453)', async () => {
+    let pipeline;
+    const now = new Date('2026-11-23T00:00:00Z');
+    const db = {
+        collection: (name) => {
+            assert.equal(name, 'offlineleases');
+            return {
+                aggregate: (p) => {
+                    pipeline = p;
+                    return {
+                        toArray: async () => [
+                            {
+                                _id: { terminalId: 't-1', shift: 's' },
+                                label: 'Till 1',
+                                cashier: 'ana',
+                            },
+                        ],
+                    };
+                },
+            };
+        },
+    };
+    assert.deepEqual(await blockingLeases(db, now), [
+        { terminalId: 't-1', label: 'Till 1', cashier: 'ana' },
+    ]);
+    assert.deepEqual(pipeline[0], {
+        $match: { active: true, expiresAt: { $gt: now } },
+    });
+    // `$gt` skips a lease without expiresAt, and a plain $unwind (no
+    // preserveNullAndEmptyArrays) drops one whose shift doc is missing.
+    assert.deepEqual(pipeline[2], { $unwind: '$shiftDoc' });
+    assert.deepEqual(pipeline[3], { $match: { 'shiftDoc.status': 'OPEN' } });
 });
 
 /** A fabricated (archive-only) verified backup for listing/pruning tests. */

@@ -42,7 +42,7 @@ const skip =
     (!MONGOD && 'GPOS_TEST_MONGOD not set') ||
     (!TOOLS && 'GPOS_TEST_MONGO_TOOLS not set') ||
     (!compiledApi && 'apps/api is not built');
-const { MongoClient } = createRequire(join(repoApi, 'package.json'))(
+const { MongoClient, ObjectId } = createRequire(join(repoApi, 'package.json'))(
     'mongoose',
 ).mongo;
 
@@ -234,15 +234,75 @@ describe('single-PC upgrade on real MongoDB', { skip }, () => {
         await withDb(paths, (db) =>
             db.collection('shifts').deleteOne({ _id: 'open' }),
         );
+        // Only an active, unexpired lease on an OPEN shift blocks, and the
+        // refusal names it; expired leases and leases of a closed
+        // (force-closed) shift, a lease whose shift is missing and one
+        // without expiresAt do not (#453). The open shift refuses too.
+        const hour = 3600 * 1000;
+        const live = new ObjectId();
+        const done = new ObjectId();
+        await withDb(paths, async (db) => {
+            await db.collection('shifts').insertMany([
+                {
+                    _id: live,
+                    status: 'OPEN',
+                    terminal: 'Till 7',
+                    cashierName: 'ana',
+                },
+                { _id: done, status: 'CLOSED' },
+            ]);
+            await db.collection('offlineleases').insertMany([
+                {
+                    _id: 'expired',
+                    active: true,
+                    shift: live,
+                    terminalId: 'old',
+                    expiresAt: new Date(Date.now() - hour),
+                },
+                {
+                    _id: 'closed',
+                    active: true,
+                    shift: done,
+                    terminalId: 'gone',
+                    expiresAt: new Date(Date.now() + hour),
+                },
+                {
+                    _id: 'orphan',
+                    active: true,
+                    shift: new ObjectId(),
+                    terminalId: 'orphan',
+                    expiresAt: new Date(Date.now() + hour),
+                },
+                {
+                    _id: 'undated',
+                    active: true,
+                    shift: live,
+                    terminalId: 'undated',
+                },
+            ]);
+        });
+        await assert.rejects(runUpgrade(b, ctx), (e) => {
+            assert.match(e.message, /shift\(s\) are open/);
+            assert.doesNotMatch(e.message, /offline cash leases/);
+            return true;
+        });
         await withDb(paths, (db) =>
-            db
-                .collection('offlineleases')
-                .insertOne({ _id: 'l', active: true }),
+            db.collection('offlineleases').insertOne({
+                _id: 'l',
+                active: true,
+                shift: live,
+                terminalId: 't-7',
+                expiresAt: new Date(Date.now() + hour),
+            }),
         );
-        await refused(b, /offline cash leases/);
-        await withDb(paths, (db) =>
-            db.collection('offlineleases').deleteOne({ _id: 'l' }),
+        await refused(
+            b,
+            /1 terminal\(s\) still hold offline cash leases: Till 7 \(terminal t-7, cashier ana\);/,
         );
+        await withDb(paths, async (db) => {
+            await db.collection('offlineleases').deleteMany({});
+            await db.collection('shifts').deleteMany({});
+        });
 
         const status = JSON.parse(await readFile(paths.backupStatus, 'utf8'));
         const old = new Date(Date.now() - 40 * 3600 * 1000).toISOString();
