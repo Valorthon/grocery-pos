@@ -80,7 +80,16 @@
                                 >
                                 <span v-else>{{ item.EAN }}</span>
                             </td>
-                            <td :class="draftTable.tdName">{{ item.name }}</td>
+                            <td :class="draftTable.tdName">
+                                {{ item.name }}
+                                <p
+                                    v-if="nameErrors[item.draftId]"
+                                    :class="FIELD_ERROR_TEXT"
+                                    data-testid="draft-name-error"
+                                >
+                                    {{ nameErrors[item.draftId] }}
+                                </p>
+                            </td>
                             <td :class="draftTable.tdNum">
                                 {{ formatCurrency(item.price ?? 0) }}/{{
                                     unitLabel(item.unit)
@@ -129,7 +138,12 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import AddProductDialog from '@/components/User/Product/AddDialog.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import { formatCurrency } from '@/utils/currency';
-import { apiErrorMessages } from '@/utils/api-error';
+import { FIELD_ERROR_TEXT } from '@/components/ui/field-style';
+import {
+    apiErrorMessages,
+    duplicateNameIndexes,
+    PRODUCT_NAME_TAKEN,
+} from '@/utils/api-error';
 import { toNewProductsBody, type ProductDraft } from '@/utils/payloads';
 import { useConfirm } from '@/composables/useConfirm';
 import {
@@ -148,6 +162,13 @@ const { items, add, replace, remove, clear } = useDraftList<ProductDraft>();
 const editItem = ref<Partial<ProductDraft>>({});
 const editingId = ref<string | null>(null);
 const saving = ref(false);
+/** A taken name per draft (#455), cleared when that draft changes. */
+const nameErrors = ref<Record<string, string>>({});
+const clearNameError = (draftId: string) => {
+    const rest = { ...nameErrors.value };
+    delete rest[draftId];
+    nameErrors.value = rest;
+};
 const router = useRouter();
 
 const {
@@ -188,10 +209,26 @@ const saveToDB = async () => {
     }
 
     saving.value = true;
+    nameErrors.value = {};
+    // The body lists the drafts in this order, so a detail's `index` is
+    // the position of its draft here.
+    const sent = items.value.map((i) => i.draftId);
     try {
         await api.post('/products/bulk', toNewProductsBody(items.value));
     } catch (err: unknown) {
         if (unmounted) return;
+        // A taken name is inline under the draft's name (#455). The
+        // server's duplicate-key details carry the draft's position;
+        // without one the draft can't be known, so it stays a toast.
+        const taken = duplicateNameIndexes(err)
+            .map((index) => sent[index])
+            .filter((id): id is string => id !== undefined);
+        if (taken.length > 0) {
+            nameErrors.value = Object.fromEntries(
+                taken.map((id) => [id, PRODUCT_NAME_TAKEN]),
+            );
+            return;
+        }
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(err, 'Error saving products. Please try again'),
@@ -233,12 +270,16 @@ const editDraft = (item: Row) => {
 };
 
 const updateDraft = (updatedProduct: ProductDraft) => {
-    if (editingId.value) replace(editingId.value, updatedProduct);
+    if (editingId.value) {
+        replace(editingId.value, updatedProduct);
+        clearNameError(editingId.value);
+    }
     editingId.value = null;
     isAddDialogOpen.value = false;
 };
 
 const deleteDraft = (item: Row) => {
     remove(item.draftId);
+    clearNameError(item.draftId);
 };
 </script>
