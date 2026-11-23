@@ -1277,6 +1277,8 @@ describe('SalesService.reverse', () => {
                     payoutShiftId: undefined,
                     type: ReversalType.REFUND,
                     admin: ADMIN,
+                    approvedBy: ADMIN.userId,
+                    approvedByName: ADMIN.username,
                 }),
                 expect.anything(),
             );

@@ -443,6 +443,24 @@ export class ManagerOverrideService implements OnModuleInit {
         contextHash: string,
         session: ClientSession,
     ): Promise<string> {
+        const { approvedBy } = await this.consumeApproval(
+            token,
+            actor,
+            action,
+            contextHash,
+            session,
+        );
+        return approvedBy;
+    }
+
+    /** As `consume`, also naming the approving manager (#458). */
+    async consumeApproval(
+        token: string | undefined,
+        actor: AuthUser,
+        action: OverrideAction,
+        contextHash: string,
+        session: ClientSession,
+    ): Promise<{ approvedBy: string; approvedByName: string }> {
         if (!token)
             throw new ForbiddenError(
                 ErrorCode.OVERRIDE_REQUIRED,
@@ -480,23 +498,26 @@ export class ManagerOverrideService implements OnModuleInit {
             )
             .lean();
         if (!grant) throw invalidApproval();
-        const manager = await this.users.updateOne(
-            {
-                _id: grant.approver,
-                isActive: true,
-                roles: {
-                    $in:
-                        action === OverrideAction.DISCOUNT
-                            ? [Role.Admin]
-                            : [Role.Admin, Role.Supervisor],
+        // Returns the pre-update document; only its `name` is read.
+        const manager = await this.users
+            .findOneAndUpdate(
+                {
+                    _id: grant.approver,
+                    isActive: true,
+                    roles: {
+                        $in:
+                            action === OverrideAction.DISCOUNT
+                                ? [Role.Admin]
+                                : [Role.Admin, Role.Supervisor],
+                    },
+                    overridePinVersion: grant.approverPinVersion,
+                    overridePinHash: { $type: 'string' },
                 },
-                overridePinVersion: grant.approverPinVersion,
-                overridePinHash: { $type: 'string' },
-            },
-            { $inc: { overrideApprovalLock: 1 } },
-            { session },
-        );
-        if (!manager.matchedCount) throw invalidApproval();
+                { $inc: { overrideApprovalLock: 1 } },
+                { session, projection: { name: 1 } },
+            )
+            .lean<{ name: string }>();
+        if (!manager) throw invalidApproval();
         // The requester's account is also checked at the monetary operation,
         // so an old signed access token cannot bypass a deactivation.
         const requester = await this.users.updateOne(
@@ -518,6 +539,9 @@ export class ManagerOverrideService implements OnModuleInit {
             { session },
         );
         if (!requester.matchedCount) throw invalidApproval();
-        return String(grant.approver);
+        return {
+            approvedBy: String(grant.approver),
+            approvedByName: manager.name,
+        };
     }
 }

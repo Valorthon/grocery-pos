@@ -10,6 +10,12 @@ export const MOCK_MANAGER_APPROVALS = {
         consume: jest.fn((_token: unknown, actor: AuthUser) =>
             Promise.resolve(actor.userId),
         ),
+        consumeApproval: jest.fn((_token: unknown, actor: AuthUser) =>
+            Promise.resolve({
+                approvedBy: actor.userId,
+                approvedByName: actor.username,
+            }),
+        ),
         discountContext: jest.fn(() => 'discount-context'),
         reversalContext: jest.fn(() => 'reversal-context'),
         visibleReversalSale: jest.fn(() => Promise.resolve({})),

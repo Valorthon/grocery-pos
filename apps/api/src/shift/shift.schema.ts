@@ -58,6 +58,14 @@ export class DrawerMovement {
     @Prop({ type: String, required: true })
     byName!: string;
 
+    /** For REVERSAL_PAYOUT: the manager who approved it (#458). */
+    @Prop({ type: mongoose.Schema.Types.ObjectId, ref: User.name })
+    approvedBy?: Types.ObjectId;
+
+    /** Username of `approvedBy` when it was recorded. */
+    @Prop({ type: String })
+    approvedByName?: string;
+
     /** For REVERSAL_PAYOUT: the voided or refunded sale. */
     @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Sales' })
     sale?: Types.ObjectId;

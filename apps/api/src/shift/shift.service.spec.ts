@@ -232,6 +232,8 @@ describe('ShiftService.current (blind)', () => {
                     type: ReversalType.REFUND,
                     reason: 'return',
                     admin: BOSS,
+                    approvedBy: BOSS.userId,
+                    approvedByName: 'boss',
                 },
                 session,
             ),
@@ -415,6 +417,8 @@ describe('ShiftService.closeOwn (Z-read)', () => {
                     type: ReversalType.VOID,
                     reason: 'mis-ring',
                     admin: BOSS,
+                    approvedBy: BOSS.userId,
+                    approvedByName: 'boss',
                 },
                 session,
             ),
@@ -804,6 +808,8 @@ describe('ShiftService.payOutReversal', () => {
                     type: ReversalType.REFUND,
                     reason: 'return',
                     admin: BOSS,
+                    approvedBy: BOSS.userId,
+                    approvedByName: 'boss',
                 },
                 session,
             ),
@@ -836,6 +842,8 @@ describe('ShiftService.payOutReversal', () => {
                 type: ReversalType.VOID,
                 reason: 'x',
                 admin: BOSS,
+                approvedBy: BOSS.userId,
+                approvedByName: 'boss',
             },
             session,
         );
@@ -871,6 +879,71 @@ describe('ShiftService.payOutReversal', () => {
                 reason: 'REFUND: return',
             }),
         ]);
+    });
+
+    it('records the approving manager on the payout and in the Z-read (#458)', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+        const approver = new Types.ObjectId();
+
+        await inTransaction((session) =>
+            service.payOutReversal(
+                {
+                    saleId: String(new Types.ObjectId()),
+                    saleShift: new Types.ObjectId(_id),
+                    amount: 10_000,
+                    type: ReversalType.REFUND,
+                    reason: 'damaged',
+                    admin: ANA,
+                    approvedBy: String(approver),
+                    approvedByName: 'owner',
+                },
+                session,
+            ),
+        );
+
+        expect(payouts(_id)).toEqual([
+            expect.objectContaining({
+                byName: 'ana',
+                approvedBy: approver,
+                approvedByName: 'owner',
+            }),
+        ]);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        expect(report.movements).toEqual([
+            expect.objectContaining({
+                byName: 'ana',
+                approvedByName: 'owner',
+            }),
+        ]);
+    });
+
+    it('decides the same person by id, not by a stale token name (#458)', async () => {
+        const { _id } = await service.open(ANA, FLOAT_COUNTS);
+
+        await inTransaction((session) =>
+            service.payOutReversal(
+                {
+                    saleId: String(new Types.ObjectId()),
+                    saleShift: new Types.ObjectId(_id),
+                    amount: 10_000,
+                    type: ReversalType.VOID,
+                    reason: 'x',
+                    admin: ANA,
+                    approvedBy: ANA.userId,
+                    approvedByName: 'ana-renamed',
+                },
+                session,
+            ),
+        );
+
+        expect(payouts(_id)).toEqual([
+            expect.objectContaining({
+                approvedBy: new Types.ObjectId(ANA.userId),
+            }),
+        ]);
+        expect('approvedByName' in payouts(_id)[0]).toBe(false);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        expect('approvedByName' in report.movements[0]).toBe(false);
     });
 
     it('refuses a different payout shift while the sale’s own is open, and rolls back', async () => {

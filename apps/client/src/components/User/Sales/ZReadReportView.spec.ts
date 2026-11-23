@@ -180,6 +180,28 @@ describe('ZReadReportView who and what', () => {
         );
     });
 
+    it('names the approving manager beside the requester on a payout (#458)', async () => {
+        const payout = {
+            type: DrawerMovementType.REVERSAL_PAYOUT,
+            amount: 5_555,
+            reason: 'REFUND: damaged',
+            at: '2026-09-25T02:00:00.000Z',
+            byName: 'cashier1',
+            sale: 'sale1',
+        };
+        const host = await mount({
+            ...REPORT,
+            movements: [
+                { ...payout, approvedByName: 'owner' },
+                { ...payout, byName: 'root' },
+            ],
+        });
+        const text = host.textContent!.replace(/\s+/g, ' ');
+        expect(text).toContain('REFUND: damaged (cashier1, approved by owner)');
+        expect(text).toContain('REFUND: damaged (root)');
+        expect(text.match(/approved by/g)).toHaveLength(1);
+    });
+
     it('has no movements section when there were none', async () => {
         const host = await mount(REPORT);
         expect(host.textContent).not.toContain('Drawer Movements');
