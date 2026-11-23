@@ -92,7 +92,11 @@ import {
 } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { productErrors, type ProductFormInput } from './validation';
-import { apiErrorMessages } from '@/utils/api-error';
+import {
+    apiErrorMessages,
+    PRODUCT_NAME_TAKEN,
+    productDuplicate,
+} from '@/utils/api-error';
 import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
 
 const props = defineProps<{
@@ -162,6 +166,15 @@ const submitProduct = async () => {
             params: toEnsureValidQuery(formData),
         });
     } catch (err) {
+        // A taken name is inline under Product Name (#455); anything else
+        // (a taken barcode too) stays a toast.
+        const duplicate = productDuplicate(err);
+        if (duplicate?.nameTaken) {
+            errors.value = { ...errors.value, name: PRODUCT_NAME_TAKEN };
+            if (duplicate.others.length > 0)
+                uiStore.queueMessage(Color.ERROR, duplicate.others);
+            return;
+        }
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(err, 'Could not check the product'),

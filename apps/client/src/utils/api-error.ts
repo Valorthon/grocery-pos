@@ -166,3 +166,47 @@ export function isDuplicateName(error: unknown): boolean {
         )
     );
 }
+
+/** The inline text for a taken product name (#282, #455). */
+export const PRODUCT_NAME_TAKEN = 'A product with this name already exists';
+
+/**
+ * The positions in a bulk insert (`POST /products/bulk`) whose taken name
+ * a `DB_DUPLICATE_KEY` reports (#455): the `name` details' `index`, the
+ * position in the request body. Empty for another error or when no detail
+ * carries an index.
+ */
+export function duplicateNameIndexes(error: unknown): number[] {
+    if (!isDuplicateName(error)) return [];
+    const details = apiErrorBody(error)?.details;
+    if (!Array.isArray(details)) return [];
+    const indexes = details
+        .filter(isObject)
+        .filter((d) => d.property === 'name')
+        .map((d) => d.index)
+        .filter(
+            (i): i is number => typeof i === 'number' && Number.isInteger(i),
+        );
+    return [...new Set(indexes)];
+}
+
+const NAME_EXISTS = 'name already exists';
+
+/**
+ * `ensureValid`'s PRODUCT_DUPLICATE answer split into a taken name (inline
+ * under the name, #455) and its other lines (e.g. a taken barcode), which
+ * stay a toast. Null for any other error.
+ */
+export function productDuplicate(
+    error: unknown,
+): { nameTaken: boolean; others: string[] } | null {
+    const body = apiErrorBody(error);
+    if (body?.error !== ErrorCode.PRODUCT_DUPLICATE) return null;
+    const lines = Array.isArray(body.details)
+        ? body.details.filter(nonEmpty)
+        : [];
+    return {
+        nameTaken: lines.includes(NAME_EXISTS),
+        others: lines.filter((l) => l !== NAME_EXISTS),
+    };
+}

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, h, ref } from 'vue';
-import { createPinia } from 'pinia';
+import { type Pinia, createPinia } from 'pinia';
+import { AxiosError, AxiosHeaders } from 'axios';
+import { useUIStore } from '@/stores/ui';
 import { click, field, fieldError, flush, type } from '@/testing/form-dom';
 import type { ProductDraft } from '@/utils/payloads';
 import AddDialog from './AddDialog.vue';
@@ -11,6 +13,7 @@ vi.mock('@/axios', () => ({ default: api }));
 
 let app: App | null = null;
 let added: ProductDraft[];
+let pinia: Pinia;
 
 beforeEach(() => {
     api.get.mockReset();
@@ -38,7 +41,8 @@ async function open(item?: Partial<ProductDraft>) {
                 onUpdate: (p: ProductDraft) => added.push(p),
             }),
     });
-    app.use(createPinia());
+    pinia = createPinia();
+    app.use(pinia);
     app.mount(host);
     isOpen.value = true;
     await flush();
@@ -138,5 +142,60 @@ describe('Product AddDialog (#17)', () => {
     it('pre-fills an edited draft with two decimals', async () => {
         await open({ EAN: VALID.EAN, name: 'Pens', price: 2000 });
         expect(field('Selling Price').value).toBe('20.00');
+    });
+
+    describe('a taken name (#455)', () => {
+        const duplicate = (details: string[]) =>
+            new AxiosError('dup', 'ERR_BAD_REQUEST', undefined, undefined, {
+                status: 400,
+                statusText: 'Bad Request',
+                headers: {},
+                config: { headers: new AxiosHeaders() },
+                data: {
+                    statusCode: 400,
+                    error: 'PRODUCT_002',
+                    message: 'Duplicate product',
+                    details,
+                },
+            });
+        const toasts = () => useUIStore(pinia).toasts.flatMap((t) => t.lines);
+
+        async function submit() {
+            await type('EAN / Barcode', VALID.EAN);
+            await type('Product Name', 'Pens');
+            await type('Selling Price', '20.00');
+            await click('Add to Draft');
+        }
+
+        it('shows it under Product Name, with no toast', async () => {
+            await open();
+            api.get.mockRejectedValue(duplicate(['name already exists']));
+            await submit();
+            expect(fieldError('Product Name')).toBe(
+                'A product with this name already exists',
+            );
+            expect(toasts()).toEqual([]);
+            expect(added).toEqual([]);
+        });
+
+        it('keeps a taken barcode a toast', async () => {
+            await open();
+            api.get.mockRejectedValue(
+                duplicate(['EAN already exists', 'name already exists']),
+            );
+            await submit();
+            expect(fieldError('Product Name')).toBe(
+                'A product with this name already exists',
+            );
+            expect(toasts()).toEqual(['EAN already exists']);
+        });
+
+        it('keeps other failures toasts', async () => {
+            await open();
+            api.get.mockRejectedValue(duplicate(['EAN already exists']));
+            await submit();
+            expect(fieldError('Product Name')).toBe('');
+            expect(toasts()).toEqual(['EAN already exists']);
+        });
     });
 });
