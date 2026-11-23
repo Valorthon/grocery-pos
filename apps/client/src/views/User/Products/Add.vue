@@ -178,10 +178,24 @@ const saving = ref(false);
  * changes.
  */
 const draftErrors = ref<Record<string, { name?: string; EAN?: string }>>({});
+/**
+ * Clears a changed or removed draft's errors, and every other draft's
+ * "an earlier draft has this …" error: the earlier draft it repeated may
+ * be the one that changed (#470).
+ */
 const clearDraftError = (draftId: string) => {
-    const rest = { ...draftErrors.value };
-    delete rest[draftId];
-    draftErrors.value = rest;
+    const next: typeof draftErrors.value = {};
+    for (const [id, errors] of Object.entries(draftErrors.value)) {
+        if (id === draftId) continue;
+        const kept = {
+            ...(errors.name &&
+                errors.name !== DRAFT_NAME_REPEATED && { name: errors.name }),
+            ...(errors.EAN &&
+                errors.EAN !== DRAFT_EAN_REPEATED && { EAN: errors.EAN }),
+        };
+        if (kept.name || kept.EAN) next[id] = kept;
+    }
+    draftErrors.value = next;
 };
 const router = useRouter();
 

@@ -172,7 +172,7 @@ describe('Add Products save, every clash at once (#470)', () => {
         { property: 'name', msg: 'Repeated in this list', index: 3 },
     ];
 
-    it('flags every draft, with no toast, and clears only an edited one', async () => {
+    it('flags every draft, with no toast; an edit clears its own and the repeats', async () => {
         await mount(['MILK', 'BREAD', 'EGGS', 'MILK']);
         api.post.mockRejectedValue(failure('DB_002', CLASHES));
         await click('Save All');
@@ -207,10 +207,37 @@ describe('Add Products save, every clash at once (#470)', () => {
             'A product with this name already exists',
             '',
             '',
-            'An earlier draft has this name',
+            // Any edit may resolve a repeat, so repeats clear too.
+            '',
         ]);
         expect(eanErrors()[1]).toBe(
             'A product with this barcode already exists',
         );
+    });
+
+    it("clears a later draft's repeat error when the earlier one is deleted", async () => {
+        await mount(['MILK', 'BREAD', 'MILK']);
+        api.post.mockRejectedValue(
+            failure('DB_002', [
+                { property: 'name', msg: 'Already exists', index: 1 },
+                { property: 'name', msg: 'Repeated in this list', index: 2 },
+            ]),
+        );
+        await click('Save All');
+        expect(nameErrors()).toEqual([
+            '',
+            'A product with this name already exists',
+            'An earlier draft has this name',
+        ]);
+        document
+            .querySelector<HTMLButtonElement>(
+                'button[aria-label="Delete draft MILK"]',
+            )!
+            .click();
+        await flush();
+        expect(nameErrors()).toEqual([
+            'A product with this name already exists',
+            '',
+        ]);
     });
 });
