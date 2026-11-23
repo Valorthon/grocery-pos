@@ -180,7 +180,7 @@ const saving = ref(false);
 const draftErrors = ref<Record<string, { name?: string; EAN?: string }>>({});
 /**
  * Clears a changed or removed draft's errors, and every other draft's
- * "an earlier draft has this …" error: the earlier draft it repeated may
+ * "another draft above already uses this …" error: the earlier draft it repeated may
  * be the one that changed (#470).
  */
 const clearDraftError = (draftId: string) => {

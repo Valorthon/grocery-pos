@@ -175,7 +175,8 @@ export const PRODUCT_EAN_TAKEN = 'A product with this barcode already exists';
 
 /** Inline texts for a draft repeating an earlier draft's name/barcode (#470). */
 export const DRAFT_NAME_REPEATED = 'Another draft above already uses this name';
-export const DRAFT_EAN_REPEATED = 'An earlier draft has this barcode';
+export const DRAFT_EAN_REPEATED =
+    'Another draft above already uses this barcode';
 
 /**
  * The positions in a bulk insert (`POST /products/bulk`) whose `property`

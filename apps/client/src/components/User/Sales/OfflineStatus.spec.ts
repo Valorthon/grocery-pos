@@ -32,7 +32,7 @@ function fixture() {
         busy: false,
         admin: false,
         clockOffset: 0,
-        state: null as { terminalId: string } | null,
+        state: null as { terminalId: string; lease?: object } | null,
         clockWarning: false,
         setConnection: vi.fn(),
         probe: vi.fn().mockResolvedValue(true),
@@ -345,13 +345,24 @@ it("shows this browser's terminal id as the End-shift refusal names it (#454)", 
     mount();
     const shown = root.querySelector('[data-testid="offline-terminal-id"]');
     expect(shown?.textContent).toBe(
-        `Terminal ${offlineTerminalSuffix(terminalId)}`,
+        `Your terminal id ${offlineTerminalSuffix(terminalId)}`,
     );
-    expect(shown?.textContent).toBe('Terminal 12CD34EF');
+    expect(shown?.textContent).toBe('Your terminal id 12CD34EF');
 });
 it('shows no terminal id before offline mode created one (#454)', () => {
     mount();
     expect(
         root.querySelector('[data-testid="offline-terminal-id"]'),
     ).toBeNull();
+});
+it('shows the id while a lease exists before the catalogue is ready (#454)', () => {
+    status.ready = false;
+    status.state = {
+        terminalId: '3f2a1b4c-0000-4000-8000-00ab12cd34ef',
+        lease: {},
+    };
+    mount();
+    expect(
+        root.querySelector('[data-testid="offline-terminal-id"]')?.textContent,
+    ).toBe('Your terminal id 12CD34EF');
 });

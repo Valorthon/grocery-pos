@@ -5,7 +5,8 @@
             status.ready ||
             status.pending.length ||
             status.error ||
-            status.clockWarning
+            status.clockWarning ||
+            status.state?.lease
         "
         class="shrink-0 px-3 py-2 bg-amber-50 border-b border-amber-200 text-sm flex flex-wrap items-center gap-2"
         role="status"
@@ -22,7 +23,7 @@
             · {{ status.pending.length }} sales pending</span
         >
         <span v-if="terminal" class="text-xs" data-testid="offline-terminal-id"
-            >Terminal {{ terminal }}</span
+            >Your terminal id {{ terminal }}</span
         >
         <span v-if="status.offline">{{
             status.ready
