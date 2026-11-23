@@ -193,13 +193,13 @@ describe('ZReadReportView who and what', () => {
             ...REPORT,
             movements: [
                 { ...payout, approvedByName: 'owner' },
-                { ...payout, byName: 'root', approvedByName: 'root' },
+                { ...payout, byName: 'root' },
             ],
         });
         const text = host.textContent!.replace(/\s+/g, ' ');
         expect(text).toContain('REFUND: damaged (cashier1, approved by owner)');
         expect(text).toContain('REFUND: damaged (root)');
-        expect(text).not.toContain('approved by root');
+        expect(text.match(/approved by/g)).toHaveLength(1);
     });
 
     it('has no movements section when there were none', async () => {

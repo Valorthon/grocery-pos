@@ -232,6 +232,8 @@ describe('ShiftService.current (blind)', () => {
                     type: ReversalType.REFUND,
                     reason: 'return',
                     admin: BOSS,
+                    approvedBy: BOSS.userId,
+                    approvedByName: 'boss',
                 },
                 session,
             ),
@@ -415,6 +417,8 @@ describe('ShiftService.closeOwn (Z-read)', () => {
                     type: ReversalType.VOID,
                     reason: 'mis-ring',
                     admin: BOSS,
+                    approvedBy: BOSS.userId,
+                    approvedByName: 'boss',
                 },
                 session,
             ),
@@ -804,6 +808,8 @@ describe('ShiftService.payOutReversal', () => {
                     type: ReversalType.REFUND,
                     reason: 'return',
                     admin: BOSS,
+                    approvedBy: BOSS.userId,
+                    approvedByName: 'boss',
                 },
                 session,
             ),
@@ -836,6 +842,8 @@ describe('ShiftService.payOutReversal', () => {
                 type: ReversalType.VOID,
                 reason: 'x',
                 admin: BOSS,
+                approvedBy: BOSS.userId,
+                approvedByName: 'boss',
             },
             session,
         );
@@ -909,9 +917,31 @@ describe('ShiftService.payOutReversal', () => {
         ]);
     });
 
-    it('leaves approvedByName off a legacy payout without an approver (#458)', async () => {
+    it('decides the same person by id, not by a stale token name (#458)', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        await payOut(new Types.ObjectId(_id), 30_000);
+
+        await inTransaction((session) =>
+            service.payOutReversal(
+                {
+                    saleId: String(new Types.ObjectId()),
+                    saleShift: new Types.ObjectId(_id),
+                    amount: 10_000,
+                    type: ReversalType.VOID,
+                    reason: 'x',
+                    admin: ANA,
+                    approvedBy: ANA.userId,
+                    approvedByName: 'ana-renamed',
+                },
+                session,
+            ),
+        );
+
+        expect(payouts(_id)).toEqual([
+            expect.objectContaining({
+                approvedBy: new Types.ObjectId(ANA.userId),
+            }),
+        ]);
+        expect('approvedByName' in payouts(_id)[0]).toBe(false);
         const report = await service.closeOwn(ANA, FLOAT_COUNTS);
         expect('approvedByName' in report.movements[0]).toBe(false);
     });

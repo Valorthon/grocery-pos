@@ -242,9 +242,12 @@ function movementLabel(type: DrawerMovementType): string {
     return MOVEMENT_LABELS[type] ?? type;
 }
 
-/** Who recorded it, and the approving manager when another person (#458). */
+/**
+ * Who recorded it, and the approving manager (#458). The server omits
+ * `approvedByName` when the approver is the requester.
+ */
 function movementBy(m: DrawerMovementView): string {
-    return m.approvedByName && m.approvedByName !== m.byName
+    return m.approvedByName
         ? `${m.byName}, approved by ${m.approvedByName}`
         : m.byName;
 }

@@ -498,6 +498,7 @@ export class ManagerOverrideService implements OnModuleInit {
             )
             .lean();
         if (!grant) throw invalidApproval();
+        // Returns the pre-update document; only its `name` is read.
         const manager = await this.users
             .findOneAndUpdate(
                 {

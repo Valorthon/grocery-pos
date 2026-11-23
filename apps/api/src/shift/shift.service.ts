@@ -415,9 +415,12 @@ export class ShiftService {
             type: ReversalType;
             reason: string;
             admin: AuthUser;
-            /** The manager who approved the reversal (#458). */
-            approvedBy?: string;
-            approvedByName?: string;
+            /**
+             * The manager who approved the reversal (#458). Every void and
+             * refund is approved, so this is always given.
+             */
+            approvedBy: string;
+            approvedByName: string;
         },
         session: ClientSession,
     ): Promise<Types.ObjectId | null> {
@@ -443,12 +446,10 @@ export class ShiftService {
             at: new Date(),
             by: new Types.ObjectId(admin.userId),
             byName: admin.username,
-            ...(approvedBy && approvedByName
-                ? {
-                      approvedBy: new Types.ObjectId(approvedBy),
-                      approvedByName,
-                  }
-                : {}),
+            approvedBy: new Types.ObjectId(approvedBy),
+            // The same person is decided by id, not name: `byName` is the
+            // token's username, which may be stale after a rename.
+            ...(approvedBy === admin.userId ? {} : { approvedByName }),
             sale: new Types.ObjectId(saleId),
         };
 
