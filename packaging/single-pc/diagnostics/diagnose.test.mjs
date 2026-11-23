@@ -29,6 +29,7 @@ import {
     supportExport,
     tailFile,
     diagnose,
+    isAccessDenied,
     errorLines,
     firewallState,
     parseLanAddress,
@@ -685,6 +686,35 @@ describe('diagnose', () => {
             GUIDANCE.backupStatusUnreadable,
         );
     });
+
+    test('EPERM and EACCES are access denied, directly or as cause (#456)', () => {
+        for (const code of ['EACCES', 'EPERM']) {
+            assert.equal(isAccessDenied({ code }), true);
+            assert.equal(isAccessDenied({ cause: { code } }), true);
+        }
+        for (const e of [{ code: 'ENOENT' }, new SyntaxError('x'), null])
+            assert.equal(isAccessDenied(e), false);
+    });
+
+    for (const code of ['EACCES', 'EPERM'])
+        test(`${code} on the install record is unverified (#456)`, async () => {
+            const report = await diagnose(
+                { dataRoot: root, release },
+                healthy({
+                    readText: async (path) => {
+                        if (path.endsWith('installer.json'))
+                            throw Object.assign(new Error(code), { code });
+                        return readFile(path, 'utf8');
+                    },
+                }),
+            );
+            const versions = byId(report, 'versions');
+            assert.equal(versions.status, 'unknown');
+            assert.deepEqual(versions.steps, []);
+            // The release passed in is still read.
+            assert.equal(versions.details.appVersion, '0.0.1');
+            assert.equal(versions.details.installedVersion, null);
+        });
 
     test('access denied is unverified, never a repair (#456)', async () => {
         const denied = (path) =>

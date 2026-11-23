@@ -260,7 +260,7 @@ async function readJson(ctx, path) {
 }
 
 /** Access denied (not elevated), as opposed to a missing or corrupt file. */
-function isAccessDenied(error) {
+export function isAccessDenied(error) {
     const code = error?.code ?? error?.cause?.code;
     return code === 'EACCES' || code === 'EPERM';
 }
@@ -280,29 +280,13 @@ function isLoopback(address) {
 
 export async function checkVersions(ctx, paths, release) {
     let state;
+    let denied = false;
     try {
         state = JSON.parse(
             await ctx.readText(join(paths.dirs.state, 'installer.json')),
         );
     } catch (error) {
-        if (isAccessDenied(error))
-            return result(
-                'versions',
-                'Installed version',
-                'unknown',
-                `The installation record could not be read: ${UNVERIFIED_ADMIN}.`,
-                {
-                    details: {
-                        installedVersion: null,
-                        installComplete: null,
-                        release: null,
-                        appVersion: null,
-                        commit: null,
-                        builtAt: null,
-                        components: null,
-                    },
-                },
-            );
+        denied = isAccessDenied(error);
         state = undefined;
     }
     const releaseDir = release ?? state?.release;
@@ -325,6 +309,14 @@ export async function checkVersions(ctx, paths, release) {
               )
             : null,
     };
+    if (denied)
+        return result(
+            'versions',
+            'Installed version',
+            'unknown',
+            `The installation record could not be read: ${UNVERIFIED_ADMIN}.`,
+            { details },
+        );
     if (!state?.complete) {
         return result(
             'versions',
