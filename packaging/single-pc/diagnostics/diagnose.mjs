@@ -11,7 +11,8 @@
 // log lines) into a folder the owner picks; see README.md "Support export".
 //
 // `check` exits 0 when everything is OK, 1 when something needs attention
-// (warn or fail), 2 on a usage error. `rotate-logs` is a maintenance
+// (warn or fail), 2 on a usage error, 3 when the only non-OK checks are
+// unverified (`unknown`, e.g. a run without administrator rights). `rotate-logs` is a maintenance
 // command (reads the MongoDB root password; run it elevated or as SYSTEM).
 // See README.md and RECOVERY.md.
 import { execFile } from 'node:child_process';
@@ -52,7 +53,7 @@ import {
     layout,
 } from '../runtime/layout.mjs';
 
-export const EXIT = { OK: 0, ATTENTION: 1, USAGE: 2 };
+export const EXIT = { OK: 0, ATTENTION: 1, USAGE: 2, UNVERIFIED: 3 };
 export const STATUS_RANK = { ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 };
 /** Bytes of each log read from its end; error lines kept per source. */
 export const LOG_TAIL_BYTES = 256 * 1024;
@@ -1179,6 +1180,14 @@ const LABEL = {
     fail: 'FAIL',
 };
 
+/** #456: exit code of `check` for a report. Only unverified (`unknown`)
+ *  lines is its own code, so a caller can tell it from a real warn/fail. */
+export function checkExitCode(report) {
+    if (report.overall === 'ok' || report.overall === 'info') return EXIT.OK;
+    if (report.overall === 'unknown') return EXIT.UNVERIFIED;
+    return EXIT.ATTENTION;
+}
+
 export function renderText(report) {
     const out = [
         'Grocery POS diagnostics',
@@ -1199,7 +1208,9 @@ export function renderText(report) {
     out.push(
         report.overall === 'ok' || report.overall === 'info'
             ? 'Everything checked is OK.'
-            : 'Something needs attention: follow the steps above.',
+            : report.overall === 'unknown'
+              ? 'Some checks need administrator rights; run as administrator for a full check.'
+              : 'Something needs attention: follow the steps above.',
     );
     out.push(
         report.guide
@@ -1799,9 +1810,7 @@ async function main() {
             ? JSON.stringify(report, null, 2) + '\n'
             : renderText(report),
     );
-    return report.overall === 'ok' || report.overall === 'info'
-        ? EXIT.OK
-        : EXIT.ATTENTION;
+    return checkExitCode(report);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

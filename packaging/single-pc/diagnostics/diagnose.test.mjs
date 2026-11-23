@@ -38,6 +38,8 @@ import {
     parseArgs,
     redact,
     renderText,
+    checkExitCode,
+    EXIT,
 } from './diagnose.mjs';
 
 const NOW = new Date('2026-11-15T03:00:00.000Z');
@@ -1252,4 +1254,53 @@ test('single-PC docs stop the API with -Force and restart the proxies (#457)', (
         recovery,
         /diagnose\.mjs" \^ check --data-root \S+ \^ --release /,
     );
+});
+
+describe('#456 unverified-only footer and exit code', () => {
+    const report = (statuses) => ({
+        generatedAt: NOW.toISOString(),
+        overall: statuses.reduce(
+            (w, s) =>
+                ({ ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 })[s] >
+                { ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 }[w]
+                    ? s
+                    : w,
+            'ok',
+        ),
+        guide: null,
+        checks: statuses.map((status, i) => ({
+            id: `c${i}`,
+            title: `Check ${i}`,
+            status,
+            summary: 's',
+            steps: [],
+        })),
+        notObserved: [],
+    });
+    const ADMIN =
+        'Some checks need administrator rights; run as administrator for a full check.';
+    const ATTENTION = 'Something needs attention: follow the steps above.';
+
+    test('only unverified: admin footer, exit 3', () => {
+        const r = report(['ok', 'unknown', 'info', 'unknown']);
+        const text = renderText(r);
+        assert.ok(text.includes(ADMIN));
+        assert.ok(!text.includes(ATTENTION));
+        assert.equal(checkExitCode(r), EXIT.UNVERIFIED);
+        assert.equal(EXIT.UNVERIFIED, 3);
+    });
+    for (const bad of ['warn', 'fail']) {
+        test(`unverified plus ${bad}: attention footer, exit 1`, () => {
+            const r = report(['unknown', bad]);
+            const text = renderText(r);
+            assert.ok(text.includes(ATTENTION));
+            assert.ok(!text.includes(ADMIN));
+            assert.equal(checkExitCode(r), EXIT.ATTENTION);
+        });
+    }
+    test('all ok/info: exit 0', () => {
+        const r = report(['ok', 'info']);
+        assert.ok(renderText(r).includes('Everything checked is OK.'));
+        assert.equal(checkExitCode(r), EXIT.OK);
+    });
 });

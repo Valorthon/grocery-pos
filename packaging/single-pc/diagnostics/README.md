@@ -35,8 +35,10 @@ node diagnose.mjs export --data-root <abs> --to <folder> [--release <abs>]
 node diagnose.mjs rotate-logs --data-root <abs> --api <release>\api [--keep 5]
 ```
 
-`check` exits 0 when everything is OK, 1 when something needs attention and
-2 on a usage error. `--release` defaults to the installer's record
+`check` exits 0 when everything is OK, 1 when something needs attention,
+2 on a usage error and 3 when the only non-OK checks are unverified (`??`,
+e.g. a run without administrator rights; the footer then asks to run as
+administrator for a full check). `--release` defaults to the installer's record
 (`state\installer.json`). `--json` prints the same report as JSON on the
 console (nothing is written to disk). An administrator sees everything; a
 standard account sees what its permissions allow (the certificate and the
