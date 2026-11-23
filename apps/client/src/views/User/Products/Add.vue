@@ -121,6 +121,9 @@
     <AddProductDialog
         v-model="isAddDialogOpen"
         :item="editItem"
+        :drafts="items"
+        :editing-id="editingId"
+        @edit-draft="openRepeatedDraft"
         @add="handleNewProduct"
         @update="updateDraft"
     />
@@ -130,7 +133,7 @@
 
 <script setup lang="ts">
 import { unitLabel } from '@grocery-pos/contracts';
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { PackagePlus, Plus, Save, Trash2 } from '@lucide/vue';
 import DraftRowActions from '@/components/ui/DraftRowActions.vue';
@@ -307,6 +310,30 @@ const editDraft = (item: Row) => {
     editingId.value = item.draftId;
     editItem.value = { ...item };
     isAddDialogOpen.value = true;
+};
+
+/**
+ * "Edit that draft" from the dialog (#478): asks first when the dialog's
+ * entries would be discarded, then opens the earlier draft.
+ */
+const openRepeatedDraft = async (draftId: string, dirty: boolean) => {
+    if (
+        dirty &&
+        !(await confirm({
+            title: 'Discard this entry?',
+            message:
+                'What you entered in this dialog will be discarded to edit the other draft.',
+            confirmLabel: 'Discard',
+            cancelLabel: 'Keep editing',
+            danger: true,
+        }))
+    )
+        return;
+    const row = items.value.find((i) => i.draftId === draftId);
+    if (!row) return;
+    isAddDialogOpen.value = false;
+    await nextTick();
+    editDraft(row);
 };
 
 const updateDraft = (updatedProduct: ProductDraft) => {

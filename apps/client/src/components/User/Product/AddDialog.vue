@@ -20,7 +20,18 @@
                         : 'Scan or type barcode'
                 "
                 :error="errors.EAN"
+                @enter="checkRepeats('EAN')"
+                @blur="checkRepeats('EAN')"
             />
+            <BaseButton
+                v-if="repeatOf.EAN"
+                variant="outline"
+                size="sm"
+                class="min-h-11"
+                data-testid="edit-repeat-ean"
+                @click="openRepeat(repeatOf.EAN)"
+                >Edit that draft</BaseButton
+            >
             <BaseCheckbox
                 v-model="formData.autoGenerateEAN"
                 label="Auto-generate EAN"
@@ -30,7 +41,17 @@
                 label="Product Name"
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
+                @blur="checkRepeats('name')"
             />
+            <BaseButton
+                v-if="repeatOf.name"
+                variant="outline"
+                size="sm"
+                class="min-h-11"
+                data-testid="edit-repeat-name"
+                @click="openRepeat(repeatOf.name)"
+                >Edit that draft</BaseButton
+            >
             <BaseCheckbox
                 v-model="formData.tracksExpiry"
                 label="Track expiry and batches (online sales only)"
@@ -94,11 +115,14 @@ import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { productErrors, type ProductFormInput } from './validation';
 import {
     apiErrorMessages,
+    DRAFT_EAN_REPEATED,
+    DRAFT_NAME_REPEATED,
     PRODUCT_EAN_TAKEN,
     PRODUCT_NAME_TAKEN,
     productDuplicate,
 } from '@/utils/api-error';
 import { toEnsureValidQuery, type ProductDraft } from '@/utils/payloads';
+import type { WithDraftId } from '@/composables/useDrafts';
 
 const props = defineProps<{
     modelValue: boolean;
@@ -112,12 +136,21 @@ const props = defineProps<{
         price?: number;
         name?: string;
     };
+    /** The page's other drafts, checked for a repeat (#478). */
+    drafts?: WithDraftId<ProductDraft>[];
+    /** The draft being edited, never flagged as its own repeat. */
+    editingId?: string | null;
 }>();
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: boolean): void;
     (e: 'add', payload: ProductDraft): void;
     (e: 'update', payload: ProductDraft): void;
+    /**
+     * Opens another draft instead (#478); `dirty` says this dialog's
+     * entries would be discarded.
+     */
+    (e: 'edit-draft', draftId: string, dirty: boolean): void;
 }>();
 
 const model = computed({
@@ -139,6 +172,54 @@ const errors = ref<Record<string, string>>({});
 
 const isEditMode = computed(() => !!props.item?.name);
 
+/** The draft each field repeats (#478), with its inline error. */
+const repeatOf = ref<{ name?: string; EAN?: string }>({});
+let opened = '';
+const snapshot = () => JSON.stringify(formData);
+
+const findRepeat = (field: 'name' | 'EAN'): string | undefined => {
+    if (field === 'EAN') {
+        const ean = formData.EAN.trim();
+        if (formData.autoGenerateEAN || !ean) return undefined;
+        return props.drafts?.find(
+            (d) =>
+                d.draftId !== props.editingId &&
+                !d.autoGenerateEAN &&
+                d.EAN === ean,
+        )?.draftId;
+    }
+    const name = normalizeProductName(formData.name);
+    if (!name) return undefined;
+    return props.drafts?.find(
+        (d) =>
+            d.draftId !== props.editingId &&
+            normalizeProductName(d.name ?? '') === name,
+    )?.draftId;
+};
+
+const REPEAT_TEXT = { name: DRAFT_NAME_REPEATED, EAN: DRAFT_EAN_REPEATED };
+
+/** Flags (or unflags) a field repeating another draft; true if flagged. */
+const checkRepeats = (field: 'name' | 'EAN'): boolean => {
+    const id = findRepeat(field);
+    const nextRepeat = { ...repeatOf.value };
+    const nextErrors = { ...errors.value };
+    if (id) {
+        nextRepeat[field] = id;
+        nextErrors[field] = REPEAT_TEXT[field];
+    } else {
+        delete nextRepeat[field];
+        if (nextErrors[field] === REPEAT_TEXT[field]) delete nextErrors[field];
+    }
+    repeatOf.value = nextRepeat;
+    errors.value = nextErrors;
+    return !!id;
+};
+
+const openRepeat = (draftId: string) => {
+    emit('edit-draft', draftId, snapshot() !== opened);
+};
+
 watch(
     () => props.modelValue,
     (open) => {
@@ -154,7 +235,17 @@ watch(
                     : '';
             formData.autoGenerateEAN = props.item?.autoGenerateEAN ?? false;
             errors.value = {};
+            repeatOf.value = {};
+            opened = snapshot();
         }
+    },
+);
+
+// Auto-generate drops the barcode from the comparison.
+watch(
+    () => formData.autoGenerateEAN,
+    () => {
+        if (repeatOf.value.EAN) checkRepeats('EAN');
     },
 );
 
@@ -164,6 +255,11 @@ for (const field of ['name', 'EAN'] as const) {
     watch(
         () => formData[field],
         () => {
+            if (repeatOf.value[field]) {
+                const rest = { ...repeatOf.value };
+                delete rest[field];
+                repeatOf.value = rest;
+            }
             if (errors.value[field]) {
                 const rest = { ...errors.value };
                 delete rest[field];
@@ -175,6 +271,11 @@ for (const field of ['name', 'EAN'] as const) {
 
 const submitProduct = async () => {
     errors.value = productErrors(formData);
+    repeatOf.value = {};
+    // A repeat of another draft is refused here (#478); Save All's server
+    // check still catches a product saved meanwhile.
+    for (const field of ['EAN', 'name'] as const)
+        if (!errors.value[field]) checkRepeats(field);
     if (Object.keys(errors.value).length) return;
 
     try {
