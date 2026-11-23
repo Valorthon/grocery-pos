@@ -11,6 +11,7 @@ import {
     ErrorCode,
     NUMERIC_LIMITS,
     OFFLINE_PENDING_DETAILS_SHAPE,
+    OFFLINE_PENDING_TERMINAL_SHAPE,
     PaymentType,
     ReversalType,
     Role,
@@ -526,67 +527,115 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         );
     });
 
-    it('refuses while a terminal lease is open, naming the admin force-close and the terminal count', async () => {
+    it('refuses while a terminal lease is open, naming the admin force-close and each terminal', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         const shift = new Types.ObjectId(_id);
-        // Terminal A holds two leases (two login sessions): one terminal.
-        leaseModel.seed({ shift, terminalId: 'A', sid: 's1', active: true });
-        leaseModel.seed({ shift, terminalId: 'A', sid: 's2', active: true });
-        leaseModel.seed({ shift, terminalId: 'B', sid: 's1', active: true });
+        const A = '11111111-1111-4111-8111-aaaaaaaa0001';
+        const B = '22222222-2222-4222-8222-bbbbbbbb0002';
+        // Terminal A holds two leases (two login sessions): one terminal,
+        // shown with its latest lease and the label it sent.
+        leaseModel.seed({
+            shift,
+            terminalId: A,
+            sid: 's1',
+            active: true,
+            terminalLabel: 'Counter 2',
+            issuedAt: new Date('2026-11-23T01:00:00Z'),
+        });
+        leaseModel.seed({
+            shift,
+            terminalId: A,
+            sid: 's2',
+            active: true,
+            issuedAt: new Date('2026-11-23T03:00:00Z'),
+        });
+        leaseModel.seed({
+            shift,
+            terminalId: B,
+            sid: 's1',
+            active: true,
+            issuedAt: new Date('2026-11-23T02:00:00Z'),
+        });
         // Released leases and other shifts' leases do not block.
-        leaseModel.seed({ shift, terminalId: 'C', sid: 's1', active: false });
+        leaseModel.seed({
+            shift,
+            terminalId: 'C',
+            sid: 's1',
+            active: false,
+            issuedAt: new Date(),
+        });
         leaseModel.seed({
             shift: new Types.ObjectId(),
             terminalId: 'D',
             sid: 's1',
             active: true,
+            issuedAt: new Date(),
         });
 
+        const details = {
+            terminals: 2,
+            blocking: [
+                {
+                    terminal: 'AAAA0001',
+                    label: 'Counter 2',
+                    leasedAt: '2026-11-23T03:00:00.000Z',
+                },
+                { terminal: 'BBBB0002', leasedAt: '2026-11-23T02:00:00.000Z' },
+            ],
+        };
         const refused = service.closeOwn(ANA, FLOAT_COUNTS);
         await expect(refused).rejects.toMatchObject({
             statusCode: 409,
             code: ErrorCode.OFFLINE_PENDING,
             message: OFFLINE_PENDING_MESSAGE,
-            details: { terminals: 2 },
+            details,
         });
         const body = (await refused.catch((err: AppError) => err)) as AppError;
-        expect(body.toResponse('/p', 'r').details).toEqual({ terminals: 2 });
-        expect(
-            wireShapeDiff(body.details, OFFLINE_PENDING_DETAILS_SHAPE),
-        ).toEqual({ missing: [], unexpected: [] });
+        const wire = body.toResponse('/p', 'r').details as typeof details;
+        expect(wire).toEqual(details);
+        expect(wireShapeDiff(wire, OFFLINE_PENDING_DETAILS_SHAPE)).toEqual({
+            missing: [],
+            unexpected: [],
+        });
+        for (const entry of wire.blocking)
+            expect(
+                wireShapeDiff(entry, OFFLINE_PENDING_TERMINAL_SHAPE),
+            ).toEqual({ missing: [], unexpected: [] });
+        expect(JSON.stringify(wire)).not.toContain(A);
         expect(OFFLINE_PENDING_MESSAGE).toMatch(/admin to force-close/);
         expect(shifts.byId(_id)!.status).toBe(ShiftStatus.OPEN);
     });
 
-    it('counts a single blocking terminal as one', async () => {
-        const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        leaseModel.seed({
-            shift: new Types.ObjectId(_id),
-            terminalId: 'A',
-            sid: 's1',
-            active: true,
-        });
-
-        await expect(service.closeOwn(ANA, FLOAT_COUNTS)).rejects.toMatchObject(
-            { code: ErrorCode.OFFLINE_PENDING, details: { terminals: 1 } },
-        );
-    });
-
-    it('counts the blocking terminals inside the close transaction', async () => {
+    it('lists the blocking terminals inside the close transaction', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         const session = { id: 'close-tx' } as unknown as ClientSession;
-        const inSession = jest.fn().mockResolvedValue(['A']);
-        const distinct = jest
-            .spyOn(leaseModel, 'distinct')
-            .mockReturnValue({ session: inSession } as never);
+        const lean = jest.fn().mockResolvedValue([
+            {
+                terminalId: 'abcd-ef123456',
+                issuedAt: new Date('2026-11-23T00:00:00Z'),
+            },
+        ]);
+        const inSession = jest.fn().mockReturnValue({ lean });
+        const sort = jest.fn().mockReturnValue({ session: inSession });
+        const find = jest
+            .spyOn(leaseModel, 'find')
+            .mockReturnValue({ sort } as never);
 
         await expect(
             service.closeOwn(ANA, FLOAT_COUNTS, session),
         ).rejects.toMatchObject({
             code: ErrorCode.OFFLINE_PENDING,
-            details: { terminals: 1 },
+            details: {
+                terminals: 1,
+                blocking: [
+                    {
+                        terminal: 'EF123456',
+                        leasedAt: '2026-11-23T00:00:00.000Z',
+                    },
+                ],
+            },
         });
-        expect(distinct).toHaveBeenCalledWith('terminalId', {
+        expect(find).toHaveBeenCalledWith({
             shift: new Types.ObjectId(_id),
             active: true,
         });

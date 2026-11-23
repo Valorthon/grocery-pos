@@ -181,17 +181,42 @@ export const APP_ERROR_RESPONSE_SHAPE: WireShape<AppErrorResponse> = {
     requestId: 'required',
 };
 
+/** One terminal that still holds an offline lease on the shift (#454). */
+export interface OfflinePendingTerminal {
+    /** Short terminal id: the last 8 characters of its id, upper case. */
+    terminal: string;
+    /** The terminal label an ADMIN saved on that device, when it sent one. */
+    label?: string;
+    /** When that terminal last took its lease (ISO). */
+    leasedAt: string;
+}
+
+export const OFFLINE_PENDING_TERMINAL_SHAPE: WireShape<OfflinePendingTerminal> =
+    {
+        terminal: 'required',
+        label: 'optional',
+        leasedAt: 'required',
+    };
+
+/** How a terminal id is shown in an OFFLINE_PENDING refusal (#454). */
+export function offlineTerminalSuffix(terminalId: string): string {
+    return terminalId.slice(-8).toUpperCase();
+}
+
 /**
  * `details` of an OFFLINE_PENDING close refusal (#143): how many terminals
  * (distinct terminal ids with an active offline lease on the shift) still
- * block the close. A count only, never terminal ids or labels.
+ * block the close, and which (#454): each one's short id, saved label and
+ * latest lease time, newest first. Never the full terminal id.
  */
 export interface OfflinePendingDetails {
     terminals: number;
+    blocking: OfflinePendingTerminal[];
 }
 
 export const OFFLINE_PENDING_DETAILS_SHAPE: WireShape<OfflinePendingDetails> = {
     terminals: 'required',
+    blocking: 'required',
 };
 
 /** Shape of every paginated list endpoint. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ErrorCode } from './errors.js';
+import { ErrorCode, offlineTerminalSuffix } from './errors.js';
 
 describe('ErrorCode', () => {
     const entries = Object.entries(ErrorCode);
@@ -20,5 +20,14 @@ describe('ErrorCode', () => {
             const area = value.replace(/_\d{3}$/, '');
             expect(name.startsWith(area)).toBe(true);
         }
+    });
+});
+
+describe('offlineTerminalSuffix (#454)', () => {
+    it('shows the last 8 characters, upper case', () => {
+        expect(
+            offlineTerminalSuffix('3f2a1b4c-0000-4000-8000-00ab12cd34ef'),
+        ).toBe('12CD34EF');
+        expect(offlineTerminalSuffix('abc')).toBe('ABC');
     });
 });

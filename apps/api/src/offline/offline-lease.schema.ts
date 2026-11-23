@@ -12,6 +12,8 @@ export class OfflineLease {
     shift!: Types.ObjectId;
     @Prop({ type: String, required: true }) sid!: string;
     @Prop({ type: String, required: true }) terminalId!: string;
+    /** Saved terminal label the device sent, for close refusals (#454). */
+    @Prop({ type: String }) terminalLabel?: string;
     @Prop({ type: String }) securityVersion?: string;
     @Prop({ type: Date, required: true }) issuedAt!: Date;
     @Prop({ type: Date, required: true }) expiresAt!: Date;

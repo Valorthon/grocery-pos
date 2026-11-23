@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+    IsNotEmpty,
     ArrayMaxSize,
     ArrayNotEmpty,
     IsArray,
@@ -19,6 +20,7 @@ import {
     BATCH_LIMITS,
     NUMERIC_LIMITS,
     PAGINATION,
+    SETTINGS_LIMITS,
     STRING_LIMITS,
     type OfflineCatalogRequest,
     type OfflineLeaseRequest,
@@ -30,6 +32,12 @@ const trim = ({ value }: { value: unknown }): unknown =>
     typeof value === 'string' ? value.trim() : value;
 export class OfflineLeaseDto implements OfflineLeaseRequest {
     @Transform(trim) @IsUUID('4') terminalId!: string;
+    @IsOptional()
+    @Transform(trim)
+    @IsString()
+    @IsNotEmpty()
+    @MaxLength(SETTINGS_LIMITS.TERMINAL)
+    terminalLabel?: string;
 }
 export class OfflineLeaseParamDto {
     @Transform(trim) @IsMongoId() id!: string;

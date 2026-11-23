@@ -189,6 +189,17 @@ export class OfflineService {
                 .findOne(filter)
                 .session(session)
                 .lean<LeaseDoc>();
+            const terminalLabel = dto.terminalLabel;
+            // A request without a label clears a stored one, so a label
+            // removed on the device is no longer shown (#454).
+            if (existing && existing.terminalLabel !== terminalLabel)
+                await this.leases.updateOne(
+                    { _id: existing._id },
+                    terminalLabel
+                        ? { $set: { terminalLabel } }
+                        : { $unset: { terminalLabel: 1 } },
+                    { session },
+                );
             const doc =
                 existing ??
                 (
@@ -196,6 +207,7 @@ export class OfflineService {
                         [
                             {
                                 ...filter,
+                                ...(terminalLabel ? { terminalLabel } : {}),
                                 issuedAt: new Date(),
                                 expiresAt: auth.expiry,
                                 securityVersion: user.overridePinVersion,
