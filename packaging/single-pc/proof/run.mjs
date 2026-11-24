@@ -9,7 +9,7 @@ import { mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { cpus, freemem, tmpdir, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-    assertWindows11,
+    assertSupportedWindows,
     boundedWait,
     components,
     parseArgs,
@@ -126,14 +126,20 @@ async function main() {
     const args = parseArgs(process.argv.slice(2));
     // Refuse before creating state, starting processes or touching an artifact.
     if (process.platform !== 'win32' || process.arch !== 'x64') {
-        throw new Error('Actual Windows 11 Intel/AMD x64 is required.');
+        throw new Error(
+            'Actual Windows 10 or Windows 11 Intel/AMD x64 is required.',
+        );
     }
     const os = JSON.parse(
         powershell(
-            `$o=Get-CimInstance Win32_OperatingSystem; $c=Get-CimInstance Win32_Processor | Select-Object -First 1; @{caption=$o.Caption; productType=[int]$o.ProductType; build=[int]$o.BuildNumber; cpu=$c.Manufacturer; cpuModel=$c.Name; windowsVersion=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').DisplayVersion} | ConvertTo-Json -Compress`,
+            `$o=Get-CimInstance Win32_OperatingSystem; $c=Get-CimInstance Win32_Processor | Select-Object -First 1; @{caption=$o.Caption; productType=[int]$o.ProductType; build=[int]$o.BuildNumber; cpu=$c.Manufacturer; cpuModel=$c.Name; windowsVersion=(Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion').DisplayVersion; avx=$(try { Add-Type -Namespace Gpos -Name Cpu -MemberDefinition ('[DllImport(' + [char]34 + 'kernel32.dll' + [char]34 + ')] public static extern bool IsProcessorFeaturePresent(uint f);'); [Gpos.Cpu]::IsProcessorFeaturePresent(39) } catch { $null })} | ConvertTo-Json -Compress`,
         ),
     );
-    assertWindows11({ platform: process.platform, arch: process.arch, ...os });
+    const platformCheck = assertSupportedWindows({
+        platform: process.platform,
+        arch: process.arch,
+        ...os,
+    });
     const pins = await components();
     assert.equal(
         process.versions.node,
@@ -371,7 +377,7 @@ async function main() {
             scope: '#357 compiled runtime only; not installed release acceptance',
             sourceCommit: args.commit,
             at: new Date().toISOString(),
-            target: os,
+            target: { ...os, ...platformCheck },
             components: {
                 node: pins.node.version,
                 mongodb: mongoVersion,

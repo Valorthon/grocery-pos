@@ -8,27 +8,58 @@ export async function components() {
     );
 }
 
-export function assertWindows11({
+/** Windows 10 is accepted from build 10240; 19045 is 22H2, the last. */
+export const WINDOWS_10_MIN_BUILD = 10240;
+export const WINDOWS_10_22H2_BUILD = 19045;
+export const WINDOWS_11_MIN_BUILD = 22000;
+
+/**
+ * Refuses anything but a Windows 10 or Windows 11 client edition on
+ * Intel/AMD x64 (owner decision 2026-11-24). Returns the warnings to record:
+ * Windows 10 below 22H2, and AVX support unknown. AVX known absent refuses.
+ */
+export function assertSupportedWindows({
     platform,
     arch,
     caption,
     productType,
     build,
     cpu,
+    avx,
 }) {
+    const refuse = (why) => {
+        throw new Error(
+            `Proof requires actual Windows 10 or Windows 11 Intel/AMD x64 workstation${why ? ` (${why})` : ''}.`,
+        );
+    };
     if (
         platform !== 'win32' ||
         arch !== 'x64' ||
         productType !== 1 ||
-        !/^Microsoft Windows 11\b/i.test(caption) ||
         !Number.isSafeInteger(build) ||
-        build < 22000 ||
         !['GenuineIntel', 'AuthenticAMD'].includes(cpu)
-    ) {
-        throw new Error(
-            'Proof requires actual Windows 11 Intel/AMD x64 workstation.',
+    )
+        refuse();
+    const major = /^Microsoft Windows (10|11)\b/i.exec(caption ?? '')?.[1];
+    if (
+        major === '11'
+            ? build < WINDOWS_11_MIN_BUILD
+            : major === '10'
+              ? build < WINDOWS_10_MIN_BUILD || build > WINDOWS_10_22H2_BUILD
+              : true
+    )
+        refuse();
+    if (avx === false) refuse('the CPU has no AVX');
+    const warnings = [];
+    if (major === '10' && build < WINDOWS_10_22H2_BUILD)
+        warnings.push(
+            `Windows 10 build ${build} is not 22H2 (${WINDOWS_10_22H2_BUILD})`,
         );
-    }
+    if (avx !== true) warnings.push('CPU AVX support could not be read');
+    return {
+        windows10_22H2: major === '10' ? build >= WINDOWS_10_22H2_BUILD : null,
+        warnings,
+    };
 }
 
 export function parseArgs(args) {

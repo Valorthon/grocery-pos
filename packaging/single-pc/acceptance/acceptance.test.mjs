@@ -312,6 +312,8 @@ function fakeContext(overrides = {}) {
                         Architecture: 9,
                     }),
                 );
+            if (joined.includes('IsProcessorFeaturePresent'))
+                return out('True\r\n');
             if (joined.includes('Get-PhysicalDisk'))
                 return out(
                     JSON.stringify({ FriendlyName: 'SSD', MediaType: 'SSD' }),
@@ -419,8 +421,8 @@ test('runChecks reports refusals of ineligible targets and command failures', as
                 return {
                     code: 0,
                     stdout: JSON.stringify({
-                        Caption: 'Microsoft Windows 10 Pro',
-                        BuildNumber: '19045',
+                        Caption: 'Microsoft Windows Server 2022 Standard',
+                        BuildNumber: '20348',
                         OSArchitecture: '64-bit',
                     }),
                     stderr: '',
@@ -446,11 +448,95 @@ test('runChecks reports refusals of ineligible targets and command failures', as
     const results = await runChecks(ctx, {});
     const byId = Object.fromEntries(results.map((r) => [r.id, r]));
     assert.equal(byId.platform.status, 'fail');
-    assert.equal(byId.platform.problems.length, 4);
+    // Server edition, ARM64 architecture, Qualcomm vendor.
+    assert.equal(byId.platform.problems.length, 3);
     assert.equal(byId.services.status, 'error');
     assert.doesNotMatch(byId.services.note, /u:p/);
     assert.equal(byId.tasks.status, 'fail');
     assert.equal(byId.diagnostics.status, 'manual');
+});
+
+/** Platform result for one OS caption/build and AVX answer. */
+async function platformFor({
+    Caption,
+    BuildNumber,
+    avx = 'True\r\n',
+    avxCode = 0,
+}) {
+    const ctx = fakeContext({
+        run: (cmd, joined) => {
+            if (joined.includes('Win32_OperatingSystem'))
+                return {
+                    code: 0,
+                    stdout: JSON.stringify({
+                        Caption,
+                        BuildNumber,
+                        OSArchitecture: '64-bit',
+                    }),
+                    stderr: '',
+                };
+            if (joined.includes('IsProcessorFeaturePresent'))
+                return { code: avxCode, stdout: avx, stderr: '' };
+        },
+    });
+    const results = await runChecks(ctx, {});
+    return results.find((r) => r.id === 'platform');
+}
+
+test('platform accepts Windows 10 22H2 and Windows 11 and records AVX (#491)', async () => {
+    const home = await platformFor({
+        Caption: 'Microsoft Windows 10 Home',
+        BuildNumber: '19045',
+    });
+    assert.equal(home.status, 'pass');
+    assert.equal(home.windows10_22H2, true);
+    assert.equal(home.avx, true);
+    const eleven = await platformFor({
+        Caption: 'Microsoft Windows 11 Pro',
+        BuildNumber: '26100',
+    });
+    assert.equal(eleven.status, 'pass');
+    assert.equal(eleven.windows10_22H2, null);
+});
+
+test('platform warns for Windows 10 before 22H2 and for unknown AVX', async () => {
+    const old = await platformFor({
+        Caption: 'Microsoft Windows 10 Pro',
+        BuildNumber: '19044',
+    });
+    assert.equal(old.status, 'warn');
+    assert.equal(old.windows10_22H2, false);
+    assert.match(old.warnings[0], /not 22H2/);
+    const unknown = await platformFor({
+        Caption: 'Microsoft Windows 11 Pro',
+        BuildNumber: '26100',
+        avx: '',
+        avxCode: 1,
+    });
+    assert.equal(unknown.status, 'warn');
+    assert.equal(unknown.avx, null);
+});
+
+test('platform fails without AVX, on Server and on out-of-range builds', async () => {
+    const noAvx = await platformFor({
+        Caption: 'Microsoft Windows 10 Pro',
+        BuildNumber: '19045',
+        avx: 'False',
+    });
+    assert.equal(noAvx.status, 'fail');
+    assert.deepEqual(noAvx.problems, ['CPU has no AVX']);
+    for (const [Caption, BuildNumber] of [
+        ['Microsoft Windows Server 2025 Datacenter', '26100'],
+        ['Microsoft Windows 10 Pro', '10239'],
+        ['Microsoft Windows 10 Pro', '19046'],
+        ['Microsoft Windows 11 Pro', '21999'],
+        ['Microsoft Windows 8.1 Pro', '9600'],
+    ])
+        assert.equal(
+            (await platformFor({ Caption, BuildNumber })).status,
+            'fail',
+            `${Caption} ${BuildNumber}`,
+        );
 });
 
 test('upgrade journal read from the data root', async () => {
@@ -476,7 +562,7 @@ test('main refuses off Windows and never writes evidence there', async () => {
         EXIT.REFUSED,
     );
     assert.equal(ctx.written.size, 0);
-    assert.match(lines[0], /Windows 11/);
+    assert.match(lines[0], /Windows 10 or Windows 11/);
 });
 
 test('main writes one redacted evidence file and refuses to overwrite it', async () => {
@@ -513,8 +599,15 @@ test('evidence counts every status', () => {
         { id: 'a', status: 'pass' },
         { id: 'b', status: 'fail' },
         { id: 'c', status: 'manual' },
+        { id: 'd', status: 'warn' },
     ]);
-    assert.deepEqual(doc.counts, { pass: 1, fail: 1, error: 0, manual: 1 });
+    assert.deepEqual(doc.counts, {
+        pass: 1,
+        warn: 1,
+        fail: 1,
+        error: 0,
+        manual: 1,
+    });
 });
 
 // ------------------------------------------------------------ readiness

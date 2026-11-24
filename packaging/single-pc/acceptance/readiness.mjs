@@ -13,7 +13,7 @@
  * real with a client root containing a space, as under C:\Program Files.
  *
  * Exit 0 ready, 1 not ready, 2 usage. Passing is a precondition for a
- * release, not acceptance: the Windows 11 runbook still has to be executed.
+ * release, not acceptance: the Windows 10/11 runbook still has to be executed.
  */
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
@@ -411,7 +411,7 @@ export async function main(
         print(
             problems.length
                 ? `${problems.length} problem(s).`
-                : `Ready${options.bundle ? ' (bundle verified)' : ''}${caddyAdapted ? ' (Caddy configs adapted with spaced paths)' : ''}. Windows 11 acceptance (RUNBOOK.md) is still required.`,
+                : `Ready${options.bundle ? ' (bundle verified)' : ''}${caddyAdapted ? ' (Caddy configs adapted with spaced paths)' : ''}. Windows 10 or Windows 11 acceptance (RUNBOOK.md) is still required.`,
         );
     }
     return problems.length ? 1 : 0;

@@ -2,7 +2,7 @@
 /**
  * Operator-run acceptance harness for the installed single-PC package (#366).
  *
- * Runs the read-only, scriptable checks of RUNBOOK.md on the Windows 11 x64
+ * Runs the read-only, scriptable checks of RUNBOOK.md on the Windows 10 or Windows 11 x64
  * target and writes one redacted evidence JSON. It never installs, stops,
  * starts, restores or changes anything; the destructive and interactive
  * scenarios (reboot, power cut, LAN device, Chrome, upgrade) stay manual in
@@ -16,6 +16,11 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import {
+    WINDOWS_10_22H2_BUILD,
+    WINDOWS_10_MIN_BUILD,
+    WINDOWS_11_MIN_BUILD,
+} from '../proof/policy.mjs';
 
 import {
     LAN_SERVICE,
@@ -36,7 +41,13 @@ export const EXIT = { OK: 0, ATTENTION: 1, USAGE: 2, REFUSED: 3 };
 export const EVIDENCE_SCHEMA = 1;
 /** Owner decision (#357): a 30-minute maintenance window target. */
 export const UPGRADE_WINDOW_MS = 30 * 60 * 1000;
-export const STATUSES = Object.freeze(['pass', 'fail', 'error', 'manual']);
+export const STATUSES = Object.freeze([
+    'pass',
+    'warn',
+    'fail',
+    'error',
+    'manual',
+]);
 
 /** Runbook scenarios that only a person can perform (RUNBOOK.md). */
 export const MANUAL = Object.freeze([
@@ -473,16 +484,49 @@ export async function runChecks(ctx, options) {
                     'Get-PhysicalDisk | Select-Object FriendlyName,MediaType,BusType,Size | ConvertTo-Json',
                 ),
             );
+            // PF_AVX_INSTRUCTIONS_AVAILABLE (39); [char]34 avoids quoting issues.
+            const avxRun = ctx.run(
+                ...ps(
+                    "Add-Type -Namespace Gpos -Name Cpu -MemberDefinition ('[DllImport(' + [char]34 + 'kernel32.dll' + [char]34 + ')] public static extern bool IsProcessorFeaturePresent(uint f);'); [Gpos.Cpu]::IsProcessorFeaturePresent(39)",
+                ),
+            );
+            const avxText = String(avxRun.stdout ?? '').trim();
+            const avx =
+                avxRun.code === 0 && /^true$/i.test(avxText)
+                    ? true
+                    : avxRun.code === 0 && /^false$/i.test(avxText)
+                      ? false
+                      : null;
             const problems = [];
-            if (
-                !/Windows 11/i.test(os?.Caption ?? '') ||
-                /Server/i.test(os?.Caption ?? '')
-            )
+            const warnings = [];
+            const caption = os?.Caption ?? '';
+            const build = Number(os?.BuildNumber);
+            const major = /Server/i.test(caption)
+                ? null
+                : /Windows 11\b/i.exec(caption)
+                  ? 11
+                  : /Windows 10\b/i.exec(caption)
+                    ? 10
+                    : null;
+            if (major === null)
                 problems.push(
-                    `not a Windows 11 client edition: ${os?.Caption}`,
+                    `not a Windows 10 or Windows 11 client edition: ${os?.Caption}`,
                 );
-            if (Number(os?.BuildNumber) < 22000)
+            else if (
+                !Number.isSafeInteger(build) ||
+                (major === 11
+                    ? build < WINDOWS_11_MIN_BUILD
+                    : build < WINDOWS_10_MIN_BUILD ||
+                      build > WINDOWS_10_22H2_BUILD)
+            )
                 problems.push(`build ${os?.BuildNumber}`);
+            else if (major === 10 && build < WINDOWS_10_22H2_BUILD)
+                warnings.push(
+                    `Windows 10 build ${build} is not 22H2 (${WINDOWS_10_22H2_BUILD})`,
+                );
+            if (avx === false) problems.push('CPU has no AVX');
+            if (avx === null)
+                warnings.push('CPU AVX support could not be read');
             if (!/64/.test(String(os?.OSArchitecture)))
                 problems.push(`architecture ${os?.OSArchitecture}`);
             // Win32_Processor.Architecture 9 = x64; 12 = ARM64.
@@ -493,8 +537,16 @@ export async function runChecks(ctx, options) {
                 if (!/intel|amd/i.test(c.Manufacturer ?? ''))
                     problems.push(`CPU vendor ${c.Manufacturer}`);
             return {
-                status: problems.length ? 'fail' : 'pass',
+                status: problems.length
+                    ? 'fail'
+                    : warnings.length
+                      ? 'warn'
+                      : 'pass',
                 problems,
+                warnings,
+                windows10_22H2:
+                    major === 10 ? build >= WINDOWS_10_22H2_BUILD : null,
+                avx,
                 os,
                 cpus,
                 disks,
@@ -806,7 +858,7 @@ export async function main(
     if (ctx.platform !== 'win32') {
         // Evidence must come from the target; never write a Linux file.
         print(
-            'Refused: run this on the Windows 11 x64 target (nothing was written).',
+            'Refused: run this on the Windows 10 or Windows 11 x64 target (nothing was written).',
         );
         return EXIT.REFUSED;
     }

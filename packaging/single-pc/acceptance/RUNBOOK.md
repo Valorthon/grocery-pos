@@ -1,4 +1,4 @@
-# Windows 11 x64 acceptance runbook (#357, #366)
+# Windows 10/11 x64 acceptance runbook (#357, #366)
 
 The one executable runbook for accepting a single-PC release on the target.
 It replaces [../proof/ACCEPTANCE-CHECKLIST.md](../proof/ACCEPTANCE-CHECKLIST.md)
@@ -8,7 +8,7 @@ is the release check done before anything is installed. **D1–D13** accept
 LAN terminals on two-PC hardware (#401, epic #402): a main PC plus at least
 one Windows terminal joined to it.
 
-**Not yet executed.** No Windows 11 x64 machine has been available (owner,
+**Not yet executed.** No Windows 10 or Windows 11 x64 machine has been available (owner,
 2026-11-14). Every field is blank on purpose. Copy this file per run, fill the
 copy, keep it with the evidence files outside the repository, and never
 record a result that was not observed on the target. A blank or failed item
@@ -153,14 +153,19 @@ Steps:
 1. `winver` and `Get-CimInstance Win32_OperatingSystem | Select Caption,Version,BuildNumber,OSArchitecture`.
 2. `Get-CimInstance Win32_Processor | Select Name,Manufacturer,NumberOfCores,NumberOfLogicalProcessors,Architecture`.
 3. `Get-PhysicalDisk | Select FriendlyName,MediaType,BusType,Size` and `Get-Volume`.
-4. Check the CPU against Microsoft's Windows 11 supported processor lists and
-   the build against Windows 11 release health (still serviced).
+4. Check the CPU against Microsoft's supported processor lists for the
+   installed Windows version and the build against its release health.
 
-The harness `platform` check records steps 1–3 and refuses non-client, non-x64
-or non-Intel/AMD; step 4 stays manual.
+The harness `platform` check records steps 1–3 plus CPU AVX support
+(`IsProcessorFeaturePresent`, the installer's detection) and whether Windows
+10 is on 22H2 (build 19045). It fails a non-client edition (Server), non-x64,
+non-Intel/AMD, a build outside Windows 10 10240–19045 or Windows 11 22000+, or
+a CPU known to lack AVX. It warns (status `warn`, not a failure) for Windows
+10 below 22H2 and for AVX support it could not read. Step 4 stays manual.
 
-Expected: Windows 11 client edition (not Server, not Windows 10), x64,
-Intel/AMD (not ARM); CPU on the supported list; serviced build.
+Expected: Windows 10 or Windows 11 client edition (owner decision
+2026-11-24; not Server), x64, Intel/AMD (not ARM), AVX present; CPU on the
+supported list. Windows 10 below 22H2 is recorded as a warning.
 
 Evidence: command output `____`, CPU list entry/link `____`, servicing status
 `____`. Result (PASS/FAIL): `____`
@@ -174,7 +179,7 @@ Steps:
    record `Get-FileHash -Algorithm SHA256` per archive.
 2. Preserve upstream signature/provenance and license files for Node and
    MongoDB (`release\notices\`).
-3. Confirm MongoDB 7.0 lists Windows 11 x86_64 as supported for this build.
+3. Confirm MongoDB 7.0 lists the target's Windows 10/11 x86_64 as supported for this build.
 
 Expected: hashes match; licenses retained; upstream support covers the target.
 
@@ -244,7 +249,7 @@ Use test records only.
 
 ### B1. Clean install
 
-Steps: on a fresh Windows 11 x64 without developer tools, follow
+Steps: on a fresh Windows 10 or Windows 11 x64 without developer tools, follow
 [../operations/INSTALL.md](../operations/INSTALL.md) exactly with the
 network unplugged: `Install.ps1 -ManifestSha256 <hash> -Mode install
 -AdminUsername <name>`. Open the "Grocery POS" shortcut, log in with the
