@@ -159,6 +159,7 @@ describe('ProductService.getMatches', () => {
     let service: ProductService;
     let find: jest.Mock;
     let limit: jest.Mock;
+    let sellableStocks: jest.Mock;
 
     beforeEach(async () => {
         limit = jest.fn().mockReturnValue({
@@ -168,9 +169,15 @@ describe('ProductService.getMatches', () => {
                         _id: new mongoose.Types.ObjectId(),
                         EAN: '2000000000015',
                         name: 'milk',
+                        reorderLevel: 4,
                     },
                 ]),
         });
+        sellableStocks = jest
+            .fn()
+            .mockImplementation((list: Array<{ _id: unknown }>) =>
+                Promise.resolve(new Map([[String(list[0]._id), 3]])),
+            );
         find = jest.fn().mockReturnValue({ sort: () => ({ limit }) });
 
         const moduleRef = await Test.createTestingModule({
@@ -185,7 +192,10 @@ describe('ProductService.getMatches', () => {
                 ProductService,
                 { provide: getConnectionToken(), useValue: {} },
                 { provide: getModelToken(Product.name), useValue: { find } },
-                { provide: InventoryService, useValue: {} },
+                {
+                    provide: InventoryService,
+                    useValue: { sellableStocks },
+                },
                 { provide: EanCounterService, useValue: {} },
             ],
         }).compile();
@@ -234,6 +244,29 @@ describe('ProductService.getMatches', () => {
             name: 'milk',
             product: expect.any(String),
         });
+        expect(sellableStocks).not.toHaveBeenCalled();
+    });
+
+    it('adds the stock hint and low stock level for the register (#482)', async () => {
+        const [match] = await service.getMatches({
+            name: 'mi',
+            withStock: true,
+        } as MatchesDto);
+
+        expect(find.mock.calls[0][1]).toContain('reorderLevel');
+        expect(sellableStocks).toHaveBeenCalledTimes(1);
+        expect(match).toMatchObject({ stock: 3, reorderLevel: 4 });
+    });
+
+    it('leaves the stock out without an inventory row (#482)', async () => {
+        sellableStocks.mockResolvedValue(new Map());
+        const [match] = await service.getMatches({
+            name: 'mi',
+            withStock: true,
+        } as MatchesDto);
+
+        expect(match).not.toHaveProperty('stock');
+        expect(match).toHaveProperty('reorderLevel', 4);
     });
 
     it('returns nothing, without a query, for an empty search', async () => {

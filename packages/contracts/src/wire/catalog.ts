@@ -68,6 +68,13 @@ export interface ProductMatch {
     name: string;
     /** The product's id. */
     product: string;
+    /**
+     * `?withStock=true` only (#482): the register's sellable stock hint in
+     * minor units, absent without an inventory row, as `GET /products/:EAN`.
+     */
+    stock?: number;
+    /** `?withStock=true` only (#482): the stored "Low stock at" level. */
+    reorderLevel?: number;
 }
 
 export const PRODUCT_MATCH_SHAPE: WireShape<ProductMatch> = {
@@ -76,6 +83,8 @@ export const PRODUCT_MATCH_SHAPE: WireShape<ProductMatch> = {
     EAN: 'required',
     name: 'required',
     product: 'required',
+    stock: 'optional',
+    reorderLevel: 'optional',
 };
 
 /** A row of `GET /inventories`: a stock level with its product. */

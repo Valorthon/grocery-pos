@@ -289,4 +289,13 @@ export class MatchesDto {
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
     @TrimUppercase()
     name!: string;
+
+    /** The register's search: add `stock` and `reorderLevel` (#482). */
+    @ValidateIf((_object, value: unknown) => value !== undefined)
+    @IsBoolean()
+    @Transform(({ obj, key }) => {
+        const raw = (obj as Record<string, unknown>)[key];
+        return raw === 'true' ? true : raw === 'false' ? false : raw;
+    })
+    withStock?: boolean;
 }

@@ -1299,6 +1299,82 @@ describe('Sell stock warning (#422)', () => {
         await scanMilk();
         expect(warning()).toBeUndefined();
     });
+
+    function lineHint() {
+        return (
+            document
+                .querySelector('[data-testid="line-stock-hint"]')
+                ?.textContent?.trim() ?? null
+        );
+    }
+
+    it('hints low or out of stock on the ticket line (#482)', async () => {
+        withStock(0);
+        mount();
+        await scanMilk();
+        expect(lineHint()).toBe('Out of stock');
+        button('Remove milk').click();
+        await flush();
+        expect(lineHint()).toBeNull();
+    });
+
+    it('keeps the hint when Undo puts the line back (#482 review)', async () => {
+        withStock(0);
+        mount();
+        await scanMilk();
+        button('Remove milk').click();
+        await flush();
+        expect(lineHint()).toBeNull();
+        const undoButton = [
+            ...document.querySelectorAll<HTMLButtonElement>('button'),
+        ].find((b) => b.textContent?.trim() === 'Undo')!;
+        undoButton.click();
+        await flush();
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(lineHint()).toBe('Out of stock');
+    });
+
+    it('hints at the low stock level and not above it (#482)', async () => {
+        serve(
+            () => Promise.resolve([]),
+            () =>
+                Promise.resolve({
+                    ...PRODUCTS[MILK.EAN],
+                    stock: 4,
+                    reorderLevel: 4,
+                }),
+        );
+        mount();
+        await scanMilk();
+        expect(lineHint()).toBe('Low stock (4 pc left)');
+    });
+
+    it('shows no line hint offline or without a stock (#482)', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        await scanMilk();
+        expect(lineHint()).toBeNull();
+        const offline = useOfflineStore();
+        offline.setConnection(false);
+        vi.spyOn(offline, 'product').mockResolvedValue({
+            ...PRODUCTS[MILK.EAN],
+            stock: 0,
+        } as unknown as ProductView);
+        await scanMilk();
+        expect(lineHint()).toBeNull();
+    });
+
+    it('asks the online search for the stock hint (#482)', async () => {
+        serve(() => Promise.resolve([]));
+        mount();
+        input().value = 'milk';
+        input().dispatchEvent(new Event('input'));
+        await pressEnter();
+        const call = get.mock.calls.find(
+            ([url]) => url === '/products/matches',
+        ) as [string, { params: Record<string, unknown> }] | undefined;
+        expect(call?.[1].params).toEqual({ name: 'milk', withStock: true });
+    });
 });
 
 describe('Sell barcode lookup errors (#27)', () => {

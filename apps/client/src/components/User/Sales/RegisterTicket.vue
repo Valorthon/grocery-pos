@@ -132,6 +132,13 @@
                                         item.EAN
                                     }}</span>
                                 </div>
+                                <div
+                                    v-if="stockHints?.[item.product]"
+                                    data-testid="line-stock-hint"
+                                    class="mt-0.5 text-xs font-semibold text-warning-fg"
+                                >
+                                    {{ stockHints[item.product] }}
+                                </div>
                             </td>
                             <td class="py-3 px-3 text-center">
                                 <div
@@ -327,6 +334,8 @@ defineProps<{
     selectedLine: string | null;
     qtyDrafts: Readonly<Record<string, string>>;
     qtyErrors: Readonly<Record<string, string>>;
+    /** Low-stock hints by product id from the online lookup (#482). */
+    stockHints?: Readonly<Record<string, string>>;
     undo: { item: CartItem; index: number } | null;
     setLineEl: (product: string, el: HTMLElement | null) => void;
     setQtyEl: (product: string, el: HTMLInputElement | null) => void;

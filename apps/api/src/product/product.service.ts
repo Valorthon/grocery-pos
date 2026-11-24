@@ -504,7 +504,7 @@ export class ProductService {
     }
 
     async getMatches(dto: MatchesDto): Promise<ProductMatch[]> {
-        const { EAN, name } = dto;
+        const { EAN, name, withStock } = dto;
 
         let query: Record<string, unknown>;
         if (EAN) {
@@ -525,7 +525,9 @@ export class ProductService {
         const matches = (await this.model
             .find(
                 { ...query, isActive: { $ne: false } },
-                'name EAN unit tracksExpiry',
+                withStock
+                    ? 'name EAN unit tracksExpiry reorderLevel'
+                    : 'name EAN unit tracksExpiry',
             )
             .sort({ name: 1 })
             .limit(MAX_MATCHES)
@@ -535,16 +537,29 @@ export class ProductService {
             _id: Types.ObjectId;
             unit?: UnitOfMeasure;
             tracksExpiry?: boolean;
+            reorderLevel?: number;
         }>;
 
-        return matches.map((match) => ({
-            EAN: match.EAN,
-            name: match.name,
-            product: match._id.toString(),
-            ...(match.tracksExpiry !== undefined && {
-                tracksExpiry: match.tracksExpiry,
-            }),
-            ...(match.unit && { unit: match.unit }),
-        }));
+        const stocks = withStock
+            ? await this.inventoryService.sellableStocks(matches)
+            : new Map<string, number>();
+
+        return matches.map((match) => {
+            const stock = stocks.get(match._id.toString());
+            return {
+                EAN: match.EAN,
+                name: match.name,
+                product: match._id.toString(),
+                ...(match.tracksExpiry !== undefined && {
+                    tracksExpiry: match.tracksExpiry,
+                }),
+                ...(match.unit && { unit: match.unit }),
+                ...(stock !== undefined && { stock }),
+                ...(withStock &&
+                    match.reorderLevel !== undefined && {
+                        reorderLevel: match.reorderLevel,
+                    }),
+            };
+        });
     }
 }

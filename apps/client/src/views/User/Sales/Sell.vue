@@ -148,6 +148,7 @@
                 :selected-line="selectedLine"
                 :qty-drafts="qtyDrafts"
                 :qty-errors="qtyErrors"
+                :stock-hints="stockHints"
                 :undo="undo"
                 :set-line-el="setLineEl"
                 :set-qty-el="setQtyEl"
@@ -322,6 +323,7 @@
 <script setup lang="ts">
 import { quantityError as quantityFieldError } from '@/utils/rules';
 import {
+    lowStockHint,
     quantityInput,
     quantityScale,
     parseQuantity,
@@ -466,7 +468,7 @@ const search = useProductSearch(
         try {
             return (
                 await api.get<Match[]>('/products/matches', {
-                    params: { name },
+                    params: { name, withStock: true },
                     signal,
                 })
             ).data;
@@ -495,6 +497,8 @@ const knownStock = new Map<string, number>();
 /** The register's lookups ask for the stock hint; other callers don't. */
 const STOCK_LOOKUP = { params: { withStock: true } };
 const stockWarning = ref<{ product: string; message: string } | null>(null);
+/** Low-stock hints per ticket line from the online lookup (#482). */
+const stockHints = ref<Record<string, string>>({});
 
 /** Warns (or clears the warning) for one line against its known stock. */
 function checkStock(product: string) {
@@ -514,8 +518,22 @@ watch(
         const warned = stockWarning.value?.product;
         if (warned && !cartStore.items.some((i) => i.product === warned))
             stockWarning.value = null;
+        pruneStockHints();
     },
 );
+/**
+ * Drops the hints of lines that are gone, except the one a pending Undo
+ * may put back (#482 review).
+ */
+function pruneStockHints() {
+    const kept = Object.entries(stockHints.value).filter(
+        ([product]) =>
+            product === undo.value?.item.product ||
+            cartStore.items.some((i) => i.product === product),
+    );
+    if (kept.length !== Object.keys(stockHints.value).length)
+        stockHints.value = Object.fromEntries(kept);
+}
 const isCheckoutOpen = ref(false);
 const isReceiptOpen = ref(false);
 const checkoutMethod = ref<PaymentType>(PaymentType.CASH);
@@ -794,7 +812,10 @@ function removeLine(product: string, toScanBox = false) {
 
     dismissUndo();
     undo.value = removed;
-    undoTimer = setTimeout(dismissUndo, UNDO_MS);
+    undoTimer = setTimeout(() => {
+        dismissUndo();
+        pruneStockHints();
+    }, UNDO_MS);
 
     // The selection moves to the line that took its place (or the one
     // before), so Delete can go on removing.
@@ -1167,6 +1188,11 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
     if (!offline.offline && product.stock !== undefined)
         knownStock.set(product._id, product.stock);
     else knownStock.delete(product._id);
+    const hints = { ...stockHints.value };
+    const hint = offline.offline ? null : lowStockHint(product);
+    if (hint) hints[product._id] = hint;
+    else delete hints[product._id];
+    stockHints.value = hints;
     checkStock(product._id);
     showFeedback(
         'success',

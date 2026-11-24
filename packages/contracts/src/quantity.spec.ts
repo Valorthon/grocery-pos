@@ -10,6 +10,7 @@ import {
     quantityInput,
     quantityScale,
     reorderLevelOf,
+    lowStockHint,
     reorderQuantityOf,
     unitLabel,
     unitOf,
@@ -149,5 +150,31 @@ describe('insufficientStockText (#422)', () => {
         ).toBe(
             'rice: 2.500 kg requested, 1.000 kg available; Unknown product: 3 pc requested, 0 pc available',
         );
+    });
+});
+
+describe('lowStockHint (#482)', () => {
+    it('is null without a stock', () => {
+        expect(lowStockHint({ reorderLevel: 5 })).toBeNull();
+    });
+    it('says out of stock at zero or below', () => {
+        expect(lowStockHint({ stock: 0 })).toBe('Out of stock');
+        expect(lowStockHint({ stock: -3, reorderLevel: 0 })).toBe(
+            'Out of stock',
+        );
+    });
+    it('says low stock at or below the level, in display units', () => {
+        expect(lowStockHint({ stock: 5, reorderLevel: 5 })).toBe(
+            'Low stock (5 pc left)',
+        );
+        expect(lowStockHint({ stock: 6, reorderLevel: 5 })).toBeNull();
+        expect(
+            lowStockHint({ stock: 2001, unit: U.KG, reorderLevel: 2000 }),
+        ).toBeNull();
+        expect(
+            lowStockHint({ stock: 1500, unit: U.KG, reorderLevel: 2000 }),
+        ).toBe('Low stock (1.500 kg left)');
+        expect(lowStockHint({ stock: 10 })).toBe('Low stock (10 pc left)');
+        expect(lowStockHint({ stock: 11 })).toBeNull();
     });
 });

@@ -210,6 +210,7 @@ it('ticket: renders lines and drafts, reports every line action', () => {
             selectedLine: 'p1',
             qtyDrafts: { p1: '0' },
             qtyErrors: { p1: 'Must be at least 1' },
+            stockHints: { p1: 'Low stock (2 pc left)' },
             undo: { item: { ...item, product: 'p9', name: 'eggs' }, index: 1 },
             setLineEl,
             setQtyEl,
@@ -224,6 +225,9 @@ it('ticket: renders lines and drafts, reports every line action', () => {
     expect(qty.value).toBe('0');
     expect(q('[data-testid="line-quantity-error"]').id).toBe('qty-error-0');
     expect(q('[data-testid="undo-bar"]').textContent).toContain('eggs');
+    expect(q('[data-testid="line-stock-hint"]').textContent?.trim()).toBe(
+        'Low stock (2 pc left)',
+    );
 
     line.click();
     expect(on.onLineClick).toHaveBeenCalledWith('p1', expect.any(MouseEvent));
@@ -436,4 +440,42 @@ it('scan box design (#164): prominent field with a visible focus state', () => {
         ]),
     );
     expect(c).not.toContain('focus:outline-none');
+});
+
+it('matches (#482): a low or out-of-stock hint shows only with a known stock', () => {
+    mount(() =>
+        h(RegisterMatches, {
+            matches: [
+                { product: 'p1', EAN: '2000000000015', name: 'milk', stock: 0 },
+                {
+                    product: 'p2',
+                    EAN: '2000000000022',
+                    name: 'mints',
+                    stock: 3,
+                    reorderLevel: 5,
+                },
+                {
+                    product: 'p3',
+                    EAN: '2000000000039',
+                    name: 'mango',
+                    stock: 50,
+                },
+                { product: 'p4', EAN: '2000000000046', name: 'melon' },
+            ],
+            error: null,
+            settled: true,
+            highlighted: -1,
+            term: 'm',
+            locked: false,
+        }),
+    );
+    const options = document.querySelectorAll('[data-testid="search-match"]');
+    const hint = (i: number) =>
+        options[i]
+            .querySelector('[data-testid="match-stock-hint"]')
+            ?.textContent?.trim() ?? null;
+    expect(hint(0)).toBe('Out of stock');
+    expect(hint(1)).toBe('Low stock (3 pc left)');
+    expect(hint(2)).toBeNull();
+    expect(hint(3)).toBeNull();
 });

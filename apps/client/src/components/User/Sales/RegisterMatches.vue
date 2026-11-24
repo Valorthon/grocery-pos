@@ -78,6 +78,13 @@
                     <p class="text-xs font-mono text-muted mt-0.5">
                         EAN: {{ m.EAN }}
                     </p>
+                    <p
+                        v-if="lowStockHint(m)"
+                        data-testid="match-stock-hint"
+                        class="text-xs font-semibold text-warning-fg mt-0.5"
+                    >
+                        {{ lowStockHint(m) }}
+                    </p>
                 </div>
                 <span
                     class="text-xs font-bold text-leaf-700 group-hover:text-leaf-800 pl-3 shrink-0"
@@ -93,6 +100,7 @@
 /** The register's live product matches under the scan box (#163). */
 import { useTemplateRef, watch } from 'vue';
 import { AlertCircle, Search } from '@lucide/vue';
+import { lowStockHint } from '@grocery-pos/contracts';
 import type { Match } from '@/components/User/Sales/product-search';
 
 const props = defineProps<{
