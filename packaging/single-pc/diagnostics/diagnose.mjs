@@ -1000,6 +1000,18 @@ export async function checkClockSync(ctx) {
         );
     if (state === 'RUNNING' && syncedSource(source) === false)
         return warn('Windows is not syncing this PC clock with a time server.');
+    // #481: `w32tm /query /source` needs administrator rights, so a
+    // running service with an unreadable source is unverified, never ok.
+    if (state === 'RUNNING' && source === null)
+        return adminUnverified(
+            result(
+                'clockSync',
+                title,
+                'unknown',
+                `The Windows time source could not be read: ${UNVERIFIED_ADMIN}.`,
+                { details },
+            ),
+        );
     if (state === null || startType === null || syncType === null)
         return result(
             'clockSync',

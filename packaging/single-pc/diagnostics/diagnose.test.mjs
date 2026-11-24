@@ -825,6 +825,24 @@ describe('diagnose', () => {
         assert.equal(checkExitCode(report), EXIT.ATTENTION);
     });
 
+    test('clockSync with an unreadable time source is admin-unverified, exit 3 (#481)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({
+                clockSync: async () => ({
+                    state: 'RUNNING',
+                    startType: 'Manual',
+                    syncType: 'NTP',
+                    source: null,
+                }),
+            }),
+        );
+        assert.equal(byId(report, 'clockSync').status, 'unknown');
+        assert.ok(onlyAdminUnverified(report));
+        assert.equal(checkExitCode(report), EXIT.UNVERIFIED);
+    });
+
     test('proxy probe without the root alone: exit 3; all ok: exit 0 (#456)', async () => {
         await healthyBackups();
         const report = await diagnose({ dataRoot: root }, healthy());
@@ -916,8 +934,11 @@ describe('diagnose', () => {
                 'unknown',
                 JSON.stringify(facts),
             );
-        // A running service whose source is unreadable is not a warning.
-        assert.equal((await run({ ...base, source: null })).status, 'ok');
+        // #481: a running service whose source is unreadable (no admin) is
+        // unverified, not ok and not a warning.
+        const unread = await run({ ...base, source: null });
+        assert.equal(unread.status, 'unknown');
+        assert.match(unread.summary, /unverified \(run as administrator\)/);
     });
 
     test('parseClockSync', () => {
