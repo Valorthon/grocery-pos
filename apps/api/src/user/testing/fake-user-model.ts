@@ -50,7 +50,7 @@ function matches(row: FakeUserRow, filter: Filter): boolean {
 
 const clone = (row: FakeUserRow): FakeUserRow => ({
     ...row,
-    roles: [...row.roles],
+    roles: [...(row.roles ?? [])],
 });
 
 /**

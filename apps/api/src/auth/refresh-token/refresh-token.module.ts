@@ -16,6 +16,6 @@ import { StepUpService } from '../step-up/step-up.service';
         ]),
     ],
     providers: [RefreshTokenService, StepUpService],
-    exports: [RefreshTokenService, StepUpService],
+    exports: [RefreshTokenService, StepUpService, MongooseModule],
 })
 export class RefreshTokenModule {}

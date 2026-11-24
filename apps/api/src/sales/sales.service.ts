@@ -564,6 +564,9 @@ export class SalesService {
             storeIdentity,
         } = await runInTransaction(
             async (session) => {
+                // A deactivated cashier is refused even with a still
+                // unexpired access token (#480).
+                await this.overrides.assertActiveRequester(user, session);
                 // First, so a cashier with no open shift is refused before
                 // anything else is read or written.
                 const shift = await this.shiftService.chargeSale(

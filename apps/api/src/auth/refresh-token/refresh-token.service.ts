@@ -167,8 +167,8 @@ export class RefreshTokenService {
 
     /**
      * Ends every session of `userId` by deleting its refresh tokens, except
-     * the session `keepSid` when given (the caller's own). Access tokens
-     * already issued stay valid until they expire (`JWT_EXPIRY_S`).
+     * the session `keepSid` when given (the caller's own). Their access
+     * tokens stop working at the next request (SessionLivenessService, #480).
      */
     async revokeAllForUser(
         userId: string,

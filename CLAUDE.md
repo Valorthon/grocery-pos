@@ -492,7 +492,14 @@ requestId}`. A 5xx never carries details or internals.
   password") retry the save once after success; Cancel saves nothing and
   keeps the edit dialog. Used by Add/Edit User and `SetManagerPinDialog`.
 - Deactivating a user, changing their roles, or resetting or changing a password
-  revokes that user's sessions. Login is rate-limited, and all login failures
+  revokes that user's sessions. Revocation is immediate (#480): the JWT
+  strategy's `SessionLivenessService` refuses (401 `AUTH_INVALID_TOKEN`) an
+  unknown or inactive user, or a `sid` without a live refresh token, on every
+  request; `POST /sales` also refuses a deactivated requester inside its
+  transaction (`assertActiveRequester` writes the active user row, so a
+  concurrent deactivation conflicts). An open shift stays for an ADMIN to
+  force-close. The DB suite's `bootDbApp` skips the check for callers without
+  a user row or with the default `sid` unless `{ realSessions: true }`. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.
 - An ADMIN's reset of another user's password is temporary (#361, owner
   decision 2026-11-14): it sets `mustChangePassword`, so that user gets
