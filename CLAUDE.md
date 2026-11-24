@@ -378,6 +378,22 @@ requestId}`. A 5xx never carries details or internals.
   `migrate:uppercase-product-names` (dry run/`--apply`), single-PC data
   version 2 `uppercase-product-names` (preflight `check`); both refuse
   case collisions before any write. Historical snapshots aren't rewritten.
+- Product name characters (#483, owner decision 2026-11-24): letters (any
+  script, ñ/accents, combining marks), digits 0-9, spaces and
+  `. , - & ' / ( ) %`; no emoji or other symbols. Contracts
+  `PRODUCT_NAME_PATTERN` backs `@IsProductName` (create, restock
+  `newProduct`, edit) and the client's `productNameError`; message
+  `PRODUCT_NAME_CHARACTERS_MESSAGE`. Search DTOs are unchanged. Existing
+  names are never rewritten and still display. `normalizeProductName`
+  also turns curly ‘ ’ into `'` and U+00A0 into a space (schema setter,
+  DTOs, client), and stored names are judged in that normalized form, so a
+  legacy `Mama’s` isn't reported (any edit stores `MAMA'S`): Edit Product sends the name
+  only when changed, so a legacy one saves, and a rename must pass. Cloud
+  `check:product-name-characters` lists offenders as `EAN – NAME
+(archived)` with fix steps (read-only, exit 1 only for active ones);
+  single-PC upgrades run the always-run `DATA_CHECKS` preflight (no
+  data-version bump): active offenders refuse, archived ones only warn
+  (owner decision 2026-11-24).
 - `Inventory.updatedBy` means the last writer.
 
 **Reporting** (#16)

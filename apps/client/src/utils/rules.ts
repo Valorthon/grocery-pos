@@ -6,7 +6,10 @@ import {
 } from '@grocery-pos/contracts';
 import {
     barcodeError,
+    hasValidProductNameCharacters,
+    normalizeProductName,
     NUMERIC_LIMITS,
+    PRODUCT_NAME_CHARACTERS_MESSAGE,
     STRING_LIMITS,
 } from '@grocery-pos/contracts';
 import { formatCurrency, parsePesos } from './currency';
@@ -28,6 +31,20 @@ export function textError(value: unknown, max: number): string {
     if (!text) return REQUIRED;
     if (text.length > max) return `At most ${max} characters`;
     return '';
+}
+
+/**
+ * A product name as the DTO checks it: measured as stored (#443), then
+ * only letters, digits, spaces and `. , - & ' / ( ) %` (#483).
+ */
+export function productNameError(value: unknown): string {
+    const name = typeof value === 'string' ? normalizeProductName(value) : '';
+    return (
+        textError(name, STRING_LIMITS.PRODUCT_NAME) ||
+        (hasValidProductNameCharacters(name)
+            ? ''
+            : PRODUCT_NAME_CHARACTERS_MESSAGE)
+    );
 }
 
 /** True when a `v-model.number` field was left blank. */

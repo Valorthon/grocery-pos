@@ -135,6 +135,8 @@ import {
     quantityInput,
     parseQuantity,
     normalizeProductName,
+    hasValidProductNameCharacters,
+    PRODUCT_NAME_CHARACTERS_MESSAGE,
     reorderLevelOf,
     reorderQuantityOf,
     type ProductView,
@@ -241,10 +243,14 @@ async function save() {
     const amount = typedPrice.value;
     const level = parseQuantity(reorderLevel.value, props.product.unit);
     const quantity = parseQuantity(reorderQuantity.value, props.product.unit);
+    // An unchanged name is not sent, so a legacy one (#483) still saves.
+    const nameChanged = normalized !== props.product.name;
     errors.name =
         !normalized || normalized.length > STRING_LIMITS.PRODUCT_NAME
             ? 'Enter a valid product name.'
-            : '';
+            : nameChanged && !hasValidProductNameCharacters(normalized)
+              ? PRODUCT_NAME_CHARACTERS_MESSAGE
+              : '';
     errors.price =
         admin && amount === null ? 'Enter a valid selling price.' : '';
     errors.reorderLevel =
@@ -270,7 +276,7 @@ async function save() {
         ...(quantity !== reorderQuantityOf(props.product) && {
             reorderQuantity: quantity,
         }),
-        name: normalized,
+        ...(nameChanged && { name: normalized }),
         ...(category.value !== props.product.category && {
             category: category.value ?? null,
         }),

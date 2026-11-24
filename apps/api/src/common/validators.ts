@@ -7,6 +7,8 @@ import { Transform } from 'class-transformer';
 import {
     BARCODE_MESSAGES,
     barcodeError,
+    PRODUCT_NAME_CHARACTERS_MESSAGE,
+    hasValidProductNameCharacters,
     normalizeProductName,
 } from '@grocery-pos/contracts';
 import { parseIsoDate } from './utils/timezone';
@@ -143,6 +145,30 @@ export function TrimUppercase() {
             ? normalizeProductName(value)
             : (value as unknown),
     );
+}
+
+/**
+ * A product name uses only the #483 characters (letters incl. accents,
+ * digits, spaces and `. , - & ' / ( ) %`). Non-strings are left to
+ * `@IsString`.
+ */
+export function IsProductName(validationOptions?: ValidationOptions) {
+    return function (target: object, propertyName: string) {
+        registerDecorator({
+            name: 'isProductName',
+            target: target.constructor,
+            propertyName,
+            options: {
+                message: PRODUCT_NAME_CHARACTERS_MESSAGE,
+                ...validationOptions,
+            },
+            validator: {
+                validate: (value: unknown) =>
+                    typeof value !== 'string' ||
+                    hasValidProductNameCharacters(value),
+            },
+        });
+    };
 }
 
 /** A real calendar date in strict `YYYY-MM-DD` form (no time, no offset). */

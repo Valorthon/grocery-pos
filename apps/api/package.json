@@ -25,6 +25,7 @@
         "migrate:categories": "ts-node migrate-categories.ts",
         "migrate:stock-ledger": "ts-node migrate-stock-ledger.ts",
         "migrate:uppercase-product-names": "ts-node migrate-uppercase-product-names.ts",
+        "check:product-name-characters": "ts-node check-product-name-characters.ts",
         "bootstrap:initial-admin": "node dist/bootstrap/initial-admin.cli.js"
     },
     "dependencies": {

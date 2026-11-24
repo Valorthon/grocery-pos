@@ -39,6 +39,7 @@ import {
     IsBarcode,
     Trim,
     TrimUppercase,
+    IsProductName,
 } from '../../common/validators';
 
 export class EnsureValidDto {
@@ -110,6 +111,7 @@ export class NewProductFields implements NewProductRequest {
     @IsString()
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
     @TrimUppercase()
+    @IsProductName()
     name!: string;
 
     @ValidateIf((_o, value: unknown) => value !== undefined)
@@ -206,6 +208,7 @@ export class UpdateFields implements ProductUpdateRequest {
     @MaxLength(STRING_LIMITS.PRODUCT_NAME)
     @TrimUppercase()
     @IsNotEmpty()
+    @IsProductName()
     name?: string;
 
     /** Centavos. */

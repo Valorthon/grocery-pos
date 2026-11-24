@@ -10,6 +10,7 @@ import {
     currentPasswordError,
     DATE_RANGE_REVERSED,
     dateRangeError,
+    productNameError,
     fieldErrors,
     integerError,
     moneyError,
@@ -212,5 +213,31 @@ describe('dateRangeError (the API dateTo rule, #20)', () => {
         expect(dateRangeError('2026-03-01', '')).toBe('');
         expect(dateRangeError('', '2026-03-01')).toBe('');
         expect(dateRangeError('', '')).toBe('');
+    });
+});
+
+describe('productNameError (#483)', () => {
+    it('accepts accented letters, digits and the allowed symbols', () => {
+        expect(
+            productNameError("piña café 1/2 (5kg) 10% a&b, mama's. x-1"),
+        ).toBe('');
+    });
+
+    it('accepts a curly apostrophe or no-break space, stored plain', () => {
+        expect(productNameError('Mama\u2019s\u00A0rice')).toBe('');
+    });
+
+    it('refuses emoji and other symbols with the allowed list', () => {
+        for (const name of ['QA 🍎 APPLE', 'A<B>', 'A$', 'A#'])
+            expect(productNameError(name)).toBe(
+                "Use only letters, numbers, spaces and . , - & ' / ( ) %",
+            );
+    });
+
+    it('keeps the required and length messages first', () => {
+        expect(productNameError('  ')).toBe(REQUIRED);
+        expect(
+            productNameError('A'.repeat(STRING_LIMITS.PRODUCT_NAME + 1)),
+        ).toBe(`At most ${STRING_LIMITS.PRODUCT_NAME} characters`);
     });
 });
