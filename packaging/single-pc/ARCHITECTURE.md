@@ -13,8 +13,8 @@ owner comments taking precedence:
 - First release: Windows 10 (builds 10240–19045) or Windows 11 (22000+) client
   editions on Intel/AMD x64, Google Chrome (owner decision 2026-11-24; most
   stores will run Windows 10 Home). Windows 10 below 22H2 (19045) only warns.
-  ARM and Windows Server are outside first-release support. The expected 4 GB DDR3 computer is a
-  qualification target; support depends on measurement on eligible hardware.
+  ARM and Windows Server are outside first-release support. The expected 4 GB DDR3
+  computer is a qualification target; support depends on measurement on eligible hardware.
 - Vendor installs and manually updates during the agreed maintenance period.
   Afterwards the owner has documented daily operation and guided replacement
   reinstall/restore. No guaranteed recovery time or supplied spare PC.
@@ -68,7 +68,9 @@ Windows 11 22000+ client editions; Windows 10 below 22H2 only warns
 (owner decision 2026-11-24). Do not equate the OS identity check with
 lifecycle qualification. Windows 10 support ended October 14, 2025; there is
 no automated Extended Security Updates (ESU) check, but the install checklist
-advises enrolling (operations/INSTALL.md). S mode is not an installation target.
+advises enrolling (operations/INSTALL.md). S mode is not an installation target. LTSC editions are not a target and
+are untested: LTSC 2019 (17763) and LTSC 2021 (19044) get the below-22H2
+warning like any other older Windows 10.
 [Windows 10 lifecycle](https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro),
 [Windows 11 lifecycle](https://learn.microsoft.com/en-us/lifecycle/products/windows-11-home-and-pro).
 
@@ -83,7 +85,8 @@ alone identifies neither. SSD is preferred for qualification.
 [AMD models](https://learn.microsoft.com/en-us/windows-hardware/design/minimum/supported/windows-11-supported-amd-processors).
 
 MongoDB 7 lists Windows 11 x86_64, not Windows 10; running it on Windows 10
-is an accepted risk (owner decision 2026-11-24). WSL is excluded. Its default WiredTiger
+is an accepted risk (owner decision 2026-11-24), resting on the Windows 10
+acceptance run in #493 (#494). WSL is excluded. Its default WiredTiger
 cache is 1.5 GB on a 4 GB machine; qualify an explicit smaller cache with the
 whole workload. The proof uses 0.25 GB only to bound its synthetic experiment,
 not as an approved production cache or total mongod memory cap. Measure Windows,
@@ -287,7 +290,8 @@ source/offer and notices for its chosen channel before distributing a bundle.
 ## Proof and acceptance status
 
 [proof/README.md](proof/README.md) describes the #357 compiled-runtime proof.
-It refuses Linux, Windows Server, Windows 10 and ARM before creating state; uses
+It refuses Linux, Windows Server, builds outside Windows 10 10240–19045 and
+Windows 11 22000+, and ARM before creating state; uses
 verified archives, a new private throwaway DB directory and generated credentials;
 proves default native argon2, authenticated primary, transaction commit/rollback,
 anonymous refusal and login/profile through the compiled API. It does **not**

@@ -274,7 +274,8 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   its stored IP and refuses `-LanIp` naming another: change it afterwards
   with `-Mode repair -LanIp`. `-LanIp` is refused in upgrade modes; the
   upgrade keeps the IP and warns in preflight if it is absent.
-- Joining a Windows terminal (#397): the common Start menu shortcut
+- Joining a Windows terminal (#397; Windows 10 or Windows 11 with Chrome,
+  `JoinTerminal.ps1` has no OS version check): the common Start menu shortcut
   "Make terminal package" (`MakeTerminalPackage.ps1`, elevated) runs
   `terminal.mjs package --data-root <dir> --to <folder>` into a folder the
   owner picks. It writes `GroceryPOS-terminal-<IP>\` with the public Caddy
@@ -353,8 +354,9 @@ SHA256SUMS` passing and `readBundle` verifying it.
 
 ### Windows-only proof (not yet done)
 
-On an eligible Windows 10 or Windows 11 x64 PC (#357/#366): `Install.ps1` parse and run;
-preflight on Windows 10/ARM/Server/busy port/low disk; `mongod --install` and
+On an eligible Windows 10 or Windows 11 x64 PC (#357/#366): `Install.ps1`
+parse and run;
+preflight on ARM/Server/an unsupported build/busy port/low disk; `mongod --install` and
 WinSW registration under `NT SERVICE\*` with the ACLs (services start, nothing
 else can read `secrets\`); start order and readiness; graceful stop (mongod
 clean shutdown in its log, Nest shutdown hooks); kill each service process

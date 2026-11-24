@@ -38,17 +38,25 @@ it differs from what you see (B15).
 Most stores run Windows 10 Home. Before installing:
 
 1. **Check the PC.** Settings > System > About shows the edition, version and
-   build. The CPU must support AVX (MongoDB needs it): look up the CPU model,
+   build. Or, in PowerShell:
+   `Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber, OSArchitecture`
+   (or `wmic os get Caption,Version,BuildNumber,OSArchitecture`). The
+   architecture must read 64-bit. The CPU must support AVX (MongoDB needs it): look up the CPU model,
    or run the installer, which refuses a CPU known to lack AVX and warns when
    it can't tell.
-2. **Update Windows 10 to 22H2** (build 19045) through Windows Update. Older
-   versions install with a warning only. If `Install.ps1` says Windows
-   PowerShell 5.1 is missing, update to 22H2 first.
+2. **Update Windows 10 to 22H2** (build 19045) through Windows Update. If Windows
+   Update doesn't offer it, use Microsoft's Windows 10 Update Assistant or
+   Media Creation Tool ("Upgrade this PC now"); allow 1–2 hours and about
+   20 GB free. Older versions install with a warning only. If `Install.ps1`
+   prints "This Windows 10 is too old to run the installer. Update Windows 10
+   to version 22H2, then run the installer again.", do that first.
 3. **Activation.** Settings > Update & Security > Activation should say
    Windows is activated.
 4. **Extended Security Updates (advice).** Windows 10 no longer gets free
-   security updates. Enrol the PC in Microsoft's ESU programme if the owner
-   agrees (Settings > Windows Update shows the offer). The installer does not
+   security updates. Enrol the PC in Microsoft's consumer ESU programme if the owner
+   agrees (Settings > Windows Update shows the offer). It is free when
+   signed in with a Microsoft account with Windows Backup settings sync on,
+   otherwise paid (about US$30 a year); check Microsoft's current terms. The installer does not
    check this.
 5. **Active hours.** Windows 10 Home restarts on its own for updates. Set
    Settings > Windows Update > Change active hours to cover store hours.
