@@ -504,7 +504,7 @@ export class ProductService {
     }
 
     async getMatches(dto: MatchesDto): Promise<ProductMatch[]> {
-        const { EAN, name } = dto;
+        const { EAN, name, withStock } = dto;
 
         let query: Record<string, unknown>;
         if (EAN) {
@@ -525,7 +525,9 @@ export class ProductService {
         const matches = (await this.model
             .find(
                 { ...query, isActive: { $ne: false } },
-                'name EAN unit tracksExpiry',
+                withStock
+                    ? 'name EAN unit tracksExpiry reorderLevel'
+                    : 'name EAN unit tracksExpiry',
             )
             .sort({ name: 1 })
             .limit(MAX_MATCHES)
@@ -535,9 +537,21 @@ export class ProductService {
             _id: Types.ObjectId;
             unit?: UnitOfMeasure;
             tracksExpiry?: boolean;
+            reorderLevel?: number;
         }>;
 
-        return matches.map((match) => ({
+        const stocks = withStock
+            ? await Promise.all(
+                  matches.map((match) =>
+                      this.inventoryService.sellableStock(
+                          match._id,
+                          match.tracksExpiry === true,
+                      ),
+                  ),
+              )
+            : [];
+
+        return matches.map((match, i) => ({
             EAN: match.EAN,
             name: match.name,
             product: match._id.toString(),
@@ -545,6 +559,11 @@ export class ProductService {
                 tracksExpiry: match.tracksExpiry,
             }),
             ...(match.unit && { unit: match.unit }),
+            ...(stocks[i] !== undefined && { stock: stocks[i] }),
+            ...(withStock &&
+                match.reorderLevel !== undefined && {
+                    reorderLevel: match.reorderLevel,
+                }),
         }));
     }
 }

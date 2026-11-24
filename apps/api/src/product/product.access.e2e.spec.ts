@@ -326,6 +326,22 @@ describe('Product route access by role (e2e)', () => {
             expect(res.status).toBe(200);
             expect(service.getMatches).toHaveBeenCalledWith({ name: 'M&M' });
         });
+
+        it('passes the register stock flag as a boolean (#482)', async () => {
+            service.getMatches.mockClear();
+
+            const res = await harness.call(
+                caller(Role.Seller),
+                'GET',
+                '/products/matches?name=MILK&withStock=true',
+            );
+
+            expect(res.status).toBe(200);
+            expect(service.getMatches).toHaveBeenCalledWith({
+                name: 'MILK',
+                withStock: true,
+            });
+        });
     });
 
     describe('write validation (issue #14)', () => {

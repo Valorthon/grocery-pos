@@ -123,3 +123,20 @@ export function insufficientStockText(
         )
         .join('; ');
 }
+
+/**
+ * The register's low-stock hint (#482): "Out of stock" at stock <= 0, else
+ * "Low stock (N left)" at or below the product's "Low stock at" level (the
+ * #40 predicate), N in display units; null otherwise or without a stock.
+ */
+export function lowStockHint(product: {
+    stock?: number;
+    unit?: UnitOfMeasure;
+    reorderLevel?: number;
+}): string | null {
+    const { stock } = product;
+    if (stock === undefined) return null;
+    if (stock <= 0) return 'Out of stock';
+    if (stock > reorderLevelOf(product)) return null;
+    return `Low stock (${formatQuantity(stock, product.unit)} left)`;
+}
