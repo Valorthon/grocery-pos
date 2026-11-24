@@ -301,6 +301,7 @@ function fakeContext(overrides = {}) {
                     JSON.stringify({
                         Caption: 'Microsoft Windows 11 Pro',
                         BuildNumber: '26100',
+                        ProductType: 1,
                         OSArchitecture: '64-bit',
                     }),
                 );
@@ -423,6 +424,7 @@ test('runChecks reports refusals of ineligible targets and command failures', as
                     stdout: JSON.stringify({
                         Caption: 'Microsoft Windows Server 2022 Standard',
                         BuildNumber: '20348',
+                        ProductType: 3,
                         OSArchitecture: '64-bit',
                     }),
                     stderr: '',
@@ -460,6 +462,7 @@ test('runChecks reports refusals of ineligible targets and command failures', as
 async function platformFor({
     Caption,
     BuildNumber,
+    ProductType = 1,
     avx = 'True\r\n',
     avxCode = 0,
 }) {
@@ -471,6 +474,7 @@ async function platformFor({
                     stdout: JSON.stringify({
                         Caption,
                         BuildNumber,
+                        ProductType,
                         OSArchitecture: '64-bit',
                     }),
                     stderr: '',
@@ -537,6 +541,23 @@ test('platform fails without AVX, on Server and on out-of-range builds', async (
             'fail',
             `${Caption} ${BuildNumber}`,
         );
+});
+
+test('platform fails a server product type and records no 22H2 without a numeric build', async () => {
+    const server = await platformFor({
+        Caption: 'Microsoft Windows 10 Pro',
+        BuildNumber: '19045',
+        ProductType: 3,
+    });
+    assert.equal(server.status, 'fail');
+    for (const BuildNumber of [undefined, '', 'abc']) {
+        const r = await platformFor({
+            Caption: 'Microsoft Windows 10 Pro',
+            BuildNumber,
+        });
+        assert.equal(r.status, 'fail');
+        assert.equal(r.windows10_22H2, null);
+    }
 });
 
 test('upgrade journal read from the data root', async () => {

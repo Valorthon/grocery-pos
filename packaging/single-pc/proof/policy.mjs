@@ -14,9 +14,46 @@ export const WINDOWS_10_22H2_BUILD = 19045;
 export const WINDOWS_11_MIN_BUILD = 22000;
 
 /**
+ * The one Windows edition/build/AVX rule set (owner decision 2026-11-24),
+ * shared by the proof guard and the acceptance harness: a Windows 10
+ * (10240-19045) or Windows 11 (22000+) client edition (ProductType 1) whose
+ * CPU is not known to lack AVX. Windows 10 below 22H2 and unreadable AVX
+ * support are warnings. `windows10_22H2` is null unless Windows 10 with a
+ * numeric build.
+ */
+export function classifyWindows({ caption, productType, build, avx }) {
+    const problems = [];
+    const warnings = [];
+    const major = /^Microsoft Windows (10|11)\b/i.exec(caption ?? '')?.[1];
+    const known = Number.isSafeInteger(build);
+    if (productType !== 1 || !major)
+        problems.push(
+            `not a Windows 10 or Windows 11 client edition: ${caption} (product type ${productType})`,
+        );
+    else if (
+        !known ||
+        (major === '11'
+            ? build < WINDOWS_11_MIN_BUILD
+            : build < WINDOWS_10_MIN_BUILD || build > WINDOWS_10_22H2_BUILD)
+    )
+        problems.push(`build ${build}`);
+    else if (major === '10' && build < WINDOWS_10_22H2_BUILD)
+        warnings.push(
+            `Windows 10 build ${build} is not 22H2 (${WINDOWS_10_22H2_BUILD})`,
+        );
+    if (avx === false) problems.push('CPU has no AVX');
+    else if (avx !== true) warnings.push('CPU AVX support could not be read');
+    return {
+        problems,
+        warnings,
+        windows10_22H2:
+            major === '10' && known ? build >= WINDOWS_10_22H2_BUILD : null,
+    };
+}
+
+/**
  * Refuses anything but a Windows 10 or Windows 11 client edition on
- * Intel/AMD x64 (owner decision 2026-11-24). Returns the warnings to record:
- * Windows 10 below 22H2, and AVX support unknown. AVX known absent refuses.
+ * Intel/AMD x64 (`classifyWindows`). Returns the warnings to record.
  */
 export function assertSupportedWindows({
     platform,
@@ -27,39 +64,23 @@ export function assertSupportedWindows({
     cpu,
     avx,
 }) {
-    const refuse = (why) => {
-        throw new Error(
-            `Proof requires actual Windows 10 or Windows 11 Intel/AMD x64 workstation${why ? ` (${why})` : ''}.`,
-        );
-    };
+    const { problems, warnings, windows10_22H2 } = classifyWindows({
+        caption,
+        productType,
+        build,
+        avx,
+    });
     if (
         platform !== 'win32' ||
         arch !== 'x64' ||
-        productType !== 1 ||
-        !Number.isSafeInteger(build) ||
         !['GenuineIntel', 'AuthenticAMD'].includes(cpu)
     )
-        refuse();
-    const major = /^Microsoft Windows (10|11)\b/i.exec(caption ?? '')?.[1];
-    if (
-        major === '11'
-            ? build < WINDOWS_11_MIN_BUILD
-            : major === '10'
-              ? build < WINDOWS_10_MIN_BUILD || build > WINDOWS_10_22H2_BUILD
-              : true
-    )
-        refuse();
-    if (avx === false) refuse('the CPU has no AVX');
-    const warnings = [];
-    if (major === '10' && build < WINDOWS_10_22H2_BUILD)
-        warnings.push(
-            `Windows 10 build ${build} is not 22H2 (${WINDOWS_10_22H2_BUILD})`,
+        problems.push('not Intel/AMD x64 Windows');
+    if (problems.length)
+        throw new Error(
+            `Proof requires actual Windows 10 or Windows 11 Intel/AMD x64 workstation (${problems.join('; ')}).`,
         );
-    if (avx !== true) warnings.push('CPU AVX support could not be read');
-    return {
-        windows10_22H2: major === '10' ? build >= WINDOWS_10_22H2_BUILD : null,
-        warnings,
-    };
+    return { windows10_22H2, warnings };
 }
 
 export function parseArgs(args) {

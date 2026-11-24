@@ -16,11 +16,7 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import {
-    WINDOWS_10_22H2_BUILD,
-    WINDOWS_10_MIN_BUILD,
-    WINDOWS_11_MIN_BUILD,
-} from '../proof/policy.mjs';
+import { classifyWindows } from '../proof/policy.mjs';
 
 import {
     LAN_SERVICE,
@@ -469,7 +465,7 @@ export async function runChecks(ctx, options) {
             const [os] = runJson(
                 ctx,
                 ps(
-                    'Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,OSArchitecture,TotalVisibleMemorySize | ConvertTo-Json',
+                    'Get-CimInstance Win32_OperatingSystem | Select-Object Caption,Version,BuildNumber,ProductType,OSArchitecture,TotalVisibleMemorySize | ConvertTo-Json',
                 ),
             );
             const cpus = runJson(
@@ -497,36 +493,14 @@ export async function runChecks(ctx, options) {
                     : avxRun.code === 0 && /^false$/i.test(avxText)
                       ? false
                       : null;
-            const problems = [];
-            const warnings = [];
-            const caption = os?.Caption ?? '';
-            const build = Number(os?.BuildNumber);
-            const major = /Server/i.test(caption)
-                ? null
-                : /Windows 11\b/i.exec(caption)
-                  ? 11
-                  : /Windows 10\b/i.exec(caption)
-                    ? 10
-                    : null;
-            if (major === null)
-                problems.push(
-                    `not a Windows 10 or Windows 11 client edition: ${os?.Caption}`,
-                );
-            else if (
-                !Number.isSafeInteger(build) ||
-                (major === 11
-                    ? build < WINDOWS_11_MIN_BUILD
-                    : build < WINDOWS_10_MIN_BUILD ||
-                      build > WINDOWS_10_22H2_BUILD)
-            )
-                problems.push(`build ${os?.BuildNumber}`);
-            else if (major === 10 && build < WINDOWS_10_22H2_BUILD)
-                warnings.push(
-                    `Windows 10 build ${build} is not 22H2 (${WINDOWS_10_22H2_BUILD})`,
-                );
-            if (avx === false) problems.push('CPU has no AVX');
-            if (avx === null)
-                warnings.push('CPU AVX support could not be read');
+            const { problems, warnings, windows10_22H2 } = classifyWindows({
+                caption: os?.Caption,
+                productType: Number(os?.ProductType),
+                build: /^\d+$/.test(String(os?.BuildNumber ?? ''))
+                    ? Number(os.BuildNumber)
+                    : null,
+                avx,
+            });
             if (!/64/.test(String(os?.OSArchitecture)))
                 problems.push(`architecture ${os?.OSArchitecture}`);
             // Win32_Processor.Architecture 9 = x64; 12 = ARM64.
@@ -544,8 +518,7 @@ export async function runChecks(ctx, options) {
                       : 'pass',
                 problems,
                 warnings,
-                windows10_22H2:
-                    major === 10 ? build >= WINDOWS_10_22H2_BUILD : null,
+                windows10_22H2,
                 avx,
                 os,
                 cpus,
