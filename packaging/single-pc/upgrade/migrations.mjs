@@ -140,7 +140,8 @@ export const MIGRATIONS = Object.freeze([UPPERCASE_PRODUCT_NAMES]);
  * contracts PRODUCT_NAME_PATTERN (#483): letters (any script, combining
  * marks too), digits, spaces and `. , - & ' / ( ) %`.
  */
-export const PRODUCT_NAME_PATTERN = /^[\p{L}\p{M}0-9 .,&'/()%-]*$/u;
+export const PRODUCT_NAME_PATTERN =
+    /^(?:(?![\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}])[\p{L}\p{Mn}\p{Mc}0-9 .,&'/()%-])*$/u;
 
 /**
  * #483: product names with emoji or other disallowed characters. Not a
@@ -150,16 +151,23 @@ export const PRODUCT_NAME_PATTERN = /^[\p{L}\p{M}0-9 .,&'/()%-]*$/u;
 export const PRODUCT_NAME_CHARACTERS = Object.freeze({
     id: 'product-name-characters',
     async check(db) {
-        const bad = (await readProductNames(db)).filter(
-            (r) => !PRODUCT_NAME_PATTERN.test(String(r.name)),
-        );
+        const bad = (
+            await db
+                .collection('products')
+                .find({}, { projection: { name: 1, EAN: 1, isActive: 1 } })
+                .toArray()
+        ).filter((r) => !PRODUCT_NAME_PATTERN.test(String(r.name)));
         if (bad.length === 0) return [];
+        // contracts describeInvalidProductName / INVALID_PRODUCT_NAME_STEPS.
         return [
             `Product names use characters that are no longer allowed: ${bad
-                .map((r) => JSON.stringify(String(r.name)))
+                .map(
+                    (r) =>
+                        `${r.EAN ?? '(no barcode)'} – ${String(r.name)}${r.isActive === false ? ' (archived)' : ''}`,
+                )
                 .join(
-                    ', ',
-                )}. Rename them in Products (letters, numbers, spaces and . , - & ' / ( ) % only) in the current release before upgrading.`,
+                    '; ',
+                )}. To fix each one in the current release: open Products, set Product status to All, search the barcode, choose Edit, rename it using only letters, numbers, spaces and . , - & ' / ( ) %, and save. Then run the upgrade again.`,
         ];
     },
 });

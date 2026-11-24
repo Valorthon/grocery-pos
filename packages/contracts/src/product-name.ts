@@ -10,10 +10,12 @@ export function normalizeProductName(name: string): string {
 /**
  * Characters a product name may use (#483, owner decision 2026-11-24):
  * letters in any script (ñ and accents included, as letters or combining
- * marks), digits 0-9, spaces and `. , - & ' / ( ) %`. No emoji or other
+ * marks: Mn/Mc only, so no keycap/enclosing marks or variation selectors),
+ * digits 0-9, spaces and `. , - & ' / ( ) %`. No emoji or other
  * symbols. Names stored before #483 keep displaying; a rename must pass.
  */
-export const PRODUCT_NAME_PATTERN = /^[\p{L}\p{M}0-9 .,&'/()%-]*$/u;
+export const PRODUCT_NAME_PATTERN =
+    /^(?:(?![\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}])[\p{L}\p{Mn}\p{Mc}0-9 .,&'/()%-])*$/u;
 
 /** The inline/API message for a name with a character outside the rule. */
 export const PRODUCT_NAME_CHARACTERS_MESSAGE =
@@ -28,11 +30,26 @@ export function hasValidProductNameCharacters(name: string): boolean {
  * Stored names that break the #483 character rule, for the cloud report
  * and the single-PC upgrade check; nothing rewrites them.
  */
-export function invalidProductNames(
-    rows: readonly ProductNameRow[],
-): ProductNameRow[] {
+export function invalidProductNames<T extends { name: string }>(
+    rows: readonly T[],
+): T[] {
     return rows.filter(({ name }) => !hasValidProductNameCharacters(name));
 }
+
+/** One offending product as the reports list it: `EAN – NAME (archived)`. */
+export function describeInvalidProductName(row: {
+    EAN?: string;
+    name: string;
+    isActive?: boolean;
+}): string {
+    return `${row.EAN ?? '(no barcode)'} – ${row.name}${
+        row.isActive === false ? ' (archived)' : ''
+    }`;
+}
+
+/** What to do about the listed names (cloud report, single-PC preflight). */
+export const INVALID_PRODUCT_NAME_STEPS =
+    "To fix each one: open Products, set Product status to All, search the barcode, choose Edit, rename it using only letters, numbers, spaces and . , - & ' / ( ) %, and save. Then run this check again.";
 
 export interface ProductNameRow {
     id: string;

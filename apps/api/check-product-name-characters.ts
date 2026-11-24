@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
+import { INVALID_PRODUCT_NAME_STEPS } from '@grocery-pos/contracts';
 import { findInvalidProductNames } from './src/migrations/product-name-characters';
 import { describeDatabase } from './src/common/utils/seed-guard';
 async function main() {
@@ -17,10 +18,11 @@ async function main() {
             console.log('Every product name uses only allowed characters.');
             return;
         }
-        console.table(invalid);
         console.error(
-            `${invalid.length} product name(s) use characters that are no longer allowed. Rename them in Products (allowed: letters, numbers, spaces and . , - & ' / ( ) %).`,
+            `${invalid.length} product name(s) use characters that are no longer allowed:`,
         );
+        for (const row of invalid) console.error(`  ${row.label}`);
+        console.error(INVALID_PRODUCT_NAME_STEPS);
         process.exitCode = 1;
     } finally {
         await mongoose.disconnect();

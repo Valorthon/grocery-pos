@@ -16,14 +16,25 @@ describe('findInvalidProductNames (#483)', () => {
             find: jest.fn().mockReturnValue({
                 toArray: async () => [
                     { _id: A, name: 'PIÑA (1/2 KG)' },
-                    { _id: B, name: 'QA 🍎 APPLE' },
+                    {
+                        _id: B,
+                        name: 'QA 🍎 APPLE',
+                        EAN: '4006381333931',
+                        isActive: false,
+                    },
                 ],
             }),
             updateOne: jest.fn(),
         };
         const connection = { db: { collection: jest.fn(() => products) } };
         expect(await findInvalidProductNames(connection as never)).toEqual([
-            { id: B.toString(), name: 'QA 🍎 APPLE' },
+            {
+                id: B.toString(),
+                name: 'QA 🍎 APPLE',
+                EAN: '4006381333931',
+                isActive: false,
+                label: '4006381333931 – QA 🍎 APPLE (archived)',
+            },
         ]);
         expect(products.updateOne).not.toHaveBeenCalled();
     });
