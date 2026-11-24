@@ -1404,7 +1404,7 @@ async function main() {
     }
     if (process.platform !== 'win32') {
         process.stderr.write(
-            'Refused: the installer runs on Windows 11 only.\n',
+            'Refused: the installer runs on Windows 10 or Windows 11 only.\n',
         );
         return EXIT.REFUSED;
     }

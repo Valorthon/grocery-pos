@@ -63,6 +63,7 @@ import {
     releasesToPrune,
     backupTaskXml,
     evaluatePreflight,
+    isSupportedWindowsBuild,
     FIREWALL_RULE,
     firewallSteps,
     timeServerSteps,
@@ -417,7 +418,9 @@ test('preflight refuses unsupported platforms, foreign data, busy ports and low 
     });
     const refused = (patch, mode = 'install') =>
         evaluatePreflight({ ...okFacts, ...patch }, mode).refusals.join(' ');
-    assert.match(refused({ osBuild: 19045 }), /Windows 11/);
+    assert.match(refused({ osBuild: 9600 }), /Windows 10 or Windows 11/);
+    assert.match(refused({ osBuild: 20348 }), /Windows 10 or Windows 11/);
+    assert.match(refused({ osBuild: undefined }), /found build unknown/);
     assert.match(refused({ osArchitecture: 'Arm64' }), /x64/);
     assert.match(refused({ serverEdition: true }), /Server/);
     assert.match(refused({ isAdmin: false }), /administrator/);
@@ -1970,4 +1973,28 @@ test('a readiness timeout names the last check error (#414)', async () => {
         'UNABLE_TO_GET_ISSUER_CERT_LOCALLY (checked with the Windows trust store)',
     );
     assert.match(message, /last check: UNABLE_TO_GET_ISSUER_CERT_LOCALLY/);
+});
+
+test('preflight accepts Windows 10 and warns below 22H2 (#488)', () => {
+    const check = (osBuild, mode = 'install') =>
+        evaluatePreflight({ ...okFacts, osBuild }, mode);
+    for (const osBuild of [19045, 22000, 22631, 26100]) {
+        assert.deepEqual(check(osBuild), { refusals: [], warnings: [] });
+    }
+    for (const osBuild of [10240, 19044]) {
+        const { refusals, warnings } = check(osBuild);
+        assert.deepEqual(refusals, []);
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0], /update Windows 10 to version 22H2/);
+    }
+    assert.deepEqual(check(19041, 'uninstall').refusals, []);
+    assert.match(
+        evaluatePreflight(
+            { ...okFacts, serverEdition: true },
+            'install',
+        ).refusals.join(' '),
+        /Windows 10 or Windows 11/,
+    );
+    assert.equal(isSupportedWindowsBuild(10239), false);
+    assert.equal(isSupportedWindowsBuild(21999), false);
 });

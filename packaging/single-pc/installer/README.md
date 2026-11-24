@@ -127,8 +127,9 @@ is installed).
 Steps (each idempotent; `state\installer.json` records the stages):
 
 1. **Verify** the whole bundle against its manifest.
-2. **Preflight**, before anything is written: Windows 11 (build ≥ 22000,
-   client edition), x64 OS architecture (`RuntimeInformation`, so x64
+2. **Preflight**, before anything is written: Windows 10 (build 10240–19045; below
+   19045 only warns "update Windows 10 to version 22H2") or Windows 11
+   (build ≥ 22000), client edition, x64 OS architecture (`RuntimeInformation`, so x64
    emulation on ARM is refused), elevated, .NET Framework ≥ 4.6.1 (WinSW
    NET461), free space (twice the release; 5 GB on the data volume,
    provisional), ports 1443/13000/27018 free unless held by our own installed
