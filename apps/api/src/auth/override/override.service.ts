@@ -399,20 +399,26 @@ export class ManagerOverrideService implements OnModuleInit {
 
     /**
      * Refuses with 401 AUTH_INVALID_TOKEN when the requester has been
-     * deactivated, read in `session`, so a sale racing the deactivation
-     * past the per-request check (SessionLivenessService, which also
-     * refuses unknown users) still cannot commit (#480).
+     * deactivated (#480). It writes the active row (`overrideApprovalLock`,
+     * as the approval path does) in `session`, so a concurrent deactivation
+     * conflicts with the sale instead of slipping past a plain read. A
+     * missing row is left to the per-request SessionLivenessService, which
+     * refuses unknown users (the DB suite signs callers without rows).
      */
     async assertActiveRequester(
         actor: AuthUser,
         session: ClientSession,
     ): Promise<void> {
-        const deactivated = await this.users
-            .findOne({ _id: actor.userId, isActive: false })
-            .select('_id')
-            .session(session)
-            .lean();
-        if (deactivated) throw new JWTInvalidError();
+        const locked = await this.users.updateOne(
+            { _id: actor.userId, isActive: true },
+            { $inc: { overrideApprovalLock: 1 } },
+            { session },
+        );
+        if (locked.matchedCount) return;
+        const exists = await this.users
+            .exists({ _id: actor.userId })
+            .session(session);
+        if (exists) throw new JWTInvalidError();
     }
 
     async visibleReversalSale(

@@ -4,6 +4,7 @@
  * request with a still-unexpired access token is 401, and a sale from it
  * is refused and writes nothing. The open shift stays for an ADMIN.
  */
+import * as argon from 'argon2';
 import { Types } from 'mongoose';
 import { ErrorCode, Role } from '@grocery-pos/contracts';
 import {
@@ -99,4 +100,49 @@ it("ends a deactivated cashier's session at once: no sale is recorded, the shift
         .findById(shift)
         .lean();
     expect(open?.status).toBe('OPEN');
+});
+
+it('keeps the old access token working after a refresh rotates the session', async () => {
+    const PASSWORD = 'password-live-123';
+    const user = caller('live-refresh', Role.Admin);
+    await db.model('User').create({
+        _id: new Types.ObjectId(user.userId),
+        name: user.username,
+        roles: user.roles,
+        isActive: true,
+        passwordHash: await argon.hash(PASSWORD),
+    });
+    const base = await db.app.getUrl();
+    const url = `${base.replace('[::1]', '127.0.0.1')}/v1`;
+    /** The last value per cookie name, cleared ones left out. */
+    const jar = (res: Response) => {
+        const map = new Map<string, string>();
+        for (const line of res.headers.getSetCookie()) {
+            const pair = line.split(';')[0];
+            const name = pair.slice(0, pair.indexOf('='));
+            if (/Expires=Thu, 01 Jan 1970/i.test(line)) map.delete(name);
+            else map.set(name, pair);
+        }
+        return [...map.values()].join('; ');
+    };
+
+    const login = await fetch(`${url}/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: user.username, password: PASSWORD }),
+    });
+    expect(login.status).toBeLessThan(300);
+    const first = jar(login);
+
+    const refresh = await fetch(`${url}/auth/refresh`, {
+        method: 'POST',
+        headers: { cookie: first },
+    });
+    expect(refresh.status).toBeLessThan(300);
+
+    // The pre-refresh access token: same session family, still live.
+    const guarded = await fetch(`${url}/users?page=1&limit=10`, {
+        headers: { cookie: first },
+    });
+    expect(guarded.status).toBe(200);
 });

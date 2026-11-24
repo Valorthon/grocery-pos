@@ -496,7 +496,8 @@ requestId}`. A 5xx never carries details or internals.
   strategy's `SessionLivenessService` refuses (401 `AUTH_INVALID_TOKEN`) an
   unknown or inactive user, or a `sid` without a live refresh token, on every
   request; `POST /sales` also refuses a deactivated requester inside its
-  transaction (`assertActiveRequester`). An open shift stays for an ADMIN to
+  transaction (`assertActiveRequester` writes the active user row, so a
+  concurrent deactivation conflicts). An open shift stays for an ADMIN to
   force-close. The DB suite's `bootDbApp` skips the check for callers without
   a user row or with the default `sid` unless `{ realSessions: true }`. Login is rate-limited, and all login failures
   return one generic 401. Passwords are at least 8 characters.

@@ -82,6 +82,7 @@ describe('manager approvals (#34)', () => {
     let stepUp: { assertLive: jest.Mock };
     let service: ManagerOverrideService;
     let users: {
+        exists?: jest.Mock;
         findOne: jest.Mock;
         findById: jest.Mock;
         updateOne: jest.Mock;
@@ -166,24 +167,36 @@ describe('manager approvals (#34)', () => {
         });
     }
 
-    it('accepts an active requester, read in the transaction (#480)', async () => {
-        users.findOne.mockReturnValueOnce(query(null));
+    it('locks an active requester in the transaction (#480)', async () => {
         await expect(
             service.assertActiveRequester(actor, session),
         ).resolves.toBeUndefined();
-        expect(users.findOne).toHaveBeenCalledWith({
-            _id: USER,
-            isActive: false,
-        });
+        expect(users.updateOne).toHaveBeenCalledWith(
+            { _id: USER, isActive: true },
+            { $inc: { overrideApprovalLock: 1 } },
+            { session },
+        );
     });
     it('refuses a deactivated requester with a 401 (#480)', async () => {
-        users.findOne.mockReturnValueOnce(query({ _id: USER }));
+        users.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        users.exists = jest.fn(() => ({
+            session: () => Promise.resolve({ _id: USER }),
+        }));
         await expect(
             service.assertActiveRequester(actor, session),
         ).rejects.toMatchObject({
             statusCode: 401,
             code: ErrorCode.AUTH_INVALID_TOKEN,
         });
+    });
+    it('leaves a requester without a user row to the per-request check (#480)', async () => {
+        users.updateOne.mockResolvedValueOnce({ matchedCount: 0 });
+        users.exists = jest.fn(() => ({
+            session: () => Promise.resolve(null),
+        }));
+        await expect(
+            service.assertActiveRequester(actor, session),
+        ).resolves.toBeUndefined();
     });
     it('requires admin approval for every positive discount', () => {
         expect(service.requiresDiscountApproval(1)).toBe(true);
