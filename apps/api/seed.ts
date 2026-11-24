@@ -183,23 +183,23 @@ async function seedProduct() {
 
         { name: 'COFFEE', category: Category.DRINKS },
         { name: 'WATER', category: Category.DRINKS },
-        { name: 'ORANGE_JUICE', category: Category.DRINKS },
+        { name: 'ORANGE JUICE', category: Category.DRINKS },
         { name: 'MILK', category: Category.DRINKS },
 
         { name: 'HEADPHONES', category: Category.ELECTRONICS },
         { name: 'SMARTPHONE', category: Category.ELECTRONICS },
-        { name: 'CHARGING_CABLE', category: Category.ELECTRONICS },
-        { name: 'POWER_BANK', category: Category.ELECTRONICS },
+        { name: 'CHARGING CABLE', category: Category.ELECTRONICS },
+        { name: 'POWER BANK', category: Category.ELECTRONICS },
 
-        { name: 'PAPER_TOWELS', category: Category.HOUSEHOLD },
-        { name: 'DISH_SOAP', category: Category.HOUSEHOLD },
+        { name: 'PAPER TOWELS', category: Category.HOUSEHOLD },
+        { name: 'DISH SOAP', category: Category.HOUSEHOLD },
         { name: 'BIBLE', category: Category.HOUSEHOLD },
-        { name: 'LAUNDRY_DETERGENT', category: Category.HOUSEHOLD },
+        { name: 'LAUNDRY DETERGENT', category: Category.HOUSEHOLD },
 
-        { name: 'COTTON_TSHIRT', category: Category.CLOTHES },
-        { name: 'DENIM_JEANS', category: Category.CLOTHES },
-        { name: 'WINTER_JACKET', category: Category.CLOTHES },
-        { name: 'ANKLE_SOCKS', category: Category.CLOTHES },
+        { name: 'COTTON TSHIRT', category: Category.CLOTHES },
+        { name: 'DENIM JEANS', category: Category.CLOTHES },
+        { name: 'WINTER JACKET', category: Category.CLOTHES },
+        { name: 'ANKLE SOCKS', category: Category.CLOTHES },
     ];
 
     let currentEAN = 10000000;

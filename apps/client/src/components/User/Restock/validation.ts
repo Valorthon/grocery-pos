@@ -1,8 +1,4 @@
-import {
-    NUMERIC_LIMITS,
-    STRING_LIMITS,
-    normalizeProductName,
-} from '@grocery-pos/contracts';
+import { NUMERIC_LIMITS, STRING_LIMITS } from '@grocery-pos/contracts';
 import type { ConfirmRequest } from '@/composables/useConfirm';
 import { countOf } from '@/utils/plural';
 import {
@@ -10,6 +6,7 @@ import {
     fieldErrors,
     quantityError,
     moneyError,
+    productNameError,
     productPickError,
     textError,
 } from '@/utils/rules';
@@ -29,13 +26,7 @@ export function restockLineErrors(form: AddFormInput): Errors {
         EAN: form.isNewProduct
             ? barcodeFieldError(form.EAN, form.autoGenerateEAN)
             : productPickError(form.product),
-        name: form.isNewProduct
-            ? // Measured as stored (#443), as the DTO does.
-              textError(
-                  normalizeProductName(form.name),
-                  STRING_LIMITS.PRODUCT_NAME,
-              )
-            : '',
+        name: form.isNewProduct ? productNameError(form.name) : '',
         price: form.isNewProduct ? moneyError(form.price) : '',
         quantity: quantityError(form.quantity, form.unit),
         // ₱0 passes here; the page asks "Record at ₱0 cost?" on save (#85).

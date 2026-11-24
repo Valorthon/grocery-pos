@@ -7,6 +7,33 @@ export function normalizeProductName(name: string): string {
     return name.trim().toUpperCase();
 }
 
+/**
+ * Characters a product name may use (#483, owner decision 2026-11-24):
+ * letters in any script (ñ and accents included, as letters or combining
+ * marks), digits 0-9, spaces and `. , - & ' / ( ) %`. No emoji or other
+ * symbols. Names stored before #483 keep displaying; a rename must pass.
+ */
+export const PRODUCT_NAME_PATTERN = /^[\p{L}\p{M}0-9 .,&'/()%-]*$/u;
+
+/** The inline/API message for a name with a character outside the rule. */
+export const PRODUCT_NAME_CHARACTERS_MESSAGE =
+    "Use only letters, numbers, spaces and . , - & ' / ( ) %";
+
+/** True when every character of `name` is allowed (#483). */
+export function hasValidProductNameCharacters(name: string): boolean {
+    return PRODUCT_NAME_PATTERN.test(name);
+}
+
+/**
+ * Stored names that break the #483 character rule, for the cloud report
+ * and the single-PC upgrade check; nothing rewrites them.
+ */
+export function invalidProductNames(
+    rows: readonly ProductNameRow[],
+): ProductNameRow[] {
+    return rows.filter(({ name }) => !hasValidProductNameCharacters(name));
+}
+
 export interface ProductNameRow {
     id: string;
     name: string;

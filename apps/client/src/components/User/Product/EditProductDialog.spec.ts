@@ -294,6 +294,37 @@ describe('EditProductDialog errors (#282)', () => {
         expect(isOpen.value).toBe(false);
     });
 
+    it('refuses emoji in a changed name inline (#483)', async () => {
+        await mount();
+        await type(field('Product name').input, 'QA 🍎 APPLE');
+        saveButton().click();
+        await flush();
+        expect(api.patch).not.toHaveBeenCalled();
+        expect(field('Product name').error()).toBe(
+            "Use only letters, numbers, spaces and . , - & ' / ( ) %",
+        );
+        await type(field('Product name').input, 'Piña (1/2 kg)');
+        saveButton().click();
+        await flush();
+        expect(api.patch).toHaveBeenCalledWith('/products', {
+            updates: [{ product: 'p1', update: { name: 'PIÑA (1/2 KG)' } }],
+        });
+    });
+
+    it('saves a legacy emoji name unchanged without sending it (#483)', async () => {
+        await mount({ product: { name: 'QA 🍎 APPLE' } });
+        await type(field('Restock amount').input, '3');
+        saveButton().click();
+        await flush();
+        expect(field('Product name').error()).toBeFalsy();
+        const [, body] = api.patch.mock.calls[0] as [
+            string,
+            { updates: { update: Record<string, unknown> }[] },
+        ];
+        expect(body.updates[0].update).not.toHaveProperty('name');
+        expect(body.updates[0].update).toHaveProperty('reorderQuantity', 3);
+    });
+
     it('another server error is a toast', async () => {
         await mount();
         api.patch.mockRejectedValueOnce(

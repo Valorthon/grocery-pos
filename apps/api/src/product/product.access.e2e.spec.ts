@@ -291,8 +291,8 @@ describe('Product route access by role (e2e)', () => {
     });
 
     describe('names are stored as typed (#15)', () => {
-        it('passes a 50-character name with &, < and > to the service unchanged', async () => {
-            const name = `m&m's <3 a>b `
+        it('passes a 50-character name with & and other allowed symbols to the service unchanged', async () => {
+            const name = `m&m's (3) a/b `
                 .repeat(4)
                 .slice(0, STRING_LIMITS.PRODUCT_NAME - 1)
                 .concat('x');
@@ -312,6 +312,20 @@ describe('Product route access by role (e2e)', () => {
             expect(service.addMany).toHaveBeenCalledWith(expect.anything(), {
                 newProducts: [{ name: name.toUpperCase(), price: 1 }],
             });
+        });
+
+        it('refuses emoji and < > in a new name (#483)', async () => {
+            service.addMany.mockClear();
+            for (const name of ['QA 🍎 APPLE', 'A<B>']) {
+                const res = await harness.call(
+                    caller(Role.Restocker),
+                    'POST',
+                    '/products/bulk',
+                    { newProducts: [{ name, price: 1 }] },
+                );
+                expect(res.status).toBe(400);
+            }
+            expect(service.addMany).not.toHaveBeenCalled();
         });
 
         it('searches for the text as typed', async () => {

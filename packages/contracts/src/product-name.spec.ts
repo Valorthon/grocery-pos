@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+    PRODUCT_NAME_CHARACTERS_MESSAGE,
+    hasValidProductNameCharacters,
+    invalidProductNames,
     normalizeProductName,
     planProductNameUppercase,
 } from './product-name.js';
@@ -50,5 +53,46 @@ describe('planProductNameUppercase (#443)', () => {
         // German sharp s uppercases to two letters.
         const plan = planProductNameUppercase([{ id: 'a', name: 'ßß' }], 3);
         expect(plan.tooLong).toEqual([{ id: 'a', to: 'SSSS' }]);
+    });
+});
+
+describe('product name characters (#483)', () => {
+    it.each([
+        'PIÑA',
+        'CAFÉ CON LECHE',
+        'CAFÉ', // combining accent
+        "MAMA'S RICE 1/2 (5KG) 10% OFF, A&B. X-1",
+    ])('accepts %j', (name) => {
+        expect(hasValidProductNameCharacters(name)).toBe(true);
+    });
+
+    it.each([
+        'QA 🍎 APPLE',
+        'A<B>',
+        'A"B',
+        'A$',
+        'A#',
+        'A@',
+        'A!',
+        'A_B',
+        'A\tB',
+        'A½',
+        'A²',
+    ])('refuses %j', (name) => {
+        expect(hasValidProductNameCharacters(name)).toBe(false);
+    });
+
+    it('reports only the stored names that break the rule', () => {
+        expect(
+            invalidProductNames([
+                { id: 'a', name: 'RICE' },
+                { id: 'b', name: 'QA 🍎 APPLE' },
+            ]),
+        ).toEqual([{ id: 'b', name: 'QA 🍎 APPLE' }]);
+    });
+
+    it('names every allowed symbol in the message', () => {
+        for (const ch of ". , - & ' / ( ) %".split(' '))
+            expect(PRODUCT_NAME_CHARACTERS_MESSAGE).toContain(ch);
     });
 });

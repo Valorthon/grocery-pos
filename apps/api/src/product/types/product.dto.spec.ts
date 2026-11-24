@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate, ValidationError } from 'class-validator';
+import { PRODUCT_NAME_CHARACTERS_MESSAGE } from '@grocery-pos/contracts';
 import { STRING_LIMITS } from '../../constants';
 import {
     GetDto,
@@ -251,6 +252,50 @@ describe('reorder settings validation', () => {
                     product: '507f1f77bcf86cd799439011',
                     update: { reorderLevel: 0, reorderQuantity: 5 },
                 },
+            ],
+        });
+        expect(await validate(dto)).toHaveLength(0);
+    });
+});
+
+describe('product name characters (#483)', () => {
+    it('accepts letters with accents, digits and the allowed symbols', async () => {
+        const name = "Piña Café 1/2 (5kg) 10% A&B, Mama's. X-1";
+        expect(
+            await propertyErrors(
+                NewProductFields,
+                { name, price: 100 },
+                'name',
+            ),
+        ).toHaveLength(0);
+    });
+
+    it.each(['QA 🍎 APPLE', 'A<B>', 'A$', 'A#'])(
+        'refuses %j on create and on edit',
+        async (name) => {
+            const [created] = await propertyErrors(
+                NewProductFields,
+                { name, price: 100 },
+                'name',
+            );
+            expect(created?.constraints?.isProductName).toBe(
+                PRODUCT_NAME_CHARACTERS_MESSAGE,
+            );
+            const dto = plainToInstance(UpdateBulkDto, {
+                updates: [
+                    { product: '507f1f77bcf86cd799439011', update: { name } },
+                ],
+            });
+            expect(JSON.stringify(await validate(dto))).toContain(
+                'isProductName',
+            );
+        },
+    );
+
+    it('lets an edit without a name through (a legacy name stays)', async () => {
+        const dto = plainToInstance(UpdateBulkDto, {
+            updates: [
+                { product: '507f1f77bcf86cd799439011', update: { price: 5 } },
             ],
         });
         expect(await validate(dto)).toHaveLength(0);

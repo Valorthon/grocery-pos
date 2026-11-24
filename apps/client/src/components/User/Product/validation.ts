@@ -1,9 +1,8 @@
-import { STRING_LIMITS, normalizeProductName } from '@grocery-pos/contracts';
 import {
     barcodeFieldError,
     fieldErrors,
     moneyError,
-    textError,
+    productNameError,
 } from '@/utils/rules';
 
 /** The product dialog's form state; `price` is the pesos as typed. */
@@ -24,11 +23,7 @@ export interface ProductFormInput {
 export function productErrors(form: ProductFormInput): Record<string, string> {
     return fieldErrors({
         EAN: barcodeFieldError(form.EAN, form.autoGenerateEAN),
-        // Measured as stored (#443), as the DTO does.
-        name: textError(
-            normalizeProductName(form.name),
-            STRING_LIMITS.PRODUCT_NAME,
-        ),
+        name: productNameError(form.name),
         price: moneyError(form.price),
     });
 }

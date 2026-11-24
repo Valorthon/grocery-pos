@@ -21,6 +21,8 @@ import {
     PRODUCT_NAME_MAX,
     UPPERCASE_PRODUCT_NAMES,
     migrationRefusals,
+    PRODUCT_NAME_CHARACTERS,
+    PRODUCT_NAME_PATTERN,
 } from './migrations.mjs';
 import {
     STAGES,
@@ -129,6 +131,38 @@ test('uppercase-product-names (#443) refuses collisions before any write', async
     // Not pending once the data is at version 2.
     assert.deepEqual(
         await migrationRefusals(db, [UPPERCASE_PRODUCT_NAMES], 2, 2),
+        [],
+    );
+});
+
+test('product-name-characters (#483) mirrors the contracts pattern', async () => {
+    const source = await readFile(
+        join(repo, 'packages', 'contracts', 'src', 'product-name.ts'),
+        'utf8',
+    );
+    assert.equal(
+        /export const PRODUCT_NAME_PATTERN = (\/.*\/u);/.exec(source)?.[1],
+        String(PRODUCT_NAME_PATTERN),
+    );
+});
+
+test('product-name-characters (#483) refuses on every upgrade and writes nothing', async () => {
+    const rows = [
+        { _id: 'a', name: "PIÑA (1/2 KG) 10% A&B, MAMA'S. X-1" },
+        { _id: 'b', name: 'QA 🍎 APPLE' },
+    ];
+    const db = fakeDb(rows);
+    // Runs even with no pending migration (data already current).
+    const refusals = await migrationRefusals(db, MIGRATIONS, 2, 2);
+    assert.equal(refusals.length, 1);
+    assert.match(refusals[0], /"QA 🍎 APPLE"/);
+    assert.doesNotMatch(refusals[0], /PIÑA/);
+    assert.deepEqual(
+        rows.map((r) => r.name),
+        ["PIÑA (1/2 KG) 10% A&B, MAMA'S. X-1", 'QA 🍎 APPLE'],
+    );
+    assert.deepEqual(
+        await PRODUCT_NAME_CHARACTERS.check(fakeDb([rows[0]])),
         [],
     );
 });

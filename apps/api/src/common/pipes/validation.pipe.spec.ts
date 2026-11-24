@@ -84,20 +84,22 @@ describe('createValidationPipe: text is stored as typed (#15)', () => {
         const dto = await body(NewProductsDto, {
             newProducts: [
                 { name: '  M&M Peanut ', price: 100 },
-                { name: 'A<B>C', price: 100 },
+                { name: "A'B/C (10%)", price: 100 },
             ],
         });
 
         expect(dto.newProducts.map((p) => p.name)).toEqual([
             'M&M PEANUT',
-            'A<B>C',
+            "A'B/C (10%)",
         ]);
 
+        // Product names allow only `. , - & ' / ( ) %` symbols (#483).
+        const typedName = "M&M's qty (10%) a/b";
         const updates = await body(UpdateProductsDto, {
-            updates: [{ product: ID, update: { name: ` ${TYPED} ` } }],
+            updates: [{ product: ID, update: { name: ` ${typedName} ` } }],
         });
 
-        expect(updates.updates[0].update.name).toBe(TYPED.toUpperCase());
+        expect(updates.updates[0].update.name).toBe(typedName.toUpperCase());
     });
 
     it('trims the restock description, which had no DTO trim before', async () => {
@@ -131,7 +133,8 @@ describe('createValidationPipe: text is stored as typed (#15)', () => {
 
 describe('createValidationPipe: MaxLength sees the text as typed (#15)', () => {
     it('accepts a 50-character product name containing &', async () => {
-        const name = textOf(STRING_LIMITS.PRODUCT_NAME);
+        // No `<`/`>` in product names since #483.
+        const name = textOf(STRING_LIMITS.PRODUCT_NAME).replace(/[<>]/g, '/');
         expect(name).toHaveLength(50);
 
         const dto = await body(NewProductsDto, {

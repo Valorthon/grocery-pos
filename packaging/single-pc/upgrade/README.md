@@ -82,6 +82,11 @@ database was created at version 1 by #360 provisioning and the current
 API, so their legacy inputs cannot exist there. New installations are
 stamped with the installing release's data version.
 
+`DATA_CHECKS` run in every upgrade's preflight, whatever the data
+version, and only read: `product-name-characters` (#483) refuses product
+names with emoji or other disallowed characters, listing them, so the
+owner renames them in the current release first. No data version bump.
+
 A schema change that needs a migration bumps both versions and adds an
 entry (`id`, `from`, `to = from + 1`, `changesData`, `up(db, { log })`)
 that is idempotent, offline and uses only the release (its node and the

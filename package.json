@@ -26,7 +26,8 @@
         "prepare": "husky",
         "migrate:categories": "pnpm --filter grocery-pos-api migrate:categories",
         "migrate:stock-ledger": "pnpm --filter grocery-pos-api migrate:stock-ledger",
-        "migrate:uppercase-product-names": "pnpm --filter grocery-pos-api migrate:uppercase-product-names"
+        "migrate:uppercase-product-names": "pnpm --filter grocery-pos-api migrate:uppercase-product-names",
+        "check:product-name-characters": "pnpm --filter grocery-pos-api check:product-name-characters"
     },
     "devDependencies": {
         "depcheck": "^1.4.7",

@@ -136,9 +136,53 @@ export const UPPERCASE_PRODUCT_NAMES = Object.freeze({
 /** Ordered: `from` → `to`. */
 export const MIGRATIONS = Object.freeze([UPPERCASE_PRODUCT_NAMES]);
 
-/** Refusals from the pending migrations' read-only `check(db)`. */
-export async function migrationRefusals(db, migrations, from, to) {
+/**
+ * contracts PRODUCT_NAME_PATTERN (#483): letters (any script, combining
+ * marks too), digits, spaces and `. , - & ' / ( ) %`.
+ */
+export const PRODUCT_NAME_PATTERN = /^[\p{L}\p{M}0-9 .,&'/()%-]*$/u;
+
+/**
+ * #483: product names with emoji or other disallowed characters. Not a
+ * migration (no data version bump): nothing is rewritten, the owner
+ * renames them in the current release first.
+ */
+export const PRODUCT_NAME_CHARACTERS = Object.freeze({
+    id: 'product-name-characters',
+    async check(db) {
+        const bad = (await readProductNames(db)).filter(
+            (r) => !PRODUCT_NAME_PATTERN.test(String(r.name)),
+        );
+        if (bad.length === 0) return [];
+        return [
+            `Product names use characters that are no longer allowed: ${bad
+                .map((r) => JSON.stringify(String(r.name)))
+                .join(
+                    ', ',
+                )}. Rename them in Products (letters, numbers, spaces and . , - & ' / ( ) % only) in the current release before upgrading.`,
+        ];
+    },
+});
+
+/**
+ * Read-only checks the preflight runs on every upgrade, whatever the data
+ * version: rules a release enforces without a migration.
+ */
+export const DATA_CHECKS = Object.freeze([PRODUCT_NAME_CHARACTERS]);
+
+/**
+ * Refusals from the pending migrations' read-only `check(db)`, then from
+ * every `checks` entry (DATA_CHECKS by default).
+ */
+export async function migrationRefusals(
+    db,
+    migrations,
+    from,
+    to,
+    checks = DATA_CHECKS,
+) {
     const out = [];
+    for (const c of checks) out.push(...(await c.check(db)));
     for (const m of pendingMigrations(migrations, from, to))
         if (typeof m.check === 'function') out.push(...(await m.check(db)));
     return out;

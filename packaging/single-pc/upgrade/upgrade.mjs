@@ -532,7 +532,7 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                     ...(await lossChecks(root, {
                         createdAt: new Date().toISOString(),
                     })),
-                    // Data a pending migration would refuse (#443).
+                    // Data a pending migration (#443) or a DATA_CHECKS rule (#483) would refuse.
                     migrationRefusals: await migrationRefusals(
                         root.db(APP_DATABASE),
                         migrations,
