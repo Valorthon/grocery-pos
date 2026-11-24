@@ -52,8 +52,25 @@ export const STAGES = Object.freeze([
     'shortcut',
 ]);
 
-/** Windows 11 is build 22000 or later (ARCHITECTURE.md platform). */
-export const MIN_WINDOWS_BUILD = 22000;
+/**
+ * Supported client builds (#488, owner decision 2026-11-24): Windows 10
+ * (10240-19045) and Windows 11 (22000 or later). Builds in between were
+ * never released as Windows 10 or 11.
+ */
+export const MIN_WINDOWS_BUILD = 10240;
+/** Windows 10 22H2, the last Windows 10 release. Older builds only warn. */
+export const WINDOWS_10_LATEST_BUILD = 19045;
+/** Windows 11 starts here. */
+export const WINDOWS_11_BUILD = 22000;
+
+/** True for a Windows 10 or Windows 11 build number. */
+export function isSupportedWindowsBuild(build) {
+    return (
+        Number.isInteger(build) &&
+        ((build >= MIN_WINDOWS_BUILD && build <= WINDOWS_10_LATEST_BUILD) ||
+            build >= WINDOWS_11_BUILD)
+    );
+}
 /** .NET Framework 4.6.1 `Release` value, WinSW NET461's requirement. */
 export const MIN_DOTNET_RELEASE = 394254;
 /**
@@ -157,10 +174,16 @@ export function serviceAccount(name) {
 export function evaluatePreflight(facts, mode) {
     const refusals = [];
     const warnings = [];
-    if (facts.platform !== 'win32') refusals.push('Windows 11 is required.');
-    if (!(facts.osBuild >= MIN_WINDOWS_BUILD)) {
+    if (facts.platform !== 'win32') {
+        refusals.push('Windows 10 or Windows 11 is required.');
+    }
+    if (!isSupportedWindowsBuild(facts.osBuild)) {
         refusals.push(
-            `Windows 11 (build ${MIN_WINDOWS_BUILD} or later) is required; found build ${facts.osBuild ?? 'unknown'}.`,
+            `Windows 10 or Windows 11 is required; found build ${facts.osBuild ?? 'unknown'}. Windows Insider and Server builds are not supported.`,
+        );
+    } else if (facts.osBuild < WINDOWS_10_LATEST_BUILD) {
+        warnings.push(
+            `This PC runs an older Windows 10 (build ${facts.osBuild}); update Windows 10 to version 22H2.`,
         );
     }
     if (facts.osArchitecture !== 'X64') {
@@ -169,7 +192,9 @@ export function evaluatePreflight(facts, mode) {
         );
     }
     if (facts.serverEdition) {
-        refusals.push('Windows Server is not supported; use Windows 11.');
+        refusals.push(
+            'Windows Server is not supported; use Windows 10 or Windows 11.',
+        );
     }
     if (!facts.isAdmin) refusals.push('Run the installer as an administrator.');
     if (mode === 'uninstall') return { refusals, warnings };

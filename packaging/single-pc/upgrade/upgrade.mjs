@@ -1003,7 +1003,9 @@ async function main() {
         return EXIT.USAGE;
     }
     if (process.platform !== 'win32') {
-        process.stderr.write('Refused: the upgrade runs on Windows 11 only.\n');
+        process.stderr.write(
+            'Refused: the upgrade runs on Windows 10 or Windows 11 only.\n',
+        );
         return EXIT.REFUSED;
     }
     const ctx = upgradeContext();
