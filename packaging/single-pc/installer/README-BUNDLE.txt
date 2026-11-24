@@ -1,4 +1,4 @@
-Grocery POS single-PC installation bundle (Windows 11 x64, Google Chrome)
+Grocery POS single-PC installation bundle (Windows 10 or 11 x64, Google Chrome)
 
 Before anything else, compare (Get-FileHash .\bundle-manifest.json).Hash with
 the bundle-manifest.json SHA-256 the vendor recorded when building (kept

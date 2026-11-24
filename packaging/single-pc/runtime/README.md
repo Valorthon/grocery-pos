@@ -11,7 +11,7 @@ The dev `docker-compose.yml`/`mongo-init.sh` (no authentication) are never
 used here. Cloud/staging defaults are unchanged.
 
 **Status:** exercised on Linux with a real MongoDB 7 `mongod` (below). No
-Windows 11 execution yet; see "Windows-only proof".
+Windows 10/11 execution yet; see "Windows-only proof".
 
 ## Layout
 
@@ -204,4 +204,4 @@ shutdown, actual listeners (`Get-NetTCPConnection`), `node --env-file` with
 Windows paths, Caddy's TLS state under `tls\`, and recovery after an
 interrupted run on NTFS. Record them in
 [../acceptance/RUNBOOK.md](../acceptance/RUNBOOK.md) terms on
-an eligible Windows 11 x64 target (#357/#366).
+an eligible Windows 10 or Windows 11 x64 target (#357/#366).

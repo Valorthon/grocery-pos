@@ -6,7 +6,7 @@ automatic updates; all shifts closed and pending receipts synchronized
 first; a 30-minute maintenance window target). Tool details:
 [../upgrade/README.md](../upgrade/README.md).
 
-**Status:** not yet performed on Windows 11 (RUNBOOK B8–B10, C7). The
+**Status:** not yet performed on Windows 10 or 11 (RUNBOOK B8–B10, C7). The
 30-minute target has not been measured on a realistic database.
 
 ## Daily startup and shutdown (owner)
@@ -78,6 +78,22 @@ the services by hand while an upgrade is unfinished.
   Reload; the basket and queued cash sales are kept.
 - Make a backup and a USB export.
 - `releases\` keeps the current and the previous release (for rollback).
+
+## Windows 10 end of updates (owner and vendor)
+
+Windows 10 gets security updates only through Extended Security Updates
+(ESU); the consumer programme reportedly runs to October 2027, but check
+Microsoft's current date. As that date nears, move the store PC to Windows 11
+if the PC is eligible (PC Health Check tells you); otherwise plan a
+replacement PC ([REPLACEMENT-PC.md](REPLACEMENT-PC.md)).
+
+## Upgrading the store PC to Windows 11
+
+Do it only on a closed day: close all shifts, let pending offline receipts
+sync, and make sure the latest backup is verified ("Back up to USB drive"
+too). The Grocery POS services stay installed and keep running across the
+Windows upgrade. Afterwards, run "Check Grocery POS" and open the app before
+the store opens.
 
 ## Other routine maintenance (vendor)
 

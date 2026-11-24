@@ -7,7 +7,7 @@ depend on the installer: #362 schedules `create` daily and installs shortcuts;
 #364 takes a backup before an upgrade; #365 reads the status interface.
 
 **Status:** exercised on Linux with real MongoDB 7.0.48 and Database Tools
-100.20.1 (below). No Windows 11 execution yet; see "Windows-only proof".
+100.20.1 (below). No Windows 10/11 execution yet; see "Windows-only proof".
 
 Owner decisions applied (#357/#363): daily automatic local backups kept 30
 days; guided export to an external drive with no recovery password, weekly
