@@ -35,7 +35,11 @@ import { release as osRelease } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tailFile } from '../diagnostics/diagnose.mjs';
-import { boundedWait } from '../proof/policy.mjs';
+import {
+    AVX_PROBE_COMMAND,
+    boundedWait,
+    parseAvxProbe,
+} from '../proof/policy.mjs';
 import { acquireLock, provision, releaseLock } from '../runtime/provision.mjs';
 import {
     APP_DATABASE,
@@ -893,7 +897,7 @@ export async function lanAddressFacts(lanIp) {
 
 // ------------------------------------------------------------ Windows context
 
-function execCapture(file, args, options = {}) {
+export function execCapture(file, args, options = {}) {
     return new Promise((done) => {
         execFile(
             file,
@@ -914,7 +918,17 @@ function execCapture(file, args, options = {}) {
     });
 }
 
-function powershell(command, env = {}) {
+/** Whether the CPU has AVX (#489): true, false or null when unreadable. */
+export async function readAvx({ timeoutMs = AVX_TIMEOUT_MS } = {}) {
+    return parseAvxProbe(
+        await powershell(AVX_PROBE_COMMAND, {}, { timeout: timeoutMs }),
+    );
+}
+
+/** A hung probe ends as unreadable (a warning), never a stuck install. */
+export const AVX_TIMEOUT_MS = 15_000;
+
+function powershell(command, env = {}, options = {}) {
     return execCapture(
         'powershell.exe',
         [
@@ -925,7 +939,7 @@ function powershell(command, env = {}) {
             '-Command',
             command,
         ],
-        { env: { ...process.env, ...env } },
+        { env: { ...process.env, ...env }, ...options },
     );
 }
 
@@ -1113,6 +1127,7 @@ export function windowsContext(env = process.env, out) {
                     16,
                 ),
                 chrome: chrome.code === 0,
+                avx: await readAvx(),
                 servicesInstalled,
                 portsBusy,
                 portsForeign,

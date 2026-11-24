@@ -16,7 +16,11 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { classifyWindows } from '../proof/policy.mjs';
+import {
+    AVX_PROBE_COMMAND,
+    classifyWindows,
+    parseAvxProbe,
+} from '../proof/policy.mjs';
 
 import {
     LAN_SERVICE,
@@ -480,19 +484,7 @@ export async function runChecks(ctx, options) {
                     'Get-PhysicalDisk | Select-Object FriendlyName,MediaType,BusType,Size | ConvertTo-Json',
                 ),
             );
-            // PF_AVX_INSTRUCTIONS_AVAILABLE (39); [char]34 avoids quoting issues.
-            const avxRun = ctx.run(
-                ...ps(
-                    "Add-Type -Namespace Gpos -Name Cpu -MemberDefinition ('[DllImport(' + [char]34 + 'kernel32.dll' + [char]34 + ')] public static extern bool IsProcessorFeaturePresent(uint f);'); [Gpos.Cpu]::IsProcessorFeaturePresent(39)",
-                ),
-            );
-            const avxText = String(avxRun.stdout ?? '').trim();
-            const avx =
-                avxRun.code === 0 && /^true$/i.test(avxText)
-                    ? true
-                    : avxRun.code === 0 && /^false$/i.test(avxText)
-                      ? false
-                      : null;
+            const avx = parseAvxProbe(ctx.run(...ps(AVX_PROBE_COMMAND)));
             const { problems, warnings, windows10_22H2 } = classifyWindows({
                 caption: os?.Caption,
                 productType: Number(os?.ProductType),

@@ -46,13 +46,14 @@ import { leaseRefusal, lossChecks, restore } from '../backup/restore.mjs';
 import { verifyTree } from '../installer/bundle.mjs';
 import {
     lanAddressFacts,
+    readAvx,
     readReleaseRecord,
     placeRelease,
     readBundle,
     runInstaller,
     windowsContext,
 } from '../installer/install.mjs';
-import { MIN_FREE, stopOrder } from '../installer/plan.mjs';
+import { MIN_FREE, avxPreflight, stopOrder } from '../installer/plan.mjs';
 import { diagnose } from '../diagnostics/diagnose.mjs';
 import {
     MIGRATIONS,
@@ -491,7 +492,14 @@ export async function runUpgrade(options, ctx, log = () => {}) {
             );
 
         if (!resuming) {
-            // preflight: read-only.
+            // preflight: read-only. AVX first (#489): known absent refuses
+            // before anything else is read; unreadable only warns.
+            if (ctx.readAvx) {
+                const cpu = avxPreflight(await ctx.readAvx());
+                if (cpu.refusals.length)
+                    throw new RefusedError(cpu.refusals.join(' '));
+                for (const warning of cpu.warnings) log(`warning: ${warning}`);
+            }
             const state = await readJson(
                 join(paths.dirs.state, 'installer.json'),
             ).catch(() => undefined);
@@ -983,6 +991,7 @@ export function upgradeContext(env = process.env) {
         },
         freeBytes,
         lanAddressFacts,
+        readAvx,
         readiness: (dataRoot, release) =>
             diagnosticsReadiness(dataRoot, release),
         apiDir: (release) => releaseLayout(release).api,

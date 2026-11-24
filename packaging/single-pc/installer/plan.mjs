@@ -167,6 +167,23 @@ export function serviceAccount(name) {
     return `NT SERVICE\\${name}`;
 }
 
+/** The refusal when the CPU is known to lack AVX (#489, owner decision 2026-11-24). */
+export const AVX_REFUSAL =
+    "This PC's processor is too old for Grocery POS (it lacks AVX, which the database needs).";
+/** The warning when AVX support could not be read. */
+export const AVX_UNKNOWN_WARNING =
+    "Could not read whether this PC's processor supports AVX, which the database needs; continuing. If the database does not start, the processor may not support AVX.";
+
+/**
+ * AVX rule for install, repair and upgrade preflight: `avx` false refuses,
+ * anything but true warns.
+ */
+export function avxPreflight(avx) {
+    if (avx === false) return { refusals: [AVX_REFUSAL], warnings: [] };
+    if (avx !== true) return { refusals: [], warnings: [AVX_UNKNOWN_WARNING] };
+    return { refusals: [], warnings: [] };
+}
+
 /**
  * Preflight decision from collected facts. Returns refusals (nothing may be
  * written) and warnings. `mode` is install, repair or uninstall.
@@ -198,6 +215,10 @@ export function evaluatePreflight(facts, mode) {
     }
     if (!facts.isAdmin) refusals.push('Run the installer as an administrator.');
     if (mode === 'uninstall') return { refusals, warnings };
+
+    const cpu = avxPreflight(facts.avx);
+    refusals.push(...cpu.refusals);
+    warnings.push(...cpu.warnings);
 
     if (!(facts.dotNetRelease >= MIN_DOTNET_RELEASE)) {
         refusals.push('.NET Framework 4.6.1 or later is required (WinSW).');

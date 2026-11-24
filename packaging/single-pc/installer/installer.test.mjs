@@ -42,6 +42,8 @@ import {
     parseLanAddress,
     runInstaller,
     utf16,
+    AVX_TIMEOUT_MS,
+    execCapture,
 } from './install.mjs';
 import {
     HANDOVER_FILE,
@@ -63,6 +65,9 @@ import {
     releasesToPrune,
     backupTaskXml,
     evaluatePreflight,
+    AVX_REFUSAL,
+    AVX_UNKNOWN_WARNING,
+    avxPreflight,
     isSupportedWindowsBuild,
     FIREWALL_RULE,
     firewallSteps,
@@ -394,6 +399,8 @@ test('the bundle has the full release layout and a manifest of every file', asyn
     await rm(dir, { recursive: true });
 });
 
+import { AVX_PROBE_COMMAND, parseAvxProbe } from '../proof/policy.mjs';
+
 // ------------------------------------------------------------ plan
 
 const okFacts = {
@@ -404,6 +411,7 @@ const okFacts = {
     isAdmin: true,
     dotNetRelease: 533320,
     chrome: true,
+    avx: true,
     servicesInstalled: [],
     portsBusy: [],
     freeBytes: { program: 10 * 1024 ** 3, data: 50 * 1024 ** 3 },
@@ -2015,4 +2023,58 @@ test('preflight accepts Windows 10 and warns below 22H2 (#488)', () => {
     );
     assert.equal(isSupportedWindowsBuild(10239), false);
     assert.equal(isSupportedWindowsBuild(21999), false);
+});
+
+test('preflight refuses a CPU without AVX and warns when unreadable (#489)', () => {
+    for (const mode of ['install', 'repair']) {
+        const base = {
+            ...okFacts,
+            dataRoot: mode === 'repair' ? 'ours' : 'new',
+        };
+        assert.deepEqual(
+            evaluatePreflight({ ...base, avx: false }, mode).refusals,
+            [AVX_REFUSAL, ...evaluatePreflight(base, mode).refusals],
+        );
+        for (const avx of [null, undefined]) {
+            const { refusals, warnings } = evaluatePreflight(
+                { ...base, avx },
+                mode,
+            );
+            assert.deepEqual(refusals, []);
+            assert.deepEqual(warnings, [AVX_UNKNOWN_WARNING]);
+        }
+    }
+    assert.equal(
+        AVX_REFUSAL,
+        "This PC's processor is too old for Grocery POS (it lacks AVX, which the database needs).",
+    );
+    assert.deepEqual(
+        evaluatePreflight({ ...okFacts, avx: false }, 'uninstall').refusals,
+        [],
+    );
+    assert.deepEqual(avxPreflight(true), { refusals: [], warnings: [] });
+    assert.deepEqual(avxPreflight(false).refusals, [AVX_REFUSAL]);
+});
+
+test('the AVX probe output parses to true, false or unknown (#489)', () => {
+    assert.match(AVX_PROBE_COMMAND, /IsProcessorFeaturePresent\(39\)/);
+    assert.match(AVX_PROBE_COMMAND, /\[char\]34/);
+    assert.equal(parseAvxProbe({ code: 0, stdout: 'True\r\n' }), true);
+    assert.equal(parseAvxProbe({ code: 0, stdout: 'False' }), false);
+    assert.equal(parseAvxProbe({ code: 0, stdout: '' }), null);
+    assert.equal(parseAvxProbe({ code: 1, stdout: 'True' }), null);
+    assert.equal(parseAvxProbe(), null);
+});
+
+test('a hung probe ends at its timeout as unreadable (#489)', async () => {
+    assert.equal(AVX_TIMEOUT_MS, 15_000);
+    const started = Date.now();
+    const run = await execCapture(
+        process.execPath,
+        ['-e', 'setTimeout(() => console.log("True"), 10000)'],
+        { timeout: 200 },
+    );
+    assert.ok(Date.now() - started < 5000);
+    assert.notEqual(run.code, 0);
+    assert.equal(parseAvxProbe(run), null);
 });

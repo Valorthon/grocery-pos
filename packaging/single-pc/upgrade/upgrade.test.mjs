@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import { layout } from '../runtime/layout.mjs';
 import { REQUIRED_RELEASE_FILES, TOOL_DIRS } from '../installer/bundle.mjs';
 import { runInstaller } from '../installer/install.mjs';
+import { AVX_REFUSAL, AVX_UNKNOWN_WARNING } from '../installer/plan.mjs';
 import { KINDS, ID_PATTERN, backupId } from '../backup/backup.mjs';
 import {
     DATA_VERSION,
@@ -32,6 +33,8 @@ import {
     parseArgs,
     recoveryPlan,
     releaseData,
+    readJournal,
+    runUpgrade,
 } from './upgrade.mjs';
 import {
     makeBundle,
@@ -592,4 +595,41 @@ test('a restore checks the backup data version against the release', async () =>
         }).join(),
         /migrates from 2 only/,
     );
+});
+
+test('upgrade preflight refuses a CPU without AVX before anything else (#489)', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'gpos-upgrade-'));
+    try {
+        const b = await makeBundle(dir, {
+            version: '1.1.0-b',
+            appVersion: '1.1.0',
+            migrations: testMigrations(),
+            dataVersion: 2,
+        });
+        const ctx = {
+            ...posixContext(dir, {}),
+            migrations: testMigrations(),
+            readAvx: async () => false,
+        };
+        const paths = layout(ctx.locations.dataRoot);
+        await mkdir(paths.dirs.state, { recursive: true });
+        await assert.rejects(
+            runUpgrade(b, ctx),
+            (e) => e.name === 'RefusedError' && e.message === AVX_REFUSAL,
+        );
+        assert.equal(await readJournal(paths), undefined, 'no journal');
+        assert.equal(ctx.log.length, 0, 'nothing stopped or ran');
+
+        // Unreadable: a warning, then the normal preflight goes on.
+        const lines = [];
+        ctx.readAvx = async () => null;
+        await assert.rejects(
+            runUpgrade(b, ctx, (line) => lines.push(line)),
+            /not completely installed/,
+        );
+        assert.deepEqual(lines, [`warning: ${AVX_UNKNOWN_WARNING}`]);
+        assert.equal(ctx.log.length, 0);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });

@@ -53,6 +53,7 @@ import {
     isPrivateIpv4,
     layout,
 } from '../runtime/layout.mjs';
+import { AVX_PROBE_COMMAND, parseAvxProbe } from '../proof/policy.mjs';
 
 export const EXIT = { OK: 0, ATTENTION: 1, USAGE: 2, UNVERIFIED: 3 };
 export const STATUS_RANK = { ok: 0, info: 0, unknown: 1, warn: 2, fail: 3 };
@@ -163,6 +164,10 @@ export const GUIDANCE = Object.freeze({
     ],
     serviceMissing: [
         'A Grocery POS service is not installed. Ask your vendor to run the installer in repair mode.',
+    ],
+    // #489: added to a database that does not answer when AVX is absent or unknown.
+    noAvx: [
+        'The processor may not support AVX, which the database needs. If this PC is old, see RECOVERY.md "The database or API does not start" and contact your vendor.',
     ],
     portClosed: [
         'The service is not answering on its port. Wait 5 minutes after a restart (the database may be recovering), then run this check again.',
@@ -674,12 +679,19 @@ export async function checkLanNetwork(ctx, paths) {
 export async function checkDatabase(ctx, apiDir) {
     const hello = await ctx.mongoHello(apiDir);
     if (hello.error) {
+        // #489: an old CPU without AVX cannot run the database at all.
+        const avx = ctx.avx ? await ctx.avx() : true;
+        const hint = avx !== true;
         return result(
             'database',
             'Database',
             'fail',
-            `The database does not answer (${hello.error}).`,
-            { steps: GUIDANCE.portClosed },
+            `The database does not answer (${hello.error})${hint ? '; the processor may not support AVX' : ''}.`,
+            {
+                steps: hint
+                    ? [...GUIDANCE.noAvx, ...GUIDANCE.portClosed]
+                    : GUIDANCE.portClosed,
+            },
         );
     }
     const details = {
@@ -1602,6 +1614,17 @@ export function realContext() {
             return firewallState(stdout);
         },
         tlsHandshake,
+        async avx() {
+            if (!windows) return null;
+            return parseAvxProbe(
+                await execCapture('powershell.exe', [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    AVX_PROBE_COMMAND,
+                ]),
+            );
+        },
         async mongoHello(apiDir) {
             if (!apiDir) return { error: 'release not found' };
             let client;
