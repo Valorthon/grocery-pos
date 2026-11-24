@@ -193,6 +193,39 @@ describe('diagnose', () => {
         assert.equal(byId(report, 'database').status, 'fail');
     });
 
+    test('a database that does not answer hints at AVX when absent or unknown (#489)', async () => {
+        for (const avx of [false, null]) {
+            const check = byId(
+                await diagnose(
+                    { dataRoot: root },
+                    healthy({
+                        avx: async () => avx,
+                        mongoHello: async () => ({ error: 'ECONNREFUSED' }),
+                    }),
+                ),
+                'database',
+            );
+            assert.equal(check.status, 'fail');
+            assert.match(check.summary, /the processor may not support AVX/);
+            assert.deepEqual(check.steps, [
+                ...GUIDANCE.noAvx,
+                ...GUIDANCE.portClosed,
+            ]);
+        }
+        const withAvx = byId(
+            await diagnose(
+                { dataRoot: root },
+                healthy({
+                    avx: async () => true,
+                    mongoHello: async () => ({ error: 'ECONNREFUSED' }),
+                }),
+            ),
+            'database',
+        );
+        assert.doesNotMatch(withAvx.summary, /AVX/);
+        assert.deepEqual(withAvx.steps, GUIDANCE.portClosed);
+    });
+
     test('database recovering (not primary)', async () => {
         const report = await diagnose(
             { dataRoot: root },

@@ -14,6 +14,24 @@ export const WINDOWS_10_22H2_BUILD = 19045;
 export const WINDOWS_11_MIN_BUILD = 22000;
 
 /**
+ * PowerShell that prints whether the CPU has AVX
+ * (IsProcessorFeaturePresent(PF_AVX_INSTRUCTIONS_AVAILABLE = 39)); [char]34
+ * avoids quoting issues. Shared by the acceptance harness, the installer and
+ * diagnostics (#489).
+ */
+export const AVX_PROBE_COMMAND =
+    "Add-Type -Namespace Gpos -Name Cpu -MemberDefinition ('[DllImport(' + [char]34 + 'kernel32.dll' + [char]34 + ')] public static extern bool IsProcessorFeaturePresent(uint f);'); [Gpos.Cpu]::IsProcessorFeaturePresent(39)";
+
+/** true/false from the probe's exit code and output, null when unreadable. */
+export function parseAvxProbe({ code, stdout } = {}) {
+    if (code !== 0) return null;
+    const text = String(stdout ?? '').trim();
+    if (/^true$/i.test(text)) return true;
+    if (/^false$/i.test(text)) return false;
+    return null;
+}
+
+/**
  * The one Windows edition/build/AVX rule set (owner decision 2026-11-24),
  * shared by the proof guard and the acceptance harness: a Windows 10
  * (10240-19045) or Windows 11 (22000+) client edition (ProductType 1) whose

@@ -52,6 +52,9 @@ Signs: the page says it cannot reach the server; the check shows **Services**,
    **repair** mode from the bundle (installer README "Repair"). Repair keeps
    the data.
 6. Disk full is a common cause: check **Disk space**.
+7. If **Database** says "the processor may not support AVX", this PC's
+   processor may be too old for the database (it needs AVX). Restarting will
+   not help: call the vendor.
 
 Vendor: service logs are in `logs\api\` and `logs\proxy\`, the database's in
 `logs\mongod.log`. The check prints their last errors with secrets removed.

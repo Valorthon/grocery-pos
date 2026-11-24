@@ -46,13 +46,14 @@ import { leaseRefusal, lossChecks, restore } from '../backup/restore.mjs';
 import { verifyTree } from '../installer/bundle.mjs';
 import {
     lanAddressFacts,
+    readAvx,
     readReleaseRecord,
     placeRelease,
     readBundle,
     runInstaller,
     windowsContext,
 } from '../installer/install.mjs';
-import { MIN_FREE, stopOrder } from '../installer/plan.mjs';
+import { MIN_FREE, avxPreflight, stopOrder } from '../installer/plan.mjs';
 import { diagnose } from '../diagnostics/diagnose.mjs';
 import {
     MIGRATIONS,
@@ -563,6 +564,12 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                 releaseBytes: bundle.releaseBytes,
             });
             refusals.push(...db.migrationRefusals);
+            // AVX (#489): known absent refuses, unreadable only warns.
+            if (ctx.readAvx) {
+                const cpu = avxPreflight(await ctx.readAvx());
+                refusals.push(...cpu.refusals);
+                for (const warning of cpu.warnings) log(`warning: ${warning}`);
+            }
             if (refusals.length) throw new RefusedError(refusals.join(' '));
             // LAN terminals (#396): a kept LAN IP that is absent right now is
             // a warning only; the switch's repair keeps it either way.
@@ -983,6 +990,7 @@ export function upgradeContext(env = process.env) {
         },
         freeBytes,
         lanAddressFacts,
+        readAvx,
         readiness: (dataRoot, release) =>
             diagnosticsReadiness(dataRoot, release),
         apiDir: (release) => releaseLayout(release).api,

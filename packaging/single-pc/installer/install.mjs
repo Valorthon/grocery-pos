@@ -35,7 +35,11 @@ import { release as osRelease } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tailFile } from '../diagnostics/diagnose.mjs';
-import { boundedWait } from '../proof/policy.mjs';
+import {
+    AVX_PROBE_COMMAND,
+    boundedWait,
+    parseAvxProbe,
+} from '../proof/policy.mjs';
 import { acquireLock, provision, releaseLock } from '../runtime/provision.mjs';
 import {
     APP_DATABASE,
@@ -914,6 +918,11 @@ function execCapture(file, args, options = {}) {
     });
 }
 
+/** Whether the CPU has AVX (#489): true, false or null when unreadable. */
+export async function readAvx() {
+    return parseAvxProbe(await powershell(AVX_PROBE_COMMAND));
+}
+
 function powershell(command, env = {}) {
     return execCapture(
         'powershell.exe',
@@ -1113,6 +1122,7 @@ export function windowsContext(env = process.env, out) {
                     16,
                 ),
                 chrome: chrome.code === 0,
+                avx: await readAvx(),
                 servicesInstalled,
                 portsBusy,
                 portsForeign,
