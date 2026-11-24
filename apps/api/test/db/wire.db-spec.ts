@@ -736,6 +736,17 @@ describe('products, stock and history', () => {
             ),
             PRODUCT_MATCH_SHAPE,
         );
+        expectEach(
+            'GET /products/matches?withStock=true',
+            await send(
+                seller,
+                'GET',
+                '/products/matches?name=item&withStock=true',
+                undefined,
+                200,
+            ),
+            PRODUCT_MATCH_SHAPE,
+        );
     });
 
     it('GET /inventories/expiry-tracking answers ExpiryTrackingView (#233)', async () => {

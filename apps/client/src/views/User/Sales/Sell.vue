@@ -518,13 +518,22 @@ watch(
         const warned = stockWarning.value?.product;
         if (warned && !cartStore.items.some((i) => i.product === warned))
             stockWarning.value = null;
-        const kept = Object.entries(stockHints.value).filter(([product]) =>
-            cartStore.items.some((i) => i.product === product),
-        );
-        if (kept.length !== Object.keys(stockHints.value).length)
-            stockHints.value = Object.fromEntries(kept);
+        pruneStockHints();
     },
 );
+/**
+ * Drops the hints of lines that are gone, except the one a pending Undo
+ * may put back (#482 review).
+ */
+function pruneStockHints() {
+    const kept = Object.entries(stockHints.value).filter(
+        ([product]) =>
+            product === undo.value?.item.product ||
+            cartStore.items.some((i) => i.product === product),
+    );
+    if (kept.length !== Object.keys(stockHints.value).length)
+        stockHints.value = Object.fromEntries(kept);
+}
 const isCheckoutOpen = ref(false);
 const isReceiptOpen = ref(false);
 const checkoutMethod = ref<PaymentType>(PaymentType.CASH);
@@ -803,7 +812,10 @@ function removeLine(product: string, toScanBox = false) {
 
     dismissUndo();
     undo.value = removed;
-    undoTimer = setTimeout(dismissUndo, UNDO_MS);
+    undoTimer = setTimeout(() => {
+        dismissUndo();
+        pruneStockHints();
+    }, UNDO_MS);
 
     // The selection moves to the line that took its place (or the one
     // before), so Delete can go on removing.

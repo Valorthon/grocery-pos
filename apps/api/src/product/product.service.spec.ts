@@ -159,7 +159,7 @@ describe('ProductService.getMatches', () => {
     let service: ProductService;
     let find: jest.Mock;
     let limit: jest.Mock;
-    let sellableStock: jest.Mock;
+    let sellableStocks: jest.Mock;
 
     beforeEach(async () => {
         limit = jest.fn().mockReturnValue({
@@ -173,7 +173,11 @@ describe('ProductService.getMatches', () => {
                     },
                 ]),
         });
-        sellableStock = jest.fn().mockResolvedValue(3);
+        sellableStocks = jest
+            .fn()
+            .mockImplementation((list: Array<{ _id: unknown }>) =>
+                Promise.resolve(new Map([[String(list[0]._id), 3]])),
+            );
         find = jest.fn().mockReturnValue({ sort: () => ({ limit }) });
 
         const moduleRef = await Test.createTestingModule({
@@ -190,7 +194,7 @@ describe('ProductService.getMatches', () => {
                 { provide: getModelToken(Product.name), useValue: { find } },
                 {
                     provide: InventoryService,
-                    useValue: { sellableStock },
+                    useValue: { sellableStocks },
                 },
                 { provide: EanCounterService, useValue: {} },
             ],
@@ -240,7 +244,7 @@ describe('ProductService.getMatches', () => {
             name: 'milk',
             product: expect.any(String),
         });
-        expect(sellableStock).not.toHaveBeenCalled();
+        expect(sellableStocks).not.toHaveBeenCalled();
     });
 
     it('adds the stock hint and low stock level for the register (#482)', async () => {
@@ -250,12 +254,12 @@ describe('ProductService.getMatches', () => {
         } as MatchesDto);
 
         expect(find.mock.calls[0][1]).toContain('reorderLevel');
-        expect(sellableStock).toHaveBeenCalledWith(expect.anything(), false);
+        expect(sellableStocks).toHaveBeenCalledTimes(1);
         expect(match).toMatchObject({ stock: 3, reorderLevel: 4 });
     });
 
     it('leaves the stock out without an inventory row (#482)', async () => {
-        sellableStock.mockResolvedValue(undefined);
+        sellableStocks.mockResolvedValue(new Map());
         const [match] = await service.getMatches({
             name: 'mi',
             withStock: true,

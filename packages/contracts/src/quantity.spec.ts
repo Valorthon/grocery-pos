@@ -169,6 +169,9 @@ describe('lowStockHint (#482)', () => {
         );
         expect(lowStockHint({ stock: 6, reorderLevel: 5 })).toBeNull();
         expect(
+            lowStockHint({ stock: 2001, unit: U.KG, reorderLevel: 2000 }),
+        ).toBeNull();
+        expect(
             lowStockHint({ stock: 1500, unit: U.KG, reorderLevel: 2000 }),
         ).toBe('Low stock (1.500 kg left)');
         expect(lowStockHint({ stock: 10 })).toBe('Low stock (10 pc left)');

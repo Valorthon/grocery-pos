@@ -541,29 +541,25 @@ export class ProductService {
         }>;
 
         const stocks = withStock
-            ? await Promise.all(
-                  matches.map((match) =>
-                      this.inventoryService.sellableStock(
-                          match._id,
-                          match.tracksExpiry === true,
-                      ),
-                  ),
-              )
-            : [];
+            ? await this.inventoryService.sellableStocks(matches)
+            : new Map<string, number>();
 
-        return matches.map((match, i) => ({
-            EAN: match.EAN,
-            name: match.name,
-            product: match._id.toString(),
-            ...(match.tracksExpiry !== undefined && {
-                tracksExpiry: match.tracksExpiry,
-            }),
-            ...(match.unit && { unit: match.unit }),
-            ...(stocks[i] !== undefined && { stock: stocks[i] }),
-            ...(withStock &&
-                match.reorderLevel !== undefined && {
-                    reorderLevel: match.reorderLevel,
+        return matches.map((match) => {
+            const stock = stocks.get(match._id.toString());
+            return {
+                EAN: match.EAN,
+                name: match.name,
+                product: match._id.toString(),
+                ...(match.tracksExpiry !== undefined && {
+                    tracksExpiry: match.tracksExpiry,
                 }),
-        }));
+                ...(match.unit && { unit: match.unit }),
+                ...(stock !== undefined && { stock }),
+                ...(withStock &&
+                    match.reorderLevel !== undefined && {
+                        reorderLevel: match.reorderLevel,
+                    }),
+            };
+        });
     }
 }

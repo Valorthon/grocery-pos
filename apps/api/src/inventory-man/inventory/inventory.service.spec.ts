@@ -287,6 +287,37 @@ describe('InventoryService.sell', () => {
         await expect(service.sellableStock(id, false)).resolves.toBe(-1);
     });
 
+    it('sellableStocks: one read, rows only, tracked capped by lots (#482)', async () => {
+        const a = new Types.ObjectId();
+        const b = new Types.ObjectId();
+        const c = new Types.ObjectId();
+        const batches = moduleBatches() as unknown as {
+            sellableQty: jest.Mock;
+        };
+        batches.sellableQty = jest.fn().mockResolvedValue(2);
+        find.mockReturnValueOnce({
+            lean: () =>
+                Promise.resolve([
+                    { product: a, stock: 7 },
+                    { product: b, stock: 9 },
+                ]),
+        });
+        const stocks = await service.sellableStocks([
+            { _id: a },
+            { _id: b, tracksExpiry: true },
+            { _id: c },
+        ]);
+        expect(find).toHaveBeenCalledTimes(1);
+        expect(stocks).toEqual(
+            new Map([
+                [a.toString(), 7],
+                [b.toString(), 2],
+            ]),
+        );
+        expect(batches.sellableQty).toHaveBeenCalledTimes(1);
+        await expect(service.sellableStocks([])).resolves.toEqual(new Map());
+    });
+
     it('reports pre-sale stock when an earlier line succeeded', async () => {
         // p1 6 of 10 applies; p2 20 of 5 is blocked. p1 must not be listed.
         find.mockReturnValue(

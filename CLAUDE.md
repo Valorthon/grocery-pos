@@ -840,11 +840,15 @@ requestId}`. A 5xx never carries details or internals.
   `InsufficientStockLine`s (netted per product, every short product) in
   `details`; the checkout error names them in display units.
 - Low-stock hint (#482, owner decision 2026-11-24): register matches
-  (`GET /products/matches?withStock=true` adds `stock` and stored
-  `reorderLevel`) and ticket lines show contracts `lowStockHint`: "Out of
-  stock" at stock ≤ 0, else "Low stock (N left)" at or below
-  `reorderLevelOf`, N in display units. No stock (no inventory row) or
-  offline shows none; #422's over-quantity warning is unchanged.
+  (`GET /products/matches?withStock=true` adds the sellable `stock`, one
+  `$in` read via `sellableStocks`, and stored `reorderLevel`) and ticket
+  lines show contracts `lowStockHint`: "Out of stock" at stock ≤ 0, else
+  "Low stock (N left)" at or below `reorderLevelOf`, N in display units.
+  It uses sellable stock (unexpired lots for tracked products), so it can
+  differ from the dashboard's aggregate low-stock count. No stock (no
+  inventory row) or offline shows none; Undo keeps a line's hint; lines
+  reloaded from storage or resumed from a parked ticket show none until
+  scanned again. #422's over-quantity warning is unchanged.
 - Basket, discount and checkout attempt (`idempotencyKey`) are kept per
   cashier in localStorage `grocery_pos_cart_v1:<userId>`, so a reload
   retries the same key and can't double-charge. Cleared on sale, void and

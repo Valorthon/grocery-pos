@@ -519,6 +519,42 @@ export class InventoryService {
     }
 
     /**
+     * `sellableStock` for several products with one inventory read (#482):
+     * ids without a row are left out; tracked ones are capped by their lots.
+     */
+    async sellableStocks(
+        products: ReadonlyArray<{
+            _id: Types.ObjectId;
+            tracksExpiry?: boolean;
+        }>,
+    ): Promise<Map<string, number>> {
+        const result = new Map<string, number>();
+        if (products.length === 0) return result;
+        const rows = await this.model
+            .find(
+                { product: { $in: products.map((p) => p._id) } },
+                { product: 1, stock: 1 },
+            )
+            .lean<Array<{ product: Types.ObjectId; stock: number }>>();
+        const stockOf = new Map(
+            rows.map((r) => [r.product.toString(), r.stock]),
+        );
+        await Promise.all(
+            products.map(async ({ _id, tracksExpiry }) => {
+                const stock = stockOf.get(_id.toString());
+                if (stock === undefined) return;
+                result.set(
+                    _id.toString(),
+                    tracksExpiry === true
+                        ? Math.min(await this.batches.sellableQty(_id), stock)
+                        : stock,
+                );
+            }),
+        );
+        return result;
+    }
+
+    /**
      * Sells stock. Quantities are summed per product so each product gets a
      * single guarded decrement, and shortfalls are reported against stock
      * read before the write (see adjust() for why). `userId` is the

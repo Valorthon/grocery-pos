@@ -1318,6 +1318,22 @@ describe('Sell stock warning (#422)', () => {
         expect(lineHint()).toBeNull();
     });
 
+    it('keeps the hint when Undo puts the line back (#482 review)', async () => {
+        withStock(0);
+        mount();
+        await scanMilk();
+        button('Remove milk').click();
+        await flush();
+        expect(lineHint()).toBeNull();
+        const undoButton = [
+            ...document.querySelectorAll<HTMLButtonElement>('button'),
+        ].find((b) => b.textContent?.trim() === 'Undo')!;
+        undoButton.click();
+        await flush();
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(lineHint()).toBe('Out of stock');
+    });
+
     it('hints at the low stock level and not above it (#482)', async () => {
         serve(
             () => Promise.resolve([]),
