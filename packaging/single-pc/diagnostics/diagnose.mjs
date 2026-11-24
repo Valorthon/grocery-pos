@@ -262,7 +262,8 @@ function adminUnverified(check) {
 }
 
 /** True when some check is not OK and every such check is an
- *  administrator-rights unknown (versions, backups, proxy probe). */
+ *  administrator-rights unknown (versions, backups, proxy probe, clock
+ *  sync time source). */
 export function onlyAdminUnverified(report) {
     const notOk = report.checks.filter(
         (c) => c.status !== 'ok' && c.status !== 'info',
@@ -1000,18 +1001,6 @@ export async function checkClockSync(ctx) {
         );
     if (state === 'RUNNING' && syncedSource(source) === false)
         return warn('Windows is not syncing this PC clock with a time server.');
-    // #481: `w32tm /query /source` needs administrator rights, so a
-    // running service with an unreadable source is unverified, never ok.
-    if (state === 'RUNNING' && source === null)
-        return adminUnverified(
-            result(
-                'clockSync',
-                title,
-                'unknown',
-                `The Windows time source could not be read: ${UNVERIFIED_ADMIN}.`,
-                { details },
-            ),
-        );
     if (state === null || startType === null || syncType === null)
         return result(
             'clockSync',
@@ -1022,6 +1011,28 @@ export async function checkClockSync(ctx) {
                 details,
             },
         );
+    // #481: a running service whose source can't be read is never ok.
+    // Only access denied (`w32tm` needs administrator rights) is the
+    // admin-only unverified case; any other failure is a plain unknown.
+    if (state === 'RUNNING' && source === null) {
+        if (facts?.sourceDenied === true)
+            return adminUnverified(
+                result(
+                    'clockSync',
+                    title,
+                    'unknown',
+                    `The Windows time source could not be read: ${UNVERIFIED_ADMIN}.`,
+                    { details },
+                ),
+            );
+        return result(
+            'clockSync',
+            title,
+            'unknown',
+            'Could not read the Windows time source.',
+            { details },
+        );
+    }
     return result(
         'clockSync',
         title,
@@ -1422,7 +1433,10 @@ export function parseClockSync(stdout) {
     const read = (k) =>
         !values[k] || values[k] === 'error' ? null : values[k];
     const svc = read('svc');
+    // #481: `sync=denied` is w32tm's access denied (0x80070005), set only then.
+    const denied = values.sync === 'denied' ? { sourceDenied: true } : {};
     return {
+        ...denied,
         state: !svc
             ? null
             : svc === 'notfound'
@@ -1430,7 +1444,7 @@ export function parseClockSync(stdout) {
               : serviceStateFromStatus(svc),
         startType: read('start'),
         syncType: read('type'),
-        source: read('sync'),
+        source: values.sync === 'denied' ? null : read('sync'),
     };
 }
 
@@ -1550,7 +1564,7 @@ export function realContext() {
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
-                "try { $s = Get-Service -Name 'w32time' -ErrorAction Stop; 'svc=' + [string]$s.Status; 'start=' + [string]$s.StartType } catch [Microsoft.PowerShell.Commands.ServiceCommandException] { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'svc=notfound' } else { 'svc=error' } } catch { 'svc=error' }; try { 'type=' + [string](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\Parameters' -Name Type -ErrorAction Stop).Type } catch { 'type=error' }; $o = & w32tm.exe /query /source 2>$null; if ($LASTEXITCODE -eq 0 -and $o) { 'sync=' + [string]($o | Select-Object -First 1) } else { 'sync=error' }",
+                "try { $s = Get-Service -Name 'w32time' -ErrorAction Stop; 'svc=' + [string]$s.Status; 'start=' + [string]$s.StartType } catch [Microsoft.PowerShell.Commands.ServiceCommandException] { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'svc=notfound' } else { 'svc=error' } } catch { 'svc=error' }; try { 'type=' + [string](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\W32Time\\Parameters' -Name Type -ErrorAction Stop).Type } catch { 'type=error' }; $o = & w32tm.exe /query /source 2>&1; if ($LASTEXITCODE -eq 0 -and $o) { 'sync=' + [string]($o | Select-Object -First 1) } elseif ($LASTEXITCODE -eq -2147024891 -or (($o | Out-String) -match '0x80070005')) { 'sync=denied' } else { 'sync=error' }",
             ]);
             return code === 0 ? parseClockSync(stdout) : null;
         },

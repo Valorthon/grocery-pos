@@ -835,12 +835,31 @@ describe('diagnose', () => {
                     startType: 'Manual',
                     syncType: 'NTP',
                     source: null,
+                    sourceDenied: true,
                 }),
             }),
         );
         assert.equal(byId(report, 'clockSync').status, 'unknown');
         assert.ok(onlyAdminUnverified(report));
         assert.equal(checkExitCode(report), EXIT.UNVERIFIED);
+    });
+
+    test('clockSync with a source unreadable for another reason: exit 1 (#481)', async () => {
+        await healthyBackups();
+        const report = await diagnose(
+            { dataRoot: root },
+            healthy({
+                clockSync: async () => ({
+                    state: 'RUNNING',
+                    startType: 'Manual',
+                    syncType: 'NTP',
+                    source: null,
+                }),
+            }),
+        );
+        assert.equal(byId(report, 'clockSync').status, 'unknown');
+        assert.ok(!onlyAdminUnverified(report));
+        assert.equal(checkExitCode(report), EXIT.ATTENTION);
     });
 
     test('proxy probe without the root alone: exit 3; all ok: exit 0 (#456)', async () => {
@@ -928,6 +947,9 @@ describe('diagnose', () => {
             { ...base, state: null },
             { ...base, startType: null },
             { ...base, syncType: null },
+            // #481: unreadable settings stay a real fault, even denied.
+            { ...base, syncType: null, source: null },
+            { ...base, syncType: null, source: null, sourceDenied: true },
         ])
             assert.equal(
                 (await run(facts)).status,
@@ -936,9 +958,13 @@ describe('diagnose', () => {
             );
         // #481: a running service whose source is unreadable (no admin) is
         // unverified, not ok and not a warning.
+        const denied = await run({ ...base, source: null, sourceDenied: true });
+        assert.equal(denied.status, 'unknown');
+        assert.match(denied.summary, /unverified \(run as administrator\)/);
+        // Any other unreadable source is a plain unknown, not admin-only.
         const unread = await run({ ...base, source: null });
         assert.equal(unread.status, 'unknown');
-        assert.match(unread.summary, /unverified \(run as administrator\)/);
+        assert.doesNotMatch(unread.summary, /run as administrator/);
     });
 
     test('parseClockSync', () => {
@@ -970,6 +996,16 @@ describe('diagnose', () => {
                 state: 'absent',
                 startType: null,
                 syncType: 'NoSync',
+                source: null,
+            },
+        );
+        assert.deepEqual(
+            parseClockSync('svc=Running\nstart=Manual\ntype=NTP\nsync=denied'),
+            {
+                sourceDenied: true,
+                state: 'RUNNING',
+                startType: 'Manual',
+                syncType: 'NTP',
                 source: null,
             },
         );
