@@ -14,6 +14,15 @@ describe('normalizeProductName (#443)', () => {
             'E2E TEST RICE 1KG',
         );
     });
+
+    it('turns curly apostrophes and no-break spaces into plain ones (#483)', () => {
+        expect(normalizeProductName('Mama\u2019s \u2018Best\u2019')).toBe(
+            "MAMA'S 'BEST'",
+        );
+        expect(normalizeProductName('\u00A0Rice\u00A01kg\u00A0')).toBe(
+            'RICE 1KG',
+        );
+    });
 });
 
 describe('planProductNameUppercase (#443)', () => {
@@ -93,6 +102,7 @@ describe('product name characters (#483)', () => {
             invalidProductNames([
                 { id: 'a', name: 'RICE' },
                 { id: 'b', name: 'QA 🍎 APPLE' },
+                { id: 'c', name: 'Mama\u2019s\u00A0rice' },
             ]),
         ).toEqual([{ id: 'b', name: 'QA 🍎 APPLE' }]);
     });

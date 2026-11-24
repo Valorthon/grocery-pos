@@ -1,4 +1,4 @@
-import { UnitOfMeasure } from '@grocery-pos/contracts';
+import { UnitOfMeasure, normalizeProductName } from '@grocery-pos/contracts';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Schema as MongooseSchema, Types } from 'mongoose';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
@@ -75,6 +75,9 @@ export class Product {
         required: true,
         unique: true,
         uppercase: true,
+        // Curly apostrophes and no-break spaces too (#483).
+        set: (value: unknown) =>
+            typeof value === 'string' ? normalizeProductName(value) : value,
         maxLength: STRING_LIMITS.PRODUCT_NAME,
     })
     name!: string;

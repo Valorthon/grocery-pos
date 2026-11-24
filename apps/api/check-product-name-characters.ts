@@ -18,12 +18,23 @@ async function main() {
             console.log('Every product name uses only allowed characters.');
             return;
         }
-        console.error(
-            `${invalid.length} product name(s) use characters that are no longer allowed:`,
-        );
-        for (const row of invalid) console.error(`  ${row.label}`);
+        // Active names must be fixed (exit 1); archived ones only warn.
+        const active = invalid.filter((row) => row.isActive !== false);
+        const archived = invalid.filter((row) => row.isActive === false);
+        if (active.length) {
+            console.error(
+                `${active.length} active product name(s) use characters that are no longer allowed:`,
+            );
+            for (const row of active) console.error(`  ${row.label}`);
+        }
+        if (archived.length) {
+            console.warn(
+                `warning: ${archived.length} archived product name(s) use characters that are no longer allowed:`,
+            );
+            for (const row of archived) console.warn(`  ${row.label}`);
+        }
         console.error(INVALID_PRODUCT_NAME_STEPS);
-        process.exitCode = 1;
+        if (active.length) process.exitCode = 1;
     } finally {
         await mongoose.disconnect();
     }

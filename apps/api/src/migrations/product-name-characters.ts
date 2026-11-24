@@ -6,7 +6,8 @@ import {
 } from '@grocery-pos/contracts';
 
 /**
- * #483: lists stored product names that break the character rule (emoji
+ * #483: lists stored product names (active ones first need fixing,
+ * archived ones only warn, owner decision 2026-11-24) that break the character rule (emoji
  * and other symbols). Read-only: nothing is rewritten; an admin renames
  * each listed product in Products (archived ones too) and re-runs this.
  */

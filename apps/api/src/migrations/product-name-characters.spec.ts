@@ -16,6 +16,8 @@ describe('findInvalidProductNames (#483)', () => {
             find: jest.fn().mockReturnValue({
                 toArray: async () => [
                     { _id: A, name: 'PIÑA (1/2 KG)' },
+                    // Valid once normalized: a curly apostrophe (#483).
+                    { _id: new Types.ObjectId(), name: 'Mama\u2019s' },
                     {
                         _id: B,
                         name: 'QA 🍎 APPLE',

@@ -292,6 +292,15 @@ describe('product name characters (#483)', () => {
         },
     );
 
+    it("stores a curly apostrophe and no-break space plainly (MAMA’S → MAMA'S)", async () => {
+        const dto = plainToInstance(NewProductFields, {
+            name: 'Mama\u2019s\u00A0rice',
+            price: 100,
+        });
+        expect(dto.name).toBe("MAMA'S RICE");
+        expect(await validate(dto)).toHaveLength(0);
+    });
+
     it('lets an edit without a name through (a legacy name stays)', async () => {
         const dto = plainToInstance(UpdateBulkDto, {
             updates: [

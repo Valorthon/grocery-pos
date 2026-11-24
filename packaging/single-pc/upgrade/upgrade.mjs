@@ -57,6 +57,7 @@ import { diagnose } from '../diagnostics/diagnose.mjs';
 import {
     MIGRATIONS,
     migrationRefusals,
+    dataCheckWarnings,
     pendingMigrations,
     validateRegistry,
     DATA_VERSION_COLLECTION,
@@ -539,8 +540,13 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                         database.dataVersion,
                         to.data.dataVersion,
                     ),
+                    // Archived product names (#483) only warn.
+                    dataWarnings: await dataCheckWarnings(
+                        root.db(APP_DATABASE),
+                    ),
                 };
             });
+            for (const warning of db.dataWarnings) log(warning);
             const backup = statusSummary(await readStatus(paths));
             const refusals = evaluateUpgrade({
                 from,

@@ -384,11 +384,16 @@ requestId}`. A 5xx never carries details or internals.
   `PRODUCT_NAME_PATTERN` backs `@IsProductName` (create, restock
   `newProduct`, edit) and the client's `productNameError`; message
   `PRODUCT_NAME_CHARACTERS_MESSAGE`. Search DTOs are unchanged. Existing
-  names are never rewritten and still display: Edit Product sends the name
+  names are never rewritten and still display. `normalizeProductName`
+  also turns curly ‘ ’ into `'` and U+00A0 into a space (schema setter,
+  DTOs, client), and stored names are judged in that normalized form, so a
+  legacy `Mama’s` isn't reported (any edit stores `MAMA'S`): Edit Product sends the name
   only when changed, so a legacy one saves, and a rename must pass. Cloud
-  `check:product-name-characters` lists offenders (read-only); single-PC
-  upgrades refuse them via the always-run `DATA_CHECKS` preflight (no
-  data-version bump).
+  `check:product-name-characters` lists offenders as `EAN – NAME
+(archived)` with fix steps (read-only, exit 1 only for active ones);
+  single-PC upgrades run the always-run `DATA_CHECKS` preflight (no
+  data-version bump): active offenders refuse, archived ones only warn
+  (owner decision 2026-11-24).
 - `Inventory.updatedBy` means the last writer.
 
 **Reporting** (#16)

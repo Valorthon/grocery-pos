@@ -223,6 +223,10 @@ describe('productNameError (#483)', () => {
         ).toBe('');
     });
 
+    it('accepts a curly apostrophe or no-break space, stored plain', () => {
+        expect(productNameError('Mama\u2019s\u00A0rice')).toBe('');
+    });
+
     it('refuses emoji and other symbols with the allowed list', () => {
         for (const name of ['QA 🍎 APPLE', 'A<B>', 'A$', 'A#'])
             expect(productNameError(name)).toBe(

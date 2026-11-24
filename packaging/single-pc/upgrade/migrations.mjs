@@ -143,31 +143,60 @@ export const MIGRATIONS = Object.freeze([UPPERCASE_PRODUCT_NAMES]);
 export const PRODUCT_NAME_PATTERN =
     /^(?:(?![\u180B-\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}])[\p{L}\p{Mn}\p{Mc}0-9 .,&'/()%-])*$/u;
 
+/** contracts normalizeProductName (#443, #483). */
+export function normalizeProductName(name) {
+    return String(name)
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/\u00A0/g, ' ')
+        .trim()
+        .toUpperCase();
+}
+
+const NAME_STEPS =
+    "To fix each one in the current release: open Products, set Product status to All, search the barcode, choose Edit, rename it using only letters, numbers, spaces and . , - & ' / ( ) %, and save. Then run the upgrade again.";
+
+/** Stored names invalid in their normalized form, active and archived. */
+async function invalidProductNameRows(db) {
+    const bad = (
+        await db
+            .collection('products')
+            .find({}, { projection: { name: 1, EAN: 1, isActive: 1 } })
+            .toArray()
+    ).filter((r) => !PRODUCT_NAME_PATTERN.test(normalizeProductName(r.name)));
+    return {
+        active: bad.filter((r) => r.isActive !== false),
+        archived: bad.filter((r) => r.isActive === false),
+    };
+}
+
+// contracts describeInvalidProductName.
+const describeRow = (r) =>
+    `${r.EAN ?? '(no barcode)'} – ${String(r.name)}${r.isActive === false ? ' (archived)' : ''}`;
+
 /**
  * #483: product names with emoji or other disallowed characters. Not a
  * migration (no data version bump): nothing is rewritten, the owner
- * renames them in the current release first.
+ * renames them in the current release first. Active ones refuse the
+ * upgrade; archived ones only warn (owner decision 2026-11-24).
  */
 export const PRODUCT_NAME_CHARACTERS = Object.freeze({
     id: 'product-name-characters',
     async check(db) {
-        const bad = (
-            await db
-                .collection('products')
-                .find({}, { projection: { name: 1, EAN: 1, isActive: 1 } })
-                .toArray()
-        ).filter((r) => !PRODUCT_NAME_PATTERN.test(String(r.name)));
-        if (bad.length === 0) return [];
-        // contracts describeInvalidProductName / INVALID_PRODUCT_NAME_STEPS.
+        const { active } = await invalidProductNameRows(db);
+        if (active.length === 0) return [];
         return [
-            `Product names use characters that are no longer allowed: ${bad
-                .map(
-                    (r) =>
-                        `${r.EAN ?? '(no barcode)'} – ${String(r.name)}${r.isActive === false ? ' (archived)' : ''}`,
-                )
-                .join(
-                    '; ',
-                )}. To fix each one in the current release: open Products, set Product status to All, search the barcode, choose Edit, rename it using only letters, numbers, spaces and . , - & ' / ( ) %, and save. Then run the upgrade again.`,
+            `Product names use characters that are no longer allowed: ${active
+                .map(describeRow)
+                .join('; ')}. ${NAME_STEPS}`,
+        ];
+    },
+    async warnings(db) {
+        const { archived } = await invalidProductNameRows(db);
+        if (archived.length === 0) return [];
+        return [
+            `warning: archived product names use characters that are no longer allowed (the upgrade continues): ${archived
+                .map(describeRow)
+                .join('; ')}. ${NAME_STEPS}`,
         ];
     },
 });
@@ -193,6 +222,15 @@ export async function migrationRefusals(
     for (const c of checks) out.push(...(await c.check(db)));
     for (const m of pendingMigrations(migrations, from, to))
         if (typeof m.check === 'function') out.push(...(await m.check(db)));
+    return out;
+}
+
+/** Warnings (not refusals) from every `checks` entry's `warnings(db)`. */
+export async function dataCheckWarnings(db, checks = DATA_CHECKS) {
+    const out = [];
+    for (const c of checks)
+        if (typeof c.warnings === 'function')
+            out.push(...(await c.warnings(db)));
     return out;
 }
 

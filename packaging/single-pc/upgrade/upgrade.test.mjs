@@ -23,6 +23,8 @@ import {
     migrationRefusals,
     PRODUCT_NAME_CHARACTERS,
     PRODUCT_NAME_PATTERN,
+    dataCheckWarnings,
+    normalizeProductName,
 } from './migrations.mjs';
 import {
     STAGES,
@@ -135,6 +137,16 @@ test('uppercase-product-names (#443) refuses collisions before any write', async
     );
 });
 
+test('normalizeProductName (#483) mirrors contracts', async () => {
+    const source = await readFile(
+        join(repo, 'packages', 'contracts', 'src', 'product-name.ts'),
+        'utf8',
+    );
+    assert.ok(source.includes('.replace(/[\\u2018\\u2019]/g, "\'")'));
+    assert.ok(source.includes(".replace(/\\u00A0/g, ' ')"));
+    assert.equal(normalizeProductName(' Mama\u2019s\u00A0x '), "MAMA'S X");
+});
+
 test('product-name-characters (#483) mirrors the contracts pattern', async () => {
     const source = await readFile(
         join(repo, 'packages', 'contracts', 'src', 'product-name.ts'),
@@ -146,9 +158,11 @@ test('product-name-characters (#483) mirrors the contracts pattern', async () =>
     );
 });
 
-test('product-name-characters (#483) refuses on every upgrade and writes nothing', async () => {
+test('product-name-characters (#483) refuses active names on every upgrade, warns on archived, writes nothing', async () => {
     const rows = [
         { _id: 'a', name: "PIÑA (1/2 KG) 10% A&B, MAMA'S. X-1" },
+        // Valid once normalized (curly apostrophe, no-break space).
+        { _id: 'd', name: 'Mama\u2019s\u00A0rice' },
         {
             _id: 'b',
             name: 'QA 🍎 APPLE',
@@ -161,19 +175,35 @@ test('product-name-characters (#483) refuses on every upgrade and writes nothing
     // Runs even with no pending migration (data already current).
     const refusals = await migrationRefusals(db, MIGRATIONS, 2, 2);
     assert.equal(refusals.length, 1);
+    // The archived one is a warning, not a refusal.
+    assert.ok(!refusals[0].includes('QA 🍎 APPLE'), refusals[0]);
+    const warnings = await dataCheckWarnings(db);
+    assert.equal(warnings.length, 1);
     assert.ok(
-        refusals[0].includes('4006381333931 – QA 🍎 APPLE (archived)'),
-        refusals[0],
+        warnings[0].includes('4006381333931 – QA 🍎 APPLE (archived)'),
+        warnings[0],
     );
+    assert.match(warnings[0], /Product status to All/);
+    assert.doesNotMatch(warnings[0], /96385074/);
     assert.ok(
         refusals[0].includes('96385074 – 1\uFE0F\u20E3;') ||
             refusals[0].includes('96385074 – 1\uFE0F\u20E3.'),
     );
     assert.match(refusals[0], /Product status to All/);
-    assert.doesNotMatch(refusals[0], /PIÑA/);
+    assert.doesNotMatch(refusals[0], /PIÑA|MAMA/i);
     assert.deepEqual(
         rows.map((r) => r.name),
-        ["PIÑA (1/2 KG) 10% A&B, MAMA'S. X-1", 'QA 🍎 APPLE', '1\uFE0F\u20E3'],
+        [
+            "PIÑA (1/2 KG) 10% A&B, MAMA'S. X-1",
+            'Mama\u2019s\u00A0rice',
+            'QA 🍎 APPLE',
+            '1\uFE0F\u20E3',
+        ],
+    );
+    // Archived only: the upgrade is not refused.
+    assert.deepEqual(
+        await migrationRefusals(fakeDb([rows[2]]), MIGRATIONS, 2, 2),
+        [],
     );
     assert.deepEqual(
         await PRODUCT_NAME_CHARACTERS.check(fakeDb([rows[0]])),

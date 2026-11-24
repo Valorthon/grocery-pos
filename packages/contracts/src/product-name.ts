@@ -2,9 +2,16 @@
  * Product names are stored and shown in UPPERCASE (#443, owner decision
  * 2026-11-22): trimmed, then uppercased. Uniqueness and name search key on
  * this form, so a search is case-insensitive whatever the user types.
+ * Curly apostrophes (U+2018/U+2019) become `'` and no-break spaces
+ * (U+00A0) plain spaces first (#483, owner decision 2026-11-24), so a
+ * pasted `Mama’s` is stored as `MAMA'S`.
  */
 export function normalizeProductName(name: string): string {
-    return name.trim().toUpperCase();
+    return name
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/\u00A0/g, ' ')
+        .trim()
+        .toUpperCase();
 }
 
 /**
@@ -28,12 +35,17 @@ export function hasValidProductNameCharacters(name: string): boolean {
 
 /**
  * Stored names that break the #483 character rule, for the cloud report
- * and the single-PC upgrade check; nothing rewrites them.
+ * and the single-PC upgrade check; nothing rewrites them. A name is judged
+ * in its normalized form: a legacy `Mama’s` passes, because any edit
+ * stores it as `MAMA'S` and nothing else about it needs the owner.
  */
 export function invalidProductNames<T extends { name: string }>(
     rows: readonly T[],
 ): T[] {
-    return rows.filter(({ name }) => !hasValidProductNameCharacters(name));
+    return rows.filter(
+        ({ name }) =>
+            !hasValidProductNameCharacters(normalizeProductName(name)),
+    );
 }
 
 /** One offending product as the reports list it: `EAN – NAME (archived)`. */
