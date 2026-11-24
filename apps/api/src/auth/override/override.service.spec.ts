@@ -166,6 +166,25 @@ describe('manager approvals (#34)', () => {
         });
     }
 
+    it('accepts an active requester, read in the transaction (#480)', async () => {
+        users.findOne.mockReturnValueOnce(query(null));
+        await expect(
+            service.assertActiveRequester(actor, session),
+        ).resolves.toBeUndefined();
+        expect(users.findOne).toHaveBeenCalledWith({
+            _id: USER,
+            isActive: false,
+        });
+    });
+    it('refuses a deactivated requester with a 401 (#480)', async () => {
+        users.findOne.mockReturnValueOnce(query({ _id: USER }));
+        await expect(
+            service.assertActiveRequester(actor, session),
+        ).rejects.toMatchObject({
+            statusCode: 401,
+            code: ErrorCode.AUTH_INVALID_TOKEN,
+        });
+    });
     it('requires admin approval for every positive discount', () => {
         expect(service.requiresDiscountApproval(1)).toBe(true);
         expect(service.requiresDiscountApproval(0)).toBe(false);

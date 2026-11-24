@@ -24,6 +24,7 @@ import { Public } from '../auth/auth.decorator';
 import { JWTAuthGuard } from '../auth/guards/jwt.guard';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { JWTStrategy } from '../auth/jwt.strategy';
+import { SessionLivenessService } from '../auth/session-liveness.service';
 import { RATE_LIMITS } from '../auth/rate-limit/rate-limit';
 import { useBodyParsers } from '../common/body-parsers';
 import { corsOptions } from '../common/cors';
@@ -130,6 +131,10 @@ describe('POST /v1/csp-report (e2e, #94)', () => {
             controllers: [ProbeController],
             providers: [
                 JWTStrategy,
+                {
+                    provide: SessionLivenessService,
+                    useValue: { isLive: () => Promise.resolve(true) },
+                },
                 {
                     provide: TypedConfigService,
                     useValue: { get: (key: string) => CONFIG[key] },

@@ -28,6 +28,7 @@ import { Types } from 'mongoose';
 import { JWTAuthGuard } from '../../auth/guards/jwt.guard';
 import { RoleGuard } from '../../auth/guards/role.guard';
 import { JWTStrategy } from '../../auth/jwt.strategy';
+import { SessionLivenessService } from '../../auth/session-liveness.service';
 import { Role } from '../../auth/types';
 import { useBodyParsers } from '../body-parsers';
 import { GlobalFilter } from '../global/global.filter';
@@ -102,6 +103,12 @@ export async function bootAccessHarness(
                 useValue: { record: () => Promise.resolve(undefined) },
             },
             JWTStrategy,
+            // Every signed caller is live unless a spec provides its own
+            // SessionLivenessService (later providers win).
+            {
+                provide: SessionLivenessService,
+                useValue: { isLive: () => Promise.resolve(true) },
+            },
             ...providers,
             {
                 provide: TypedConfigService,

@@ -11,6 +11,8 @@
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
 import { Role } from '../auth/types';
+import type { JWTPayload } from '../auth/types';
+import { SessionLivenessService } from '../auth/session-liveness.service';
 import {
     AccessHarness,
     bootAccessHarness,
@@ -32,12 +34,24 @@ const service = {
     getDetails: jest.fn(),
 };
 
+/** Users deactivated since their (still unexpired) token was signed (#480). */
+const deactivated = new Set<string>();
+
 let harness: AccessHarness;
 
 beforeAll(async () => {
     harness = await bootAccessHarness(
         [SalesController],
-        [{ provide: SalesService, useValue: service }],
+        [
+            { provide: SalesService, useValue: service },
+            {
+                provide: SessionLivenessService,
+                useValue: {
+                    isLive: (p: JWTPayload) =>
+                        Promise.resolve(!deactivated.has(p.userId)),
+                },
+            },
+        ],
     );
 });
 
@@ -66,6 +80,17 @@ async function errorOf(res: Response): Promise<string> {
 }
 
 describe('POST /sales (e2e)', () => {
+    it("refuses a deactivated cashier's unexpired token with 401 and records nothing (#480)", async () => {
+        const seller = caller(Role.Seller);
+        deactivated.add(seller.userId);
+
+        const res = await harness.call(seller, 'POST', '/sales', cashBody());
+
+        expect(res.status).toBe(401);
+        expect(await errorOf(res)).toBe(ErrorCode.AUTH_INVALID_TOKEN);
+        expect(service.sell).not.toHaveBeenCalled();
+    });
+
     it('records the sale as the caller and returns the server receipt', async () => {
         const seller = caller(Role.Seller);
         const body = cashBody();

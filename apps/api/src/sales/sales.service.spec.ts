@@ -30,7 +30,7 @@ import {
     SellDto,
     TenderType,
 } from './types';
-import { AuthUser } from '../auth/types';
+import { AuthUser, JWTInvalidError } from '../auth/types';
 import {
     RECEIPT_DISCOUNT_SHAPE,
     RECEIPT_ITEM_SHAPE,
@@ -395,6 +395,30 @@ describe('SalesService.sell', () => {
                 statusCode: 409,
                 code: ErrorCode.SHIFT_NOT_OPEN,
             });
+            expect(getMany).not.toHaveBeenCalled();
+            expect(create).not.toHaveBeenCalled();
+            expect(inventorySell).not.toHaveBeenCalled();
+            expect(detailsBulkWrite).not.toHaveBeenCalled();
+        });
+
+        it('refuses a deactivated cashier inside the transaction and writes nothing (#480)', async () => {
+            MOCK_MANAGER_APPROVALS.useValue.assertActiveRequester.mockRejectedValueOnce(
+                new JWTInvalidError(),
+            );
+
+            const attempt = service.sell(
+                CASHIER,
+                sellDto([{ product: 'p1', quantity: 1 }]),
+            );
+
+            await expect(attempt).rejects.toMatchObject({
+                statusCode: 401,
+                code: ErrorCode.AUTH_INVALID_TOKEN,
+            });
+            expect(
+                MOCK_MANAGER_APPROVALS.useValue.assertActiveRequester,
+            ).toHaveBeenCalledWith(CASHIER, expect.anything());
+            expect(chargeSale).not.toHaveBeenCalled();
             expect(getMany).not.toHaveBeenCalled();
             expect(create).not.toHaveBeenCalled();
             expect(inventorySell).not.toHaveBeenCalled();

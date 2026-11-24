@@ -32,6 +32,8 @@ import { Roles } from './auth.decorator';
 import { JWTAuthGuard } from './guards/jwt.guard';
 import { RoleGuard } from './guards/role.guard';
 import { JWTStrategy } from './jwt.strategy';
+import { SessionLivenessService } from './session-liveness.service';
+import { User } from '../user/user.schema';
 import { RefreshToken } from './refresh-token/refresh-token.schema';
 import { RefreshTokenService } from './refresh-token/refresh-token.service';
 import { StepUpService } from './step-up/step-up.service';
@@ -249,6 +251,19 @@ describe('Auth session flow (e2e)', () => {
                     },
                 },
                 JWTStrategy,
+                SessionLivenessService,
+                {
+                    // Every user is active here; sessions are the fake
+                    // refresh-token model's (#480).
+                    provide: getModelToken(User.name),
+                    useValue: {
+                        findById: () => ({
+                            select: () => ({
+                                lean: () => Promise.resolve({ isActive: true }),
+                            }),
+                        }),
+                    },
+                },
                 CookieService,
                 RefreshTokenService,
                 {
@@ -933,8 +948,9 @@ describe('Auth session flow (e2e)', () => {
         });
 
         it('an ended session cannot step up', async () => {
+            // The access token of an ended session is refused outright (#480).
             const res = await reauth([sessionToken(new Types.ObjectId())]);
-            expect(res.status).toBe(403);
+            expect(res.status).toBe(401);
             expect(stepUps.rows).toEqual([]);
         });
 

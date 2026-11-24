@@ -41,6 +41,7 @@ import {
 } from '../../common/errors';
 import { runInTransaction } from '../../common/utils/db';
 import { StepUpService } from '../step-up/step-up.service';
+import { JWTInvalidError } from '../types';
 import { saleRequestHash } from '../../sales/idempotency';
 import {
     discountApprovalContext,
@@ -394,6 +395,24 @@ export class ManagerOverrideService implements OnModuleInit {
             amount: sale.amount,
             netCash: saleNetCash(sale),
         });
+    }
+
+    /**
+     * Refuses with 401 AUTH_INVALID_TOKEN when the requester has been
+     * deactivated, read in `session`, so a sale racing the deactivation
+     * past the per-request check (SessionLivenessService, which also
+     * refuses unknown users) still cannot commit (#480).
+     */
+    async assertActiveRequester(
+        actor: AuthUser,
+        session: ClientSession,
+    ): Promise<void> {
+        const deactivated = await this.users
+            .findOne({ _id: actor.userId, isActive: false })
+            .select('_id')
+            .session(session)
+            .lean();
+        if (deactivated) throw new JWTInvalidError();
     }
 
     async visibleReversalSale(

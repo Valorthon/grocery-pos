@@ -6,6 +6,7 @@ import { ManagerOverrideService } from '../override.service';
 export const MOCK_MANAGER_APPROVALS = {
     provide: ManagerOverrideService,
     useValue: {
+        assertActiveRequester: jest.fn(() => Promise.resolve()),
         requiresDiscountApproval: (amount: number) => amount > 0,
         consume: jest.fn((_token: unknown, actor: AuthUser) =>
             Promise.resolve(actor.userId),

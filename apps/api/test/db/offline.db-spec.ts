@@ -400,8 +400,10 @@ it('requires reconciliation after cashier deactivation or session revocation', a
     await db
         .model<User>('User')
         .updateOne({ _id: seller.userId }, { $set: { isActive: false } });
+    // The deactivated cashier's session ends at once (#480); the queued
+    // cash stays on the terminal for an ADMIN to reconcile.
     expect((await db.call(seller, 'POST', '/offline/sync', body)).status).toBe(
-        409,
+        401,
     );
     expect(
         (

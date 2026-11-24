@@ -5,9 +5,12 @@
  * Mongoose models and indexes, the global guards, filter and
  * `createValidationPipe`) against a throwaway database on MONGO_URI_TEST,
  * serves it over HTTP on a random port, and drops the database on `close`.
- * Nothing is mocked. Requests are signed with a JWT cookie, like the access
- * harness, so no user or login is needed: the JWT strategy trusts a signed
- * token without reading the database.
+ * Requests are signed with a JWT cookie, like the access harness, so no
+ * login is needed. The one seam is `SuiteSessionLiveness` (#480): a caller
+ * with no user row, or the default `sid` (its own user id, which no real
+ * login produces), skips the per-request session check; a stored user's
+ * active flag and an explicit `sid` are checked as in production.
+ * `bootDbApp({ realSessions: true })` drops the seam entirely.
  */
 import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -24,6 +27,8 @@ import {
     TenderType,
 } from '@grocery-pos/contracts';
 import { AppModule } from '../../src/app.module';
+import { SessionLivenessService } from '../../src/auth/session-liveness.service';
+import type { JWTPayload } from '../../src/auth/types';
 import { Role } from '../../src/auth/types';
 import { useBodyParsers } from '../../src/common/body-parsers';
 import { applyTrustProxy } from '../../src/common/http-topology';
@@ -102,12 +107,19 @@ export interface DbApp {
  * global ValidationPipe, signed cookies and URI versioning. Boot it once
  * per spec file: the env (and so the database) is fixed at import.
  */
-export async function bootDbApp(): Promise<DbApp> {
+export async function bootDbApp(
+    opts: { realSessions?: boolean } = {},
+): Promise<DbApp> {
     const name = dbName();
 
-    const moduleRef = await Test.createTestingModule({
+    const builder = Test.createTestingModule({
         imports: [AppModule],
-    }).compile();
+    });
+    if (!opts.realSessions)
+        builder
+            .overrideProvider(SessionLivenessService)
+            .useClass(SuiteSessionLiveness);
+    const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
         logger: ['error'],
         bodyParser: false,
@@ -175,6 +187,20 @@ export async function bootDbApp(): Promise<DbApp> {
             }
         },
     };
+}
+
+/** See the file comment: production checks, minus the suite's shortcuts. */
+class SuiteSessionLiveness extends SessionLivenessService {
+    override async isLive(payload: JWTPayload): Promise<boolean> {
+        const row = await this.users
+            .findById(payload.userId)
+            .select('isActive')
+            .lean<{ isActive?: boolean }>();
+        if (!row) return true;
+        if (row.isActive === false) return false;
+        if (payload.sid === payload.userId) return true;
+        return super.isLive(payload);
+    }
 }
 
 let eanSeq = 0;

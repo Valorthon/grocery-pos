@@ -33,6 +33,7 @@ import { User } from './user.schema';
 import { JWTAuthGuard } from '../auth/guards/jwt.guard';
 import { RoleGuard } from '../auth/guards/role.guard';
 import { JWTStrategy } from '../auth/jwt.strategy';
+import { SessionLivenessService } from '../auth/session-liveness.service';
 import { Role } from '../auth/types';
 import { TypedConfigService } from '../common/typed-config/typed-config.service';
 import { GlobalFilter } from '../common/global/global.filter';
@@ -158,6 +159,7 @@ describe('Users (e2e)', () => {
                 StepUpService,
                 { provide: getModelToken(StepUp.name), useValue: stepUps },
                 JWTStrategy,
+                SessionLivenessService,
                 { provide: getModelToken(User.name), useValue: model },
                 {
                     provide: getConnectionToken(),
@@ -307,6 +309,34 @@ describe('Users (e2e)', () => {
         expect(model.byId(cashier._id)).toMatchObject({
             roles: [Role.Restocker],
             isActive: false,
+        });
+    });
+
+    it("a deactivated user's unexpired access token -> 401 on the next request (#480)", async () => {
+        expect((await call(cashier, 'GET', '/users/profile')).status).toBe(200);
+        const res = await patchUsers(admin, [
+            { user: id(cashier), update: { isActive: false } },
+        ]);
+        expect(res.status).toBe(200);
+
+        const after = await call(cashier, 'GET', '/users/profile');
+        expect(after.status).toBe(401);
+        expect(after.body).toMatchObject({
+            error: ErrorCode.AUTH_INVALID_TOKEN,
+        });
+    });
+
+    it('an access token whose session was revoked -> 401 (#480)', async () => {
+        const res = await call(
+            cashier,
+            'GET',
+            '/users/profile',
+            undefined,
+            new Types.ObjectId().toString(),
+        );
+        expect(res.status).toBe(401);
+        expect(res.body).toMatchObject({
+            error: ErrorCode.AUTH_INVALID_TOKEN,
         });
     });
 
@@ -960,8 +990,10 @@ describe('Users (e2e)', () => {
                 },
                 sid,
             );
-            expect(res.status).toBe(403);
-            expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+            // The ended session's access token is itself refused (#480).
+            expect(res.status).toBe(401);
+            expect(res.body.error).toBe(ErrorCode.AUTH_INVALID_TOKEN);
+            expect(model.byId(cashier._id)?.isActive).toBe(true);
         });
 
         it('a legacy token without sid is refused', async () => {

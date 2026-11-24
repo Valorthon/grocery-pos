@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtModule } from '@nestjs/jwt';
+import { MongooseModule } from '@nestjs/mongoose';
+import { User, UserSchema } from '../user/user.schema';
+import { SessionLivenessService } from './session-liveness.service';
 import { CookieModule } from '../common/utils/cookie/cookie.module';
 import { UserModule } from '../user/user.module';
 import { JWTStrategy } from './jwt.strategy';
@@ -15,9 +18,10 @@ import { RateLimitModule } from './rate-limit/rate-limit';
         CookieModule,
         RefreshTokenModule,
         RateLimitModule,
+        MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
     ],
     controllers: [AuthController],
-    providers: [AuthService, JWTStrategy],
+    providers: [AuthService, JWTStrategy, SessionLivenessService],
     exports: [AuthService],
 })
 export class AuthModule {}
