@@ -419,7 +419,10 @@ test('preflight refuses unsupported platforms, foreign data, busy ports and low 
     const refused = (patch, mode = 'install') =>
         evaluatePreflight({ ...okFacts, ...patch }, mode).refusals.join(' ');
     assert.match(refused({ osBuild: 9600 }), /Windows 10 or Windows 11/);
-    assert.match(refused({ osBuild: 20348 }), /Windows 10 or Windows 11/);
+    assert.match(
+        refused({ osBuild: 20348 }),
+        /Windows Insider and Server builds/,
+    );
     assert.match(refused({ osBuild: undefined }), /found build unknown/);
     assert.match(refused({ osArchitecture: 'Arm64' }), /x64/);
     assert.match(refused({ serverEdition: true }), /Server/);
@@ -1414,7 +1417,22 @@ test('the PowerShell scripts are strict, offline and never run downloaded code',
         'JoinTerminal.ps1',
     ]) {
         const text = await readFile(new URL(name, here), 'utf8');
-        assert.match(text, /^#Requires -Version 5\.1/, name);
+        if (name === 'Install.ps1') {
+            // #488: an explicit check gives Windows 10 1507/1511
+            // (PowerShell 5.0) a plain message instead of #Requires.
+            assert.doesNotMatch(text, /#Requires/, name);
+            assert.match(
+                text,
+                /\$PSVersionTable\.PSVersion -lt \[version\]'5\.1'[\s\S]*Update Windows 10 to version 22H2[\s\S]*exit 1/,
+                name,
+            );
+            assert.ok(
+                text.indexOf('PSVersionTable') < text.indexOf('Set-StrictMode'),
+                name,
+            );
+        } else {
+            assert.match(text, /^#Requires -Version 5\.1/, name);
+        }
         assert.match(text, /Set-StrictMode -Version Latest/, name);
         assert.match(text, /\$ErrorActionPreference = 'Stop'/, name);
         assert.doesNotMatch(

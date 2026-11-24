@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 <#
 .SYNOPSIS
     Grocery POS single-PC installer bootstrap (#362).
@@ -63,6 +62,13 @@ param(
     [switch]$AcceptOpenShifts,
     [switch]$AcceptPendingOffline
 )
+
+# Windows 10 1507/1511 ship PowerShell 5.0; a Requires directive would abort
+# with PowerShell's own error, so check here in 5.0-safe syntax (#488).
+if ($PSVersionTable.PSVersion -lt [version]'5.1') {
+    [Console]::Error.WriteLine('This Windows 10 is too old to run the installer. Update Windows 10 to version 22H2, then run the installer again.')
+    exit 1
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

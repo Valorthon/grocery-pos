@@ -179,7 +179,7 @@ export function evaluatePreflight(facts, mode) {
     }
     if (!isSupportedWindowsBuild(facts.osBuild)) {
         refusals.push(
-            `Windows 10 or Windows 11 is required; found build ${facts.osBuild ?? 'unknown'}.`,
+            `Windows 10 or Windows 11 is required; found build ${facts.osBuild ?? 'unknown'}. Windows Insider and Server builds are not supported.`,
         );
     } else if (facts.osBuild < WINDOWS_10_LATEST_BUILD) {
         warnings.push(
