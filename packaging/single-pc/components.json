@@ -75,7 +75,7 @@
         "checksumSource": "none published upstream; SHA-256 computed from the release asset on 2026-11-14",
         "source": "https://github.com/winsw/winsw/releases/tag/v2.12.0",
         "license": "MIT and bundled third-party notices",
-        "requires": ".NET Framework 4.6.1 or later (Windows 11 ships 4.8)",
+        "requires": ".NET Framework 4.6.1 or later (Windows 10 22H2 and Windows 11 ship 4.8)",
         "bundle": {
             "archive": "file",
             "to": "services/WinSW.exe"

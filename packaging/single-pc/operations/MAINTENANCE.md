@@ -6,7 +6,7 @@ automatic updates; all shifts closed and pending receipts synchronized
 first; a 30-minute maintenance window target). Tool details:
 [../upgrade/README.md](../upgrade/README.md).
 
-**Status:** not yet performed on Windows 11 (RUNBOOK B8–B10, C7). The
+**Status:** not yet performed on Windows 10 or 11 (RUNBOOK B8–B10, C7). The
 30-minute target has not been measured on a realistic database.
 
 ## Daily startup and shutdown (owner)

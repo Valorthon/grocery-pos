@@ -8,14 +8,14 @@ does not reimplement them.
 
 **Status:** the bundle builder runs on Linux (a real bundle was built from the
 pinned components) and the installer's orchestration is tested against a
-recording context. **No Windows 11 execution yet.** Service registration,
+recording context. **No Windows 10/11 execution yet.** Service registration,
 virtual accounts, ACLs, Task Scheduler, certutil trust in Chrome, shortcuts,
 reboot, crash recovery and LAN checks are unproven until the #357/#366 run
 (see "Windows-only proof").
 
 ## Why PowerShell + Node, not MSI or Inno Setup
 
-- Windows PowerShell 5.1 ships with Windows 11 and the bundle already ships
+- Windows PowerShell 5.1 ships with Windows 10 and 11 and the bundle already ships
   Node, so the installer adds no tool, runtime or license to the distribution
   obligations in [../ARCHITECTURE.md](../ARCHITECTURE.md).
 - The logic lives in Node modules: `plan.mjs` (pure, every command and
@@ -353,7 +353,7 @@ SHA256SUMS` passing and `readBundle` verifying it.
 
 ### Windows-only proof (not yet done)
 
-On an eligible Windows 11 x64 PC (#357/#366): `Install.ps1` parse and run;
+On an eligible Windows 10 or Windows 11 x64 PC (#357/#366): `Install.ps1` parse and run;
 preflight on Windows 10/ARM/Server/busy port/low disk; `mongod --install` and
 WinSW registration under `NT SERVICE\*` with the ACLs (services start, nothing
 else can read `secrets\`); start order and readiness; graceful stop (mongod

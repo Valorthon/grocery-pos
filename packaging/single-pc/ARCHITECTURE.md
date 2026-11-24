@@ -1,6 +1,6 @@
 # Single-PC architecture (#357)
 
-Status: engineering architecture selected; **Windows 11 proof pending**. This
+Status: engineering architecture selected; **Windows 10/11 proof pending**. This
 document does not certify a release or close #357. The owner authorized full epic
 implementation after its original planning-only creation. No customer installation,
 deployment or data migration is authorized by that request.
@@ -10,8 +10,10 @@ deployment or data migration is authorized by that request.
 Recorded on [#357](https://github.com/Valorthon/grocery-pos/issues/357), with later
 owner comments taking precedence:
 
-- First release: Windows 11 on Intel/AMD x64, Google Chrome. Windows 10 and ARM
-  are outside first-release support. The expected 4 GB DDR3 computer is a
+- First release: Windows 10 (builds 10240–19045) or Windows 11 (22000+) client
+  editions on Intel/AMD x64, Google Chrome (owner decision 2026-11-24; most
+  stores will run Windows 10 Home). Windows 10 below 22H2 (19045) only warns.
+  ARM and Windows Server are outside first-release support. The expected 4 GB DDR3 computer is a
   qualification target; support depends on measurement on eligible hardware.
 - Vendor installs and manually updates during the agreed maintenance period.
   Afterwards the owner has documented daily operation and guided replacement
@@ -59,23 +61,29 @@ pins do not mean those executables have passed Windows execution tests.
 
 ## Platform and hardware qualification
 
-Qualify a still-serviced Windows 11 Home/Pro x64 build, initially 25H2 or later,
-recording edition, full build and Chrome version in release evidence. Do not
-equate the proof's OS identity check with lifecycle qualification. Current
-Home/Pro lifecycle documentation lists 24H2 support ended October 13, 2026;
-other editions have their own lifecycles. S mode is not an installation target.
-[Windows lifecycle](https://learn.microsoft.com/en-us/lifecycle/products/windows-11-home-and-pro).
+Qualify Windows 10 22H2 (build 19045) and a current Windows 11 Home/Pro x64
+build, recording edition, full build and Chrome version in release evidence.
+The installer, upgrade and proof accept Windows 10 builds 10240–19045 and
+Windows 11 22000+ client editions; Windows 10 below 22H2 only warns
+(owner decision 2026-11-24). Do not equate the OS identity check with
+lifecycle qualification. Windows 10 support ended October 14, 2025; there is
+no automated Extended Security Updates (ESU) check, but the install checklist
+advises enrolling (operations/INSTALL.md). S mode is not an installation target.
+[Windows 10 lifecycle](https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro),
+[Windows 11 lifecycle](https://learn.microsoft.com/en-us/lifecycle/products/windows-11-home-and-pro).
 
 Windows 11 requires an eligible CPU, two cores, 4 GB RAM, 64 GB storage,
-UEFI/Secure Boot capability and TPM 2.0. These are OS eligibility requirements,
-not POS performance or free-space promises. Check the actual CPU model against
-Microsoft's selected-release requirements and Mongo's AVX/microarchitecture
-requirements; DDR3 alone identifies neither. SSD is preferred for qualification.
+UEFI/Secure Boot capability and TPM 2.0; Windows 10 runs on older PCs that
+fail these. They are OS eligibility requirements, not POS performance or
+free-space promises. MongoDB 7 needs a CPU with AVX: preflight refuses a CPU
+known to lack it, warns when it can't tell, and diagnostics show a hint. DDR3
+alone identifies neither. SSD is preferred for qualification.
 [Windows requirements](https://learn.microsoft.com/en-us/windows/whats-new/windows-11-requirements),
 [Intel models](https://learn.microsoft.com/en-us/windows-hardware/design/minimum/supported/windows-11-supported-intel-processors),
 [AMD models](https://learn.microsoft.com/en-us/windows-hardware/design/minimum/supported/windows-11-supported-amd-processors).
 
-MongoDB 7 supports Windows 11 x86_64 and excludes WSL. Its default WiredTiger
+MongoDB 7 lists Windows 11 x86_64, not Windows 10; running it on Windows 10
+is an accepted risk (owner decision 2026-11-24). WSL is excluded. Its default WiredTiger
 cache is 1.5 GB on a 4 GB machine; qualify an explicit smaller cache with the
 whole workload. The proof uses 0.25 GB only to bound its synthetic experiment,
 not as an approved production cache or total mongod memory cap. Measure Windows,
@@ -286,20 +294,20 @@ anonymous refusal and login/profile through the compiled API. It does **not**
 run `dist/main.js`'s current all-interface listener, install services, implement
 #358, or count as browser/package acceptance.
 
-No actual Windows 11 execution has been performed from this Fedora session.
+No actual Windows 10 or Windows 11 execution has been performed from this Fedora session.
 The harness and mocked policy checks are preparation, not positive platform proof.
 The owner authorized merging #376 (squash b673486) before target proof as a
-specific exception. #357 and its epic checkbox stay open until actual Windows 11
+specific exception. #357 and its epic checkbox stay open until actual Windows 10/11
 x64 proof and hardware qualification are recorded, using the operator runbook
 and evidence template in
 [acceptance/RUNBOOK.md](acceptance/RUNBOOK.md).
 
-Obtain a licensed clean Windows 11 x64 PC/VM on the approved build, plus replacement
+Obtain a licensed clean Windows 10 22H2 or Windows 11 x64 PC/VM on the approved build, plus replacement
 restore target and another LAN peer. For a VM use 4 GB, at least two vCPUs and
 Windows-required security settings; the exact hardware test must also cover the
 expected low-end PC. No Windows license/image/VM access is currently available
 to this session. Hosted x64 Windows CI uses Server images, so it can supplement
-native smoke checks but cannot substitute for Windows 11 proof; its Windows 11
+native smoke checks but cannot substitute for Windows 10/11 proof; its Windows 11
 hosted ARM option is not this target. No external provisioning was performed.
 [GitHub runner specifications](https://docs.github.com/en/actions/reference/runners/github-hosted-runners).
 

@@ -57,7 +57,7 @@ real directories and rejection of a stale source manifest. It uses no public
 registry and never reuses the developer's package cache.
 
 These are Linux builder/dependency checks, not Windows installation acceptance.
-Windows 11 x64 native execution and the remaining platform checks belong to #366.
+Windows 10/11 x64 native execution and the remaining platform checks belong to #366.
 
 ## Full bundle repeat
 

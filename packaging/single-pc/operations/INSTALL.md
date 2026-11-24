@@ -5,14 +5,15 @@ the vendor installs, the store owner keeps the credentials). The details of
 each step are in [../installer/README.md](../installer/README.md); this guide
 is the order to do them in.
 
-**Status:** not yet performed on Windows 11. The first run is RUNBOOK B1
+**Status:** not yet performed on Windows 10 or 11. The first run is RUNBOOK B1
 ([../acceptance/RUNBOOK.md](../acceptance/RUNBOOK.md)); fix this guide where
 it differs from what you see (B15).
 
 ## Before the visit
 
-1. The PC: Windows 11 (client edition, build 22000 or later), Intel/AMD x64,
-   Google Chrome installed, at least 5 GB free on the data drive, ideally a
+1. The PC: Windows 10 (build 10240–19045, ideally 22H2) or Windows 11
+   (build 22000 or later), client edition (Home or Pro), Intel/AMD x64 with
+   AVX, Google Chrome installed, at least 5 GB free on the data drive, ideally a
    UPS. 4 GB RAM is the target being qualified, not a proven minimum.
 2. Build the bundle from the release commit on the vendor build machine:
 
@@ -31,6 +32,28 @@ it differs from what you see (B15).
    was not changed on the way.
 4. Copy the whole bundle folder to a USB stick. Agree the first
    administrator's username with the owner (lower case; no password yet).
+
+## Install-day checklist (Windows settings)
+
+Most stores run Windows 10 Home. Before installing:
+
+1. **Check the PC.** Settings > System > About shows the edition, version and
+   build. The CPU must support AVX (MongoDB needs it): look up the CPU model,
+   or run the installer, which refuses a CPU known to lack AVX and warns when
+   it can't tell.
+2. **Update Windows 10 to 22H2** (build 19045) through Windows Update. Older
+   versions install with a warning only. If `Install.ps1` says Windows
+   PowerShell 5.1 is missing, update to 22H2 first.
+3. **Activation.** Settings > Update & Security > Activation should say
+   Windows is activated.
+4. **Extended Security Updates (advice).** Windows 10 no longer gets free
+   security updates. Enrol the PC in Microsoft's ESU programme if the owner
+   agrees (Settings > Windows Update shows the offer). The installer does not
+   check this.
+5. **Active hours.** Windows 10 Home restarts on its own for updates. Set
+   Settings > Windows Update > Change active hours to cover store hours.
+6. **Windows 11 upgrade prompts.** Decline them during a working day; upgrade
+   only on a closed day, with a verified backup, then check the app.
 
 ## At the store (offline is fine; nothing is downloaded)
 
