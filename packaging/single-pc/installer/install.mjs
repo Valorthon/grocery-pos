@@ -897,7 +897,7 @@ export async function lanAddressFacts(lanIp) {
 
 // ------------------------------------------------------------ Windows context
 
-function execCapture(file, args, options = {}) {
+export function execCapture(file, args, options = {}) {
     return new Promise((done) => {
         execFile(
             file,
@@ -919,11 +919,16 @@ function execCapture(file, args, options = {}) {
 }
 
 /** Whether the CPU has AVX (#489): true, false or null when unreadable. */
-export async function readAvx() {
-    return parseAvxProbe(await powershell(AVX_PROBE_COMMAND));
+export async function readAvx({ timeoutMs = AVX_TIMEOUT_MS } = {}) {
+    return parseAvxProbe(
+        await powershell(AVX_PROBE_COMMAND, {}, { timeout: timeoutMs }),
+    );
 }
 
-function powershell(command, env = {}) {
+/** A hung probe ends as unreadable (a warning), never a stuck install. */
+export const AVX_TIMEOUT_MS = 15_000;
+
+function powershell(command, env = {}, options = {}) {
     return execCapture(
         'powershell.exe',
         [
@@ -934,7 +939,7 @@ function powershell(command, env = {}) {
             '-Command',
             command,
         ],
-        { env: { ...process.env, ...env } },
+        { env: { ...process.env, ...env }, ...options },
     );
 }
 

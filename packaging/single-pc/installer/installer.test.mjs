@@ -42,6 +42,8 @@ import {
     parseLanAddress,
     runInstaller,
     utf16,
+    AVX_TIMEOUT_MS,
+    execCapture,
 } from './install.mjs';
 import {
     HANDOVER_FILE,
@@ -2062,4 +2064,17 @@ test('the AVX probe output parses to true, false or unknown (#489)', () => {
     assert.equal(parseAvxProbe({ code: 0, stdout: '' }), null);
     assert.equal(parseAvxProbe({ code: 1, stdout: 'True' }), null);
     assert.equal(parseAvxProbe(), null);
+});
+
+test('a hung probe ends at its timeout as unreadable (#489)', async () => {
+    assert.equal(AVX_TIMEOUT_MS, 15_000);
+    const started = Date.now();
+    const run = await execCapture(
+        process.execPath,
+        ['-e', 'setTimeout(() => console.log("True"), 10000)'],
+        { timeout: 200 },
+    );
+    assert.ok(Date.now() - started < 5000);
+    assert.notEqual(run.code, 0);
+    assert.equal(parseAvxProbe(run), null);
 });

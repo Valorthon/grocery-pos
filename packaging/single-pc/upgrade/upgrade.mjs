@@ -492,7 +492,14 @@ export async function runUpgrade(options, ctx, log = () => {}) {
             );
 
         if (!resuming) {
-            // preflight: read-only.
+            // preflight: read-only. AVX first (#489): known absent refuses
+            // before anything else is read; unreadable only warns.
+            if (ctx.readAvx) {
+                const cpu = avxPreflight(await ctx.readAvx());
+                if (cpu.refusals.length)
+                    throw new RefusedError(cpu.refusals.join(' '));
+                for (const warning of cpu.warnings) log(`warning: ${warning}`);
+            }
             const state = await readJson(
                 join(paths.dirs.state, 'installer.json'),
             ).catch(() => undefined);
@@ -564,12 +571,6 @@ export async function runUpgrade(options, ctx, log = () => {}) {
                 releaseBytes: bundle.releaseBytes,
             });
             refusals.push(...db.migrationRefusals);
-            // AVX (#489): known absent refuses, unreadable only warns.
-            if (ctx.readAvx) {
-                const cpu = avxPreflight(await ctx.readAvx());
-                refusals.push(...cpu.refusals);
-                for (const warning of cpu.warnings) log(`warning: ${warning}`);
-            }
             if (refusals.length) throw new RefusedError(refusals.join(' '));
             // LAN terminals (#396): a kept LAN IP that is absent right now is
             // a warning only; the switch's repair keeps it either way.
