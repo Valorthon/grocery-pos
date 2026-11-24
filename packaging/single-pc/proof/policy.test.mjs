@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
-    assertWindows11,
+    assertSupportedWindows,
     boundedWait,
     components,
     parseArgs,
@@ -20,12 +20,13 @@ const target = {
     productType: 1,
     build: 26200,
     cpu: 'GenuineIntel',
+    avx: true,
 };
 
-test('platform evidence refuses Server, Windows 10, ARM, Linux and missing OS evidence', () => {
-    assert.doesNotThrow(() => assertWindows11(target));
+test('platform evidence refuses Server, ARM, Linux, no AVX and missing OS evidence', () => {
+    assert.doesNotThrow(() => assertSupportedWindows(target));
     assert.doesNotThrow(() =>
-        assertWindows11({ ...target, cpu: 'AuthenticAMD' }),
+        assertSupportedWindows({ ...target, cpu: 'AuthenticAMD' }),
     );
     for (const change of [
         { platform: 'linux' },
@@ -34,13 +35,45 @@ test('platform evidence refuses Server, Windows 10, ARM, Linux and missing OS ev
         { productType: 2 },
         { caption: 'Microsoft Windows Server 2025' },
         { caption: 'Microsoft Windows 10 Pro' },
-        { build: 19045 },
+        { build: 21999 },
+        { caption: 'Microsoft Windows 10 Pro', build: 10239 },
+        { caption: 'Microsoft Windows 10 Pro', build: 19046 },
+        { caption: 'Microsoft Windows 8.1 Pro', build: 9600 },
+        { avx: false },
         { build: NaN },
         { cpu: 'unknown' },
         { productType: undefined },
     ]) {
-        assert.throws(() => assertWindows11({ ...target, ...change }));
+        assert.throws(() => assertSupportedWindows({ ...target, ...change }));
     }
+});
+
+test('platform evidence accepts Windows 10 and warns before 22H2 or for unknown AVX (#491)', () => {
+    const ten = {
+        ...target,
+        caption: 'Microsoft Windows 10 Home',
+        build: 19045,
+    };
+    assert.deepEqual(assertSupportedWindows(ten), {
+        windows10_22H2: true,
+        warnings: [],
+    });
+    assert.deepEqual(assertSupportedWindows(target), {
+        windows10_22H2: null,
+        warnings: [],
+    });
+    const old = assertSupportedWindows({ ...ten, build: 19044 });
+    assert.equal(old.windows10_22H2, false);
+    assert.match(old.warnings[0], /not 22H2/);
+    for (const avx of [null, undefined])
+        assert.match(
+            assertSupportedWindows({ ...target, avx }).warnings[0],
+            /AVX/,
+        );
+    assert.throws(
+        () => assertSupportedWindows({ ...target, avx: false }),
+        /no AVX/,
+    );
 });
 
 test('proof CLI accepts no DB URL, secret, missing, duplicated or unknown options', () => {

@@ -1,4 +1,4 @@
-# Windows 11 compiled-runtime architecture proof
+# Windows 10/11 compiled-runtime architecture proof
 
 This is the bounded #357 platform experiment, not an installer or customer
 bootstrap. It only creates a uniquely named temporary directory and database
@@ -7,7 +7,8 @@ Do not run it against a customer installation. No platform proof has yet passed.
 
 ## Prepare on the Windows build machine
 
-Use an eligible Windows 11 Intel/AMD x64 PC and the exact Node archive in
+Use an eligible Windows 10 or Windows 11 Intel/AMD x64 PC (client edition;
+Windows 10 builds 10240–19045, Windows 11 22000+; owner decision 2026-11-24) and the exact Node archive in
 `../components.json`. Acquire both archives through the listed official URLs
 before taking the target offline. Preserve upstream provenance/signature and
 license materials with the test record; SHA-256 alone is integrity, not an
@@ -52,7 +53,9 @@ C:\gpos-tools\node-v22.23.5-win-x64\node.exe .\proof\run.mjs `
 The output parent must exist and the output file must not exist. A failed or
 ineligible run never writes passing evidence or overwrites an earlier report.
 The tool obtains OS/CPU identity from CIM; its OS guard is not a claim that
-every Windows 11 build/CPU is still serviced or eligible. Record that qualification
+every Windows 10/11 build/CPU is still serviced or eligible. The report's
+`target` records the build, `windows10_22H2`, `avx` and `warnings` (Windows
+10 below 22H2, or AVX unreadable); a CPU without AVX is refused. Record that qualification
 separately. PowerShell, CIM, Get-NetTCPConnection and icacls must be available;
 missing capabilities fail the proof. Execution uses current-user-only temp ACLs.
 

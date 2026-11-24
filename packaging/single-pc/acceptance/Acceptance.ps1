@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
     Runs the read-only acceptance checks (acceptance.mjs, #366) on the
-    Windows 11 x64 target and writes a new redacted evidence JSON.
+    Windows 10 or Windows 11 x64 target and writes a new redacted evidence JSON.
     It installs, starts, stops and changes nothing. Run from an elevated
     Windows PowerShell in the source checkout's packaging\single-pc\acceptance
     folder (or a copy of it next to ..\runtime and ..\installer).

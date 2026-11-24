@@ -1,4 +1,4 @@
-# Windows 11 x64 acceptance checklist (moved)
+# Windows 10/11 x64 acceptance checklist (moved)
 
 The checklist is now one executable runbook:
 [../acceptance/RUNBOOK.md](../acceptance/RUNBOOK.md) (#366).
@@ -10,5 +10,5 @@ exact commands, evidence fields and the issue each closes. The runbook adds
 items left open by #358–#365), plus the read-only acceptance harness
 [../acceptance/acceptance.mjs](../acceptance/acceptance.mjs).
 
-Nothing in it has been executed yet; no Windows 11 x64 machine has been
-available.
+Nothing in it has been executed yet; no Windows 10 or Windows 11 x64
+machine has been available.
