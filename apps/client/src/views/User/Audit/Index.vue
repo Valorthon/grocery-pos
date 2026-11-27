@@ -154,16 +154,16 @@
                                 <Copy :size="14" aria-hidden="true" /></button
                         ></span>
                     </dd>
-                    <dt class="font-semibold">Approved by</dt>
-                    <dd>
-                        {{
-                            selected.approvedBy
-                                ? (selected.approvedByName ??
-                                  shortId(selected.approvedBy))
-                                : '—'
-                        }}
-                    </dd>
-                    <dt class="font-semibold">IP</dt>
+                    <template v-if="selected.approvedBy">
+                        <dt class="font-semibold">Approved by</dt>
+                        <dd>
+                            {{
+                                selected.approvedByName ??
+                                shortId(selected.approvedBy)
+                            }}
+                        </dd>
+                    </template>
+                    <dt class="font-semibold">Client address</dt>
                     <dd>{{ selected.ip ?? 'Unavailable' }}</dd>
                     <dt class="font-semibold">Device</dt>
                     <dd>
