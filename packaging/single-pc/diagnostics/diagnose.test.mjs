@@ -32,7 +32,8 @@ import {
     diagnose,
     isAccessDenied,
     errorLines,
-    firewallState,
+    firewallProbeScript,
+    parseFirewallProbe,
     parseLanAddress,
     parseTimeServer,
     parseClockSync,
@@ -587,9 +588,24 @@ describe('diagnose', () => {
     });
 
     test('LAN network fact parsers (#399)', () => {
-        assert.equal(firewallState(''), 'missing');
-        assert.equal(firewallState('True\r\n'), 'enabled');
-        assert.equal(firewallState('False'), 'disabled');
+        // #501: a removed rule is missing, a refused read is unknown.
+        assert.equal(parseFirewallProbe(0, 'NotFound\r\n'), 'missing');
+        assert.equal(parseFirewallProbe(0, 'True\r\n'), 'enabled');
+        assert.equal(parseFirewallProbe(0, 'False'), 'disabled');
+        assert.equal(parseFirewallProbe(2, ''), null);
+        assert.equal(parseFirewallProbe(1, ''), null);
+        assert.equal(parseFirewallProbe(0, ''), null);
+        assert.equal(parseFirewallProbe(0, 'garbage'), null);
+        const script = firewallProbeScript();
+        assert.match(
+            script,
+            /-DisplayName 'GroceryPOS-LAN-HTTPS' -ErrorAction Stop/,
+        );
+        assert.match(
+            script,
+            /'ObjectNotFound'\) \{ 'NotFound' \} else \{ exit 2 \}/,
+        );
+        assert.doesNotMatch(script, /SilentlyContinue/);
         assert.deepEqual(parseLanAddress(''), {
             lanIpPresent: false,
             lanProfile: null,
