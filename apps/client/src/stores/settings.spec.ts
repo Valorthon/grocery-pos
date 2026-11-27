@@ -202,12 +202,24 @@ it('guesses Guest/Incognito only from a small storage quota (#502)', async () =>
     const quota = (value: number) => ({
         estimate: () => Promise.resolve({ quota: value }),
     });
-    expect(await looksEphemeralBrowser(quota(100 * 1024 * 1024))).toBe(true);
-    expect(await looksEphemeralBrowser(quota(EPHEMERAL_QUOTA_BYTES))).toBe(
+    const none = undefined;
+    expect(await looksEphemeralBrowser(quota(100 * 1024 * 1024), none)).toBe(
+        true,
+    );
+    expect(
+        await looksEphemeralBrowser(quota(EPHEMERAL_QUOTA_BYTES), none),
+    ).toBe(false);
+    expect(await looksEphemeralBrowser(quota(50 * 1024 ** 3), none)).toBe(
         false,
     );
-    expect(await looksEphemeralBrowser(quota(50 * 1024 ** 3))).toBe(false);
-    expect(await looksEphemeralBrowser(undefined)).toBe(false);
+    // Heap-relative where Chromium reports the JS heap limit.
+    const heap = 4 * 1024 ** 3;
+    expect(await looksEphemeralBrowser(quota(6 * 1024 ** 3), heap)).toBe(true);
+    expect(await looksEphemeralBrowser(quota(9 * 1024 ** 3), heap)).toBe(false);
+    expect(await looksEphemeralBrowser(undefined, heap)).toBe(false);
+    expect(
+        await looksEphemeralBrowser({} as Pick<StorageManager, 'estimate'>),
+    ).toBe(false);
     expect(
         await looksEphemeralBrowser({
             estimate: () => Promise.reject(new Error('no')),

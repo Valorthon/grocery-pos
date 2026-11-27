@@ -39,28 +39,37 @@ export const terminalLabel = ref(savedTerminal.value || DEFAULT_TERMINAL);
 /** The saved label itself, '' while none is saved ("Not set", #502). */
 export const savedTerminalLabel = readonly(savedTerminal);
 /**
- * Below this storage quota the browser is most likely a Guest or Incognito
- * window, whose storage ends when the window closes (#502). Chromium gives
- * such profiles about 100 MB, a normal profile a share of the disk.
+ * Fallback threshold (#502): below this storage quota the browser is most
+ * likely a Guest or Incognito window, whose storage ends when it closes.
+ * Used only where the JS heap limit is unknown.
  */
 export const EPHEMERAL_QUOTA_BYTES = 120 * 1024 * 1024;
 /**
- * Best-effort guess that this is a Guest/Incognito window (#502): true only
- * when the storage estimate answers with a small quota. Unknown is false.
+ * Best-effort guess that this is a Guest/Incognito window (#502). Chromium
+ * caps such a profile's quota near its memory budget, so where
+ * `performance.memory` exists a quota under twice the JS heap limit counts;
+ * elsewhere a quota under `EPHEMERAL_QUOTA_BYTES`. No estimate is false.
  */
 export async function looksEphemeralBrowser(
     storage: Pick<StorageManager, 'estimate'> | undefined = typeof navigator ===
     'undefined'
         ? undefined
         : navigator.storage,
+    heapLimit: number | undefined = (
+        globalThis.performance as
+            | (Performance & { memory?: { jsHeapSizeLimit?: number } })
+            | undefined
+    )?.memory?.jsHeapSizeLimit,
 ): Promise<boolean> {
+    if (!storage || typeof storage.estimate !== 'function') return false;
     try {
-        const quota = (await storage?.estimate())?.quota;
-        return (
-            typeof quota === 'number' &&
-            quota > 0 &&
-            quota < EPHEMERAL_QUOTA_BYTES
-        );
+        const quota = (await storage.estimate())?.quota;
+        if (typeof quota !== 'number' || quota <= 0) return false;
+        const threshold =
+            typeof heapLimit === 'number' && heapLimit > 0
+                ? 2 * heapLimit
+                : EPHEMERAL_QUOTA_BYTES;
+        return quota < threshold;
     } catch {
         return false;
     }

@@ -247,9 +247,36 @@ it('shows "Not set" and an empty field on a fresh terminal (#502)', async () => 
     expect(terminalSection().textContent).toContain(
         "Saved in this PC's browser only; set it on each terminal",
     );
+    // Not a single-pc build: no device address line.
+    expect(document.querySelector('[data-testid="device-address"]')).toBeNull();
+});
+it('shows the device address in a single-pc build, the main PC on localhost (#502)', async () => {
+    vi.stubEnv('VITE_APP_ENV', 'single-pc');
+    try {
+        await mount();
+        const line = document.querySelector(
+            '[data-testid="device-address"]',
+        )?.textContent;
+        expect(line).toContain(window.location.host);
+        expect(line).toContain('(the main PC)');
+    } finally {
+        vi.unstubAllEnvs();
+    }
+});
+it('marks the "Lane #1" fallback as no label in Terminals seen (#502)', async () => {
+    seenRows = [
+        {
+            label: 'Lane #1',
+            lastSeenAt: '2026-11-27T01:00:00.000Z',
+            shifts: 1,
+            offlineLeases: 0,
+        },
+    ];
+    await mount();
+    seenRows = [];
     expect(
-        document.querySelector('[data-testid="device-address"]')?.textContent,
-    ).toContain(window.location.host);
+        document.querySelector('[data-testid="terminals-seen"]')?.textContent,
+    ).toContain('(no label) Lane #1');
 });
 it('saves the label with a success toast (#502)', async () => {
     refreshSavedTerminalLabel();

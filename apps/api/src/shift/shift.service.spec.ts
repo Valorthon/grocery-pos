@@ -1099,8 +1099,21 @@ describe('ShiftService.list and getById', () => {
 
 describe('ShiftService.terminalsSeen (#502)', () => {
     type Group = { _id: string; lastSeenAt: Date; count: number };
+    /** Answers like the real pipeline: `$in` filter, newest first, `$limit`. */
     function stub(model: FakeModel, rows: Group[]) {
-        const aggregate = jest.fn().mockResolvedValue(rows);
+        const aggregate = jest.fn((pipeline: Record<string, unknown>[]) => {
+            const match = Object.values(
+                pipeline[0].$match as Record<string, { $in?: string[] }>,
+            )[0];
+            const limit = pipeline.find((stage) => '$limit' in stage)
+                ?.$limit as number;
+            const sorted = [...rows]
+                .filter((row) => !match.$in || match.$in.includes(row._id))
+                .sort(
+                    (a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime(),
+                );
+            return Promise.resolve(sorted.slice(0, limit));
+        });
         Object.assign(model, { aggregate });
         return aggregate;
     }
@@ -1163,10 +1176,33 @@ describe('ShiftService.terminalsSeen (#502)', () => {
         const body = await service.terminalsSeen();
 
         expect(body.terminals).toHaveLength(TERMINALS_SEEN_LIMIT);
-        for (const agg of [shiftAgg, leaseAgg]) {
-            const pipeline = agg.mock.calls[0][0] as Record<string, unknown>[];
-            expect(pipeline).toContainEqual({ $limit: TERMINALS_SEEN_LIMIT });
-        }
+        for (const agg of [shiftAgg, leaseAgg])
+            for (const [pipeline] of agg.mock.calls)
+                expect(pipeline).toContainEqual({
+                    $limit: TERMINALS_SEEN_LIMIT * 2,
+                });
+    });
+
+    it('keeps full counts for a recent shift label whose leases are old', async () => {
+        stub(shifts, [{ _id: 'Lane A', lastSeenAt: at(500), count: 2 }]);
+        stub(leaseModel, [
+            ...Array.from({ length: TERMINALS_SEEN_LIMIT }, (_, i) => ({
+                _id: `Lease ${i}`,
+                lastSeenAt: at(100 + i),
+                count: 1,
+            })),
+            { _id: 'Lane A', lastSeenAt: at(1), count: 4 },
+        ]);
+
+        const body = await service.terminalsSeen();
+
+        expect(body.terminals).toHaveLength(TERMINALS_SEEN_LIMIT);
+        expect(body.terminals[0]).toEqual({
+            label: 'Lane A',
+            lastSeenAt: at(500).toISOString(),
+            shifts: 2,
+            offlineLeases: 4,
+        });
     });
 });
 

@@ -100,7 +100,11 @@
                 <p class="text-sm text-slate-600">
                     Saved in this PC's browser only; set it on each terminal.
                 </p>
-                <p class="text-sm text-slate-600" data-testid="device-address">
+                <p
+                    v-if="deviceAddress"
+                    class="text-sm text-slate-600"
+                    data-testid="device-address"
+                >
                     This device's address:
                     <span class="font-medium text-slate-900">{{
                         deviceAddress
@@ -108,7 +112,7 @@
                 </p>
                 <p
                     v-if="ephemeral"
-                    role="alert"
+                    role="status"
                     class="text-sm text-amber-800"
                     data-testid="ephemeral-warning"
                 >
@@ -170,7 +174,7 @@
                         class="py-2 flex flex-wrap gap-x-3"
                     >
                         <span class="font-medium text-slate-900">{{
-                            row.label
+                            seenLabel(row.label)
                         }}</span>
                         <span class="text-slate-600"
                             >Last seen
@@ -195,6 +199,7 @@
 import { NON_VAT_NOTICE } from '@/utils/tax-notice';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
+    DEFAULT_TERMINAL,
     SETTINGS_LIMITS,
     TERMINALS_SEEN_LIMIT,
     type TerminalSeen,
@@ -237,10 +242,19 @@ const seen = ref<TerminalSeen[]>([]);
 const seenLoading = ref(true);
 const seenError = ref('');
 let seenRequest = 0;
-const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
-const deviceAddress = LOOPBACK.has(window.location.hostname)
-    ? `${window.location.host} (the main PC)`
-    : window.location.host;
+/** Single-pc builds only (#502): localhost is the main PC, else a LAN terminal. */
+const deviceAddress =
+    import.meta.env.VITE_APP_ENV === 'single-pc'
+        ? window.location.hostname === 'localhost'
+            ? `${window.location.host} (the main PC)`
+            : window.location.host
+        : '';
+/** The display fallback is not a saved label; say so (#502). */
+function seenLabel(label: string): string {
+    return label === DEFAULT_TERMINAL
+        ? `(no label) ${DEFAULT_TERMINAL}`
+        : label;
+}
 const loadingForm = ref(true);
 const saving = ref(false),
     saveError = ref('');
