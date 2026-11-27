@@ -1358,20 +1358,14 @@ function tcp(host, port) {
     });
 }
 
-/** Get-NetFirewallRule's Enabled (a locale-independent enum) to a state. */
-export function firewallState(text) {
-    const value = text.trim();
-    if (value === '' || value === 'NotFound') return 'missing';
-    return value === 'True' ? 'enabled' : 'disabled';
-}
-
 /** The firewall probe (#501). A rule that doesn't exist makes
  *  Get-NetFirewallRule fail with category ObjectNotFound, which with
  *  SilentlyContinue still leaves `$?` false and a nonzero exit, so it read
  *  as unreadable. The script catches it: ObjectNotFound prints `NotFound`
- *  (missing); any other error (e.g. PermissionDenied) exits 2 (unknown). */
-export function firewallProbeScript(name) {
-    return `try { $r = Get-NetFirewallRule -DisplayName '${name}' -ErrorAction Stop; [string]($r | Select-Object -First 1).Enabled } catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'NotFound' } else { exit 2 } }`;
+ *  (missing); any other error (e.g. a stopped MpsSvc or a CIM provider
+ *  failure) exits 2 (unknown). */
+export function firewallProbeScript() {
+    return `try { $r = Get-NetFirewallRule -DisplayName '${FIREWALL_RULE}' -ErrorAction Stop; [string]($r | Select-Object -First 1).Enabled } catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'NotFound' } else { exit 2 } }`;
 }
 
 /** The probe's exit code and output to missing/enabled/disabled, or null
@@ -1681,7 +1675,7 @@ export function realContext() {
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
-                firewallProbeScript(name),
+                firewallProbeScript(),
             ]);
             return parseFirewallProbe(code, stdout);
         },
