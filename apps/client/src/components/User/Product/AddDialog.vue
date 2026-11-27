@@ -41,7 +41,7 @@
                 label="Product Name"
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
-                @blur="checkRepeats('name')"
+                @blur="onNameBlur"
             />
             <BaseButton
                 v-if="repeatOf.name"
@@ -112,6 +112,7 @@ import {
     unitLabel,
 } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
+import { productNameCharactersError } from '@/utils/rules';
 import { productErrors, type ProductFormInput } from './validation';
 import {
     apiErrorMessages,
@@ -214,6 +215,15 @@ const checkRepeats = (field: 'name' | 'EAN'): boolean => {
     repeatOf.value = nextRepeat;
     errors.value = nextErrors;
     return !!id;
+};
+
+/** Leaving the name field checks its characters (#507), then repeats. */
+const onNameBlur = () => {
+    // Escape or × blurs the field as the dialog closes: no flash.
+    if (!props.modelValue) return;
+    const message = productNameCharactersError(formData.name);
+    if (message) errors.value = { ...errors.value, name: message };
+    else checkRepeats('name');
 };
 
 const openRepeat = (draftId: string) => {

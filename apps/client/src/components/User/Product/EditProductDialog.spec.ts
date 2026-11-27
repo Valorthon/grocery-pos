@@ -311,6 +311,28 @@ describe('EditProductDialog errors (#282)', () => {
         });
     });
 
+    it('checks a changed name on blur, never a legacy one (#507)', async () => {
+        await mount({ product: { name: 'QA 🍎 APPLE' } });
+        const { input } = field('Product name');
+        input.dispatchEvent(new Event('blur'));
+        await flush();
+        expect(field('Product name').error()).toBeFalsy();
+        await type(input, 'QA 🍎 PEAR');
+        input.dispatchEvent(new Event('blur'));
+        await flush();
+        expect(field('Product name').error()).toBe(
+            "Use only letters, numbers, spaces and . , - & ' / ( ) %",
+        );
+        await type(input, 'Mama’s Best');
+        input.dispatchEvent(new Event('blur'));
+        await flush();
+        expect(field('Product name').error()).toBeFalsy();
+        await type(input, 'Piña (1/2 kg)');
+        input.dispatchEvent(new Event('blur'));
+        await flush();
+        expect(field('Product name').error()).toBeFalsy();
+    });
+
     it('saves a legacy emoji name unchanged without sending it (#483)', async () => {
         await mount({ product: { name: 'QA 🍎 APPLE' } });
         await type(field('Restock amount').input, '3');

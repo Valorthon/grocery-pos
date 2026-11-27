@@ -231,6 +231,28 @@ describe('Product AddDialog (#17)', () => {
         });
     });
 
+    it('checks the name characters on blur (#507)', async () => {
+        await open();
+        await type('Product Name', 'QA 🍎 APPLE');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe(
+            "Use only letters, numbers, spaces and . , - & ' / ( ) %",
+        );
+        await type('Product Name', 'Piña (1/2 kg)');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe('');
+        await type('Product Name', 'Mama’s Best');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe('');
+        await type('Product Name', '');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe('');
+    });
+
     describe('a repeat of another draft (#478)', () => {
         const DRAFTS: WithDraftId<ProductDraft>[] = [
             {

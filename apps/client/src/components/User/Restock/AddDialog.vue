@@ -123,6 +123,8 @@
                     label="Product Name"
                     :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :error="errors.name"
+                    @update:model-value="clearError('name')"
+                    @blur="onNameBlur"
                 />
                 <BaseInput
                     v-model="formData.price"
@@ -177,6 +179,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { STRING_LIMITS, type ProductCostView } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
+import { productNameCharactersError } from '@/utils/rules';
 import { toEnsureValidQuery } from '@/utils/payloads';
 import { useProductMatches } from '@/composables/useProductMatches';
 import type { ScannedLine } from '@/composables/useBarcodeCapture';
@@ -308,6 +311,13 @@ function loadCostDefault(generation: number) {
                 ),
             ),
         );
+}
+
+/** Leaving a new product's name checks its characters (#507). */
+function onNameBlur() {
+    if (!props.modelValue) return;
+    const message = productNameCharactersError(formData.name);
+    if (message) errors.value = { ...errors.value, name: message };
 }
 
 function clearError(...fields: string[]) {
