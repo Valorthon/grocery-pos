@@ -4,6 +4,7 @@
 // otherwise. With a built API (apps/api/dist) it also logs in to the
 // restored replacement installation.
 //   GPOS_TEST_MONGOD=… GPOS_TEST_MONGO_TOOLS=… node --test packaging/single-pc/backup/backup.db.test.mjs
+import { WIRE_VERSION } from '../../../packages/contracts/dist/esm/release.js';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -140,7 +141,7 @@ function http(path, { method = 'GET', body, cookie } = {}) {
                     Host: 'localhost:1443',
                     Origin: ORIGIN,
                     // Every single-pc client names its wire version (#364).
-                    'x-wire-version': '1',
+                    'x-wire-version': String(WIRE_VERSION),
                     ...(body ? { 'Content-Type': 'application/json' } : {}),
                     ...(cookie ? { Cookie: cookie } : {}),
                 },
