@@ -1361,8 +1361,28 @@ function tcp(host, port) {
 /** Get-NetFirewallRule's Enabled (a locale-independent enum) to a state. */
 export function firewallState(text) {
     const value = text.trim();
-    if (value === '') return 'missing';
+    if (value === '' || value === 'NotFound') return 'missing';
     return value === 'True' ? 'enabled' : 'disabled';
+}
+
+/** The firewall probe (#501). A rule that doesn't exist makes
+ *  Get-NetFirewallRule fail with category ObjectNotFound, which with
+ *  SilentlyContinue still leaves `$?` false and a nonzero exit, so it read
+ *  as unreadable. The script catches it: ObjectNotFound prints `NotFound`
+ *  (missing); any other error (e.g. PermissionDenied) exits 2 (unknown). */
+export function firewallProbeScript(name) {
+    return `try { $r = Get-NetFirewallRule -DisplayName '${name}' -ErrorAction Stop; [string]($r | Select-Object -First 1).Enabled } catch { if ($_.CategoryInfo.Category -eq 'ObjectNotFound') { 'NotFound' } else { exit 2 } }`;
+}
+
+/** The probe's exit code and output to missing/enabled/disabled, or null
+ *  (unreadable) for a failure or unexpected output. */
+export function parseFirewallProbe(code, stdout) {
+    if (code !== 0) return null;
+    const value = stdout.trim();
+    if (value === 'NotFound') return 'missing';
+    if (value === 'True') return 'enabled';
+    if (value === 'False') return 'disabled';
+    return null;
 }
 
 /** The installer's adapter facts (#396): Preferred address lines with their
@@ -1661,10 +1681,9 @@ export function realContext() {
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
-                `$r = Get-NetFirewallRule -DisplayName '${name}' -ErrorAction SilentlyContinue; if ($r) { [string]($r | Select-Object -First 1).Enabled }`,
+                firewallProbeScript(name),
             ]);
-            if (code !== 0) return null;
-            return firewallState(stdout);
+            return parseFirewallProbe(code, stdout);
         },
         tlsHandshake,
         async avx() {
