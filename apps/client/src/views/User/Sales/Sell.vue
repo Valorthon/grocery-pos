@@ -364,7 +364,7 @@ import {
     useCartStore,
 } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
-import { apiErrorCode } from '@/utils/api-error';
+import { apiErrorBody, apiErrorCode } from '@/utils/api-error';
 import { Color, REGISTER_TOAST_IDLE, useUIStore } from '@/stores/ui';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import CheckoutModal from '@/components/User/Sales/CheckoutModal.vue';
@@ -385,7 +385,10 @@ import {
     saleErrorMessage,
     useSaleCheckout,
 } from '@/components/User/Sales/sale-submission';
-import { stockWarningText } from '@/components/User/Sales/stock-warning';
+import {
+    shortStockLines,
+    stockWarningText,
+} from '@/components/User/Sales/stock-warning';
 import {
     isBarcode,
     type Match,
@@ -494,6 +497,8 @@ const scanFeedback = ref<{ type: 'success' | 'error'; message: string } | null>(
  * non-blocking warning when a line asks for more. Offline adds none.
  */
 const knownStock = new Map<string, number>();
+/** Each looked-up line's "Low stock at" level, for a refreshed hint (#504). */
+const knownReorderLevel = new Map<string, number | undefined>();
 /** The register's lookups ask for the stock hint; other callers don't. */
 const STOCK_LOOKUP = { params: { withStock: true } };
 const stockWarning = ref<{ product: string; message: string } | null>(null);
@@ -1188,6 +1193,7 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
     if (!offline.offline && product.stock !== undefined)
         knownStock.set(product._id, product.stock);
     else knownStock.delete(product._id);
+    knownReorderLevel.set(product._id, product.reorderLevel);
     const hints = { ...stockHints.value };
     const hint = offline.offline ? null : lowStockHint(product);
     if (hint) hints[product._id] = hint;
@@ -1480,10 +1486,34 @@ async function explainFailure(error: unknown): Promise<never> {
     // A 400 means nothing was recorded. The usual cause is a price that
     // changed since the item was scanned, so the preview total the tenders
     // were built from is stale: refresh it for the retry.
+    if (isRejectedSale(error)) applyShortStock(error);
     if (isRejectedSale(error) && (await refreshCartPrices())) {
         message += ' Prices have changed and the total is updated.';
     }
     throw new Error(message);
+}
+
+/**
+ * An insufficient-stock refusal names each short product's current
+ * sellable stock: the ticket's hints and warning follow it (#504).
+ */
+function applyShortStock(error: unknown) {
+    const lines = shortStockLines(apiErrorBody(error) ?? undefined);
+    if (!lines.length) return;
+    const hints = { ...stockHints.value };
+    for (const line of lines) {
+        const item = cartStore.items.find((i) => i.product === line.product);
+        if (!item) continue;
+        knownStock.set(line.product, line.available);
+        const hint = lowStockHint({
+            stock: line.available,
+            unit: item.unit,
+            reorderLevel: knownReorderLevel.get(line.product),
+        });
+        if (hint) hints[line.product] = hint;
+        else delete hints[line.product];
+    }
+    stockHints.value = hints;
 }
 
 /** Re-reads each cart line's price; true if any changed. */
