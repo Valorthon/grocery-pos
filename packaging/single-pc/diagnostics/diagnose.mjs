@@ -427,17 +427,39 @@ const PORT_NAMES = [
 /**
  * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
  * and only if it is a private IPv4 address. Never for the API or MongoDB.
- */
-async function configuredLanIp(ctx, paths) {
-    if (!paths) return null;
-    const lanIp = (await readJson(ctx, paths.runtimeManifest))?.lanIp;
-    return typeof lanIp === 'string' && isPrivateIpv4(lanIp) ? lanIp : null;
+ * #499: the LAN IP plus whether the manifest was refused (not elevated),
+ *  so callers report `unknown` instead of "no LAN terminals". */
+async function lanConfig(ctx, paths) {
+    if (!paths) return { lanIp: null, denied: false };
+    let manifest;
+    try {
+        manifest = JSON.parse(await ctx.readText(paths.runtimeManifest));
+    } catch (error) {
+        return { lanIp: null, denied: isAccessDenied(error) };
+    }
+    const lanIp = manifest?.lanIp;
+    return {
+        lanIp: typeof lanIp === 'string' && isPrivateIpv4(lanIp) ? lanIp : null,
+        denied: false,
+    };
+}
+
+function lanUnverified(id, title, details) {
+    return adminUnverified(
+        result(
+            id,
+            title,
+            'unknown',
+            `The LAN terminal settings could not be read: ${UNVERIFIED_ADMIN}.`,
+            details ? { details } : {},
+        ),
+    );
 }
 
 export async function checkPorts(ctx, paths) {
     // Only the LAN proxy service may listen on the LAN IP (#396): while it
     // is known not to run, a listener there is someone else's.
-    const configured = await configuredLanIp(ctx, paths);
+    const { lanIp: configured, denied } = await lanConfig(ctx, paths);
     const states = configured ? await ctx.serviceStates() : null;
     const lanIp =
         // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
@@ -451,6 +473,9 @@ export async function checkPorts(ctx, paths) {
     const details = {};
     const closed = [];
     const exposed = [];
+    // #499: unreadable LAN settings leave a private-IPv4 proxy listener
+    // unexplained, never proven foreign.
+    const unverified = [];
     for (const [key, label, port, hosts] of PORT_NAMES) {
         const open = [];
         for (const host of hosts)
@@ -461,7 +486,14 @@ export async function checkPorts(ctx, paths) {
             (key === 'proxy' &&
                 lanIp !== null &&
                 address.toLowerCase().replace(/^::ffff:/, '') === lanIp);
-        const foreign = (listening ?? []).filter((a) => !allowed(a));
+        let foreign = (listening ?? []).filter((a) => !allowed(a));
+        if (key === 'proxy' && denied) {
+            const maybeLan = foreign.filter((a) =>
+                isPrivateIpv4(a.toLowerCase().replace(/^::ffff:/, '')),
+            );
+            if (maybeLan.length) unverified.push(`${label} (${port})`);
+            foreign = foreign.filter((a) => !maybeLan.includes(a));
+        }
         details[key] = { port, reachable: open, listeners: listening };
         if (foreign.length) exposed.push(`${label} (${port})`);
         else if (open.length < hosts.length) closed.push(`${label} (${port})`);
@@ -484,6 +516,17 @@ export async function checkPorts(ctx, paths) {
             { details, steps: GUIDANCE.portClosed },
         );
     }
+    if (unverified.length) {
+        return adminUnverified(
+            result(
+                'ports',
+                'Ports (this PC only)',
+                'unknown',
+                `Also listening on a LAN address: ${unverified.join(', ')}; the LAN terminal settings could not be read: ${UNVERIFIED_ADMIN}.`,
+                { details: { ...details, lanIp: null } },
+            ),
+        );
+    }
     return result(
         'ports',
         'Ports (this PC only)',
@@ -502,7 +545,8 @@ export async function checkPorts(ctx, paths) {
  */
 export async function checkLanProxy(ctx, paths) {
     const title = 'LAN terminals';
-    const lanIp = await configuredLanIp(ctx, paths);
+    const { lanIp, denied } = await lanConfig(ctx, paths);
+    if (denied) return lanUnverified('lanProxy', title);
     if (!lanIp)
         return result(
             'lanProxy',
@@ -553,7 +597,8 @@ export async function checkLanProxy(ctx, paths) {
  */
 export async function checkTimeServer(ctx, paths) {
     const title = 'Time for LAN terminals';
-    const lanIp = await configuredLanIp(ctx, paths);
+    const { lanIp, denied } = await lanConfig(ctx, paths);
+    if (denied) return lanUnverified('timeServer', title);
     if (!lanIp)
         return result(
             'timeServer',
@@ -606,7 +651,8 @@ export async function checkTimeServer(ctx, paths) {
  */
 export async function checkLanNetwork(ctx, paths) {
     const title = 'LAN network';
-    const lanIp = await configuredLanIp(ctx, paths);
+    const { lanIp, denied } = await lanConfig(ctx, paths);
+    if (denied) return lanUnverified('lanNetwork', title);
     if (!lanIp)
         return result(
             'lanNetwork',

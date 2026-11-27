@@ -305,6 +305,57 @@ describe('diagnose', () => {
         }
     });
 
+    test('unreadable LAN settings make the LAN listener unknown, never a stop-selling FAIL (#499)', async () => {
+        const paths = layout(root);
+        const deniedCtx = (listeners) =>
+            healthy({
+                readText: async (path) => {
+                    if (path === paths.runtimeManifest)
+                        throw Object.assign(new Error('EPERM'), {
+                            code: 'EPERM',
+                        });
+                    return (await import('node:fs/promises')).readFile(
+                        path,
+                        'utf8',
+                    );
+                },
+                listeners,
+            });
+        const report = await diagnose(
+            { dataRoot: root },
+            deniedCtx(async (p) =>
+                p === 1443
+                    ? ['127.0.0.1', '::1', '192.168.1.10']
+                    : ['127.0.0.1'],
+            ),
+        );
+        const ports = byId(report, 'ports');
+        assert.equal(ports.status, 'unknown');
+        assert.match(ports.summary, /administrator/);
+        assert.deepEqual(ports.steps, []);
+        for (const id of ['lanProxy', 'lanNetwork', 'timeServer'])
+            assert.equal(byId(report, id).status, 'unknown', id);
+        assert.doesNotMatch(
+            renderText(report),
+            /do not keep selling|No LAN terminals/,
+        );
+
+        // Real exposures still fail: a public address on the proxy port,
+        // or any non-loopback listener on the database or application.
+        for (const listeners of [
+            async (p) =>
+                p === 1443 ? ['127.0.0.1', '::1', '8.8.8.8'] : ['127.0.0.1'],
+            async (p) =>
+                p === 1443
+                    ? ['127.0.0.1', '::1']
+                    : ['127.0.0.1', '192.168.1.10'],
+            async () => ['0.0.0.0'],
+        ]) {
+            const r = await diagnose({ dataRoot: root }, deniedCtx(listeners));
+            assert.equal(byId(r, 'ports').status, 'fail');
+        }
+    });
+
     test('LAN network: address, profile, firewall rule and certificate (#399)', async () => {
         const paths = layout(root);
         const rootPem =
