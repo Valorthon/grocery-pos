@@ -188,12 +188,16 @@ test('product-name-characters (#483) refuses active names on every upgrade, warn
     );
     assert.match(warnings[0], /Product status to All/);
     assert.doesNotMatch(warnings[0], /96385074/);
+    // #506: the upgrade continues, so the warning never says to run it again.
+    assert.doesNotMatch(warnings[0], /run the upgrade again/);
+    assert.match(warnings[0], /and save\.$/);
     assert.ok(
         refusals[0].includes('96385074 – 1\uFE0F\u20E3;') ||
             refusals[0].includes('96385074 – 1\uFE0F\u20E3.'),
     );
     assert.match(refusals[0], /Product status to All/);
     assert.doesNotMatch(refusals[0], /PIÑA|MAMA/i);
+    assert.match(refusals[0], /and save\. Then run the upgrade again\.$/);
     assert.deepEqual(
         rows.map((r) => r.name),
         [

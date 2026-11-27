@@ -153,7 +153,8 @@ export function normalizeProductName(name) {
 }
 
 const NAME_STEPS =
-    "To fix each one in the current release: open Products, set Product status to All, search the barcode, choose Edit, rename it using only letters, numbers, spaces and . , - & ' / ( ) %, and save. Then run the upgrade again.";
+    "To fix each one in the current release: open Products, set Product status to All, search the barcode, choose Edit, rename it using only letters, numbers, spaces and . , - & ' / ( ) %, and save.";
+const RUN_AGAIN = 'Then run the upgrade again.';
 
 /** Stored names invalid in their normalized form, active and archived. */
 async function invalidProductNameRows(db) {
@@ -187,7 +188,7 @@ export const PRODUCT_NAME_CHARACTERS = Object.freeze({
         return [
             `Product names use characters that are no longer allowed: ${active
                 .map(describeRow)
-                .join('; ')}. ${NAME_STEPS}`,
+                .join('; ')}. ${NAME_STEPS} ${RUN_AGAIN}`,
         ];
     },
     async warnings(db) {
