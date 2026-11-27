@@ -1405,10 +1405,14 @@ on upstream fixes).
   a verified TLS handshake to the IP passes (unread = `unknown`).
 - Clock sync (#446): `clockSync` (always on, warn) warns when the service is
   disabled/absent, Set time automatically is off (`W32Time\Parameters\Type`
-  NoSync) or the running service's source isn't a peer/Hyper-V (a stopped
-  trigger-start service is fine),
-  step "Turn on Set time automatically"; unreadable is `unknown`.
-  `timeServer` (LAN only) is unchanged.
+  NoSync) (a stopped trigger-start service is fine), step "Turn on Set
+  time automatically"; unreadable is `unknown`. A running service on a
+  local source (Local CMOS / Free-running clock: no internet, first sync
+  pending, `/reliable:yes` LAN server) is `info`, not a warning (#508). `timeServer` (LAN only) is unchanged.
+- #508: `lanNetwork` names a stopped/refusing `GroceryPOS-ProxyLan`
+  instead of the certificate; `services` counts the running ones (LAN
+  proxy included); `app.caddy` sets `servers { protocols h1 h2 }` (no
+  HTTP/3 on UDP 1443, the firewall rule is TCP only) for both sites.
 
 **Single-PC upgrades** (#364, `packaging/single-pc/upgrade/`)
 

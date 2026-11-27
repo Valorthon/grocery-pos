@@ -407,11 +407,15 @@ export async function checkServices(ctx) {
             { details: states, steps: GUIDANCE.serviceStopped },
         );
     }
+    // #508: counted, so a running LAN proxy (#396) is included.
+    const running =
+        Object.values(SERVICES).length +
+        (states[LAN_SERVICE] === 'RUNNING' ? 1 : 0);
     return result(
         'services',
         'Services',
         'ok',
-        'All three services are running.',
+        `All ${running} services are running.`,
         {
             details: states,
         },
@@ -649,6 +653,14 @@ export async function checkTimeServer(ctx, paths) {
     );
 }
 
+function lanServiceWord(state) {
+    if (state === 'absent') return 'not installed';
+    if (state === 'STOPPED') return 'stopped';
+    if (state && state !== 'RUNNING' && state !== 'UNKNOWN')
+        return `not running (${state})`;
+    return 'not answering';
+}
+
 /**
  * The LAN terminals' network on this PC (#399): the fixed LAN IP is still on
  * a network adapter (DHCP drift), that network is Private, the firewall
@@ -698,7 +710,20 @@ export async function checkLanNetwork(ctx, paths) {
         flag('warn', 'the network is Public', GUIDANCE.lanPublic);
     if (firewall === 'missing' || firewall === 'disabled')
         flag('warn', `the firewall rule is ${firewall}`, GUIDANCE.lanFirewall);
-    if (tls?.error)
+    // #508: a refused handshake, or the LAN service known not to run, is
+    // the service being down (reported by lanProxy), not the certificate.
+    const lanState = (await ctx.serviceStates?.())?.[LAN_SERVICE];
+    const lanDown =
+        (lanState && lanState !== 'RUNNING' && lanState !== 'UNKNOWN') ||
+        tls?.error === 'ECONNREFUSED';
+    details.lanService = lanState ?? null;
+    if (lanDown && tls?.error)
+        flag(
+            'warn',
+            `the LAN proxy service (${LAN_SERVICE}) is ${lanServiceWord(lanState)}`,
+            GUIDANCE.lanProxy,
+        );
+    else if (tls?.error)
         flag(
             'warn',
             `the certificate on ${lanIp} failed (${tls.error})`,
@@ -1039,9 +1064,9 @@ export async function checkBackups(paths, now) {
 /**
  * Windows must keep this PC's own clock in sync (#446), LAN or not. On a
  * workgroup PC w32time is trigger-start and often stopped, which is fine;
- * it warns when the service is disabled or absent, when Set time
- * automatically is off (Type NoSync), or when the running service reads a
- * local clock source. Read-only; unreadable facts are `unknown`.
+ * it warns when the service is disabled or absent or when Set time
+ * automatically is off (Type NoSync). A running service on a local clock
+ * source is info, not a warning (#508). Read-only; unreadable facts are `unknown`.
  */
 export async function checkClockSync(ctx) {
     const title = 'Clock sync';
@@ -1064,8 +1089,6 @@ export async function checkClockSync(ctx) {
         return warn(
             'The Windows Time service is disabled, so this PC clock is not kept in sync.',
         );
-    if (state === 'RUNNING' && syncedSource(source) === false)
-        return warn('Windows is not syncing this PC clock with a time server.');
     if (state === null || startType === null || syncType === null)
         return result(
             'clockSync',
@@ -1098,6 +1121,20 @@ export async function checkClockSync(ctx) {
             { details },
         );
     }
+    // #508: a local source is not a fault. `w32tm /query /source` reads
+    // "Free-running System Clock" until the first sync after a (trigger)
+    // start, and "Local CMOS Clock" while no peer answers (no internet), or
+    // on the LAN time server (`/reliable:yes`, AnnounceFlags 5) between
+    // syncs. Set time automatically (Type) is the setting; a stopped
+    // trigger-start service reads ok, so a running one must not warn.
+    if (state === 'RUNNING' && syncedSource(source) === false)
+        return result(
+            'clockSync',
+            title,
+            'info',
+            `Set time automatically is on; Windows has not reached a time server yet (source: ${source}). It syncs by itself once the internet is available.`,
+            { details },
+        );
     return result(
         'clockSync',
         title,

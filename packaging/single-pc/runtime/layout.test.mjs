@@ -212,6 +212,10 @@ test('LAN terminals: LAN_ORIGIN, runtime manifest and the proxy LAN site (#396)'
         /Reporting-Endpoints "csp-endpoint=\\"\/v1\/csp-report\\""/,
     );
     assert.doesNotMatch(shared, /https:\/\/localhost:1443\/v1/);
+    // #508: both sites are TCP only (no HTTP/3 on UDP 1443).
+    assert.match(shared, /\n\tservers \{\n\t\tprotocols h1 h2\n\t\}\n/);
+    for (const text of [local, lanFile, shared])
+        assert.doesNotMatch(text, /\bh3\b|protocols[^\n]*h2c/);
 });
 
 test('generated secrets match their stored format, and a damaged one does not', () => {

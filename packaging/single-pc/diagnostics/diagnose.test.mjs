@@ -392,6 +392,37 @@ describe('diagnose', () => {
         }
     });
 
+    test('services: the running count includes the LAN proxy (#508)', async () => {
+        const states = Object.fromEntries(
+            Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+        );
+        const run = async (lan) =>
+            byId(
+                await diagnose(
+                    { dataRoot: root },
+                    healthy({
+                        serviceStates: async () =>
+                            lan ? { ...states, [LAN_SERVICE]: lan } : states,
+                    }),
+                ),
+                'services',
+            );
+        const three = Object.values(SERVICES).length;
+        assert.equal(
+            (await run(null)).summary,
+            `All ${three} services are running.`,
+        );
+        assert.equal(
+            (await run('RUNNING')).summary,
+            `All ${three + 1} services are running.`,
+        );
+        for (const lan of ['STOPPED', 'absent'])
+            assert.equal(
+                (await run(lan)).summary,
+                `All ${three} services are running.`,
+            );
+    });
+
     test('LAN network: address, profile, firewall rule and certificate (#399)', async () => {
         const paths = layout(root);
         const rootPem =
@@ -464,6 +495,50 @@ describe('diagnose', () => {
         assert.equal(cert.status, 'warn');
         assert.deepEqual(cert.steps, GUIDANCE.lanCertificate);
         assert.match(cert.summary, /ALTNAME/);
+        // #508: a stopped LAN proxy is named, not blamed on the certificate.
+        const withLan = (state) => async () => ({
+            ...Object.fromEntries(
+                Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+            ),
+            [LAN_SERVICE]: state,
+        });
+        const refused = async () => ({ error: 'ECONNREFUSED' });
+        for (const [state, word] of [
+            ['STOPPED', /GroceryPOS-ProxyLan\) is stopped/],
+            ['absent', /GroceryPOS-ProxyLan\) is not installed/],
+            ['START_PENDING', /is not running \(START_PENDING\)/],
+            ['RUNNING', /GroceryPOS-ProxyLan\) is not answering/],
+            [undefined, /GroceryPOS-ProxyLan\) is not answering/],
+        ]) {
+            const down = await run(
+                lanCtx({
+                    serviceStates: withLan(state),
+                    tlsHandshake: refused,
+                }),
+            );
+            assert.equal(down.status, 'warn', String(state));
+            assert.match(down.summary, word);
+            assert.doesNotMatch(down.summary, /certificate/);
+            assert.deepEqual(down.steps, GUIDANCE.lanProxy);
+        }
+        // A stopped service with another handshake error is still the service.
+        const stoppedTimeout = await run(
+            lanCtx({
+                serviceStates: withLan('STOPPED'),
+                tlsHandshake: async () => ({ error: 'TIMEOUT' }),
+            }),
+        );
+        assert.match(stoppedTimeout.summary, /is stopped/);
+        // A running service with a real certificate error stays a certificate.
+        const badCert = await run(
+            lanCtx({
+                serviceStates: withLan('RUNNING'),
+                tlsHandshake: async () => ({
+                    error: 'ERR_TLS_CERT_ALTNAME_INVALID',
+                }),
+            }),
+        );
+        assert.deepEqual(badCert.steps, GUIDANCE.lanCertificate);
         // Problems add up.
         const both = await run(
             lanCtx({
@@ -1064,9 +1139,6 @@ describe('diagnose', () => {
             { ...base, syncType: 'NoSync' },
             { ...base, state: 'STOPPED', startType: 'Disabled', source: null },
             { state: 'absent', startType: null, syncType: null, source: null },
-            { ...base, source: 'Local CMOS Clock' },
-            { ...base, source: 'Horloge CMOS locale' },
-            { ...base, source: 'Free-running System Clock' },
         ];
         for (const facts of warns) {
             const warn = await run(facts);
@@ -1076,6 +1148,20 @@ describe('diagnose', () => {
                 warn.steps.join(' '),
                 /Turn on Set time automatically/,
             );
+        }
+        // #508: a running service on a local source (no internet yet, the
+        // first minutes after a trigger start, or the LAN time server with
+        // /reliable:yes) is info, never a warning: a stopped service is ok.
+        for (const source of [
+            'Local CMOS Clock',
+            'Horloge CMOS locale',
+            'Free-running System Clock',
+        ]) {
+            const local = await run({ ...base, source });
+            assert.equal(local.status, 'info', source);
+            assert.match(local.summary, /^Set time automatically is on/);
+            assert.ok(local.summary.includes(source));
+            assert.deepEqual(local.steps, []);
         }
         for (const facts of [
             null,
