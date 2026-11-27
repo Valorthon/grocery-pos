@@ -17,6 +17,12 @@
 	local_certs
 	skip_install_trust
 	auto_https disable_redirects
+	# TCP only (#508): no HTTP/3 (QUIC over UDP 1443). The LAN firewall rule
+	# allows TCP 1443 alone, and loopback gains nothing from it, so neither
+	# site opens a UDP listener.
+	servers {
+		protocols h1 h2
+	}
 	# Every site names its own bind (loopback, or the one LAN IP). Never a
 	# wildcard (0.0.0.0) listener and no default_bind.
 }

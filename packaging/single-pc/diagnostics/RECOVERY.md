@@ -153,9 +153,11 @@ the check shows **LAN terminals** WARN.
    **repair**.
 4. **LAN network** WARN names the cause: the fixed address is gone (next
    section), the network is Public (set it to Private in Windows Settings >
-   Network & internet), the firewall rule is missing (vendor **repair**), or
-   the certificate on the LAN address does not match (restart, else
-   **repair**).
+   Network & internet), the firewall rule is missing (vendor **repair**), the
+   LAN proxy service (GroceryPOS-ProxyLan) is stopped or not answering
+   (restart the PC; it also retries by itself) or not installed (vendor
+   **repair**), or the certificate on the LAN address does not match
+   (restart, else **repair**).
 
 ## LAN address changed
 
@@ -215,13 +217,19 @@ turned off: ask your vendor to run repair.
 ## Clock sync
 
 "Check Grocery POS" warns about **Clock sync** when Set time automatically
-is off, the Windows Time service is disabled, or Windows is not syncing the
-clock with a time server. (A stopped time service on its own is normal:
-Windows starts it when needed.) The clock can then drift (on a PC that also
-starts another system, by hours), which puts sales on the wrong day and may refuse offline cash sales. Turn on
-Set time automatically: Windows Settings > Time & language > Date & time,
-switch on "Set time automatically", then press "Sync now". Run the check
-again. If it still warns, restart the PC; if it stays, ask your vendor.
+is off, the Windows Time service is disabled, or Windows is set to another
+time source (such as a domain) that it cannot reach. (A stopped time service
+on its own is normal: Windows starts it when needed.) It shows **Clock sync**
+as information, not a warning, when Set time automatically is on but Windows
+has not reached a time server yet ("Local CMOS Clock" or "Free-running
+System Clock"): normal without internet or right after the PC starts; check
+again once the internet is back. The clock can drift (on a PC that also
+starts another system, by hours), which puts sales on the wrong day and may
+refuse offline cash sales. Turn on Set time automatically: Windows Settings
+
+> Time & language > Date & time, switch on "Set time automatically", then
+> press "Sync now". Run the check
+> again. If it still warns, restart the PC; if it stays, ask your vendor.
 
 ## After an interrupted or failed upgrade (vendor)
 

@@ -15,6 +15,7 @@ import { request as httpsRequest } from 'node:https';
 import { connect as netConnect, createServer as netServer } from 'node:net';
 import { networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createSocket } from 'node:dgram';
 import { connect as tlsConnect } from 'node:tls';
 import { after, before, describe, test } from 'node:test';
 import { boundedWait } from '../proof/policy.mjs';
@@ -198,6 +199,33 @@ describe(
                 new RegExp(`IP Address:${LAN_IP.replaceAll('.', '\\.')}`),
             );
             socket.destroy();
+        });
+
+        test('neither site offers HTTP/3 or holds UDP on its port (#508)', async () => {
+            for (const [host, servername] of [
+                [LAN_IP, undefined],
+                ['127.0.0.1', 'localhost'],
+            ]) {
+                const answer = await get(host, port, '/', {
+                    ca,
+                    servername,
+                    headers: servername ? { Host: `localhost:${port}` } : {},
+                });
+                assert.equal(answer.headers['alt-svc'], undefined, host);
+                // A UDP bind succeeds only if Caddy holds no QUIC socket.
+                const udp = createSocket('udp4');
+                await new Promise((done, fail) => {
+                    udp.once('error', fail);
+                    udp.bind(port, host, done);
+                });
+                udp.close();
+            }
+            const udp6 = createSocket({ type: 'udp6', ipv6Only: true });
+            await new Promise((done, fail) => {
+                udp6.once('error', fail);
+                udp6.bind(port, '::1', done);
+            });
+            udp6.close();
         });
 
         test('health is refused on the LAN site but not on localhost', async () => {
