@@ -780,6 +780,7 @@ export class SalesService {
         { type, reason, payoutShiftId }: ReverseSaleInput,
         session?: ClientSession,
         approvalToken?: string,
+        terminalId?: string,
     ) {
         return runInTransaction(
             async (session) => {
@@ -873,6 +874,9 @@ export class SalesService {
                         admin: user,
                         approvedBy,
                         approvedByName,
+                        ...(user.roles.includes(Role.Admin)
+                            ? {}
+                            : { cashierTerminal: { id: terminalId } }),
                     },
                     session,
                 );

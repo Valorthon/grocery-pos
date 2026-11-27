@@ -167,10 +167,11 @@ export enum ErrorCode {
 export const REQUEST_ID_HEADER = 'X-Request-Id';
 
 /**
- * The browser's stable terminal id (#509), sent by the client on every
- * request. An open shift is bound to the terminal that opened it (or, for
- * a shift opened before #509, the first terminal that sells, moves cash,
- * leases or closes on it). Never the editable terminal label.
+ * The browser's stable terminal id (#509), sent by the client on
+ * `/shifts`, `/sales` and `/offline` requests only. An open shift is bound
+ * to the terminal that opened it (or, for a shift opened before #509, the
+ * first terminal that sells, leases offline or moves cash on it; closing
+ * checks but never binds). Never the editable terminal label.
  */
 export const TERMINAL_ID_HEADER = 'x-terminal-id';
 /** What a terminal id looks like: a UUID or another opaque token. */

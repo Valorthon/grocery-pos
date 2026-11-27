@@ -293,6 +293,8 @@ test('package writes the public root, info, script and readme from the stored LA
     assert.match(readme, /-Mode join/);
     // #510: one normal Chrome profile, never Guest/Incognito, keep site data.
     assert.match(readme, /normal Default profile/);
+    // #509: a new terminal identity strands an open shift.
+    assert.match(readme, /new terminal identity/);
     assert.match(readme, /Never use a Guest or Incognito\r\nwindow/);
     assert.match(
         readme,

@@ -10,6 +10,7 @@ import {
     Role,
     SaleStatus,
     TenderType,
+    TERMINAL_ID_HEADER,
     MANAGER_OVERRIDE_SHAPE,
     wireShapeDiff,
     type ManagerOverrideResponse,
@@ -571,5 +572,46 @@ describe('manager overrides (#34)', () => {
                     'Invalid manager username or PIN',
                 );
         }
+    });
+});
+
+describe("a cashier's own cash reversal from another terminal (#509)", () => {
+    it('is refused with SHIFT_OTHER_TERMINAL and rolled back; the shift’s terminal voids it', async () => {
+        const product = await seedProduct(db, 1000, 5);
+        const sale = await read<{ _id: string }>(
+            await db.call(seller, 'POST', '/sales', cashSale(product, 1, 1000)),
+        );
+        expect(sale.status).toBe(201);
+        const body = { reason: 'mis-ring' };
+        const approval = () =>
+            approvalHeaders(db, seller, OverrideAction.VOID, {
+                reversal: { saleId: sale.body._id, reason: 'mis-ring' },
+            });
+
+        const refused = await read<{ error: string }>(
+            await db.call(
+                seller,
+                'POST',
+                `/sales/${sale.body._id}/void`,
+                body,
+                {
+                    ...(await approval()),
+                    [TERMINAL_ID_HEADER]: 'terminal-other-0002',
+                },
+            ),
+        );
+        expect(refused.status).toBe(409);
+        expect(refused.body.error).toBe(ErrorCode.SHIFT_OTHER_TERMINAL);
+        expect(await stockOf(db, product)).toBe(4);
+
+        const voided = await db.call(
+            seller,
+            'POST',
+            `/sales/${sale.body._id}/void`,
+            body,
+            await approval(),
+        );
+        expect(voided.status).toBe(201);
+        expect(await stockOf(db, product)).toBe(5);
     });
 });

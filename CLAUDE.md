@@ -298,10 +298,15 @@ Rules:
   `shiftOtherTerminalMessage`); a missing/malformed id on those writes is
   400 `SHIFT_TERMINAL_REQUIRED` (reload). Idempotent sale and drawer
   replays, offline uploads of already-collected cash, reads, ADMIN
-  force-close and void/refund payouts are unaffected. The view field
+  force-close, ADMIN reversals (with or without `payoutShiftId`) and
+  GCash-only reversals are unaffected; a SELLER's own cash-paying
+  void/refund is bound like a drawer movement (owner decision
+  2026-11-27; cross-terminal refunds are #526). The view field
   `onThisTerminal` drives the seller dashboard notice (owner wording) and
   hides Go to register/End shift; the register redirects to the dashboard
-  and no offline lease is prepared there.
+  and no offline lease is prepared there. Clearing site data, a Guest/Incognito window or
+  another Chrome profile gives the PC a new id, so a shift open there then
+  needs an ADMIN force-close (RECOVERY.md, terminal README.txt).
 
 **Errors** (#8)
 

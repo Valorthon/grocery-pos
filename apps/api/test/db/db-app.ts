@@ -13,6 +13,7 @@
  * `bootDbApp({ realSessions: true })` drops the seam entirely.
  */
 import { TERMINAL_ID_HEADER } from '@grocery-pos/contracts';
+import { DEFAULT_TEST_TERMINAL } from '../../src/common/testing/access-harness';
 import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { INestApplication, VersioningType } from '@nestjs/common';
@@ -363,6 +364,3 @@ export async function drawerRequest(db: DbApp, who: Caller) {
         throw new Error('Open a test shift before creating a drawer request');
     return { shiftId: String(shift._id), idempotencyKey: randomUUID() };
 }
-
-/** The terminal id the harness sends unless a call names another (#509). */
-export const DEFAULT_TEST_TERMINAL = 'terminal-test-0001';

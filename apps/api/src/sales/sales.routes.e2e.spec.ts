@@ -280,6 +280,7 @@ describe('POST /sales/:id/void and /refund (e2e)', () => {
                 { reason: 'mis-ring', payoutShiftId: SHIFT, type },
                 undefined,
                 undefined,
+                DEFAULT_TEST_TERMINAL,
             );
         },
     );

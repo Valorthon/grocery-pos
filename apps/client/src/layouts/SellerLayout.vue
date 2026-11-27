@@ -130,6 +130,8 @@ onMounted(async () => {
 });
 
 watch(() => route.name, requireShift);
+// Bound to another terminal after load (#509): leave the register.
+watch(() => shiftStore.otherTerminalNotice, requireShift);
 
 watch(
     () => shiftStore.activeShift,

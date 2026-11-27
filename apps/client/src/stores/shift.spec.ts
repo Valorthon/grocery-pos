@@ -163,6 +163,40 @@ describe('shift store (server-backed, issue #2)', () => {
         expect(store.loaded).toBe(true);
     });
 
+    it('marks the shift as on another terminal when a drawer movement or close is refused for it (#509)', async () => {
+        const store = await loadStore();
+        for (const run of [
+            () => store.recordDrawer(DrawerMovementType.CASH_IN, 100, 'x'),
+            () => store.closeShift({ '1000': 1 }),
+        ]) {
+            api.get.mockResolvedValue({ data: { shift: SHIFT } });
+            await store.fetchCurrent();
+            const refusal = apiError(409, ErrorCode.SHIFT_OTHER_TERMINAL);
+            (refusal.response!.data as Record<string, unknown>).details = {
+                terminal: 'Lane 2',
+            };
+            api.post.mockRejectedValue(refusal);
+            api.get.mockResolvedValue({
+                data: {
+                    shift: {
+                        ...SHIFT,
+                        terminal: 'Lane 2',
+                        onThisTerminal: false,
+                    },
+                },
+            });
+            store.shiftOutOpen = true;
+
+            await expect(run()).rejects.toThrow();
+
+            expect(store.activeShift?.onThisTerminal).toBe(false);
+            expect(store.shiftOutOpen).toBe(false);
+            expect(store.otherTerminalNotice).toBe(
+                'Your shift is open on Lane 2. Close it there, or ask an admin to force-close.',
+            );
+        }
+    });
+
     it('closes with the counts and shows the Z-read the server returns', async () => {
         api.get.mockResolvedValue({ data: { shift: SHIFT } });
         api.post.mockResolvedValue({ data: REPORT });

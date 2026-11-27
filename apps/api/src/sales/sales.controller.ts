@@ -104,6 +104,7 @@ export class SalesController {
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
         @Headers('x-manager-approval') approvalToken?: string,
+        @TerminalId() terminalId?: string,
     ): Promise<SaleView> {
         return asJson(
             await this.service.reverse(
@@ -115,6 +116,7 @@ export class SalesController {
                 },
                 undefined,
                 approvalToken,
+                terminalId,
             ),
         );
     }
@@ -127,6 +129,7 @@ export class SalesController {
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
         @Headers('x-manager-approval') approvalToken?: string,
+        @TerminalId() terminalId?: string,
     ): Promise<SaleView> {
         return asJson(
             await this.service.reverse(
@@ -138,6 +141,7 @@ export class SalesController {
                 },
                 undefined,
                 approvalToken,
+                terminalId,
             ),
         );
     }

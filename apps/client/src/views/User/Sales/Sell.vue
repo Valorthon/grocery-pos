@@ -1479,8 +1479,13 @@ async function explainFailure(error: unknown): Promise<never> {
     // No open shift on the server (e.g. an admin force-closed it): nothing
     // was recorded. Drop the local shift; the layout then sends the
     // cashier to open a new one, with the ticket kept in the cart.
-    if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
-        shiftStore.shiftClosedElsewhere();
+    // Open on another terminal (#509): nothing was recorded either. The
+    // layout moves the cashier to the dashboard notice; the ticket is kept.
+    if (
+        apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN ||
+        apiErrorCode(error) === ErrorCode.SHIFT_OTHER_TERMINAL
+    ) {
+        shiftStore.onShiftRefusal(error);
         throw new Error(message);
     }
     // A 400 means nothing was recorded. The usual cause is a price that

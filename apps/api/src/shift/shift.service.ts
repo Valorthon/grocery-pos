@@ -490,6 +490,7 @@ export class ShiftService {
             admin,
             approvedBy,
             approvedByName,
+            cashierTerminal,
         }: {
             saleId: string;
             saleShift: Types.ObjectId | null;
@@ -505,6 +506,12 @@ export class ShiftService {
              */
             approvedBy: string;
             approvedByName: string;
+            /**
+             * Set for a cashier's own reversal (#509, owner decision
+             * 2026-11-27): cash leaves the shift's drawer only from the
+             * terminal it is bound to. ADMIN reversals leave it unset.
+             */
+            cashierTerminal?: { id: string | undefined };
         },
         session: ClientSession,
     ): Promise<Types.ObjectId | null> {
@@ -537,6 +544,31 @@ export class ShiftService {
             sale: new Types.ObjectId(saleId),
         };
 
+        if (saleShift && cashierTerminal) {
+            const terminal = terminalBinding(
+                requireTerminalId(cashierTerminal.id),
+            );
+            const res = await this.model.updateOne(
+                {
+                    _id: saleShift,
+                    status: ShiftStatus.OPEN,
+                    ...terminal.filter,
+                },
+                { $push: { movements: movement }, $set: terminal.set },
+                { session, runValidators: true },
+            );
+            if (res.matchedCount > 0) return saleShift;
+            const open = await this.model
+                .findOne(
+                    { _id: saleShift, status: ShiftStatus.OPEN },
+                    {
+                        terminal: 1,
+                    },
+                )
+                .session(session)
+                .lean<{ terminal: string }>();
+            if (open) throw otherTerminal(open.terminal);
+        }
         if (
             saleShift &&
             (await this.pushIfOpen(saleShift, movement, session))
