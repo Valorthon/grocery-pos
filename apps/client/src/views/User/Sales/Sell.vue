@@ -1190,10 +1190,10 @@ function addProduct(product: ProductView, quantity: number, submitted: string) {
     // Rung up again: the removed line is not put back on top of it.
     if (undo.value?.item.product === product._id) dismissUndo();
     selectedLine.value = product._id;
-    if (!offline.offline && product.stock !== undefined)
+    if (!offline.offline && product.stock !== undefined) {
         knownStock.set(product._id, product.stock);
-    else knownStock.delete(product._id);
-    knownReorderLevel.set(product._id, product.reorderLevel);
+        knownReorderLevel.set(product._id, product.reorderLevel);
+    } else knownStock.delete(product._id);
     const hints = { ...stockHints.value };
     const hint = offline.offline ? null : lowStockHint(product);
     if (hint) hints[product._id] = hint;
@@ -1486,9 +1486,10 @@ async function explainFailure(error: unknown): Promise<never> {
     // A 400 means nothing was recorded. The usual cause is a price that
     // changed since the item was scanned, so the preview total the tenders
     // were built from is stale: refresh it for the retry.
-    if (isRejectedSale(error)) applyShortStock(error);
-    if (isRejectedSale(error) && (await refreshCartPrices())) {
-        message += ' Prices have changed and the total is updated.';
+    if (isRejectedSale(error)) {
+        applyShortStock(error);
+        if (await refreshCartPrices())
+            message += ' Prices have changed and the total is updated.';
     }
     throw new Error(message);
 }
@@ -1505,6 +1506,11 @@ function applyShortStock(error: unknown) {
         const item = cartStore.items.find((i) => i.product === line.product);
         if (!item) continue;
         knownStock.set(line.product, line.available);
+        checkStock(line.product);
+        // Without a looked-up level (e.g. a line restored from storage)
+        // only "Out of stock" is certain; never the default level.
+        const known = knownReorderLevel.has(line.product);
+        if (!known && line.available > 0) continue;
         const hint = lowStockHint({
             stock: line.available,
             unit: item.unit,
