@@ -95,7 +95,14 @@ it('shows safe actor/action/detail diff text without treating stored strings as 
     await openRow();
     expect(document.body.textContent).toContain('<img src=x onerror=alert(1)>');
     expect(document.querySelector('img')).toBeNull();
-    expect(dd('Approved by')).toBe('—');
+    // #503: no approver, no "Approved by" row; the address has its own label.
+    expect(dd('Approved by')).toBe('');
+    expect(
+        [...document.querySelectorAll('dl dt')].map((el) =>
+            el.textContent?.trim(),
+        ),
+    ).not.toContain('Approved by');
+    expect(dd('Client address')).toBe('127.0.0.1');
 });
 it('pages and retries applied filters rather than unsearched edits', async () => {
     await mount();
@@ -395,7 +402,8 @@ it('shows the heading, details, device summary, copy and a changes table (#306)'
     expect(dd('Actor')).toContain('507f1f77…39011');
     expect(dd('Target')).toContain('User · admin');
     expect(dd('Approved by')).toBe('boss');
-    expect(dd('IP')).toBe('127.0.0.1');
+    expect(dd('Client address')).toBe('127.0.0.1');
+    expect(dd('IP')).toBe('');
     expect(dd('Device')).toContain('Chrome 157 on Linux');
     const details = document.querySelector('dl details')!;
     expect(details.querySelector('summary')?.textContent).toContain(
