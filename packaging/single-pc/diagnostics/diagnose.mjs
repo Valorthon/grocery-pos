@@ -427,8 +427,9 @@ const PORT_NAMES = [
 /**
  * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
  * and only if it is a private IPv4 address. Never for the API or MongoDB.
- * #499: the LAN IP plus whether the manifest was refused (not elevated),
- *  so callers report `unknown` instead of "no LAN terminals". */
+ * #499: also whether the manifest was refused (not elevated), so callers
+ * report `unknown` instead of "no LAN terminals".
+ */
 async function lanConfig(ctx, paths) {
     if (!paths) return { lanIp: null, denied: false };
     let manifest;
@@ -460,16 +461,15 @@ export async function checkPorts(ctx, paths) {
     // Only the LAN proxy service may listen on the LAN IP (#396): while it
     // is known not to run, a listener there is someone else's.
     const { lanIp: configured, denied } = await lanConfig(ctx, paths);
-    const states = configured ? await ctx.serviceStates() : null;
-    const lanIp =
-        // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
-        // under SCM recovery) may hold the LAN listener.
+    const states = configured || denied ? await ctx.serviceStates() : null;
+    // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
+    // under SCM recovery) may hold the LAN listener.
+    const lanServiceDown =
         states &&
         (states[LAN_SERVICE] === 'STOPPED' ||
             states[LAN_SERVICE] === 'absent' ||
-            states[LAN_SERVICE] === undefined)
-            ? null
-            : configured;
+            states[LAN_SERVICE] === undefined);
+    const lanIp = lanServiceDown ? null : configured;
     const details = {};
     const closed = [];
     const exposed = [];
@@ -487,12 +487,19 @@ export async function checkPorts(ctx, paths) {
                 lanIp !== null &&
                 address.toLowerCase().replace(/^::ffff:/, '') === lanIp);
         let foreign = (listening ?? []).filter((a) => !allowed(a));
-        if (key === 'proxy' && denied) {
+        // Only while the LAN service may run, and only one address: a
+        // single LAN IP can be configured.
+        if (key === 'proxy' && denied && states && !lanServiceDown) {
             const maybeLan = foreign.filter((a) =>
                 isPrivateIpv4(a.toLowerCase().replace(/^::ffff:/, '')),
             );
-            if (maybeLan.length) unverified.push(`${label} (${port})`);
-            foreign = foreign.filter((a) => !maybeLan.includes(a));
+            const distinct = new Set(
+                maybeLan.map((a) => a.toLowerCase().replace(/^::ffff:/, '')),
+            );
+            if (distinct.size === 1) {
+                unverified.push(`${label} (${port})`);
+                foreign = foreign.filter((a) => !maybeLan.includes(a));
+            }
         }
         details[key] = { port, reachable: open, listeners: listening };
         if (foreign.length) exposed.push(`${label} (${port})`);

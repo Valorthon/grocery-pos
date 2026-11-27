@@ -307,8 +307,14 @@ describe('diagnose', () => {
 
     test('unreadable LAN settings make the LAN listener unknown, never a stop-selling FAIL (#499)', async () => {
         const paths = layout(root);
-        const deniedCtx = (listeners) =>
+        const deniedCtx = (listeners, lanState = 'RUNNING') =>
             healthy({
+                serviceStates: async () => ({
+                    ...Object.fromEntries(
+                        Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+                    ),
+                    ...(lanState ? { [LAN_SERVICE]: lanState } : {}),
+                }),
                 readText: async (path) => {
                     if (path === paths.runtimeManifest)
                         throw Object.assign(new Error('EPERM'), {
@@ -353,6 +359,34 @@ describe('diagnose', () => {
         ]) {
             const r = await diagnose({ dataRoot: root }, deniedCtx(listeners));
             assert.equal(byId(r, 'ports').status, 'fail');
+        }
+        // Two private addresses: only one LAN IP can be configured.
+        for (const extra of [
+            ['0.0.0.0'],
+            ['::'],
+            ['192.168.1.10', '10.0.0.5'],
+        ]) {
+            const r = await diagnose(
+                { dataRoot: root },
+                deniedCtx(async (p) =>
+                    p === 1443 ? ['127.0.0.1', '::1', ...extra] : ['127.0.0.1'],
+                ),
+            );
+            assert.equal(byId(r, 'ports').status, 'fail', extra.join());
+        }
+        // The LAN service absent or stopped: the listener is someone else's.
+        for (const lanState of [null, 'STOPPED']) {
+            const r = await diagnose(
+                { dataRoot: root },
+                deniedCtx(
+                    async (p) =>
+                        p === 1443
+                            ? ['127.0.0.1', '::1', '192.168.1.10']
+                            : ['127.0.0.1'],
+                    lanState,
+                ),
+            );
+            assert.equal(byId(r, 'ports').status, 'fail', String(lanState));
         }
     });
 
