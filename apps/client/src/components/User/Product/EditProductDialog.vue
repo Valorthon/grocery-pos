@@ -244,6 +244,7 @@ watch(
  * legacy name is not sent, so it is never flagged (#483).
  */
 function onNameBlur() {
+    if (!open.value) return;
     const changed = normalizeProductName(name.value) !== props.product.name;
     if (changed && productNameCharactersError(name.value))
         errors.name = PRODUCT_NAME_CHARACTERS_MESSAGE;

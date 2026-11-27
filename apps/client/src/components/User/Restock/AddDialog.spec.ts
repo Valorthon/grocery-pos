@@ -205,6 +205,21 @@ describe('Restock AddDialog (#17)', () => {
         field('Product Name').dispatchEvent(new Event('blur'));
         await flush();
         expect(fieldError('Product Name')).toBe('');
+        await type('Product Name', 'Mama’s Best');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe('');
+    });
+
+    it('clears the name error on edit, without a blur (#507)', async () => {
+        await open();
+        await check('This is a new product', true);
+        await type('Product Name', 'QA 🍎 APPLE');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).not.toBe('');
+        await type('Product Name', 'QA APPLE');
+        expect(fieldError('Product Name')).toBe('');
     });
 
     it('adds a new product with a valid typed EAN', async () => {

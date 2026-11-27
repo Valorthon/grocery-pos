@@ -123,6 +123,7 @@
                     label="Product Name"
                     :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :error="errors.name"
+                    @update:model-value="clearError('name')"
                     @blur="onNameBlur"
                 />
                 <BaseInput
@@ -155,7 +156,6 @@ import {
     EXPIRY_LIMITS,
     isExpiryDate,
     normalizeProductName,
-    PRODUCT_NAME_CHARACTERS_MESSAGE,
     UnitOfMeasure,
     unitOf,
     quantityInput,
@@ -315,10 +315,9 @@ function loadCostDefault(generation: number) {
 
 /** Leaving a new product's name checks its characters (#507). */
 function onNameBlur() {
+    if (!props.modelValue) return;
     const message = productNameCharactersError(formData.name);
     if (message) errors.value = { ...errors.value, name: message };
-    else if (errors.value.name === PRODUCT_NAME_CHARACTERS_MESSAGE)
-        clearError('name');
 }
 
 function clearError(...fields: string[]) {

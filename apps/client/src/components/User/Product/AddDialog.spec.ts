@@ -243,6 +243,10 @@ describe('Product AddDialog (#17)', () => {
         field('Product Name').dispatchEvent(new Event('blur'));
         await flush();
         expect(fieldError('Product Name')).toBe('');
+        await type('Product Name', 'Mama’s Best');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe('');
         await type('Product Name', '');
         field('Product Name').dispatchEvent(new Event('blur'));
         await flush();

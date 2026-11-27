@@ -323,6 +323,10 @@ describe('EditProductDialog errors (#282)', () => {
         expect(field('Product name').error()).toBe(
             "Use only letters, numbers, spaces and . , - & ' / ( ) %",
         );
+        await type(input, 'Mama’s Best');
+        input.dispatchEvent(new Event('blur'));
+        await flush();
+        expect(field('Product name').error()).toBeFalsy();
         await type(input, 'Piña (1/2 kg)');
         input.dispatchEvent(new Event('blur'));
         await flush();
