@@ -1807,31 +1807,32 @@ function isInside(child, parent) {
     );
 }
 
-// RFC 1918 IPv4 addresses (10/8, 172.16/12, 192.168/16), the LAN IP among them.
-const PRIVATE_IPV4 =
-    /\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b/g;
+// Every IP address in the report: IPv6 (full or compressed, IPv4-mapped in
+// dotted or hex form, with a zone suffix), then IPv4.
+const IPV6 =
+    /(?<![\w:.%])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?::(?:\d{1,3}\.){3}\d{1,3})?)(?:%[\w.-]+)?(?![\w:.%])/gi;
+const IPV4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g;
+const KEPT_IPV6 = new Set(['::1', '::']);
 
 /**
- * Replaces the LAN IP and any private IPv4 address in every string of a
- * value (check summaries, steps, details, structured `lanIp` fields), for
- * the support export (#500). Keys stay; loopback addresses stay readable.
+ * Replaces every IP address in every string of a value (check summaries,
+ * steps, details, structured `lanIp` fields) with `[ip]`, for the support
+ * export (#500). Only loopback (127/8, ::1) and unspecified (0.0.0.0, ::)
+ * addresses stay readable; keys stay.
  */
-export function scrubPrivateIps(value, lanIp) {
-    const scrub = (text) => {
-        let out = text.replace(PRIVATE_IPV4, '[ip]');
-        if (typeof lanIp === 'string' && lanIp)
-            out = out.split(lanIp).join('[ip]');
-        return out;
-    };
-    if (typeof value === 'string') return scrub(value);
-    if (Array.isArray(value))
-        return value.map((v) => scrubPrivateIps(v, lanIp));
+export function scrubIps(value) {
+    if (typeof value === 'string')
+        return value
+            .replace(IPV6, (ip) =>
+                KEPT_IPV6.has(ip.toLowerCase()) ? ip : '[ip]',
+            )
+            .replace(IPV4, (ip) =>
+                ip.startsWith('127.') || ip === '0.0.0.0' ? ip : '[ip]',
+            );
+    if (Array.isArray(value)) return value.map(scrubIps);
     if (value && typeof value === 'object')
         return Object.fromEntries(
-            Object.entries(value).map(([k, v]) => [
-                k,
-                scrubPrivateIps(v, lanIp),
-            ]),
+            Object.entries(value).map(([k, v]) => [k, scrubIps(v)]),
         );
     return value;
 }
@@ -1846,12 +1847,7 @@ export async function supportExport(options, ctx = realContext()) {
     const info = await stat(to).catch(() => null);
     if (!info?.isDirectory())
         throw new Error('The chosen folder does not exist.');
-    // The configured LAN IP as written, even when it isn't private.
-    const lanIp = await ctx
-        .readText(paths.runtimeManifest)
-        .then((text) => JSON.parse(text)?.lanIp)
-        .catch(() => null);
-    const report = scrubPrivateIps(await diagnose(options, ctx), lanIp);
+    const report = scrubIps(await diagnose(options, ctx));
     const logs = {};
     for (const [name, files] of await logSources(ctx, paths)) {
         logs[name] = [];
