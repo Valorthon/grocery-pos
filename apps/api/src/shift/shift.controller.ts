@@ -3,6 +3,7 @@ import { RequireOwnRole, Roles } from '../auth/auth.decorator';
 import { CurrentUser, Role } from '../auth/types';
 import type { AuthUser } from '../auth/types';
 import { ShiftService } from './shift.service';
+import { TerminalId } from './terminal-id';
 import type {
     CurrentShiftResponse,
     CurrentShiftView,
@@ -38,6 +39,10 @@ import {
  *   GET  /shifts/:id              Admin   any shift and its Z-read
  *   POST /shifts/:id/close        Admin   force-close with a count
  *
+ * The cashier's writes (sales, offline leases, drawer, close) work only
+ * from the terminal that opened the shift (#509, `TERMINAL_ID_HEADER`);
+ * other terminals get 409 SHIFT_OTHER_TERMINAL. Admin routes ignore it.
+ *
  * A cashier only ever reaches their own shift: the "current" routes look
  * it up by the caller, and every route taking an id is Admin-only.
  * shift.access.e2e.spec.ts pins this.
@@ -51,31 +56,40 @@ export class ShiftController {
     async open(
         @CurrentUser() user: AuthUser,
         @Body() dto: OpenShiftDto,
+        @TerminalId({ required: true }) terminalId: string,
     ): Promise<CurrentShiftView> {
-        return await this.service.open(user, dto.counts, dto.terminal);
+        return await this.service.open(
+            user,
+            dto.counts,
+            dto.terminal,
+            terminalId,
+        );
     }
 
     @Get('current')
     async current(
         @CurrentUser() user: AuthUser,
+        @TerminalId() terminalId?: string,
     ): Promise<CurrentShiftResponse> {
-        return { shift: await this.service.current(user) };
+        return { shift: await this.service.current(user, terminalId) };
     }
 
     @Post('current/drawer')
     async drawer(
         @CurrentUser() user: AuthUser,
         @Body() dto: DrawerMovementDto,
+        @TerminalId() terminalId?: string,
     ): Promise<CurrentShiftView> {
-        return await this.service.recordDrawer(user, dto);
+        return await this.service.recordDrawer(user, dto, terminalId);
     }
 
     @Post('current/close')
     async closeOwn(
         @CurrentUser() user: AuthUser,
         @Body() dto: CloseShiftDto,
+        @TerminalId() terminalId?: string,
     ): Promise<ZReadReport> {
-        return await this.service.closeOwn(user, dto.counts);
+        return await this.service.closeOwn(user, dto.counts, terminalId);
     }
 
     @Get('last-closed')

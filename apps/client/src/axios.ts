@@ -3,7 +3,12 @@ import axios, {
     isAxiosError,
     type InternalAxiosRequestConfig,
 } from 'axios';
-import { WIRE_VERSION, WIRE_VERSION_HEADER } from '@grocery-pos/contracts';
+import {
+    TERMINAL_ID_HEADER,
+    WIRE_VERSION,
+    WIRE_VERSION_HEADER,
+} from '@grocery-pos/contracts';
+import { terminalId } from './utils/terminal-id';
 import constant from '@/constant';
 import { useAuthStore } from './stores/auth';
 import { env } from './config/env';
@@ -63,7 +68,16 @@ export const isAuthEndpoint = (url?: string): boolean => {
     return !!path && AUTH_ENDPOINTS.some((endpoint) => path.endsWith(endpoint));
 };
 
+/**
+ * Routes that act on (or report) the cashier's shift and so name this
+ * browser's terminal (#509). Only these, so other cross-origin reads gain
+ * no custom header.
+ */
+const TERMINAL_ROUTES = /^\/?(shifts|sales|offline)(\/|\?|$)/;
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+    if (config.url && TERMINAL_ROUTES.test(config.url))
+        config.headers[TERMINAL_ID_HEADER] = terminalId();
     if (config.data instanceof FormData) {
         delete config.headers['Content-Type'];
     } else {

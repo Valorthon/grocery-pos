@@ -42,6 +42,7 @@ function state(): OfflineState {
                 openedAt: new Date().toISOString(),
                 openingFloat: 10000,
                 movements: [],
+                onThisTerminal: true,
             },
             serverTime: 0,
         },

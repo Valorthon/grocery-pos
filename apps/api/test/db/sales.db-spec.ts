@@ -9,7 +9,11 @@ import { OverrideAction } from '@grocery-pos/contracts';
  */
 import { randomUUID } from 'node:crypto';
 import { Types } from 'mongoose';
-import { DrawerMovementType, ErrorCode } from '@grocery-pos/contracts';
+import {
+    DrawerMovementType,
+    ErrorCode,
+    TERMINAL_ID_HEADER,
+} from '@grocery-pos/contracts';
 import { Role } from '../../src/auth/types';
 import {
     bootDbApp,
@@ -442,5 +446,71 @@ describe('An ADMIN-only account at the register (issue #84)', () => {
 
         expect(sold.status).toBe(201);
         expect(await stockOf(db, product)).toBe(4);
+    });
+});
+
+describe('POST /sales from another terminal (#509)', () => {
+    const OTHER = { [TERMINAL_ID_HEADER]: 'terminal-other-0002' };
+
+    it('refuses the sale with nothing written; the opening terminal sells and a replay works from anywhere', async () => {
+        const product = await seedProduct(db, PRICE, 10);
+        const body = cashSale(product, 1, PRICE);
+
+        const refused = await read<{ error: string }>(
+            await db.call(seller, 'POST', '/sales', body, OTHER),
+        );
+        expect(refused.status).toBe(409);
+        expect(refused.body.error).toBe(ErrorCode.SHIFT_OTHER_TERMINAL);
+        expect(await stockOf(db, product)).toBe(10);
+
+        const sold = await read(await db.call(seller, 'POST', '/sales', body));
+        expect(sold.status).toBe(201);
+        // A replay records nothing, so it needs neither the shift nor its terminal.
+        const replay = await read(
+            await db.call(seller, 'POST', '/sales', body, OTHER),
+        );
+        expect(replay.status).toBe(201);
+        expect(replay.body._id).toBe(sold.body._id);
+        expect(await stockOf(db, product)).toBe(9);
+    });
+
+    it('two terminals racing on a shift opened before #509: exactly one binds it', async () => {
+        const product = await seedProduct(db, PRICE, 50);
+        await db
+            .model('Shift')
+            .updateOne(
+                { cashier: new Types.ObjectId(seller.userId), status: 'OPEN' },
+                { $unset: { terminalId: 1 } },
+            );
+        const terminals = Array.from(
+            { length: 6 },
+            (_, i) => `terminal-race-000${i}`,
+        );
+
+        const results = await Promise.all(
+            terminals.map((t) =>
+                db
+                    .call(
+                        seller,
+                        'POST',
+                        '/sales',
+                        cashSale(product, 1, PRICE),
+                        { [TERMINAL_ID_HEADER]: t },
+                    )
+                    .then(read<{ error?: string }>),
+            ),
+        );
+
+        const shift = await db
+            .model<{ terminalId?: string; saleCount: number }>('Shift')
+            .findOne({ cashier: new Types.ObjectId(seller.userId) })
+            .lean();
+        const ok = results.filter((r) => r.status === 201);
+        expect(ok).toHaveLength(1);
+        expect(terminals).toContain(shift?.terminalId);
+        expect(shift?.saleCount).toBe(1);
+        for (const r of results.filter((r) => r.status !== 201))
+            expect(r.body.error).toBe(ErrorCode.SHIFT_OTHER_TERMINAL);
+        expect(await stockOf(db, product)).toBe(49);
     });
 });

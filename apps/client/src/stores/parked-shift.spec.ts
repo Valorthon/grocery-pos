@@ -35,6 +35,7 @@ function setup() {
         openedAt: new Date().toISOString(),
         openingFloat: 100,
         movements: [],
+        onThisTerminal: true,
     };
     shift.shiftOutOpen = true;
     return { cart, shift };

@@ -1,3 +1,4 @@
+import { TerminalId } from '../shift/terminal-id';
 import {
     Body,
     Controller,
@@ -82,9 +83,16 @@ export class SalesController {
         @CurrentUser() user: AuthUser,
         @Body() dto: SellDto,
         @Headers('x-manager-approval') approvalToken?: string,
+        @TerminalId() terminalId?: string,
     ): Promise<Receipt> {
         return asJson(
-            await this.service.sell(user, dto, undefined, approvalToken),
+            await this.service.sell(
+                user,
+                dto,
+                undefined,
+                approvalToken,
+                terminalId,
+            ),
         );
     }
 
@@ -96,6 +104,7 @@ export class SalesController {
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
         @Headers('x-manager-approval') approvalToken?: string,
+        @TerminalId() terminalId?: string,
     ): Promise<SaleView> {
         return asJson(
             await this.service.reverse(
@@ -107,6 +116,7 @@ export class SalesController {
                 },
                 undefined,
                 approvalToken,
+                terminalId,
             ),
         );
     }
@@ -119,6 +129,7 @@ export class SalesController {
         @Param() { id }: ReverseSaleParamDto,
         @Body() dto: ReverseSaleDto,
         @Headers('x-manager-approval') approvalToken?: string,
+        @TerminalId() terminalId?: string,
     ): Promise<SaleView> {
         return asJson(
             await this.service.reverse(
@@ -130,6 +141,7 @@ export class SalesController {
                 },
                 undefined,
                 approvalToken,
+                terminalId,
             ),
         );
     }

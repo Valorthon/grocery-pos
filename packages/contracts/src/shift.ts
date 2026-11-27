@@ -164,6 +164,11 @@ export interface CurrentShiftView {
     openingFloat: number;
     /** The cashier's own cash in and cash drops, oldest first. */
     movements: DrawerMovementView[];
+    /**
+     * Whether this request's terminal may sell and move cash on the shift
+     * (#509): it opened the shift, or the shift is not bound yet.
+     */
+    onThisTerminal: boolean;
 }
 
 /** A count of sales and the centavos they add up to. */

@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
-import { receiptStoreIdentity } from '@grocery-pos/contracts';
+import {
+    receiptStoreIdentity,
+    shiftOtherTerminalMessage,
+    type ShiftOtherTerminalDetails,
+} from '@grocery-pos/contracts';
 import { SettingsService } from '../settings/settings.service';
 import { Inject as InjectSettings } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
@@ -42,6 +46,7 @@ import {
     ValidationError,
 } from '../common/errors';
 import { runInTransaction } from '../common/utils/db';
+import { requireTerminalId } from './terminal-id';
 import { NUMERIC_LIMITS, STRING_LIMITS } from '../constants';
 import { isDuplicateKey } from '../sales/idempotency';
 import { Sales } from '../sales/sales.schema';
@@ -89,7 +94,10 @@ function toMovementView(m: DrawerMovement): DrawerMovementView {
  * The cashier's view of their open shift: blind, so no expected cash, no
  * sales totals, and no payouts an ADMIN charged to it.
  */
-export function toCurrentView(shift: ShiftDoc): CurrentShiftView {
+export function toCurrentView(
+    shift: ShiftDoc,
+    terminalId: string | undefined,
+): CurrentShiftView {
     return {
         _id: String(shift._id),
         status: shift.status,
@@ -100,7 +108,44 @@ export function toCurrentView(shift: ShiftDoc): CurrentShiftView {
         movements: (shift.movements ?? [])
             .filter((m) => CASHIER_MOVEMENTS.includes(m.type))
             .map(toMovementView),
+        onThisTerminal: onTerminal(shift, terminalId),
     };
+}
+
+/**
+ * Whether `terminalId` may sell and move cash on the shift (#509): the
+ * shift is bound to it, or not bound yet (opened before #509).
+ */
+export function onTerminal(
+    shift: { terminalId?: string },
+    terminalId: string | undefined,
+): boolean {
+    return shift.terminalId === undefined || shift.terminalId === terminalId;
+}
+
+/**
+ * The filter and update that write a shift only from its own terminal and
+ * bind an unbound (pre-#509) shift to the first terminal that writes it.
+ * In a transaction, a concurrent first use by two terminals write-conflicts
+ * and the retry sees the winner's binding.
+ */
+export function terminalBinding(terminalId: string) {
+    return {
+        filter: {
+            $or: [{ terminalId }, { terminalId: { $exists: false } }],
+        },
+        set: { terminalId },
+    };
+}
+
+/** 409 SHIFT_OTHER_TERMINAL naming the shift's terminal label (#509). */
+export function otherTerminal(terminal: string): ConflictError {
+    const details: ShiftOtherTerminalDetails = { terminal };
+    return new ConflictError(
+        ErrorCode.SHIFT_OTHER_TERMINAL,
+        shiftOtherTerminalMessage(terminal),
+        details,
+    );
 }
 
 /** The stored Z-read of a closed shift, with its movements. */
@@ -178,6 +223,7 @@ export class ShiftService {
         user: AuthUser,
         counts: BillCounts,
         terminal = DEFAULT_TERMINAL,
+        terminalId?: string,
     ): Promise<CurrentShiftView> {
         const openingFloat = countedTotal(counts);
         if (openingFloat < SHIFT_LIMITS.OPENING_FLOAT_MIN) {
@@ -203,6 +249,7 @@ export class ShiftService {
                                 cashier: new Types.ObjectId(user.userId),
                                 cashierName: user.username,
                                 terminal,
+                                ...(terminalId ? { terminalId } : {}),
                                 storeSettings: store,
                                 status: ShiftStatus.OPEN,
                                 openedAt: new Date(),
@@ -232,7 +279,7 @@ export class ShiftService {
                     },
                     session,
                 );
-                return toCurrentView(created.toObject());
+                return toCurrentView(created.toObject(), terminalId);
             }, this.connection);
         } catch (err) {
             // A concurrent open by the same cashier won the unique index.
@@ -271,11 +318,30 @@ export class ShiftService {
     }
 
     /** The caller's open shift, blind, or null. */
-    async current(user: AuthUser): Promise<CurrentShiftView | null> {
+    async current(
+        user: AuthUser,
+        terminalId?: string,
+    ): Promise<CurrentShiftView | null> {
         const shift = await this.model
             .findOne(this.openFilter(user.userId))
             .lean<ShiftDoc>();
-        return shift ? toCurrentView(shift) : null;
+        return shift ? toCurrentView(shift, terminalId) : null;
+    }
+
+    /**
+     * Why a terminal-bound write on `cashier`'s open shift matched nothing:
+     * the shift is open on another terminal (409 SHIFT_OTHER_TERMINAL), or
+     * there is none (409 SHIFT_NOT_OPEN).
+     */
+    private async refusal(
+        cashier: string,
+        session: ClientSession,
+    ): Promise<ConflictError> {
+        const open = await this.model
+            .findOne(this.openFilter(cashier), { terminal: 1 })
+            .session(session)
+            .lean<{ terminal: string }>();
+        return open ? otherTerminal(open.terminal) : this.notOpen();
     }
 
     /** The id of `cashier`'s open shift, or null. */
@@ -294,6 +360,7 @@ export class ShiftService {
     async recordDrawer(
         user: AuthUser,
         dto: DrawerMovementDto,
+        terminalId?: string,
     ): Promise<CurrentShiftView> {
         const requestHash = createHash('sha256')
             .update(
@@ -337,19 +404,26 @@ export class ShiftService {
                         'This drawer retry key was already used for different movement details',
                     );
                 }
-                return toCurrentView(original);
+                return toCurrentView(original, terminalId);
             }
+            const terminal = terminalBinding(requireTerminalId(terminalId));
             // The write conflicts with other drawer writes and close. Driver
             // transaction retries reread the committed movement before appending.
             const shift = await this.model
                 .findOneAndUpdate(
-                    { ...filter, status: ShiftStatus.OPEN },
-                    { $push: { movements: movement } },
+                    { ...filter, status: ShiftStatus.OPEN, ...terminal.filter },
+                    { $push: { movements: movement }, $set: terminal.set },
                     { new: true, runValidators: true, session },
                 )
                 .lean<ShiftDoc>();
 
-            if (!shift) throw this.notOpen();
+            if (!shift) {
+                // Only this shift: another open shift of the caller's
+                // is not the one named.
+                if (original.status === ShiftStatus.OPEN)
+                    throw otherTerminal(original.terminal);
+                throw this.notOpen();
+            }
             await this.audit.record(
                 {
                     actor: user,
@@ -363,7 +437,7 @@ export class ShiftService {
                 },
                 session,
             );
-            return toCurrentView(shift);
+            return toCurrentView(shift, terminalId);
         }, this.connection);
     }
 
@@ -378,17 +452,19 @@ export class ShiftService {
      */
     async chargeSale(
         cashier: string,
+        terminalId: string | undefined,
         session: ClientSession,
     ): Promise<Types.ObjectId> {
+        const terminal = terminalBinding(requireTerminalId(terminalId));
         const shift = await this.model
             .findOneAndUpdate(
-                this.openFilter(cashier),
-                { $inc: { saleCount: 1 } },
+                { ...this.openFilter(cashier), ...terminal.filter },
+                { $inc: { saleCount: 1 }, $set: terminal.set },
                 { session, new: true, projection: { _id: 1 } },
             )
             .lean<{ _id: Types.ObjectId }>();
 
-        if (!shift) throw this.notOpen();
+        if (!shift) throw await this.refusal(cashier, session);
         return shift._id;
     }
 
@@ -414,6 +490,7 @@ export class ShiftService {
             admin,
             approvedBy,
             approvedByName,
+            cashierTerminal,
         }: {
             saleId: string;
             saleShift: Types.ObjectId | null;
@@ -429,6 +506,12 @@ export class ShiftService {
              */
             approvedBy: string;
             approvedByName: string;
+            /**
+             * Set for a cashier's own reversal (#509, owner decision
+             * 2026-11-27): cash leaves the shift's drawer only from the
+             * terminal it is bound to. ADMIN reversals leave it unset.
+             */
+            cashierTerminal?: { id: string | undefined };
         },
         session: ClientSession,
     ): Promise<Types.ObjectId | null> {
@@ -461,6 +544,31 @@ export class ShiftService {
             sale: new Types.ObjectId(saleId),
         };
 
+        if (saleShift && cashierTerminal) {
+            const terminal = terminalBinding(
+                requireTerminalId(cashierTerminal.id),
+            );
+            const res = await this.model.updateOne(
+                {
+                    _id: saleShift,
+                    status: ShiftStatus.OPEN,
+                    ...terminal.filter,
+                },
+                { $push: { movements: movement }, $set: terminal.set },
+                { session, runValidators: true },
+            );
+            if (res.matchedCount > 0) return saleShift;
+            const open = await this.model
+                .findOne(
+                    { _id: saleShift, status: ShiftStatus.OPEN },
+                    {
+                        terminal: 1,
+                    },
+                )
+                .session(session)
+                .lean<{ terminal: string }>();
+            if (open) throw otherTerminal(open.terminal);
+        }
         if (
             saleShift &&
             (await this.pushIfOpen(saleShift, movement, session))
@@ -537,9 +645,11 @@ export class ShiftService {
     async closeOwn(
         user: AuthUser,
         counts: BillCounts,
+        terminalId: string | undefined,
         session?: ClientSession,
     ): Promise<ZReadReport> {
         const countedCash = countedTotal(counts);
+        const id = requireTerminalId(terminalId);
         return runInTransaction(
             async (session) => {
                 const shift = await this.model
@@ -547,6 +657,9 @@ export class ShiftService {
                     .session(session)
                     .lean<ShiftDoc>();
                 if (!shift) throw this.notOpen();
+                // An unbound (pre-#509) shift closes from any terminal; the
+                // close's own write conflicts with a concurrent first bind.
+                if (!onTerminal(shift, id)) throw otherTerminal(shift.terminal);
                 // One terminal may hold several leases (one per login
                 // session): one entry per terminal, with its latest lease
                 // and the label it last sent (#454).

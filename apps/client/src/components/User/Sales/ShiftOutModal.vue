@@ -103,7 +103,7 @@ import BillCountInput from './BillCountInput.vue';
 import { closeErrorText, countPieces, countsError } from './shift';
 import type { BillCounts } from './shift';
 import { useShiftStore } from '@/stores/shift';
-import { apiErrorCode } from '@/utils/api-error';
+import { apiErrorCode, apiErrorText } from '@/utils/api-error';
 import { Color, useUIStore } from '@/stores/ui';
 import { useCartStore } from '@/stores/cart';
 import { formatCurrency } from '@/utils/currency';
@@ -173,7 +173,10 @@ async function confirm() {
         await shiftStore.closeShift(billCounts.value, parkedChoice.value);
     } catch (err) {
         error.value = closeErrorText(err, 'Could not close the shift');
-        if (apiErrorCode(err) === ErrorCode.SHIFT_NOT_OPEN) {
+        if (apiErrorCode(err) === ErrorCode.SHIFT_OTHER_TERMINAL) {
+            // Open on another terminal (#509): the store closed the modal.
+            uiStore.queueMessage(Color.ERROR, apiErrorText(err, ''));
+        } else if (apiErrorCode(err) === ErrorCode.SHIFT_NOT_OPEN) {
             // Closed elsewhere (e.g. by an admin): the modal has closed.
             uiStore.queueMessage(
                 Color.ERROR,

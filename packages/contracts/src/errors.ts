@@ -57,6 +57,18 @@ export enum ErrorCode {
     SHIFT_PAYOUT_NO_OPEN_SHIFT = 'SHIFT_005',
     /** A drawer retry reused its key for different movement details. */
     SHIFT_DRAWER_IDEMPOTENCY_MISMATCH = 'SHIFT_006',
+    /**
+     * The caller's open shift is bound to another terminal (#509): sales,
+     * offline leases, drawer movements and the cashier's own close work
+     * only from the browser that opened it. `details` is
+     * `ShiftOtherTerminalDetails`.
+     */
+    SHIFT_OTHER_TERMINAL = 'SHIFT_007',
+    /**
+     * The request has no valid `TERMINAL_ID_HEADER` (#509), e.g. a tab
+     * still running an older client: reload the page.
+     */
+    SHIFT_TERMINAL_REQUIRED = 'SHIFT_008',
 
     /** The caller is signed in but may not do this (generic 403). */
     FORBIDDEN = 'FORBIDDEN_001',
@@ -153,6 +165,28 @@ export enum ErrorCode {
  * (`AppErrorResponse.requestId`) so users can quote it (issue #8).
  */
 export const REQUEST_ID_HEADER = 'X-Request-Id';
+
+/**
+ * The browser's stable terminal id (#509), sent by the client on
+ * `/shifts`, `/sales` and `/offline` requests only. An open shift is bound
+ * to the terminal that opened it (or, for a shift opened before #509, the
+ * first terminal that sells, leases offline or moves cash on it; closing
+ * checks but never binds). Never the editable terminal label.
+ */
+export const TERMINAL_ID_HEADER = 'x-terminal-id';
+/** What a terminal id looks like: a UUID or another opaque token. */
+export const TERMINAL_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
+
+/** `details` of a SHIFT_OTHER_TERMINAL error. */
+export interface ShiftOtherTerminalDetails {
+    /** The label of the terminal the shift is open on. */
+    terminal: string;
+}
+
+/** The owner-approved message for SHIFT_OTHER_TERMINAL (#509). */
+export function shiftOtherTerminalMessage(terminal: string): string {
+    return `Your shift is open on ${terminal}. Close it there, or ask an admin to force-close.`;
+}
 
 /** Body returned by the API's GlobalFilter for every error response. */
 export interface AppErrorResponse {

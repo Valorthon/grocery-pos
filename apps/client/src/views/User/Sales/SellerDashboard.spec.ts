@@ -56,6 +56,7 @@ describe('SellerDashboard (issue #2)', () => {
             openedAt: '2026-09-25T00:00:00.000Z',
             openingFloat: 100_000,
             movements: [],
+            onThisTerminal: true,
         };
         shift.loaded = true;
 
@@ -97,6 +98,7 @@ const openShift = {
     openedAt: '2026-09-25T00:00:00.000Z',
     openingFloat: 100_000,
     movements: [],
+    onThisTerminal: true,
 };
 
 describe('SellerDashboard shift hero (#167)', () => {
@@ -198,6 +200,36 @@ describe('SellerDashboard shift hero (#167)', () => {
             document.querySelector('[data-testid="shift-load-error"]'),
         ).toBeNull();
         expect(document.body.textContent).toContain('Shift open');
+    });
+
+    it('names the terminal a shift is bound to and offers no register, drawer or close here (#509)', async () => {
+        const shift = useShiftStore();
+        shift.activeShift = {
+            ...openShift,
+            terminal: 'Lane 2',
+            onThisTerminal: false,
+        };
+        shift.loaded = true;
+        mount();
+        await flush();
+
+        const notice = document.querySelector(
+            '[data-testid="shift-other-terminal"]',
+        )!;
+        expect(notice.getAttribute('role')).toBe('alert');
+        expect(notice.textContent!.trim()).toBe(
+            'Your shift is open on Lane 2. Close it there, or ask an admin to force-close.',
+        );
+        expect(
+            document.querySelector('[data-testid="go-to-register"]'),
+        ).toBeNull();
+        expect(document.querySelector('[data-testid="end-shift"]')).toBeNull();
+        expect(
+            document.querySelector('[data-testid="start-shift"]'),
+        ).toBeNull();
+        expect(
+            document.querySelector('[data-testid="last-shift-report"]'),
+        ).not.toBeNull();
     });
 
     it('offers Start shift when no shift is open', async () => {

@@ -16,6 +16,7 @@ import {
     ReconcileOfflineSaleDto,
 } from './offline.dto';
 import { asJson } from '../common/wire';
+import { TerminalId } from '../shift/terminal-id';
 @RequireOwnRole(Role.Seller)
 @Controller('offline')
 export class OfflineController {
@@ -23,8 +24,9 @@ export class OfflineController {
     @Post('lease') async lease(
         @CurrentUser() user: AuthUser,
         @Body() dto: OfflineLeaseDto,
+        @TerminalId() terminalId?: string,
     ): Promise<OfflineLeaseView> {
-        return this.service.lease(user, dto);
+        return this.service.lease(user, dto, terminalId);
     }
     @Get('catalog') async catalog(
         @CurrentUser() user: AuthUser,

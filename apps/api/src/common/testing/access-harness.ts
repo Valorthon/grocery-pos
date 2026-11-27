@@ -1,3 +1,4 @@
+import { TERMINAL_ID_HEADER } from '@grocery-pos/contracts';
 import { AuditService } from '../../audit/audit.service';
 /**
  * A real Nest app for per-role access e2e specs, over HTTP with `fetch`.
@@ -147,6 +148,9 @@ export async function bootAccessHarness(
                 headers: {
                     cookie: `jwt=${signCookie(token)}`,
                     'content-type': 'application/json',
+                    // One browser by default; pass another to act from a
+                    // second terminal, or '' to send none (#509).
+                    [TERMINAL_ID_HEADER]: DEFAULT_TEST_TERMINAL,
                     ...headers,
                 },
                 body: body === undefined ? undefined : JSON.stringify(body),
@@ -155,3 +159,6 @@ export async function bootAccessHarness(
         close: () => app.close(),
     };
 }
+
+/** The terminal id the harness sends unless a call names another (#509). */
+export const DEFAULT_TEST_TERMINAL = 'terminal-test-0001';

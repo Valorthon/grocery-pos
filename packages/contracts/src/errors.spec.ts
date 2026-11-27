@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { ErrorCode, offlineTerminalSuffix } from './errors.js';
+import {
+    ErrorCode,
+    offlineTerminalSuffix,
+    shiftOtherTerminalMessage,
+    TERMINAL_ID_PATTERN,
+} from './errors.js';
 
 describe('ErrorCode', () => {
     const entries = Object.entries(ErrorCode);
@@ -29,5 +34,21 @@ describe('offlineTerminalSuffix (#454)', () => {
             offlineTerminalSuffix('3f2a1b4c-0000-4000-8000-00ab12cd34ef'),
         ).toBe('12CD34EF');
         expect(offlineTerminalSuffix('abc')).toBe('ABC');
+    });
+});
+
+describe('shift terminal binding (#509)', () => {
+    it('words the other-terminal refusal as the owner approved', () => {
+        expect(shiftOtherTerminalMessage('Lane 2')).toBe(
+            'Your shift is open on Lane 2. Close it there, or ask an admin to force-close.',
+        );
+    });
+
+    it('accepts a UUID terminal id and refuses blanks or symbols', () => {
+        expect(
+            TERMINAL_ID_PATTERN.test('3f1c2b9e-8d4a-4c6e-9b2f-1a7d5e0c4b8a'),
+        ).toBe(true);
+        expect(TERMINAL_ID_PATTERN.test('')).toBe(false);
+        expect(TERMINAL_ID_PATTERN.test('lane 1!')).toBe(false);
     });
 });

@@ -11,6 +11,7 @@ import {
 } from '@grocery-pos/contracts';
 import { useCartStore } from '@/stores/cart';
 import { useShiftStore } from '@/stores/shift';
+import { Color, useUIStore } from '@/stores/ui';
 import ShiftOutModal from './ShiftOutModal.vue';
 import ZReadReportView from './ZReadReportView.vue';
 import {
@@ -109,6 +110,7 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
             openedAt: '2026-09-25T00:00:00.000Z',
             openingFloat: 100_000,
             movements: [],
+            onThisTerminal: true,
         };
         shift.loaded = true;
         mount(ShiftOutModal);
@@ -304,6 +306,53 @@ describe('ShiftOutModal (blind close, issue #2)', () => {
     });
 });
 
+describe('a close refused from another terminal (#509)', () => {
+    it('closes the modal, marks the shift as elsewhere and toasts the server’s reason', async () => {
+        const message =
+            'Your shift is open on Lane 2. Close it there, or ask an admin to force-close.';
+        const shift = useShiftStore();
+        shift.activeShift = {
+            _id: 'shift1',
+            status: ShiftStatus.OPEN,
+            cashierName: 'ana',
+            terminal: 'Lane 2',
+            openedAt: '2026-09-25T00:00:00.000Z',
+            openingFloat: 100_000,
+            movements: [],
+            onThisTerminal: true,
+        };
+        shift.loaded = true;
+        const ui = useUIStore();
+        const toast = vi.spyOn(ui, 'queueMessage');
+        mount(ShiftOutModal);
+        shift.shiftOutOpen = true;
+        await flush();
+        await typeCount('1000', '1');
+        api.get.mockReturnValue(new Promise(() => undefined));
+        api.post.mockRejectedValue(
+            new AxiosError('failed', 'ERR_BAD_REQUEST', undefined, null, {
+                status: 409,
+                data: {
+                    statusCode: 409,
+                    error: ErrorCode.SHIFT_OTHER_TERMINAL,
+                    message,
+                    details: { terminal: 'Lane 2' },
+                },
+            } as AxiosResponse),
+        );
+        document
+            .querySelector<HTMLButtonElement>(
+                '[data-testid="shift-out-confirm"]',
+            )!
+            .click();
+        await flush();
+
+        expect(shift.shiftOutOpen).toBe(false);
+        expect(shift.otherTerminalNotice).toBe(message);
+        expect(toast).toHaveBeenCalledWith(Color.ERROR, message);
+    });
+});
+
 describe('a close refused by offline terminals (#143)', () => {
     const SERVER_MESSAGE =
         'Offline mode is still on for this shift on at least one terminal.';
@@ -333,6 +382,7 @@ describe('a close refused by offline terminals (#143)', () => {
             openedAt: '2026-09-25T00:00:00.000Z',
             openingFloat: 100_000,
             movements: [],
+            onThisTerminal: true,
         };
         shift.loaded = true;
         mount(ShiftOutModal);

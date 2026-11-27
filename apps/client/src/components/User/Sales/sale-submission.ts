@@ -298,7 +298,15 @@ export class SaleNotSentError extends Error {
  * expired token or a concurrent PIN reset), so parking stays blocked.
  */
 function nothingRecorded(error: unknown): boolean {
-    return error instanceof SaleNotSentError || isRejectedSale(error);
+    const code = apiErrorCode(error);
+    return (
+        error instanceof SaleNotSentError ||
+        isRejectedSale(error) ||
+        // Refused before anything is written (#509): the shift is closed or
+        // open on another terminal, so the ticket may be parked.
+        code === ErrorCode.SHIFT_NOT_OPEN ||
+        code === ErrorCode.SHIFT_OTHER_TERMINAL
+    );
 }
 
 /** True when the server refused the sale as invalid (nothing was recorded). */

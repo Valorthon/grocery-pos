@@ -7,7 +7,7 @@
  * with `sort`, `skip`, `limit`, `session`, `lean`), `create`,
  * `findOneAndUpdate` and `updateOne` with `$set`, `$inc` and `$push`,
  * `countDocuments`, `exists` and `distinct`. Filters are plain equality (compared as
- * strings, so ObjectIds match their hex). The unique partial index on open
+ * strings, so ObjectIds match their hex), plus `$or` and `$exists`. The unique partial index on open
  * shifts is enforced on `create`, with Mongo's duplicate-key error shape.
  * Transactions run one at a time and roll back on a throw; real snapshot
  * isolation and write conflicts need a real replica set.
@@ -19,9 +19,18 @@ type Row = Record<string, unknown> & { _id: Types.ObjectId };
 type Filter = Record<string, unknown>;
 
 function matches(row: Row, filter: Filter): boolean {
-    return Object.entries(filter).every(
-        ([key, expected]) => String(row[key]) === String(expected),
-    );
+    return Object.entries(filter).every(([key, expected]) => {
+        // `$or` of plain filters and `{ $exists }`, for the #509 binding.
+        if (key === '$or')
+            return (expected as Filter[]).some((f) => matches(row, f));
+        if (
+            expected !== null &&
+            typeof expected === 'object' &&
+            '$exists' in expected
+        )
+            return (row[key] !== undefined) === expected.$exists;
+        return String(row[key]) === String(expected);
+    });
 }
 
 /** Deep copy that keeps ObjectIds and Dates intact. */

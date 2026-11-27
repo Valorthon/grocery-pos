@@ -1,12 +1,12 @@
 import { terminalLabel } from '@/settings/presentation';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { isAxiosError } from 'axios';
 import { defineStore } from 'pinia';
 import api from '@/axios';
 import { useOfflineStore } from './offline';
 import { useCartStore } from './cart';
 import { Color, useUIStore } from './ui';
-import { apiErrorCode, apiErrorText } from '@/utils/api-error';
+import { apiErrorBody, apiErrorCode, apiErrorText } from '@/utils/api-error';
 import {
     type BillCounts,
     type CashierDrawerMovement,
@@ -15,6 +15,8 @@ import {
     type CurrentShiftView,
     type DrawerMovementRequest,
     ErrorCode,
+    shiftOtherTerminalMessage,
+    type ShiftOtherTerminalDetails,
     type LastClosedResponse,
     type OpenShiftRequest,
     ShiftStatus,
@@ -61,6 +63,13 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
     return apiErrorText(error, fallback);
 }
 
+/** `details.terminal` of a SHIFT_OTHER_TERMINAL refusal, if present. */
+function otherTerminalLabel(error: unknown): string | undefined {
+    const details = apiErrorBody(error)?.details as
+        Partial<ShiftOtherTerminalDetails> | null | undefined;
+    return typeof details?.terminal === 'string' ? details.terminal : undefined;
+}
+
 /**
  * The cashier's shift, as the server holds it (issue #2). Nothing here is
  * computed or stored locally: every figure comes from an API response.
@@ -76,6 +85,17 @@ export const useShiftStore = defineStore('shift', () => {
     const loaded = ref(false);
     /** True when the last shift check failed and nothing is known (#167). */
     const loadError = ref(false);
+
+    /**
+     * The open shift's refusal on this browser (#509): it is bound to the
+     * terminal that opened it, so here nothing may be sold, moved or
+     * closed. Null when the shift may be used here (or there is none).
+     */
+    const otherTerminalNotice = computed(() =>
+        activeShift.value && activeShift.value.onThisTerminal === false
+            ? shiftOtherTerminalMessage(activeShift.value.terminal)
+            : null,
+    );
 
     const shiftInOpen = ref(false);
     const drawerAction = ref<CashierDrawerMovement | null>(null);
@@ -132,6 +152,31 @@ export const useShiftStore = defineStore('shift', () => {
         setShift(null);
         drawerAction.value = null;
         shiftOutOpen.value = false;
+    }
+
+    /**
+     * The server says the shift is open on another terminal (#509), e.g.
+     * bound there after this page loaded: mark it so, close the drawer and
+     * close dialogs, and re-read it. The layout then shows the notice.
+     */
+    function shiftOnOtherTerminal(terminal?: string) {
+        if (activeShift.value)
+            activeShift.value = {
+                ...activeShift.value,
+                ...(terminal ? { terminal } : {}),
+                onThisTerminal: false,
+            };
+        drawerAction.value = null;
+        shiftOutOpen.value = false;
+        void fetchCurrent().catch(() => undefined);
+    }
+
+    /** Handles a refusal that means this page's shift is not usable here. */
+    function onShiftRefusal(error: unknown) {
+        const code = apiErrorCode(error);
+        if (code === ErrorCode.SHIFT_NOT_OPEN) shiftClosedElsewhere();
+        else if (code === ErrorCode.SHIFT_OTHER_TERMINAL)
+            shiftOnOtherTerminal(otherTerminalLabel(error));
     }
 
     /** Opens a shift with the counted float. The server adds it up. */
@@ -205,9 +250,7 @@ export const useShiftStore = defineStore('shift', () => {
                 drawerAttempt === attempt
             )
                 drawerAttempt = null;
-            if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
-                shiftClosedElsewhere();
-            }
+            onShiftRefusal(error);
             throw error;
         }
     }
@@ -246,9 +289,7 @@ export const useShiftStore = defineStore('shift', () => {
             ).data;
         } catch (error) {
             if (gen !== generation) throw new StaleResponseError();
-            if (apiErrorCode(error) === ErrorCode.SHIFT_NOT_OPEN) {
-                shiftClosedElsewhere();
-            }
+            onShiftRefusal(error);
             throw error;
         } finally {
             if (gen === generation && managingParked) cart.unlock();
@@ -309,6 +350,7 @@ export const useShiftStore = defineStore('shift', () => {
 
     return {
         activeShift,
+        otherTerminalNotice,
         loaded,
         loadError,
         shiftInOpen,
@@ -321,6 +363,8 @@ export const useShiftStore = defineStore('shift', () => {
         closeShift,
         showLastReport,
         shiftClosedElsewhere,
+        shiftOnOtherTerminal,
+        onShiftRefusal,
         reset,
         goToRegister,
     };

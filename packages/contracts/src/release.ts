@@ -13,7 +13,7 @@
  * 409 `CLIENT_OUTDATED` before reading the body, so a browser tab still
  * running the previous release's code never submits an old-shape request.
  */
-export const WIRE_VERSION = 1;
+export const WIRE_VERSION = 2;
 export const WIRE_VERSION_HEADER = 'x-wire-version';
 
 /**

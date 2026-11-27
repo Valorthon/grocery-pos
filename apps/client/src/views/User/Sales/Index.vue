@@ -752,6 +752,7 @@ import {
 import { paymentLabel, tenderLabel } from '@/components/User/Sales/checkout';
 import { useAuthStore } from '@/stores/auth';
 import { Color, useUIStore } from '@/stores/ui';
+import { useShiftStore } from '@/stores/shift';
 
 /** The ledger fields of a sale that explain its total (centavos). */
 interface SaleTotals {
@@ -803,6 +804,7 @@ const {
 } = useManagerApproval();
 
 const uiStore = useUIStore();
+const shiftStore = useShiftStore();
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
@@ -1230,6 +1232,16 @@ async function confirmReversal() {
     const reason = reversalReason.value.trim();
     if (!type || !canConfirmReversal.value || reversing.value) return;
 
+    // A cashier's own cash payout leaves the shift's drawer only on the
+    // terminal it is bound to (#509): say so before asking a manager.
+    if (
+        !authStore.isAdmin &&
+        reversalCash.value > 0 &&
+        shiftStore.otherTerminalNotice
+    ) {
+        uiStore.queueMessage(Color.ERROR, shiftStore.otherTerminalNotice);
+        return;
+    }
     reversing.value = true;
     const action = type === ReversalType.VOID ? 'void' : 'refund';
     try {
@@ -1267,6 +1279,8 @@ async function confirmReversal() {
         ) {
             await loadPayoutShifts(true);
         }
+        if (code === ErrorCode.SHIFT_OTHER_TERMINAL)
+            shiftStore.onShiftRefusal(error);
         uiStore.queueMessage(
             Color.ERROR,
             apiErrorMessages(error, `Could not ${action} the sale`),

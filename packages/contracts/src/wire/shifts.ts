@@ -38,6 +38,7 @@ export const CURRENT_SHIFT_VIEW_SHAPE: WireShape<CurrentShiftView> = {
     openedAt: 'required',
     openingFloat: 'required',
     movements: 'required',
+    onThisTerminal: 'required',
 };
 
 export const COUNTED_AMOUNT_SHAPE: WireShape<CountedAmount> = {

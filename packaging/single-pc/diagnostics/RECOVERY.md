@@ -184,12 +184,15 @@ which uses Chrome's normal Default profile. A Guest or Incognito window, or
 clearing the browsing or site data for the POS address (Ctrl+Shift+Delete,
 a "delete site data when Chrome closes" setting, cleaner tools), deletes
 the terminal label, parked tickets, the current basket and any offline
-cash sales not yet synced.
+cash sales not yet synced. It also gives the PC a new terminal identity: a
+shift opened there is bound to the old one, so the cashier sees "Your
+shift is open on …" and only an ADMIN force-close ends it.
 
 1. Open the "Grocery POS" shortcut again; an ADMIN sets the label again in
    Store settings on this terminal.
-2. If offline cash was lost, the shift cannot close normally: an ADMIN
-   force-closes it with the counted cash.
+2. If offline cash was lost, or a shift was open on this terminal, the
+   shift cannot close normally: an ADMIN force-closes it with the counted
+   cash.
 3. The lost sales cannot be recovered: the drawer will be over by their
    cash. Note them on paper (time, items, amount) with the Z-read, and
    adjust stock for the items sold if needed.

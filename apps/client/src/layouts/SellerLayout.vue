@@ -104,6 +104,9 @@ function requireShift() {
     if (route.name === 'Sell' && shiftStore.loaded && !shiftStore.activeShift) {
         shiftStore.shiftInOpen = true;
         void router.replace({ name: 'SellerDashboard' });
+    } else if (route.name === 'Sell' && shiftStore.otherTerminalNotice) {
+        // Open on another terminal (#509): the dashboard says where.
+        void router.replace({ name: 'SellerDashboard' });
     }
 }
 
@@ -127,13 +130,17 @@ onMounted(async () => {
 });
 
 watch(() => route.name, requireShift);
+// Bound to another terminal after load (#509): leave the register.
+watch(() => shiftStore.otherTerminalNotice, requireShift);
 
 watch(
     () => shiftStore.activeShift,
     (shift, previous) => {
         // `loaded` is cleared by a reset (logout): nothing to report then.
-        if (shift && shift._id !== previous?._id)
+        if (shift && shift._id !== previous?._id) {
             void useOfflineStore().prepare(shift);
+            requireShift();
+        }
         if (shift || !previous || !shiftStore.loaded) return;
         // Closed by the cashier: the Z-read is on screen. Otherwise it was
         // closed elsewhere (an admin force-closed it).

@@ -49,6 +49,7 @@ const lease = (): OfflineLeaseView => ({
         terminal: 'A',
         openingFloat: 10000,
         movements: [],
+        onThisTerminal: true,
     },
     serverTime: Date.now(),
 });

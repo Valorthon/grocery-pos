@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type App, createApp, nextTick } from 'vue';
 import { createPinia, type Pinia, setActivePinia } from 'pinia';
 import {
+    ErrorCode,
     PaymentType,
     Role,
     SaleStatus,
@@ -11,6 +12,8 @@ import {
 import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios';
 import { openDates, openMoreFilters } from '@/testing/form-dom';
 import { useAuthStore } from '@/stores/auth';
+import { useShiftStore } from '@/stores/shift';
+import { Color, useUIStore } from '@/stores/ui';
 import Index from './Index.vue';
 import type { ApiGet, ApiSend } from '@/testing/api-mock';
 
@@ -294,6 +297,83 @@ describe('admin void/refund cash payout (issue #2)', () => {
             },
             { headers: { 'X-Manager-Approval': 'approved' } },
         );
+    });
+});
+
+describe('a seller’s cash reversal on another terminal (#509)', () => {
+    const NOTICE =
+        'Your shift is open on Lane 2. Close it there, or ask an admin to force-close.';
+    function sellerShift(onThisTerminal: boolean) {
+        useAuthStore().user = { username: 'ana', roles: [Role.Seller] };
+        useShiftStore().activeShift = {
+            _id: OWN_SHIFT,
+            status: ShiftStatus.OPEN,
+            cashierName: 'ana',
+            terminal: 'Lane 2',
+            openedAt: '2026-09-25T00:00:00.000Z',
+            openingFloat: 100_000,
+            movements: [],
+            onThisTerminal,
+        };
+        useShiftStore().loaded = true;
+    }
+
+    it('is refused with the notice before any manager is asked', async () => {
+        sellerShift(false);
+        serve(CASH_SALE, []);
+        const toast = vi.spyOn(useUIStore(), 'queueMessage');
+        await startVoid();
+
+        confirmButton().click();
+        await flush();
+
+        expect(toast).toHaveBeenCalledWith(Color.ERROR, NOTICE);
+        expect(document.querySelector('#override-manager-pin')).toBeNull();
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('marks the shift as elsewhere when the server refuses it', async () => {
+        sellerShift(true);
+        serve(CASH_SALE, []);
+        const served = api.get.getMockImplementation()!;
+        const elsewhere = {
+            ...useShiftStore().activeShift!,
+            onThisTerminal: false,
+        };
+        api.get.mockImplementation((url, config) =>
+            url === '/shifts/current'
+                ? Promise.resolve({ data: { shift: elsewhere } })
+                : served(url, config),
+        );
+        await startVoid();
+        api.post.mockImplementation((url: string) =>
+            url === '/sales/sale1/void'
+                ? Promise.reject(
+                      new AxiosError(
+                          '409',
+                          'ERR_BAD_REQUEST',
+                          undefined,
+                          null,
+                          {
+                              status: 409,
+                              data: {
+                                  statusCode: 409,
+                                  error: ErrorCode.SHIFT_OTHER_TERMINAL,
+                                  message: NOTICE,
+                                  details: { terminal: 'Lane 2' },
+                              },
+                          } as AxiosResponse,
+                      ),
+                  )
+                : Promise.resolve({ data: { token: 'approved' } }),
+        );
+
+        confirmButton().click();
+        await flush();
+        await approveManager();
+
+        expect(useShiftStore().activeShift?.onThisTerminal).toBe(false);
+        expect(useShiftStore().otherTerminalNotice).toBe(NOTICE);
     });
 });
 

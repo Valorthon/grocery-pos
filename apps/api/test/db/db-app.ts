@@ -12,6 +12,8 @@
  * active flag and an explicit `sid` are checked as in production.
  * `bootDbApp({ realSessions: true })` drops the seam entirely.
  */
+import { TERMINAL_ID_HEADER } from '@grocery-pos/contracts';
+import { DEFAULT_TEST_TERMINAL } from '../../src/common/testing/access-harness';
 import { createHmac, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { INestApplication, VersioningType } from '@nestjs/common';
@@ -167,6 +169,9 @@ export async function bootDbApp(
                 headers: {
                     cookie: `jwt=${signCookie(token)}`,
                     'content-type': 'application/json',
+                    // One browser by default; pass another to act from a
+                    // second terminal, or '' to send none (#509).
+                    [TERMINAL_ID_HEADER]: DEFAULT_TEST_TERMINAL,
                     ...headers,
                 },
                 body: body === undefined ? undefined : JSON.stringify(body),
