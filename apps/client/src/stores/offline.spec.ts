@@ -370,6 +370,29 @@ it('refuses reconciliation without admin authority and a nonblank reason', async
         'reason',
     );
 });
+it('waits for an in-flight prepare before releasing the lease (#505)', async () => {
+    let answer!: () => void;
+    vi.mocked(api.post).mockImplementation((path, data) =>
+        path === '/offline/lease'
+            ? new Promise((resolve) => {
+                  answer = () =>
+                      resolve({ data: { ...lease(), serverTime: Date.now() } });
+              })
+            : acknowledged(path, data),
+    );
+    const preparing = store.prepare(lease().shift);
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    const closing = store.beforeClose();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const paths = () => vi.mocked(api.post).mock.calls.map(([p]) => p);
+    expect(paths()).not.toContain(`/offline/leases/${LEASE}/release`);
+    answer();
+    await preparing;
+    await closing;
+    expect(paths()[paths().length - 1]).toBe(
+        `/offline/leases/${LEASE}/release`,
+    );
+});
 it('drains and suspends offline mode before releasing the exact terminal lease', async () => {
     await store.queue(body(), items());
     await store.beforeClose();
@@ -838,6 +861,63 @@ it('refuses enqueue once the lease expired in corrected time (#398)', async () =
     await store.restore(USER, [Role.Seller]);
     expect(store.ready).toBe(false);
     await expect(store.queue(body(), items())).rejects.toThrow('expired');
+});
+it('shows no stored clock warning after a reload until a fresh measurement confirms it (#505)', async () => {
+    const saved = (await readOfflineState(USER))!;
+    await saveOfflineState({ ...saved, lease: lease(), clockOffset: 120_000 });
+    await store.restore(USER, [Role.Seller]);
+    // The stored offset still corrects time, but doesn't warn on its own.
+    expect(store.clockOffset).toBe(120_000);
+    expect(store.clockWarning).toBe(false);
+    // The fixed clock: the lease answer measures a small offset, shown
+    // before the catalogue finishes loading.
+    vi.mocked(api.post).mockImplementation(async (path, data) =>
+        path === '/offline/lease'
+            ? { data: { ...lease(), serverTime: Date.now() } }
+            : acknowledged(path, data),
+    );
+    let finish!: () => void;
+    vi.mocked(api.get).mockImplementation(
+        () =>
+            new Promise((resolve) => {
+                finish = () =>
+                    resolve({
+                        data: {
+                            products: [],
+                            next: null,
+                            serverTime: Date.now(),
+                        },
+                    });
+            }),
+    );
+    const preparing = store.prepare(lease().shift);
+    await vi.waitFor(() => expect(store.clockMeasured).toBe(true));
+    expect(Math.abs(store.clockOffset)).toBeLessThan(2000);
+    expect(store.clockWarning).toBe(false);
+    finish();
+    await preparing;
+    expect(store.clockWarning).toBe(false);
+});
+it('warns after a reload once a fresh measurement confirms the skew (#505)', async () => {
+    const saved = (await readOfflineState(USER))!;
+    await saveOfflineState({ ...saved, lease: lease(), clockOffset: 120_000 });
+    await store.restore(USER, [Role.Seller]);
+    vi.mocked(api.post).mockImplementation(async (path, data) =>
+        path === '/offline/lease'
+            ? { data: { ...lease(), serverTime: Date.now() + 120_000 } }
+            : acknowledged(path, data),
+    );
+    vi.mocked(api.get).mockResolvedValue({
+        data: {
+            products: [product()],
+            next: null,
+            serverTime: Date.now() + 120_000,
+        },
+    });
+    await store.prepare(lease().shift);
+    expect(store.clockWarning).toBe(true);
+    store.reset();
+    expect(store.clockWarning).toBe(false);
 });
 it('reads no iat from an unreadable proof', async () => {
     const { proofIat } = await import('./offline');

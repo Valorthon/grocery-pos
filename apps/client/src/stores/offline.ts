@@ -106,9 +106,17 @@ export const useOfflineStore = defineStore('offline', () => {
     const offline = computed(() => !connected.value);
     /** Server minus terminal clock (ms); 0 until a lease answer was seen. */
     const clockOffset = computed(() => state.value?.clockOffset ?? 0);
+    /**
+     * Whether this page measured the offset itself. A stored offset still
+     * corrects time after a reload, but only a fresh measurement may warn,
+     * so a fixed clock doesn't keep its old warning (#505).
+     */
+    const clockMeasured = ref(false);
     /** The terminal clock is far enough off to need fixing (#398). */
     const clockWarning = computed(
-        () => Math.abs(clockOffset.value) > OFFLINE_CLOCK_WARN_MS,
+        () =>
+            clockMeasured.value &&
+            Math.abs(clockOffset.value) > OFFLINE_CLOCK_WARN_MS,
     );
     const now = () => Date.now() + clockOffset.value;
     const ready = computed(
@@ -136,6 +144,7 @@ export const useOfflineStore = defineStore('offline', () => {
         owner.value = id;
         admin.value = roles.includes(Role.Admin);
         state.value = null;
+        clockMeasured.value = false;
         pending.value = [];
         error.value = '';
         try {
@@ -156,6 +165,7 @@ export const useOfflineStore = defineStore('offline', () => {
         busy.value = false;
         owner.value = null;
         state.value = null;
+        clockMeasured.value = false;
         pending.value = [];
         admin.value = false;
         pendingOpen.value = false;
@@ -206,6 +216,10 @@ export const useOfflineStore = defineStore('offline', () => {
             if (!active || gen !== generation) return;
             if (state.value?.lease?._id !== lease._id)
                 state.value = { ...active, products: [] };
+            else if (offset !== undefined)
+                // Show the fresh offset now, not after the catalogue (#505).
+                state.value = { ...active, products: state.value.products };
+            if (offset !== undefined) clockMeasured.value = true;
             let cursor = active.cursor;
             do {
                 const { data: page, offset: pageOffset } = await timed(() =>
@@ -227,6 +241,7 @@ export const useOfflineStore = defineStore('offline', () => {
                     ))
                 )
                     break;
+                if (pageOffset !== undefined) clockMeasured.value = true;
                 cursor = page.next;
             } while (cursor);
             const saved = await readOfflineState(id);
@@ -496,6 +511,9 @@ export const useOfflineStore = defineStore('offline', () => {
             );
         await sync();
         const saved = await suspendOffline(id);
+        // A focus-triggered prepare still running must not renew the lease
+        // after its release (#505).
+        await preparing?.catch(() => undefined);
         if (saved?.lease) {
             await api.post(`/offline/leases/${saved.lease._id}/release`, {
                 terminalId: saved.terminalId,
@@ -561,6 +579,7 @@ export const useOfflineStore = defineStore('offline', () => {
         offline,
         ready,
         clockOffset,
+        clockMeasured,
         clockWarning,
         busy,
         error,
