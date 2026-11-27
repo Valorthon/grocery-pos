@@ -63,3 +63,11 @@ export function isValidReferenceNumber(value: string): boolean {
         REFERENCE_NUMBER_LIMITS.PATTERN.test(value)
     );
 }
+
+/**
+ * How far back a SELLER may void or refund any cashier's sale (#526, owner
+ * decision 2026-11-27): the last 30 store-calendar days, today included,
+ * by the sale's occurrence (`soldAt`, else `createdAt`). Older sales are
+ * ADMIN only.
+ */
+export const SELLER_REVERSAL_WINDOW_DAYS = 30;

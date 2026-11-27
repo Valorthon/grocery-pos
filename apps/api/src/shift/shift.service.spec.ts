@@ -866,6 +866,7 @@ describe('ShiftService.payOutReversal', () => {
         amount: number,
         payoutShiftId?: string,
         cashierTerminal?: { id: string | undefined },
+        requester: AuthUser = BOSS,
     ) {
         return inTransaction((session) =>
             service.payOutReversal(
@@ -876,7 +877,7 @@ describe('ShiftService.payOutReversal', () => {
                     payoutShiftId,
                     type: ReversalType.REFUND,
                     reason: 'return',
-                    admin: BOSS,
+                    admin: requester,
                     approvedBy: BOSS.userId,
                     approvedByName: 'boss',
                     ...(cashierTerminal ? { cashierTerminal } : {}),
@@ -892,7 +893,7 @@ describe('ShiftService.payOutReversal', () => {
         ).filter((m) => m.type === DrawerMovementType.REVERSAL_PAYOUT);
     }
 
-    it('pays a cashier’s own cash reversal only from the shift’s terminal (#509)', async () => {
+    it('pays a cashier’s reversal only from their own shift on its terminal (#509, #526)', async () => {
         const { _id } = await service.open(
             ANA,
             FLOAT_COUNTS,
@@ -902,31 +903,68 @@ describe('ShiftService.payOutReversal', () => {
         const shift = new Types.ObjectId(_id);
 
         await expect(
-            payOut(shift, 500, undefined, { id: 'terminal-other-02' }),
+            payOut(shift, 500, undefined, { id: 'terminal-other-02' }, ANA),
         ).rejects.toMatchObject({
             code: ErrorCode.SHIFT_OTHER_TERMINAL,
             details: { terminal: 'Lane 1' },
         });
         await expect(
-            payOut(shift, 500, undefined, { id: undefined }),
+            payOut(shift, 500, undefined, { id: undefined }, ANA),
         ).rejects.toMatchObject({ code: ErrorCode.SHIFT_TERMINAL_REQUIRED });
+        // GCash only touches no drawer but still needs the shift here (#526).
+        await expect(
+            payOut(shift, 0, undefined, { id: 'terminal-other-02' }, ANA),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_OTHER_TERMINAL });
         expect(payouts(_id)).toHaveLength(0);
 
-        // GCash only touches no drawer: allowed from anywhere.
         await expect(
-            payOut(shift, 0, undefined, { id: 'terminal-other-02' }),
+            payOut(shift, 0, undefined, { id: TERMINAL }, ANA),
         ).resolves.toBeNull();
         // The same terminal pays; an ADMIN (no cashierTerminal) still does.
         await expect(
-            payOut(shift, 500, undefined, { id: TERMINAL }),
+            payOut(shift, 500, undefined, { id: TERMINAL }, ANA),
         ).resolves.toEqual(shift);
         await expect(payOut(shift, 500)).resolves.toEqual(shift);
         expect(payouts(_id)).toHaveLength(2);
 
         // Opened before #509: the reversal binds it.
         delete shifts.byId(_id)!.terminalId;
-        await payOut(shift, 500, undefined, { id: 'terminal-other-02' });
+        await payOut(shift, 500, undefined, { id: 'terminal-other-02' }, ANA);
         expect(shifts.byId(_id)!.terminalId).toBe('terminal-other-02');
+    });
+
+    it('charges another cashier’s sale to the refunding cashier’s shift (#526)', async () => {
+        const ana = await service.open(ANA, FLOAT_COUNTS, 'Lane 1', TERMINAL);
+        const ben = await service.open(
+            BEN,
+            FLOAT_COUNTS,
+            'Lane 2',
+            'terminal-other-02',
+        );
+
+        await expect(
+            payOut(
+                new Types.ObjectId(ana._id),
+                700,
+                undefined,
+                { id: 'terminal-other-02' },
+                BEN,
+            ),
+        ).resolves.toEqual(new Types.ObjectId(ben._id));
+        expect(payouts(ben._id)).toEqual([
+            expect.objectContaining({ amount: 700 }),
+        ]);
+        expect(payouts(ana._id)).toHaveLength(0);
+        // The sale's still-open shift is written so its close conflicts.
+        expect(shifts.byId(ana._id)!.reversalCount).toBe(1);
+
+        // A closed sale shift, or none, is fine too; no shift of one's own is not.
+        await expect(
+            payOut(null, 300, undefined, { id: 'terminal-other-02' }, BEN),
+        ).resolves.toEqual(new Types.ObjectId(ben._id));
+        await expect(
+            payOut(null, 300, undefined, { id: TERMINAL }, BOSS),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
     });
 
     it('touches no drawer when there is no cash to pay back', async () => {

@@ -570,8 +570,15 @@
                         class="text-xs text-muted"
                         data-testid="payout-own-shift"
                     >
-                        {{ formatCurrency(reversalCash) }} cash is paid back out
-                        of the drawer of the shift this sale was rung in.
+                        <template v-if="authStore.isAdmin"
+                            >{{ formatCurrency(reversalCash) }} cash is paid
+                            back out of the drawer of the shift this sale was
+                            rung in.</template
+                        >
+                        <template v-else
+                            >{{ formatCurrency(reversalCash) }} cash is paid
+                            back out of your drawer.</template
+                        >
                     </p>
                     <template v-else>
                         <p
@@ -1094,7 +1101,8 @@ async function copyId() {
     }
 }
 
-// Whole-sale reversals require manager approval; sellers see only their own current-shift sales.
+// Whole-sale reversals require manager approval; a seller may reverse any
+// cashier's sale from the last 30 days, found by its number (#526).
 const canReverse = computed(
     () =>
         !useOfflineStore().offline &&
@@ -1232,13 +1240,10 @@ async function confirmReversal() {
     const reason = reversalReason.value.trim();
     if (!type || !canConfirmReversal.value || reversing.value) return;
 
-    // A cashier's own cash payout leaves the shift's drawer only on the
-    // terminal it is bound to (#509): say so before asking a manager.
-    if (
-        !authStore.isAdmin &&
-        reversalCash.value > 0 &&
-        shiftStore.otherTerminalNotice
-    ) {
+    // A cashier's reversal is paid from their own shift, only on the
+    // terminal it is bound to, GCash-only included (#509, #526): say so
+    // before asking a manager.
+    if (!authStore.isAdmin && shiftStore.otherTerminalNotice) {
         uiStore.queueMessage(Color.ERROR, shiftStore.otherTerminalNotice);
         return;
     }

@@ -76,7 +76,7 @@ describe('Roles page (issue #24)', () => {
             'Run own cash shift',
         );
         expect(permissionsShown(Role.Admin)).toContain(
-            'Void and refund sales with manager approval',
+            'Void and refund any sale with manager approval',
         );
     });
 
@@ -102,7 +102,7 @@ describe('Roles page (issue #24)', () => {
         for (const role of ASSIGNABLE_ROLES) {
             expect(
                 permissionsShown(role).includes(
-                    'Void and refund sales with manager approval',
+                    'Void and refund any sale with manager approval',
                 ),
             ).toBe(role === Role.Admin || role === Role.Seller);
         }

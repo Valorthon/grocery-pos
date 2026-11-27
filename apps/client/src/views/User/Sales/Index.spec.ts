@@ -332,6 +332,37 @@ describe('a seller’s cash reversal on another terminal (#509)', () => {
         expect(api.post).not.toHaveBeenCalled();
     });
 
+    it('refuses a GCash-only reversal on another terminal too (#526)', async () => {
+        sellerShift(false);
+        serve(
+            {
+                ...CASH_SALE,
+                paymentType: PaymentType.GCASH,
+                tenders: [{ type: TenderType.GCASH, amount: CASH_SALE.amount }],
+                changeGiven: 0,
+            },
+            [],
+        );
+        const toast = vi.spyOn(useUIStore(), 'queueMessage');
+        await startVoid();
+
+        confirmButton().click();
+        await flush();
+
+        expect(toast).toHaveBeenCalledWith(Color.ERROR, NOTICE);
+        expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it('says the cash comes out of the seller’s own drawer (#526)', async () => {
+        sellerShift(true);
+        serve(CASH_SALE, []);
+        await startVoid();
+        expect(
+            document.querySelector('[data-testid="payout-own-shift"]')
+                ?.textContent,
+        ).toContain('out of your drawer');
+    });
+
     it('marks the shift as elsewhere when the server refuses it', async () => {
         sellerShift(true);
         serve(CASH_SALE, []);

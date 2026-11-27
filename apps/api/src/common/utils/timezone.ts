@@ -113,7 +113,7 @@ function sameDate(a: CalendarDate, b: CalendarDate): boolean {
     return a.year === b.year && a.month === b.month && a.day === b.day;
 }
 
-function addDays(date: CalendarDate, days: number): CalendarDate {
+export function addDays(date: CalendarDate, days: number): CalendarDate {
     const d = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
     return {
         year: d.getUTCFullYear(),

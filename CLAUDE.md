@@ -130,10 +130,14 @@ Rules:
   manager username + six-digit PIN dialog (#34, product decision 2026-11-03).
   A configurable cashier allowance is deferred until the owner revisits it.
 - Void and refund cover the whole sale only and require an ADMIN or SUPERVISOR
-  manager approval. ADMIN may reverse any sale; a SELLER may reverse only their
-  own sale in their current open shift, paying from that shift only (#34).
-  They put stock back, pay cash out of a shift's drawer (see Shifts), and record
-  the manager in `reversal.approvedBy`. Revenue excludes reversed sales.
+  manager approval. ADMIN may reverse any sale (#34); a SELLER may reverse any
+  cashier's sale from the last `SELLER_REVERSAL_WINDOW_DAYS` (30) store days
+  by occurrence (`soldAt`, else `createdAt`; older is 403 FORBIDDEN), from any
+  terminal, with an open shift of their own on this terminal, which pays the
+  cash (GCash-only included: still needs that shift; #526, owner decision
+  2026-11-27, amending #34). They put stock back, pay cash out of a shift's
+  drawer (see Shifts), and record the manager in `reversal.approvedBy`.
+  Revenue excludes reversed sales.
 - SPLIT tender stores `tenders`, `amountTendered` and `changeGiven`. A GCash
   `referenceNumber` is 13 digits, unique, and required for non-cash tenders.
 - `POST /sales` is idempotent through `idempotencyKey` plus a `requestHash`. A
@@ -272,15 +276,23 @@ Rules:
   voids/refunds, drawer movements, expected, counted, over/short).
 - Expected cash = float + cash in − drops + net cash of the shift's sales
   (cash tender − change, `saleNetCash`) − reversal payouts charged to it.
-- Void/refund pays the sale's net cash out of its own shift while open,
-  else out of the open shift the ADMIN passes as `payoutShiftId`;
-  otherwise it is refused and nothing changes. GCash-only touches no
-  drawer. `reversal.payoutShift` records which shift paid.
+- A SELLER's void/refund pays the sale's net cash out of the requester's
+  own open shift on this terminal (`cashierTerminal`, #509/#526), whoever
+  rang the sale; none is 409 `SHIFT_NOT_OPEN`/`SHIFT_OTHER_TERMINAL`, and a
+  seller's `payoutShiftId` is 403. An ADMIN's (unchanged) pays out of the
+  sale's own shift while open, else out of the open shift passed as
+  `payoutShiftId`; otherwise it is refused and nothing changes. GCash-only
+  touches no drawer. The sale's still-open shift is written either way so
+  its close conflicts. `reversal.payoutShift` records which shift paid.
 - An ADMIN can force-close an open shift with a count; the Z-read records
   the admin. Cashiers reopen their last Z-read from the seller dashboard;
   admins see every shift on `/admin/shifts`. CSV and reports are #44.
 - A non-admin reads only their own sales in their current open shift
-  (none without one; others 404).
+  (none without one; others 404), except that, with an open shift, a
+  `saleNumber` search on `GET /sales` and `GET /sales/details/:id` also
+  reach any cashier's sale within the 30-day reversal window (#526), with
+  the usual cashier projection (lines, totals, tender, cashier name; never
+  costs, payouts or approvers).
 - Terminal binding (#509, owner decision 2026-11-27): a shift is bound to
   the browser that opened it. The client sends a stable per-browser id
   (`utils/terminal-id.ts`, localStorage `grocery_pos_terminal_v1`, shared
@@ -561,6 +573,9 @@ requestId}`. A 5xx never carries details or internals.
   live in memory only. MongoDB consumes the grant in the same transaction as
   the sale/reversal, so rollback restores it and concurrent uses cannot both
   succeed. An idempotent checkout replay needs no new approval.
+- A SELLER's reversal approval covers any cashier's sale within the 30-day
+  window (#526) and needs the requester's open shift (409 `SHIFT_NOT_OPEN`
+  before the PIN); the context still binds the exact sale and amounts.
 - Current requester/approver roles and activation are checked inside the
   transaction. PIN reset/removal, role/activation edits and password changes
   invalidate pending approvals. Every approved action records the manager's

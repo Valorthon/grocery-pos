@@ -90,7 +90,9 @@ describe('route summaries (#262)', () => {
         const admin = routeDescription(router.resolve('/admin/sales'));
         const seller = routeDescription(router.resolve('/seller/orders'));
         expect(admin).toMatch(/void or refund/);
-        expect(seller).toMatch(/^Your sales in your current shift/);
+        expect(seller).toMatch(
+            /^Your shift's sales; find any sale from the last 30 days/,
+        );
     });
 
     it('falls back to the page summary when a query variant has none', () => {
