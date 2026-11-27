@@ -45,7 +45,9 @@ describe('shift terminal binding (#509)', () => {
     });
 
     it('accepts a UUID terminal id and refuses blanks or symbols', () => {
-        expect(TERMINAL_ID_PATTERN.test(crypto.randomUUID())).toBe(true);
+        expect(
+            TERMINAL_ID_PATTERN.test('3f1c2b9e-8d4a-4c6e-9b2f-1a7d5e0c4b8a'),
+        ).toBe(true);
         expect(TERMINAL_ID_PATTERN.test('')).toBe(false);
         expect(TERMINAL_ID_PATTERN.test('lane 1!')).toBe(false);
     });
