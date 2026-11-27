@@ -299,6 +299,11 @@ manual` and then `backup.mjs export --to <drive>` (#363 interfaces; the
   recorded thumbprint (never by name: every Caddy root has a similar CN)
   first. Leave deletes only the recorded root and the shortcut; Windows
   time keeps its setting. Windows execution is pending (#401).
+  The shortcut opens Chrome's normal (default) profile, never `--guest`
+  or `--incognito`; `README.txt` tells the terminal to keep one normal
+  profile and never clear the POS address's site data, since a Guest or
+  Incognito window loses the terminal label and queued offline cash when
+  it closes (#510).
 - Time server (#398): with a LAN IP, install/repair make the main PC the
   terminals' clock: `W32Time\TimeProviders\NtpServer\Enabled=1`,
   `w32tm /config /reliable:yes /update` (AnnounceFlags 5, so the isolated

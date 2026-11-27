@@ -173,6 +173,17 @@ IP>` and joins every terminal again (`JoinTerminal.ps1 -Mode rejoin`).
    not carried over. Sync offline cash and finish parked tickets first; an
    ADMIN sets each terminal's label again in Store settings.
 
+## Terminal lost its label or offline cash
+
+Signs: a LAN terminal asks for its label again, or offline cash it took is
+gone from its queue, after its Chrome window closed.
+
+Each terminal must use one normal Chrome profile, through the "Grocery POS"
+shortcut. A Guest or Incognito window, or clearing the site data for the
+POS address, deletes the terminal label and any queued offline cash. Open
+the shortcut in a normal profile, and ask an ADMIN to set the label again in
+Store settings. Never clear Chrome's site data for the POS address.
+
 ## Interrupted shutdown or power loss
 
 Signs: after a power cut or forced shutdown the app does not come back;
