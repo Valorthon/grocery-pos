@@ -7,7 +7,13 @@ import { AuditAction } from '@grocery-pos/contracts';
 import { OfflineLease } from '../offline/offline-lease.schema';
 import { Injectable } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Connection, Model, Types } from 'mongoose';
+import {
+    ClientSession,
+    Connection,
+    Model,
+    PipelineStage,
+    Types,
+} from 'mongoose';
 import {
     saleNetCash,
     type BillCounts,
@@ -23,6 +29,8 @@ import {
     ReversalType,
     SHIFT_LIMITS,
     type ShiftListItem,
+    TERMINALS_SEEN_LIMIT,
+    type TerminalsSeenResponse,
     ShiftStatus,
     type ZReadReport,
 } from '@grocery-pos/contracts';
@@ -729,6 +737,92 @@ export class ShiftService {
             .sort({ closedAt: -1 })
             .lean<ShiftDoc>();
         return shift ? this.withOfflineAddendum(toReport(shift), shift) : null;
+    }
+
+    /**
+     * The terminal labels seen in shifts and offline leases (#502), newest
+     * first, at most `TERMINALS_SEEN_LIMIT`. Read-only, for Store settings.
+     *
+     * Each source's newest `limit` labels hold the overall newest `limit`;
+     * those candidates are then counted again over both sources with `$in`,
+     * so a label cut from one source's top list keeps its full counts.
+     */
+    async terminalsSeen(): Promise<TerminalsSeenResponse> {
+        type Group = { _id: string; lastSeenAt: Date; count: number };
+        const limit = TERMINALS_SEEN_LIMIT;
+        const pipeline = (
+            field: string,
+            at: string,
+            labels?: string[],
+        ): PipelineStage[] => [
+            {
+                $match: {
+                    [field]: labels
+                        ? { $in: labels }
+                        : { $type: 'string', $ne: '' },
+                },
+            },
+            {
+                $group: {
+                    _id: '$' + field,
+                    lastSeenAt: { $max: '$' + at },
+                    count: { $sum: 1 },
+                },
+            },
+            { $sort: { lastSeenAt: -1, _id: 1 } },
+            { $limit: limit * 2 },
+        ];
+        const read = (labels?: string[]) =>
+            Promise.all([
+                this.model.aggregate<Group>(
+                    pipeline('terminal', 'openedAt', labels),
+                ),
+                this.offlineLeases.aggregate<Group>(
+                    pipeline('terminalLabel', 'issuedAt', labels),
+                ),
+            ]);
+        const [shiftTop, leaseTop] = await read();
+        const candidates = [
+            ...new Set(
+                [...shiftTop.slice(0, limit), ...leaseTop.slice(0, limit)].map(
+                    (row) => row._id,
+                ),
+            ),
+        ];
+        if (candidates.length === 0) return { terminals: [] };
+        const [shifts, leases] = await read(candidates);
+        const byLabel = new Map<
+            string,
+            { lastSeenAt: number; shifts: number; offlineLeases: number }
+        >();
+        const add = (rows: Group[], key: 'shifts' | 'offlineLeases') => {
+            for (const row of rows) {
+                const at = new Date(row.lastSeenAt).getTime();
+                const entry = byLabel.get(row._id) ?? {
+                    lastSeenAt: at,
+                    shifts: 0,
+                    offlineLeases: 0,
+                };
+                entry.lastSeenAt = Math.max(entry.lastSeenAt, at);
+                entry[key] += row.count;
+                byLabel.set(row._id, entry);
+            }
+        };
+        add(shifts, 'shifts');
+        add(leases, 'offlineLeases');
+        const terminals = [...byLabel.entries()]
+            .sort(
+                ([a, x], [b, y]) =>
+                    y.lastSeenAt - x.lastSeenAt || a.localeCompare(b),
+            )
+            .slice(0, limit)
+            .map(([label, entry]) => ({
+                label,
+                lastSeenAt: new Date(entry.lastSeenAt).toISOString(),
+                shifts: entry.shifts,
+                offlineLeases: entry.offlineLeases,
+            }));
+        return { terminals };
     }
 
     /** Every shift, newest first; ADMIN only. */

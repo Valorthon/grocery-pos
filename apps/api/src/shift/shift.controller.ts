@@ -9,6 +9,7 @@ import type {
     LastClosedResponse,
     Paginated,
     ShiftListItem,
+    TerminalsSeenResponse,
     ZReadReport,
 } from '@grocery-pos/contracts';
 import {
@@ -33,6 +34,7 @@ import {
  *   POST /shifts/current/close    Seller  blind count; returns the Z-read
  *   GET  /shifts/last-closed      Seller  own most recent Z-read
  *   GET  /shifts                  Admin   every shift, newest first
+ *   GET  /shifts/terminals        Admin   terminal labels seen (#502)
  *   GET  /shifts/:id              Admin   any shift and its Z-read
  *   POST /shifts/:id/close        Admin   force-close with a count
  *
@@ -87,6 +89,13 @@ export class ShiftController {
     @Get()
     async list(@Query() dto: ListShiftsDto): Promise<Paginated<ShiftListItem>> {
         return await this.service.list(dto);
+    }
+
+    /** Read-only list of terminal labels seen, for Store settings (#502). */
+    @Roles(Role.Admin)
+    @Get('terminals')
+    async terminals(): Promise<TerminalsSeenResponse> {
+        return await this.service.terminalsSeen();
     }
 
     @Roles(Role.Admin)

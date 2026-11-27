@@ -85,13 +85,6 @@
                     >
                         {{ saveError }}
                     </p>
-                    <p
-                        v-if="notice"
-                        role="status"
-                        class="text-sm text-emerald-700"
-                    >
-                        {{ notice }}
-                    </p>
                     <BaseButton
                         type="submit"
                         :disabled="saving || loadingForm || !settingsDirty"
@@ -102,28 +95,101 @@
                 </form>
             </div>
         </PageCard>
-        <PageCard heading="This register">
-            <div class="p-5 space-y-4">
-                <BaseInput
-                    id="settings-terminal"
-                    v-model="laneInput"
-                    label="Terminal / lane label"
-                    :maxlength="SETTINGS_LIMITS.TERMINAL"
-                    :disabled="saving || loadingForm"
-                />
-                <p class="text-xs text-slate-600">
-                    Saved on this device. New shifts use this label; it does not
-                    grant access or change an open shift.
+        <PageCard heading="This terminal">
+            <div class="p-5 space-y-4" data-testid="this-terminal">
+                <p class="text-sm text-slate-600">
+                    Saved in this PC's browser only; set it on each terminal.
                 </p>
-                <BaseButton
-                    :disabled="
-                        saving ||
-                        loadingForm ||
-                        laneInput.trim() === terminalLabel
-                    "
-                    @click="saveLane"
-                    >Save device label</BaseButton
+                <p
+                    v-if="deviceAddress"
+                    class="text-sm text-slate-600"
+                    data-testid="device-address"
                 >
+                    This device's address:
+                    <span class="font-medium text-slate-900">{{
+                        deviceAddress
+                    }}</span>
+                </p>
+                <p
+                    v-if="ephemeral"
+                    role="status"
+                    class="text-sm text-amber-800"
+                    data-testid="ephemeral-warning"
+                >
+                    This looks like a Guest or Incognito window. The terminal
+                    label and any offline cash sales waiting to sync are lost
+                    when it closes. Use a normal browser window.
+                </p>
+                <p class="text-sm text-slate-600" data-testid="terminal-state">
+                    Current label:
+                    <span class="font-medium text-slate-900">{{
+                        savedTerminalLabel || 'Not set'
+                    }}</span>
+                </p>
+                <form class="space-y-4" @submit.prevent="saveLane">
+                    <BaseInput
+                        id="settings-terminal"
+                        v-model="laneInput"
+                        label="Terminal / lane label"
+                        placeholder="Not set"
+                        :maxlength="SETTINGS_LIMITS.TERMINAL"
+                        :error="laneError"
+                        :disabled="saving || loadingForm"
+                        @update:model-value="laneError = ''"
+                    />
+                    <p class="text-xs text-slate-600">
+                        New shifts use this label; it does not grant access or
+                        change an open shift.
+                    </p>
+                    <BaseButton
+                        type="submit"
+                        :disabled="saving || loadingForm || !laneDirty"
+                        >Save terminal label</BaseButton
+                    >
+                </form>
+            </div>
+        </PageCard>
+        <PageCard heading="Terminals seen">
+            <div class="p-5 space-y-3" data-testid="terminals-seen">
+                <p class="text-sm text-slate-600">
+                    Labels used by shifts and offline mode, newest first
+                    (read-only, at most {{ TERMINALS_SEEN_LIMIT }}).
+                </p>
+                <p v-if="seenLoading" class="text-sm text-slate-600">
+                    Loading…
+                </p>
+                <div v-else-if="seenError" class="space-y-2">
+                    <p role="alert" class="text-sm text-red-700">
+                        {{ seenError }}
+                    </p>
+                    <BaseButton @click="loadSeen">Retry</BaseButton>
+                </div>
+                <p v-else-if="seen.length === 0" class="text-sm text-slate-600">
+                    No terminals yet.
+                </p>
+                <ul v-else class="divide-y divide-slate-200 text-sm">
+                    <li
+                        v-for="row in seen"
+                        :key="row.label"
+                        class="py-2 flex flex-wrap gap-x-3"
+                    >
+                        <span class="font-medium text-slate-900">{{
+                            seenLabel(row.label)
+                        }}</span>
+                        <span class="text-slate-600"
+                            >Last seen
+                            {{ formatStoreDateTime(row.lastSeenAt) }}</span
+                        >
+                        <span class="text-slate-600"
+                            >{{ row.shifts }}
+                            {{ row.shifts === 1 ? 'shift' : 'shifts' }} ·
+                            {{ row.offlineLeases }} offline
+                            {{
+                                row.offlineLeases === 1 ? 'session' : 'sessions'
+                            }}</span
+                        >
+                    </li>
+                </ul>
             </div>
         </PageCard>
         <ConfirmDialog :request="request" @answer="answer" />
@@ -133,7 +199,11 @@
 import { NON_VAT_NOTICE } from '@/utils/tax-notice';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
+    DEFAULT_TERMINAL,
     SETTINGS_LIMITS,
+    TERMINALS_SEEN_LIMIT,
+    type TerminalSeen,
+    type TerminalsSeenResponse,
     type StoreIdentity,
     type UpdateStoreSettingsRequest,
 } from '@grocery-pos/contracts';
@@ -143,11 +213,15 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { useSettingsStore } from '@/stores/settings';
+import { Color, useUIStore } from '@/stores/ui';
+import api from '@/axios';
+import { formatStoreDateTime } from '@/utils/datetime';
 import { useConfirm } from '@/composables/useConfirm';
 import { useUnsavedDraftsGuard } from '@/composables/useDrafts';
 import {
     initialSettings,
-    terminalLabel,
+    looksEphemeralBrowser,
+    savedTerminalLabel,
     saveTerminalLabel,
     validExpiryAlertDays,
 } from '@/settings/presentation';
@@ -157,11 +231,33 @@ const form = ref({ ...initialSettings });
 const baseline = ref(JSON.stringify(form.value));
 const reorderInput = ref<string | number>(10);
 const expiryInput = ref<string | number>(initialSettings.expiryAlertDays);
-const laneInput = ref(terminalLabel.value);
+const ui = useUIStore();
+const laneInput = ref(savedTerminalLabel.value);
+const laneError = ref('');
+const laneDirty = computed(
+    () => laneInput.value.trim() !== savedTerminalLabel.value,
+);
+const ephemeral = ref(false);
+const seen = ref<TerminalSeen[]>([]);
+const seenLoading = ref(true);
+const seenError = ref('');
+let seenRequest = 0;
+/** Single-pc builds only (#502): localhost is the main PC, else a LAN terminal. */
+const deviceAddress =
+    import.meta.env.VITE_APP_ENV === 'single-pc'
+        ? window.location.hostname === 'localhost'
+            ? `${window.location.host} (the main PC)`
+            : window.location.host
+        : '';
+/** The display fallback is not a saved label; say so (#502). */
+function seenLabel(label: string): string {
+    return label === DEFAULT_TERMINAL
+        ? `(no label) ${DEFAULT_TERMINAL}`
+        : label;
+}
 const loadingForm = ref(true);
 const saving = ref(false),
-    saveError = ref(''),
-    notice = ref('');
+    saveError = ref('');
 const { request, confirm, answer } = useConfirm();
 const identityFields: {
     key: keyof StoreIdentity;
@@ -194,10 +290,7 @@ const settingsDirty = computed(
         String(expiryInput.value) !== String(form.value.expiryAlertDays),
 );
 useUnsavedDraftsGuard({
-    count: () =>
-        settingsDirty.value || laneInput.value.trim() !== terminalLabel.value
-            ? 1
-            : 0,
+    count: () => (settingsDirty.value || laneDirty.value ? 1 : 0),
     saving: () => saving.value,
     confirm,
 });
@@ -231,6 +324,26 @@ function resetForm() {
     reorderInput.value = form.value.defaultReorderLevel;
     expiryInput.value = form.value.expiryAlertDays;
 }
+async function loadSeen() {
+    const request = ++seenRequest;
+    seenLoading.value = true;
+    seenError.value = '';
+    try {
+        const { data } =
+            await api.get<TerminalsSeenResponse>('/shifts/terminals');
+        if (active && request === seenRequest) seen.value = data.terminals;
+    } catch (cause) {
+        if (active && request === seenRequest)
+            seenError.value = apiErrorText(cause);
+    } finally {
+        if (active && request === seenRequest) seenLoading.value = false;
+    }
+}
+onMounted(() => {
+    void looksEphemeralBrowser().then((value) => {
+        if (active) ephemeral.value = value;
+    });
+});
 onMounted(async () => {
     await ownerKnown();
     if (!active) return;
@@ -238,6 +351,7 @@ onMounted(async () => {
     if (active) {
         resetForm();
         loadingForm.value = false;
+        void loadSeen();
     }
 });
 async function reload() {
@@ -257,13 +371,11 @@ async function reload() {
     if (active && !settings.error) {
         resetForm();
         saveError.value = '';
-        notice.value = '';
     }
 }
 async function save() {
     if (saving.value || loadingForm.value || !settingsDirty.value) return;
     saveError.value = '';
-    notice.value = '';
     const level = Number(reorderInput.value);
     if (
         !form.value.storeName.trim() ||
@@ -310,7 +422,7 @@ async function save() {
     try {
         if ((await settings.save(body)) && active) {
             resetForm();
-            notice.value = 'Store settings saved.';
+            ui.queueMessage(Color.SUCCESS, 'Store settings saved.');
         }
     } catch (cause) {
         if (active) saveError.value = apiErrorText(cause);
@@ -319,13 +431,21 @@ async function save() {
     }
 }
 function saveLane() {
-    notice.value = '';
-    saveError.value = '';
-    if (saveTerminalLabel(laneInput.value)) {
-        laneInput.value = terminalLabel.value;
-        notice.value = 'Device label saved for the next shift.';
+    laneError.value = '';
+    const label = laneInput.value.trim();
+    if (!label) {
+        laneError.value = 'Enter a label for this terminal.';
+        return;
+    }
+    if (label.length > SETTINGS_LIMITS.TERMINAL) {
+        laneError.value = `Use at most ${SETTINGS_LIMITS.TERMINAL} characters.`;
+        return;
+    }
+    if (saveTerminalLabel(label)) {
+        laneInput.value = savedTerminalLabel.value;
+        ui.queueMessage(Color.SUCCESS, 'Terminal label saved.');
     } else
-        saveError.value =
-            'Could not save the device label. Check the label and browser storage.';
+        laneError.value =
+            "Couldn't save the label in this browser's storage. Check that the browser allows site data, then try again.";
 }
 </script>
