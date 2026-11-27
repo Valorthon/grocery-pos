@@ -103,6 +103,10 @@ function isRange(value: unknown): value is Range {
 /** Equality on ids and numbers, and `$gte`/`$lt` on dates, as Mongo would. */
 function matches(row: SaleRow, filter: Record<string, unknown>): boolean {
     return Object.entries(filter).every(([key, expected]) => {
+        if (key === '$and')
+            return (expected as Record<string, unknown>[]).every((f) =>
+                matches(row, f),
+            );
         if (key === '$or')
             return (expected as Record<string, unknown>[]).some((f) =>
                 matches(row, f),
@@ -400,6 +404,70 @@ describe('Sales history scoping (e2e)', () => {
             if (allowed) expect(res.status).not.toBe(403);
             else expect(res.status).toBe(403);
         }
+    });
+
+    describe('sale-number lookup of any cashier’s recent sale (#526)', () => {
+        const RECENT: SaleRow = sale(
+            SELLER_C,
+            new Types.ObjectId(),
+            550,
+            new Date(Date.now() - 2 * 86_400_000).toISOString(),
+        );
+        RECENT.reversal = {
+            type: 'REFUND',
+            payoutShift: new Types.ObjectId(),
+            payoutAmount: 550,
+        };
+        beforeAll(() => SALES.push(RECENT));
+        afterAll(() => SALES.splice(SALES.indexOf(RECENT), 1));
+        const byNumber = (who: typeof SELLER_A, row: SaleRow) =>
+            harness.call(
+                who,
+                'GET',
+                `/sales?page=1&limit=10&saleNumber=${String(row._id)}`,
+            );
+
+        it('finds another cashier’s sale from the last 30 days, without payout figures', async () => {
+            const res = await byNumber(SELLER_A, RECENT);
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                data: Array<Record<string, unknown>>;
+            };
+            expect(body.data.map((r) => r._id)).toEqual([String(RECENT._id)]);
+            expect(body.data[0].reversal).toEqual({ type: 'REFUND' });
+            expect(body.data[0]).not.toHaveProperty('idempotencyKey');
+        });
+
+        it('never finds an older sale, and never lists it without a number', async () => {
+            const old = await byNumber(SELLER_A, C_SALE);
+            expect(((await old.json()) as { data: unknown[] }).data).toEqual(
+                [],
+            );
+            const { data } = await list(SELLER_A);
+            expect(data.map((r) => r._id)).not.toContain(String(RECENT._id));
+        });
+
+        it('needs an open shift of the seller’s own', async () => {
+            const res = await byNumber(SELLER_C, RECENT);
+            expect(((await res.json()) as { data: unknown[] }).data).toEqual(
+                [],
+            );
+        });
+
+        it('opens a recent sale’s lines, but not an older one’s', async () => {
+            const recent = await harness.call(
+                SELLER_B,
+                'GET',
+                `/sales/details/${String(RECENT._id)}`,
+            );
+            expect(recent.status).toBe(200);
+            const old = await harness.call(
+                SELLER_B,
+                'GET',
+                `/sales/details/${String(C_SALE._id)}`,
+            );
+            expect(old.status).toBe(404);
+        });
     });
 
     it.each([Role.Restocker, Role.Adjuster, Role.UserManager])(

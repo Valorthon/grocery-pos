@@ -1,3 +1,4 @@
+import type { SettingsService } from '../../settings/settings.service';
 import { StepUpService } from '../step-up/step-up.service';
 import { ForbiddenError } from '../../common/errors';
 import { AuditService } from '../../audit/audit.service';
@@ -76,6 +77,7 @@ const sale = {
     paymentType: PaymentType.CASH,
     tenders: [{ type: TenderType.CASH, amount: 1000 }],
     changeGiven: 0,
+    createdAt: new Date(),
 } as SaleDoc;
 
 describe('manager approvals (#34)', () => {
@@ -153,6 +155,9 @@ describe('manager approvals (#34)', () => {
                 record: jest.fn().mockResolvedValue(undefined),
             } as unknown as AuditService,
             stepUp as unknown as StepUpService,
+            {
+                timezone: () => Promise.resolve('Asia/Manila'),
+            } as unknown as SettingsService,
         );
     });
     function token(
@@ -293,7 +298,7 @@ describe('manager approvals (#34)', () => {
         }
     });
     it.each([OverrideAction.VOID, OverrideAction.REFUND])(
-        'allows supervisor approval for %s, restricted to the current cashier scope',
+        'allows supervisor approval for %s of any cashier’s recent sale (#526)',
         async (action) => {
             users.findOne.mockReturnValue(
                 query({ ...manager, roles: [Role.Supervisor] }),
@@ -304,11 +309,7 @@ describe('manager approvals (#34)', () => {
                 context: { reversal: { saleId: SALE, reason: 'Return' } },
             });
             expect(result.token).toBeTruthy();
-            expect(sales.findOne).toHaveBeenCalledWith({
-                _id: SALE,
-                cashier: new Types.ObjectId(USER),
-                shift: new Types.ObjectId(SHIFT),
-            });
+            expect(sales.findOne).toHaveBeenCalledWith({ _id: SALE });
         },
     );
     it('requires an exact reversal context and disallows cashier payout redirection', async () => {
@@ -341,7 +342,37 @@ describe('manager approvals (#34)', () => {
             }),
         ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
     });
-    it('refuses already-reversed sales and hides sales outside current scope', async () => {
+    it('refuses a seller a sale older than the 30-day window, but not an admin (#526)', async () => {
+        const old = {
+            ...sale,
+            cashier: new Types.ObjectId(),
+            createdAt: new Date(Date.now() - 31 * 86_400_000),
+        };
+        sales.findOne.mockReturnValue(query(old));
+        await expect(
+            service.visibleReversalSale(actor, SALE),
+        ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
+        await expect(service.visibleReversalSale(admin, SALE)).resolves.toBe(
+            old,
+        );
+        // An offline sale counts from when it occurred.
+        sales.findOne.mockReturnValue(
+            query({ ...old, createdAt: new Date(), soldAt: old.createdAt }),
+        );
+        await expect(
+            service.visibleReversalSale(actor, SALE),
+        ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
+        sales.findOne.mockReturnValue(
+            query({
+                ...old,
+                createdAt: new Date(Date.now() - 28 * 86_400_000),
+            }),
+        );
+        await expect(
+            service.visibleReversalSale(actor, SALE),
+        ).resolves.toBeTruthy();
+    });
+    it('refuses already-reversed sales and a seller without an open shift', async () => {
         sales.findOne.mockReturnValueOnce(
             query({ ...sale, status: SaleStatus.VOIDED }),
         );
@@ -355,7 +386,7 @@ describe('manager approvals (#34)', () => {
         shifts.findOne.mockReturnValueOnce(query(null));
         await expect(
             service.visibleReversalSale(actor, SALE),
-        ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND });
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
         sales.findOne.mockReturnValueOnce(query(null));
         await expect(
             service.visibleReversalSale(admin, SALE, session),

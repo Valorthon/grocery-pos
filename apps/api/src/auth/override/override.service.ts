@@ -9,14 +9,20 @@ import {
     NUMERIC_LIMITS,
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
-import { Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { SettingsService } from '../../settings/settings.service';
+import {
+    occurredSince,
+    sellerReversalCutoff,
+} from '../../sales/reversal-window';
 import { JwtService } from '@nestjs/jwt';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { randomBytes, randomUUID } from 'node:crypto';
 import * as argon from 'argon2';
 import {
     discountAmount,
+    SELLER_REVERSAL_WINDOW_DAYS,
     OverrideAction,
     OVERRIDE_APPROVAL_TTL_S,
     Role,
@@ -79,6 +85,8 @@ export class ManagerOverrideService implements OnModuleInit {
         private stockCounts: Model<StockCount> | undefined = undefined,
         private audit: AuditService,
         private stepUp: StepUpService,
+        @Inject(SettingsService)
+        private settings: SettingsService,
     ) {}
 
     onModuleInit(): void {
@@ -358,7 +366,7 @@ export class ManagerOverrideService implements OnModuleInit {
         if (!actor.roles.includes(Role.Admin) && payoutShiftId)
             throw new ForbiddenError(
                 ErrorCode.FORBIDDEN,
-                "A cashier may pay only from the sale's own open shift",
+                'A cashier pays only from their own open shift',
             );
         return this.reversalContext(action, sale, reason, payoutShiftId);
     }
@@ -441,23 +449,40 @@ export class ManagerOverrideService implements OnModuleInit {
                 ErrorCode.FORBIDDEN,
                 'Your account can no longer reverse sales',
             );
-        const filter: Record<string, unknown> = { _id: saleId };
-        if (!actor.roles.includes(Role.Admin)) {
+        const isAdmin = actor.roles.includes(Role.Admin);
+        if (!isAdmin) {
+            // Any cashier's sale (#526), but only with an open shift of
+            // one's own: that shift pays the cash back.
             const shift = await this.shifts
-                .findOne({ cashier: actor.userId, status: ShiftStatus.OPEN })
+                .findOne(
+                    { cashier: actor.userId, status: ShiftStatus.OPEN },
+                    { _id: 1 },
+                )
                 .session(session ?? null)
                 .lean();
             if (!shift)
-                throw new NotFoundError(ErrorCode.NOT_FOUND, 'Sale not found');
-            filter.cashier = new Types.ObjectId(actor.userId);
-            filter.shift = shift._id;
+                throw new ConflictError(
+                    ErrorCode.SHIFT_NOT_OPEN,
+                    'You have no open shift. Open a shift first.',
+                );
         }
         const sale = await this.sales
-            .findOne(filter)
+            .findOne({ _id: saleId })
             .session(session ?? null)
             .lean<SaleDoc>();
         if (!sale)
             throw new NotFoundError(ErrorCode.NOT_FOUND, 'Sale not found');
+        if (
+            !isAdmin &&
+            !occurredSince(
+                sale,
+                sellerReversalCutoff(await this.settings.timezone(session)),
+            )
+        )
+            throw new ForbiddenError(
+                ErrorCode.FORBIDDEN,
+                `Only an admin can void or refund a sale older than ${SELLER_REVERSAL_WINDOW_DAYS} days`,
+            );
         return sale;
     }
 

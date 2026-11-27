@@ -473,7 +473,12 @@ export class ShiftService {
      * transaction. Returns the shift charged, or null when there was no cash
      * to pay back (GCash only), in which case no drawer is touched.
      *
-     * The sale's own shift pays while it is open. Once it is closed (or for
+     * A cashier's reversal (`cashierTerminal` set, #526) is always paid by
+     * the requester's own open shift on this terminal, whichever cashier
+     * rang the sale; without one it is SHIFT_NOT_OPEN or
+     * SHIFT_OTHER_TERMINAL, GCash-only included.
+     *
+     * For an ADMIN, the sale's own shift pays while it is open. Once it is closed (or for
      * a sale from before shifts), the ADMIN names an open shift with
      * `payoutShiftId`; without one this refuses with SHIFT_PAYOUT_REQUIRED,
      * or SHIFT_PAYOUT_NO_OPEN_SHIFT when none is open. Refusing throws, so
@@ -507,29 +512,14 @@ export class ShiftService {
             approvedBy: string;
             approvedByName: string;
             /**
-             * Set for a cashier's own reversal (#509, owner decision
-             * 2026-11-27): cash leaves the shift's drawer only from the
-             * terminal it is bound to. ADMIN reversals leave it unset.
+             * Set for a cashier's reversal (#509, #526): the requester's
+             * own open shift pays, only from the terminal it is bound to.
+             * ADMIN reversals leave it unset.
              */
             cashierTerminal?: { id: string | undefined };
         },
         session: ClientSession,
     ): Promise<Types.ObjectId | null> {
-        if (amount <= 0) {
-            // No drawer is touched, but the reversal still changes the
-            // sale's status, which that shift's Z-read reports. Write the
-            // shift (only while OPEN) so a concurrent close conflicts with
-            // this transaction instead of storing a Z-read that misses it.
-            if (saleShift) {
-                await this.model.updateOne(
-                    { _id: saleShift, status: ShiftStatus.OPEN },
-                    { $inc: { reversalCount: 1 } },
-                    { session },
-                );
-            }
-            return null;
-        }
-
         const movement: DrawerMovement = {
             type: DrawerMovementType.REVERSAL_PAYOUT,
             amount,
@@ -544,31 +534,39 @@ export class ShiftService {
             sale: new Types.ObjectId(saleId),
         };
 
-        if (saleShift && cashierTerminal) {
+        if (cashierTerminal) {
+            // A cashier's reversal of any cashier's sale (#526): the cash
+            // leaves the requester's own open shift, from the terminal it
+            // is bound to. A GCash-only reversal still needs that shift
+            // (the write proves it is open here) but pays nothing.
             const terminal = terminalBinding(
                 requireTerminalId(cashierTerminal.id),
             );
-            const res = await this.model.updateOne(
-                {
-                    _id: saleShift,
-                    status: ShiftStatus.OPEN,
-                    ...terminal.filter,
-                },
-                { $push: { movements: movement }, $set: terminal.set },
-                { session, runValidators: true },
-            );
-            if (res.matchedCount > 0) return saleShift;
-            const open = await this.model
-                .findOne(
-                    { _id: saleShift, status: ShiftStatus.OPEN },
+            const own = await this.model
+                .findOneAndUpdate(
+                    { ...this.openFilter(admin.userId), ...terminal.filter },
+                    amount > 0
+                        ? { $push: { movements: movement }, $set: terminal.set }
+                        : { $set: terminal.set },
                     {
-                        terminal: 1,
+                        session,
+                        new: true,
+                        runValidators: true,
+                        projection: { _id: 1 },
                     },
                 )
-                .session(session)
-                .lean<{ terminal: string }>();
-            if (open) throw otherTerminal(open.terminal);
+                .lean<{ _id: Types.ObjectId }>();
+            if (!own) throw await this.refusal(admin.userId, session);
+            if (saleShift && (amount <= 0 || !saleShift.equals(own._id)))
+                await this.touchIfOpen(saleShift, session);
+            return amount > 0 ? own._id : null;
         }
+
+        if (amount <= 0) {
+            if (saleShift) await this.touchIfOpen(saleShift, session);
+            return null;
+        }
+
         if (
             saleShift &&
             (await this.pushIfOpen(saleShift, movement, session))
@@ -624,6 +622,22 @@ export class ShiftService {
             ErrorCode.SHIFT_CLOSED,
             'That shift is closed: choose an open shift',
             { shift: payoutShiftId },
+        );
+    }
+
+    /**
+     * The reversal changes the sale's status, which its shift's Z-read
+     * reports. Write that shift (only while OPEN) so a concurrent close
+     * conflicts with the reversal instead of storing a Z-read that misses it.
+     */
+    private async touchIfOpen(
+        shift: Types.ObjectId,
+        session: ClientSession,
+    ): Promise<void> {
+        await this.model.updateOne(
+            { _id: shift, status: ShiftStatus.OPEN },
+            { $inc: { reversalCount: 1 } },
+            { session },
         );
     }
 

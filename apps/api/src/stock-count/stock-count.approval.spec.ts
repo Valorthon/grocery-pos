@@ -1,3 +1,4 @@
+import type { SettingsService } from '../settings/settings.service';
 import type { StepUpService } from '../auth/step-up/step-up.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtService } from '@nestjs/jwt';
@@ -109,6 +110,9 @@ beforeEach(() => {
             record: jest.fn().mockResolvedValue(undefined),
         } as unknown as AuditService,
         {} as StepUpService,
+        {
+            timezone: () => Promise.resolve('Asia/Manila'),
+        } as unknown as SettingsService,
     );
 });
 it.each([Role.Adjuster, Role.Admin])(

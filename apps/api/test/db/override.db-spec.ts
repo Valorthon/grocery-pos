@@ -399,7 +399,7 @@ describe('manager overrides (#34)', () => {
                 { $set: { roles: [Role.Admin] } },
             );
     });
-    it('allows an approved cashier reversal only for their own open-shift sale', async () => {
+    it('allows an approved cashier reversal of their own sale, never without approval', async () => {
         const id = await saleId();
         expect(
             (
@@ -425,14 +425,6 @@ describe('manager overrides (#34)', () => {
         expect(result.body.reversal).not.toHaveProperty('payoutShift');
         expect(result.body.reversal).not.toHaveProperty('payoutAmount');
         expect(await stockOf(db, product)).toBe(10);
-        const other = caller(`other-${randomUUID().slice(0, 8)}`, Role.Seller);
-        await ensureApprovalFixtures(db, other);
-        await openShift(db, other);
-        await expect(
-            approvalHeaders(db, other, OverrideAction.VOID, {
-                reversal: { saleId: id, reason: 'Other' },
-            }),
-        ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND });
     });
     it('does not let a cashier redirect the payout or reverse after their shift closes', async () => {
         const id = await saleId();
@@ -472,7 +464,7 @@ describe('manager overrides (#34)', () => {
                     headers,
                 )
             ).status,
-        ).toBe(404);
+        ).toBe(409);
     });
     it('hides PIN hashes and versions from user listings and enforces admin PIN management', async () => {
         const manager = await db
@@ -615,5 +607,167 @@ describe("a cashier's own cash reversal from another terminal (#509)", () => {
         );
         expect(voided.status).toBe(201);
         expect(await stockOf(db, product)).toBe(5);
+    });
+});
+
+describe('any cashier refunds any recent sale from their own drawer (#526)', () => {
+    async function freshSeller(prefix: string) {
+        const who = caller(
+            `${prefix}-${randomUUID().slice(0, 8)}`,
+            Role.Seller,
+        );
+        await ensureApprovalFixtures(db, who);
+        const shift = await openShift(db, who);
+        return { who, shift };
+    }
+    async function payoutsOf(shift: string) {
+        const row = await db.connection
+            .db!.collection<{ movements?: { type: string; amount: number }[] }>(
+                'shifts',
+            )
+            .findOne({ _id: new Types.ObjectId(shift) });
+        return (row?.movements ?? []).filter(
+            (m) => m.type === 'REVERSAL_PAYOUT',
+        );
+    }
+
+    it('lets another cashier refund with a PIN, paid from the refunding shift', async () => {
+        const id = await saleId();
+        const sellerShift = String(
+            (await db
+                .model('Shift')
+                .findOne({ cashier: seller.userId, status: 'OPEN' })
+                .lean<{ _id: Types.ObjectId }>())!._id,
+        );
+        const { who: other, shift: otherShift } = await freshSeller('refunder');
+
+        const found = await read<{ data: { _id: string }[] }>(
+            await db.call(
+                other,
+                'GET',
+                `/sales?page=1&limit=10&saleNumber=${id}`,
+            ),
+        );
+        expect(found.body.data.map((s) => s._id)).toEqual([id]);
+        expect(
+            (await db.call(other, 'GET', `/sales/details/${id}`)).status,
+        ).toBe(200);
+
+        const headers = await approvalHeaders(
+            db,
+            other,
+            OverrideAction.REFUND,
+            {
+                reversal: { saleId: id, reason: 'Returned' },
+            },
+        );
+        const refunded = await read(
+            await db.call(
+                other,
+                'POST',
+                `/sales/${id}/refund`,
+                { reason: 'Returned' },
+                headers,
+            ),
+        );
+        expect(refunded.status).toBe(201);
+        expect(refunded.body.status).toBe(SaleStatus.REFUNDED);
+        expect(await stockOf(db, product)).toBe(10);
+        expect(await payoutsOf(otherShift)).toEqual([
+            expect.objectContaining({ amount: 1000 }),
+        ]);
+        expect(await payoutsOf(sellerShift)).toHaveLength(0);
+        const stored = await storedSale(id);
+        expect(String(stored!.reversal!.payoutShift)).toBe(otherShift);
+        expect(String(stored!.reversal!.approvedBy)).toBeTruthy();
+    });
+
+    it('refuses a seller a sale older than 30 store days; an admin still may', async () => {
+        const id = await saleId();
+        await db.connection
+            .db!.collection('sales')
+            .updateOne(
+                { _id: new Types.ObjectId(id) },
+                { $set: { createdAt: new Date(Date.now() - 31 * 86_400_000) } },
+            );
+        await expect(
+            approvalHeaders(db, seller, OverrideAction.VOID, {
+                reversal: { saleId: id, reason: 'Old' },
+            }),
+        ).rejects.toMatchObject({ code: ErrorCode.FORBIDDEN });
+        const found = await read<{ data: unknown[] }>(
+            await db.call(
+                seller,
+                'GET',
+                `/sales?page=1&limit=10&saleNumber=${id}`,
+            ),
+        );
+        expect(found.body.data).toHaveLength(0);
+        await expect(
+            approvalHeaders(db, admin, OverrideAction.VOID, {
+                reversal: { saleId: id, reason: 'Old' },
+            }),
+        ).resolves.toBeTruthy();
+    });
+
+    it('refuses another terminal and a cashier without an open shift, and rolls back', async () => {
+        const id = await saleId();
+        const { who: other } = await freshSeller('lane2');
+        const headers = await approvalHeaders(db, other, OverrideAction.VOID, {
+            reversal: { saleId: id, reason: 'mis-ring' },
+        });
+        const refused = await read<{ error: string }>(
+            await db.call(
+                other,
+                'POST',
+                `/sales/${id}/void`,
+                { reason: 'mis-ring' },
+                { ...headers, [TERMINAL_ID_HEADER]: 'terminal-other-0002' },
+            ),
+        );
+        expect(refused.status).toBe(409);
+        expect(refused.body.error).toBe(ErrorCode.SHIFT_OTHER_TERMINAL);
+        expect(await stockOf(db, product)).toBe(9);
+        expect((await storedSale(id))!.status).toBe(SaleStatus.COMPLETED);
+
+        const none = caller(`noshift-${randomUUID().slice(0, 8)}`, Role.Seller);
+        await ensureApprovalFixtures(db, none);
+        await expect(
+            approvalHeaders(db, none, OverrideAction.VOID, {
+                reversal: { saleId: id, reason: 'mis-ring' },
+            }),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
+    });
+
+    it('lets only one of two concurrent refunds by different cashiers succeed', async () => {
+        const id = await saleId();
+        const a = await freshSeller('race-a');
+        const b = await freshSeller('race-b');
+        const body = { reason: 'Returned' };
+        const [ha, hb] = await Promise.all(
+            [a.who, b.who].map((who) =>
+                approvalHeaders(db, who, OverrideAction.REFUND, {
+                    reversal: { saleId: id, reason: 'Returned' },
+                }),
+            ),
+        );
+        const consumed = () =>
+            db
+                .model(OverrideGrant.name)
+                .countDocuments({ consumedAt: { $ne: null } });
+        const before = await consumed();
+        const results = await Promise.all([
+            db.call(a.who, 'POST', `/sales/${id}/refund`, body, ha),
+            db.call(b.who, 'POST', `/sales/${id}/refund`, body, hb),
+        ]);
+        expect(results.map((r) => r.status).sort()).toEqual([201, 409]);
+        expect(await stockOf(db, product)).toBe(10);
+        const paid = [
+            ...(await payoutsOf(a.shift)),
+            ...(await payoutsOf(b.shift)),
+        ];
+        expect(paid).toHaveLength(1);
+        // The loser's grant consumption rolled back with its refund.
+        expect((await consumed()) - before).toBe(1);
     });
 });

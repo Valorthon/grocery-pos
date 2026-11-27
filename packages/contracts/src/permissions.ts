@@ -247,7 +247,10 @@ export const PERMISSIONS: Permission[] = [
         pages: ['SalesHistory'],
     },
     {
-        label: 'Void and refund sales with manager approval',
+        label: 'Void and refund any sale with manager approval',
+        // A SELLER: any cashier's sale from the last
+        // SELLER_REVERSAL_WINDOW_DAYS, paid from their own open shift on
+        // this terminal (#526); older sales are ADMIN only.
         roles: [Role.Seller, Role.Admin],
         routes: ['POST /sales/:id/void', 'POST /sales/:id/refund'],
         pages: ['Sales', 'SalesHistory'],

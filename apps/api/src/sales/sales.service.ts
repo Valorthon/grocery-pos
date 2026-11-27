@@ -59,6 +59,7 @@ import { Settlement, settleTenders } from './tender';
 import { isDuplicateKey, saleRequestHash } from './idempotency';
 import { ShiftService } from '../shift/shift.service';
 import { dateRangeFilter } from '../common/utils/timezone';
+import { occurredSinceFilter, sellerReversalCutoff } from './reversal-window';
 import { ManagerOverrideService } from '../auth/override/override.service';
 
 /**
@@ -195,7 +196,10 @@ export class SalesService {
      * A page of sales, newest first. An ADMIN sees every cashier's sales;
      * anyone else only the sales they rang up in their current open shift
      * (`saleScope`), and nothing without one. The `cashier` and date
-     * filters narrow that scope (`salesListFilter`) and never widen it.
+     * filters narrow that scope (`salesListFilter`) and never widen it,
+     * except a non-admin `saleNumber` lookup (#526): it searches every
+     * cashier's sales in the reversal window, so `cashier` then names any
+     * cashier.
      */
     async getAll(
         user: AuthUser,
@@ -204,17 +208,26 @@ export class SalesService {
         const { page, limit } = dto;
 
         const skip = (page - 1) * limit;
+        const isAdmin = user.roles.includes(Role.Admin);
         const scope = await this.scopeFor(user);
         if (!scope) return { data: [], totalItems: 0 };
 
-        const filter = salesListFilter(
-            scope,
-            dto,
-            await this.settings.timezone(),
-        );
-        if (!filter) return { data: [], totalItems: 0 };
+        const timeZone = await this.settings.timezone();
+        // A cashier with an open shift may look up any cashier's sale by
+        // its number to void or refund it (#526): only by number, only
+        // within the reversal window, with the cashier projection.
+        const lookup = !isAdmin && !!dto.saleNumber;
+        const listed = salesListFilter(lookup ? {} : scope, dto, timeZone);
+        if (!listed) return { data: [], totalItems: 0 };
+        const filter = lookup
+            ? {
+                  $and: [
+                      listed,
+                      occurredSinceFilter(sellerReversalCutoff(timeZone)),
+                  ],
+              }
+            : listed;
 
-        const isAdmin = user.roles.includes(Role.Admin);
         const projection = isAdmin
             ? INTERNAL_SALE_FIELDS
             : { ...INTERNAL_SALE_FIELDS, ...CASHIER_HIDDEN_SALE_FIELDS };
@@ -367,8 +380,20 @@ export class SalesService {
         const { sales } = dto;
 
         const scope = await this.scopeFor(user);
+        // A cashier with an open shift also reads any cashier's sale within
+        // the reversal window, which a sale-number lookup finds (#526).
         const visible =
-            scope && (await this.model.exists({ _id: sales, ...scope }));
+            scope &&
+            ((await this.model.exists({ _id: sales, ...scope })) ||
+                (!user.roles.includes(Role.Admin) &&
+                    (await this.model.exists({
+                        _id: sales,
+                        ...occurredSinceFilter(
+                            sellerReversalCutoff(
+                                await this.settings.timezone(),
+                            ),
+                        ),
+                    }))));
         if (!visible) {
             throw new NotFoundError(ErrorCode.NOT_FOUND, 'Sale not found', {
                 sale: sales,
@@ -792,7 +817,7 @@ export class SalesService {
                 if (!user.roles.includes(Role.Admin) && payoutShiftId) {
                     throw new ForbiddenError(
                         ErrorCode.FORBIDDEN,
-                        "A cashier may pay only from the sale's own open shift",
+                        'A cashier pays only from their own open shift',
                     );
                 }
                 const action =
