@@ -292,14 +292,22 @@ test('package writes the public root, info, script and readme from the stored LA
     const readme = await readFile(join(dir, 'README.txt'), 'utf8');
     assert.match(readme, /-Mode join/);
     // #510: one normal Chrome profile, never Guest/Incognito, keep site data.
-    assert.match(readme, /one normal Chrome profile/);
-    assert.match(readme, /never a\r\nGuest or Incognito window/);
+    assert.match(readme, /normal Default profile/);
+    assert.match(readme, /Never use a Guest or Incognito\r\nwindow/);
     assert.match(
         readme,
-        /Never clear the browsing or\r\nsite data for https:\/\//,
+        /the terminal label,\r\nparked tickets, the current basket and any offline cash sales not\r\nyet synced/,
     );
+    assert.match(
+        readme,
+        /never clear the browsing or site\r\ndata for https:\/\//,
+    );
+    assert.match(readme, /Ctrl\+Shift\+Delete/);
     const script = await readFile(join(here, 'JoinTerminal.ps1'), 'utf8');
-    assert.match(script, /\$shortcut\.Arguments = '--new-window ' \+ \$url/);
+    assert.match(
+        script,
+        /\$shortcut\.Arguments = '--profile-directory=Default --new-window ' \+ \$url/,
+    );
     assert.doesNotMatch(script, /--guest|--incognito/i);
     assert.deepEqual(await readdir(to), ['GroceryPOS-terminal-192.168.1.10']);
     await assert.rejects(

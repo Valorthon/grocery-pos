@@ -166,7 +166,7 @@ foreach ($link in $shortcuts) {
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $link) | Out-Null
     $shortcut = $shell.CreateShortcut($link)
     $shortcut.TargetPath = $chrome
-    $shortcut.Arguments = '--new-window ' + $url
+    $shortcut.Arguments = '--profile-directory=Default --new-window ' + $url
     $shortcut.Description = 'Open Grocery POS in Google Chrome'
     $shortcut.Save()
 }

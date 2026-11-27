@@ -175,14 +175,24 @@ IP>` and joins every terminal again (`JoinTerminal.ps1 -Mode rejoin`).
 
 ## Terminal lost its label or offline cash
 
-Signs: a LAN terminal asks for its label again, or offline cash it took is
-gone from its queue, after its Chrome window closed.
+Signs: after its Chrome window closed, a LAN terminal asks for its label
+again, or offline cash it took is gone from its queue, or the cashier's own
+shift close is refused because the terminal's offline queue never drained.
 
-Each terminal must use one normal Chrome profile, through the "Grocery POS"
-shortcut. A Guest or Incognito window, or clearing the site data for the
-POS address, deletes the terminal label and any queued offline cash. Open
-the shortcut in a normal profile, and ask an ADMIN to set the label again in
-Store settings. Never clear Chrome's site data for the POS address.
+Each terminal must always open the app with the "Grocery POS" shortcut,
+which uses Chrome's normal Default profile. A Guest or Incognito window, or
+clearing the browsing or site data for the POS address (Ctrl+Shift+Delete,
+a "delete site data when Chrome closes" setting, cleaner tools), deletes
+the terminal label, parked tickets, the current basket and any offline
+cash sales not yet synced.
+
+1. Open the "Grocery POS" shortcut again; an ADMIN sets the label again in
+   Store settings on this terminal.
+2. If offline cash was lost, the shift cannot close normally: an ADMIN
+   force-closes it with the counted cash.
+3. The lost sales cannot be recovered: the drawer will be over by their
+   cash. Note them on paper (time, items, amount) with the Z-read, and
+   adjust stock for the items sold if needed.
 
 ## Interrupted shutdown or power loss
 
