@@ -1807,6 +1807,35 @@ function isInside(child, parent) {
     );
 }
 
+// RFC 1918 IPv4 addresses (10/8, 172.16/12, 192.168/16), the LAN IP among them.
+const PRIVATE_IPV4 =
+    /\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b/g;
+
+/**
+ * Replaces the LAN IP and any private IPv4 address in every string of a
+ * value (check summaries, steps, details, structured `lanIp` fields), for
+ * the support export (#500). Keys stay; loopback addresses stay readable.
+ */
+export function scrubPrivateIps(value, lanIp) {
+    const scrub = (text) => {
+        let out = text.replace(PRIVATE_IPV4, '[ip]');
+        if (typeof lanIp === 'string' && lanIp)
+            out = out.split(lanIp).join('[ip]');
+        return out;
+    };
+    if (typeof value === 'string') return scrub(value);
+    if (Array.isArray(value))
+        return value.map((v) => scrubPrivateIps(v, lanIp));
+    if (value && typeof value === 'object')
+        return Object.fromEntries(
+            Object.entries(value).map(([k, v]) => [
+                k,
+                scrubPrivateIps(v, lanIp),
+            ]),
+        );
+    return value;
+}
+
 export async function supportExport(options, ctx = realContext()) {
     const paths = layout(resolve(options.dataRoot));
     const to = resolve(options.to);
@@ -1817,7 +1846,12 @@ export async function supportExport(options, ctx = realContext()) {
     const info = await stat(to).catch(() => null);
     if (!info?.isDirectory())
         throw new Error('The chosen folder does not exist.');
-    const report = await diagnose(options, ctx);
+    // The configured LAN IP as written, even when it isn't private.
+    const lanIp = await ctx
+        .readText(paths.runtimeManifest)
+        .then((text) => JSON.parse(text)?.lanIp)
+        .catch(() => null);
+    const report = scrubPrivateIps(await diagnose(options, ctx), lanIp);
     const logs = {};
     for (const [name, files] of await logSources(ctx, paths)) {
         logs[name] = [];

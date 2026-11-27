@@ -27,6 +27,7 @@ import {
     rotateReason,
     serviceStateFromStatus,
     supportExport,
+    scrubPrivateIps,
     tailFile,
     diagnose,
     isAccessDenied,
@@ -1387,6 +1388,60 @@ describe('review fixes and owner decisions (#365)', () => {
         }
         assert.equal(report.guide, join(release, 'help', 'RECOVERY.md'));
         assert.match(renderText(report), /Recovery guide: .*RECOVERY\.md/);
+    });
+
+    test('support export: no LAN IP or private IPv4 in the report (#500)', async () => {
+        const paths = layout(root);
+        const out = await mkdtemp(join(tmpdir(), 'gpos-usb-'));
+        try {
+            const file = await supportExport(
+                { dataRoot: root, to: out },
+                healthy({
+                    readText: async (path) =>
+                        path === paths.runtimeManifest
+                            ? JSON.stringify({ lanIp: '192.168.1.8' })
+                            : (await import('node:fs/promises')).readFile(
+                                  path,
+                                  'utf8',
+                              ),
+                    serviceStates: async () => ({
+                        ...Object.fromEntries(
+                            Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+                        ),
+                        [LAN_SERVICE]: 'RUNNING',
+                    }),
+                    listeners: async (p) =>
+                        p === 1443
+                            ? ['127.0.0.1', '::1', '192.168.1.8', '10.0.0.7']
+                            : ['127.0.0.1'],
+                }),
+            );
+            const text = await readFile(file, 'utf8');
+            assert.doesNotMatch(
+                text,
+                /\b(?:10(?:\.\d{1,3}){3}|172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2}|192\.168(?:\.\d{1,3}){2})\b/,
+            );
+            assert.match(text, /\[ip\]/);
+        } finally {
+            await rm(out, { recursive: true, force: true });
+        }
+        assert.deepEqual(
+            scrubPrivateIps(
+                {
+                    summary: 'on 192.168.1.8 and 172.20.0.1, not 172.32.0.1',
+                    lanIp: '8.8.8.8',
+                    list: ['10.1.1.1', 127, null],
+                    loop: '127.0.0.1',
+                },
+                '8.8.8.8',
+            ),
+            {
+                summary: 'on [ip] and [ip], not 172.32.0.1',
+                lanIp: '[ip]',
+                list: ['[ip]', 127, null],
+                loop: '127.0.0.1',
+            },
+        );
     });
 
     test('support export: report + redacted log lines, nothing else', async () => {
