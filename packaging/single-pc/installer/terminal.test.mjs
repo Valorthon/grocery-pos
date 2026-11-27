@@ -302,7 +302,7 @@ test('package writes the public root, info, script and readme from the stored LA
     );
     assert.match(
         readme,
-        /never clear the browsing or site\r\ndata for https:\/\//,
+        /never clear the browsing or site data for\r\nhttps:\/\//,
     );
     assert.match(readme, /Ctrl\+Shift\+Delete/);
     const script = await readFile(join(here, 'JoinTerminal.ps1'), 'utf8');

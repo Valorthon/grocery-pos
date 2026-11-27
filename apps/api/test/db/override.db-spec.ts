@@ -588,6 +588,7 @@ describe("a cashier's own cash reversal from another terminal (#509)", () => {
                 reversal: { saleId: sale.body._id, reason: 'mis-ring' },
             });
 
+        const granted = await approval();
         const refused = await read<{ error: string }>(
             await db.call(
                 seller,
@@ -595,7 +596,7 @@ describe("a cashier's own cash reversal from another terminal (#509)", () => {
                 `/sales/${sale.body._id}/void`,
                 body,
                 {
-                    ...(await approval()),
+                    ...granted,
                     [TERMINAL_ID_HEADER]: 'terminal-other-0002',
                 },
             ),
@@ -609,7 +610,8 @@ describe("a cashier's own cash reversal from another terminal (#509)", () => {
             'POST',
             `/sales/${sale.body._id}/void`,
             body,
-            await approval(),
+            // The refusal rolled back: the same one-use grant still works.
+            granted,
         );
         expect(voided.status).toBe(201);
         expect(await stockOf(db, product)).toBe(5);

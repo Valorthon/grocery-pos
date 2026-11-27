@@ -1409,6 +1409,56 @@ describe('Sell stock warning (#422)', () => {
         },
     );
 
+    it('keeps the ticket and marks the shift as elsewhere on SHIFT_OTHER_TERMINAL (#509)', async () => {
+        withStock(5);
+        const message =
+            'Your shift is open on Lane 2. Close it there, or ask an admin to force-close.';
+        const config = { headers: new AxiosHeaders() };
+        post.mockRejectedValue(
+            new AxiosError('409', 'ERR_BAD_REQUEST', config, null, {
+                status: 409,
+                statusText: '',
+                data: {
+                    statusCode: 409,
+                    error: ErrorCode.SHIFT_OTHER_TERMINAL,
+                    message,
+                    details: { terminal: 'Lane 2' },
+                },
+                headers: {},
+                config,
+            }),
+        );
+        const served = get.getMockImplementation() as (
+            url: string,
+            ...rest: unknown[]
+        ) => Promise<unknown>;
+        get.mockImplementation((url: string, ...rest: unknown[]) =>
+            url === '/shifts/current'
+                ? Promise.resolve({
+                      data: {
+                          shift: {
+                              ...useShiftStore().activeShift!,
+                              terminal: 'Lane 2',
+                              onThisTerminal: false,
+                          },
+                      },
+                  })
+                : served(url, ...rest),
+        );
+        mount();
+        await scanMilk();
+        await chargeCash();
+
+        expect(cartNames()).toEqual(['1x milk']);
+        expect(useShiftStore().activeShift?.onThisTerminal).toBe(false);
+        expect(useShiftStore().otherTerminalNotice).toBe(message);
+        expect(document.body.textContent).toContain(
+            'Your shift is open on Lane 2',
+        );
+        // Nothing was recorded: the attempt is released so it can be parked.
+        expect(useCartStore().attempt).toBeNull();
+    });
+
     it('warns with the refused available stock after a refusal (#504)', async () => {
         withStock(5);
         post.mockRejectedValue(shortStockRefusal(1));

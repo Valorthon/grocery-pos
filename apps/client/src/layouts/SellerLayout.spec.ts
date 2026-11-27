@@ -166,6 +166,17 @@ describe('SellerLayout (shift from the server, issue #2)', () => {
         );
     });
 
+    it('leaves the register when the shift turns out to be bound to another terminal after load (#509)', async () => {
+        api.get.mockResolvedValue({ data: { shift: SHIFT } });
+        await mountAt('/seller/register');
+        expect(router.currentRoute.value.name).toBe('Sell');
+
+        useShiftStore().shiftOnOtherTerminal('Lane 2');
+        await flush();
+
+        expect(router.currentRoute.value.name).toBe('SellerDashboard');
+    });
+
     it('sends the cashier to open a shift when the server has none', async () => {
         api.get.mockResolvedValue({ data: { shift: null } });
 

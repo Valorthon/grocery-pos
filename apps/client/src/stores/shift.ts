@@ -63,12 +63,6 @@ export function apiErrorMessage(error: unknown, fallback: string): string {
     return apiErrorText(error, fallback);
 }
 
-/**
- * The cashier's shift, as the server holds it (issue #2). Nothing here is
- * computed or stored locally: every figure comes from an API response.
- * While the shift is open the server is blind to the cashier (no expected
- * cash or variance); the Z-read arrives only after the count is submitted.
- */
 /** `details.terminal` of a SHIFT_OTHER_TERMINAL refusal, if present. */
 function otherTerminalLabel(error: unknown): string | undefined {
     const details = apiErrorBody(error)?.details as
@@ -76,6 +70,12 @@ function otherTerminalLabel(error: unknown): string | undefined {
     return typeof details?.terminal === 'string' ? details.terminal : undefined;
 }
 
+/**
+ * The cashier's shift, as the server holds it (issue #2). Nothing here is
+ * computed or stored locally: every figure comes from an API response.
+ * While the shift is open the server is blind to the cashier (no expected
+ * cash or variance); the Z-read arrives only after the count is submitted.
+ */
 export const useShiftStore = defineStore('shift', () => {
     clearLegacyShiftStorage();
 
