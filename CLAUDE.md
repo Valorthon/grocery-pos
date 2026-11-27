@@ -448,7 +448,8 @@ requestId}`. A 5xx never carries details or internals.
   sees stock counts; only inventory roles can follow the list link.
 - `GET /sales` takes `cashier` and `dateFrom`/`dateTo`. For ADMIN they filter
   everything. For anyone else they only narrow the own-open-shift scope, and
-  naming another cashier returns nothing. Sales are indexed on `{createdAt}`,
+  naming another cashier returns nothing, except in a `saleNumber`
+  lookup within the 30-day reversal window (#526). Sales are indexed on `{createdAt}`,
   `{cashier, createdAt}` and `{shift, createdAt}`.
 - `startOfDayInZone` returns the first of two repeated midnights on a
   fall-back day (Amman 2021-10-29), searching back up to 3h.

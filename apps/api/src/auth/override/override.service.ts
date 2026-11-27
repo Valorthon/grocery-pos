@@ -9,18 +9,13 @@ import {
     NUMERIC_LIMITS,
     type UnitOfMeasure,
 } from '@grocery-pos/contracts';
-import {
-    Inject as InjectSettings,
-    Injectable,
-    OnModuleInit,
-    Optional,
-} from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit, Optional } from '@nestjs/common';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { SettingsService } from '../../settings/settings.service';
 import {
     occurredSince,
     sellerReversalCutoff,
 } from '../../sales/reversal-window';
-import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -90,7 +85,7 @@ export class ManagerOverrideService implements OnModuleInit {
         private stockCounts: Model<StockCount> | undefined = undefined,
         private audit: AuditService,
         private stepUp: StepUpService,
-        @InjectSettings(SettingsService)
+        @Inject(SettingsService)
         private settings: SettingsService,
     ) {}
 

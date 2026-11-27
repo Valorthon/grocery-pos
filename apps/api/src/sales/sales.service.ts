@@ -196,7 +196,10 @@ export class SalesService {
      * A page of sales, newest first. An ADMIN sees every cashier's sales;
      * anyone else only the sales they rang up in their current open shift
      * (`saleScope`), and nothing without one. The `cashier` and date
-     * filters narrow that scope (`salesListFilter`) and never widen it.
+     * filters narrow that scope (`salesListFilter`) and never widen it,
+     * except a non-admin `saleNumber` lookup (#526): it searches every
+     * cashier's sales in the reversal window, so `cashier` then names any
+     * cashier.
      */
     async getAll(
         user: AuthUser,
