@@ -95,3 +95,36 @@ export const SHIFT_LIST_ITEM_SHAPE: WireShape<ShiftListItem> = {
     openingFloat: 'required',
     report: 'required',
 };
+
+/** At most this many terminals in `GET /shifts/terminals` (#502). */
+export const TERMINALS_SEEN_LIMIT = 50;
+
+/**
+ * One terminal label the server has seen (#502): from shifts opened with it
+ * and offline leases the device registered with it. Read-only, ADMIN.
+ */
+export interface TerminalSeen {
+    label: string;
+    /** ISO: the latest shift open or offline lease with this label. */
+    lastSeenAt: string;
+    /** Shifts opened with this label. */
+    shifts: number;
+    /** Offline leases registered with this label. */
+    offlineLeases: number;
+}
+
+/** `GET /shifts/terminals`: newest first, at most `TERMINALS_SEEN_LIMIT`. */
+export interface TerminalsSeenResponse {
+    terminals: TerminalSeen[];
+}
+
+export const TERMINAL_SEEN_SHAPE: WireShape<TerminalSeen> = {
+    label: 'required',
+    lastSeenAt: 'required',
+    shifts: 'required',
+    offlineLeases: 'required',
+};
+
+export const TERMINALS_SEEN_RESPONSE_SHAPE: WireShape<TerminalsSeenResponse> = {
+    terminals: 'required',
+};

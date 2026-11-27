@@ -12,6 +12,9 @@ import {
     NUMERIC_LIMITS,
     OFFLINE_PENDING_DETAILS_SHAPE,
     OFFLINE_PENDING_TERMINAL_SHAPE,
+    TERMINAL_SEEN_SHAPE,
+    TERMINALS_SEEN_LIMIT,
+    TERMINALS_SEEN_RESPONSE_SHAPE,
     PaymentType,
     ReversalType,
     Role,
@@ -1091,6 +1094,79 @@ describe('ShiftService.list and getById', () => {
         await expect(
             service.getById(new Types.ObjectId().toString()),
         ).rejects.toMatchObject({ statusCode: 404 });
+    });
+});
+
+describe('ShiftService.terminalsSeen (#502)', () => {
+    type Group = { _id: string; lastSeenAt: Date; count: number };
+    function stub(model: FakeModel, rows: Group[]) {
+        const aggregate = jest.fn().mockResolvedValue(rows);
+        Object.assign(model, { aggregate });
+        return aggregate;
+    }
+    const at = (minutes: number) =>
+        new Date(Date.UTC(2026, 10, 27, 0, minutes));
+
+    it('merges shift and lease labels, newest first, in the wire shape', async () => {
+        stub(shifts, [
+            { _id: 'Lane 2', lastSeenAt: at(5), count: 3 },
+            { _id: 'Lane 1', lastSeenAt: at(1), count: 1 },
+        ]);
+        stub(leaseModel, [
+            { _id: 'Lane 1', lastSeenAt: at(9), count: 2 },
+            { _id: 'Back office', lastSeenAt: at(2), count: 1 },
+        ]);
+
+        const body = await service.terminalsSeen();
+
+        expect(wireShapeDiff(body, TERMINALS_SEEN_RESPONSE_SHAPE)).toEqual({
+            missing: [],
+            unexpected: [],
+        });
+        for (const row of body.terminals)
+            expect(wireShapeDiff(row, TERMINAL_SEEN_SHAPE)).toEqual({
+                missing: [],
+                unexpected: [],
+            });
+        expect(body.terminals).toEqual([
+            {
+                label: 'Lane 1',
+                lastSeenAt: at(9).toISOString(),
+                shifts: 1,
+                offlineLeases: 2,
+            },
+            {
+                label: 'Lane 2',
+                lastSeenAt: at(5).toISOString(),
+                shifts: 3,
+                offlineLeases: 0,
+            },
+            {
+                label: 'Back office',
+                lastSeenAt: at(2).toISOString(),
+                shifts: 0,
+                offlineLeases: 1,
+            },
+        ]);
+    });
+
+    it('bounds each query and the merged list to the limit', async () => {
+        const many = (prefix: string) =>
+            Array.from({ length: TERMINALS_SEEN_LIMIT }, (_, i) => ({
+                _id: `${prefix} ${i}`,
+                lastSeenAt: at(i),
+                count: 1,
+            }));
+        const shiftAgg = stub(shifts, many('Shift'));
+        const leaseAgg = stub(leaseModel, many('Lease'));
+
+        const body = await service.terminalsSeen();
+
+        expect(body.terminals).toHaveLength(TERMINALS_SEEN_LIMIT);
+        for (const agg of [shiftAgg, leaseAgg]) {
+            const pipeline = agg.mock.calls[0][0] as Record<string, unknown>[];
+            expect(pipeline).toContainEqual({ $limit: TERMINALS_SEEN_LIMIT });
+        }
     });
 });
 

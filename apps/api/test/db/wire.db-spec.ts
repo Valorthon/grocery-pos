@@ -74,6 +74,8 @@ import {
     SHIFT_LIST_ITEM_SHAPE,
     STORE_SETTINGS_SHAPE,
     STORE_TODAY_SHAPE,
+    TERMINAL_SEEN_SHAPE,
+    TERMINALS_SEEN_RESPONSE_SHAPE,
     TENDER_SHAPE,
     TenderType,
     USER_REF_SHAPE,
@@ -174,6 +176,7 @@ const DATE_KEYS = new Set([
     'updatedAt',
     'at',
     'openedAt',
+    'lastSeenAt',
     'closedAt',
     'timestamp',
 ]);
@@ -181,6 +184,8 @@ const DATE_KEYS = new Set([
 const INTEGER_KEYS = new Set([
     'amount',
     'totalAmount',
+    'shifts',
+    'offlineLeases',
     'subtotal',
     'price',
     'unitPrice',
@@ -587,6 +592,16 @@ describe('shifts', () => {
         }
         const one = await get(admin, `/shifts/${String(rows[0]._id)}`);
         expectShape('GET /shifts/:id', one, SHIFT_LIST_ITEM_SHAPE);
+        const seen = await get(admin, '/shifts/terminals');
+        expectShape(
+            'GET /shifts/terminals',
+            seen,
+            TERMINALS_SEEN_RESPONSE_SHAPE,
+        );
+        const terminals = seen.terminals as Body[];
+        expect(terminals.length).toBeGreaterThan(0);
+        for (const row of terminals)
+            expectShape('GET /shifts/terminals row', row, TERMINAL_SEEN_SHAPE);
     });
 });
 

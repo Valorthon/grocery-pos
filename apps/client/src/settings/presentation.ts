@@ -1,4 +1,4 @@
-import { shallowRef, ref } from 'vue';
+import { readonly, shallowRef, ref } from 'vue';
 import {
     DEFAULT_TERMINAL,
     SETTINGS_LIMITS,
@@ -36,6 +36,35 @@ function readSavedTerminal(): string {
 }
 const savedTerminal = ref(readSavedTerminal());
 export const terminalLabel = ref(savedTerminal.value || DEFAULT_TERMINAL);
+/** The saved label itself, '' while none is saved ("Not set", #502). */
+export const savedTerminalLabel = readonly(savedTerminal);
+/**
+ * Below this storage quota the browser is most likely a Guest or Incognito
+ * window, whose storage ends when the window closes (#502). Chromium gives
+ * such profiles about 100 MB, a normal profile a share of the disk.
+ */
+export const EPHEMERAL_QUOTA_BYTES = 120 * 1024 * 1024;
+/**
+ * Best-effort guess that this is a Guest/Incognito window (#502): true only
+ * when the storage estimate answers with a small quota. Unknown is false.
+ */
+export async function looksEphemeralBrowser(
+    storage: Pick<StorageManager, 'estimate'> | undefined = typeof navigator ===
+    'undefined'
+        ? undefined
+        : navigator.storage,
+): Promise<boolean> {
+    try {
+        const quota = (await storage?.estimate())?.quota;
+        return (
+            typeof quota === 'number' &&
+            quota > 0 &&
+            quota < EPHEMERAL_QUOTA_BYTES
+        );
+    } catch {
+        return false;
+    }
+}
 /** Whether this browser has a saved label, apart from the default (#399). */
 export function hasSavedTerminalLabel(): boolean {
     return savedTerminal.value !== '';

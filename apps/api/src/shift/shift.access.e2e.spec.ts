@@ -38,6 +38,10 @@ const FLOAT_COUNTS = { '1000': 1 };
 
 const shifts = fakeShiftModel();
 const sales = new FakeModel();
+const leases = new FakeModel();
+// GET /shifts/terminals (#502) aggregates; the fakes have no data for it.
+for (const model of [shifts, leases])
+    Object.assign(model, { aggregate: jest.fn().mockResolvedValue([]) });
 
 describe('Shift routes (e2e)', () => {
     let harness: AccessHarness;
@@ -56,7 +60,7 @@ describe('Shift routes (e2e)', () => {
                 { provide: getModelToken(Sales.name), useValue: sales },
                 {
                     provide: getModelToken(OfflineLease.name),
-                    useValue: new FakeModel(),
+                    useValue: leases,
                 },
             ],
         );
@@ -104,6 +108,7 @@ describe('Shift routes (e2e)', () => {
             [method: 'GET' | 'POST', path: string, body?: unknown]
         > = [
             ['GET', '/shifts?page=1&limit=10'],
+            ['GET', '/shifts/terminals'],
             ['GET', `/shifts/${someId}`],
             ['POST', `/shifts/${someId}/close`, { counts: FLOAT_COUNTS }],
         ];
@@ -162,6 +167,16 @@ describe('Shift routes (e2e)', () => {
                 else expect(res.status).toBe(403);
             },
         );
+
+        it('answers an ADMIN GET /shifts/terminals with the list (#502)', async () => {
+            const res = await harness.call(
+                caller(Role.Admin),
+                'GET',
+                '/shifts/terminals',
+            );
+            expect(res.status).toBe(200);
+            expect(await res.json()).toEqual({ terminals: [] });
+        });
 
         it('lets a seller who also manages users use the cashier routes, not the admin ones', async () => {
             const who = caller(Role.Seller, Role.UserManager);

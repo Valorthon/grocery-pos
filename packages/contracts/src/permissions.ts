@@ -276,7 +276,12 @@ export const PERMISSIONS: Permission[] = [
     {
         label: 'View and force-close shifts',
         roles: [Role.Admin],
-        routes: ['GET /shifts', 'GET /shifts/:id', 'POST /shifts/:id/close'],
+        routes: [
+            'GET /shifts',
+            'GET /shifts/terminals',
+            'GET /shifts/:id',
+            'POST /shifts/:id/close',
+        ],
         pages: ['Shifts'],
     },
     {

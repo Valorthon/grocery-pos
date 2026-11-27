@@ -7,6 +7,12 @@ import { useSettingsStore } from '@/stores/settings';
 import { initialSettings } from '@/settings/presentation';
 import { click, field, flush } from '@/testing/form-dom';
 import api from '@/axios';
+import type { TerminalSeen } from '@grocery-pos/contracts';
+import { useUIStore } from '@/stores/ui';
+import {
+    refreshSavedTerminalLabel,
+    savedTerminalLabel,
+} from '@/settings/presentation';
 vi.mock('@/axios', () => ({ default: { get: vi.fn(), patch: vi.fn() } }));
 let app: App | undefined;
 let pinia = createPinia();
@@ -15,10 +21,16 @@ beforeEach(() => {
     setActivePinia(pinia);
     localStorage.clear();
     useSettingsStore().setOwner('admin');
-    vi.mocked(api.get).mockResolvedValue({
-        data: { ...initialSettings, storeName: 'Current Shop' },
-    });
+    vi.mocked(api.get).mockImplementation((url: string) =>
+        Promise.resolve({
+            data:
+                url === '/shifts/terminals'
+                    ? { terminals: seenRows }
+                    : { ...initialSettings, storeName: 'Current Shop' },
+        }),
+    );
 });
+let seenRows: TerminalSeen[] = [];
 afterEach(() => {
     app?.unmount();
     app = undefined;
@@ -74,7 +86,9 @@ it('keeps edits after an API save failure and permits retry', async () => {
     });
     await click('Save store settings');
     await flush();
-    expect(document.body.textContent).toContain('Store settings saved.');
+    expect(useUIStore().toasts.map((toast) => toast.lines)).toContainEqual([
+        'Store settings saved.',
+    ]);
     expect(api.patch).toHaveBeenLastCalledWith(
         '/settings',
         expect.objectContaining({
@@ -215,4 +229,125 @@ it('edits the expiry alert window with the API bounds (#213)', async () => {
         expect.objectContaining({ version: 0, expiryAlertDays: 30 }),
     );
     expect(field(label).value).toBe('30');
+});
+
+// ------------------------------------------------ This terminal (#502)
+
+function terminalSection() {
+    return document.querySelector('[data-testid="this-terminal"]')!;
+}
+it('shows "Not set" and an empty field on a fresh terminal (#502)', async () => {
+    refreshSavedTerminalLabel();
+    await mount();
+    expect(field('Terminal / lane label').value).toBe('');
+    expect(
+        document.querySelector('[data-testid="terminal-state"]')?.textContent,
+    ).toContain('Not set');
+    expect(terminalSection().textContent).not.toContain('Lane #1');
+    expect(terminalSection().textContent).toContain(
+        "Saved in this PC's browser only; set it on each terminal",
+    );
+    expect(
+        document.querySelector('[data-testid="device-address"]')?.textContent,
+    ).toContain(window.location.host);
+});
+it('saves the label with a success toast (#502)', async () => {
+    refreshSavedTerminalLabel();
+    await mount();
+    input('Terminal / lane label', '  Lane 3 ');
+    await flush();
+    await click('Save terminal label');
+    await flush();
+    expect(localStorage.getItem('grocery_pos_terminal_label_v1')).toBe(
+        'Lane 3',
+    );
+    expect(savedTerminalLabel.value).toBe('Lane 3');
+    expect(
+        document.querySelector('[data-testid="terminal-state"]')?.textContent,
+    ).toContain('Lane 3');
+    expect(useUIStore().toasts.map((toast) => toast.lines)).toContainEqual([
+        'Terminal label saved.',
+    ]);
+});
+it('shows a visible error when browser storage refuses the label (#502)', async () => {
+    refreshSavedTerminalLabel();
+    await mount();
+    input('Terminal / lane label', 'Lane 4');
+    await flush();
+    const storage = vi
+        .spyOn(Storage.prototype, 'setItem')
+        .mockImplementation(() => {
+            throw new Error('full');
+        });
+    await click('Save terminal label');
+    await flush();
+    storage.mockRestore();
+    expect(terminalSection().textContent).toContain(
+        "Couldn't save the label in this browser's storage",
+    );
+    expect(savedTerminalLabel.value).toBe('');
+    expect(useUIStore().toasts).toHaveLength(0);
+});
+it('offers no save for a blank label (#502)', async () => {
+    refreshSavedTerminalLabel();
+    await mount();
+    input('Terminal / lane label', '   ');
+    await flush();
+    const save = Array.from(document.querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Save terminal label',
+    );
+    expect(save?.disabled).toBe(true);
+});
+it('lists the terminals seen from the server, read-only (#502)', async () => {
+    seenRows = [
+        {
+            label: 'Lane 2',
+            lastSeenAt: '2026-11-27T01:00:00.000Z',
+            shifts: 3,
+            offlineLeases: 1,
+        },
+    ];
+    await mount();
+    seenRows = [];
+    expect(api.get).toHaveBeenCalledWith('/shifts/terminals');
+    const list = document.querySelector('[data-testid="terminals-seen"]')!;
+    expect(list.textContent).toContain('Lane 2');
+    expect(list.textContent).toContain('3 shifts');
+    expect(list.textContent).toContain('1 offline session');
+    expect(list.querySelector('input, button')).toBeNull();
+});
+it('shows a Retry when the terminals seen list fails (#502)', async () => {
+    const settingsAnswer = { data: { ...initialSettings } };
+    vi.mocked(api.get)
+        .mockResolvedValueOnce(settingsAnswer)
+        .mockRejectedValueOnce(new Error('network'));
+    await mount();
+    const list = document.querySelector('[data-testid="terminals-seen"]')!;
+    expect(list.querySelector('[role="alert"]')).not.toBeNull();
+    await click('Retry');
+    await flush();
+    expect(list.querySelector('[role="alert"]')).toBeNull();
+    expect(list.textContent).toContain('No terminals yet.');
+});
+it('warns when the browser looks like Guest/Incognito (#502)', async () => {
+    Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value: { estimate: () => Promise.resolve({ quota: 50 * 1024 * 1024 }) },
+    });
+    try {
+        await mount();
+        await flush();
+        expect(
+            document.querySelector('[data-testid="ephemeral-warning"]')
+                ?.textContent,
+        ).toContain('Guest or Incognito');
+    } finally {
+        Reflect.deleteProperty(navigator, 'storage');
+    }
+});
+it('shows no Guest/Incognito warning in a normal window (#502)', async () => {
+    await mount();
+    expect(
+        document.querySelector('[data-testid="ephemeral-warning"]'),
+    ).toBeNull();
 });

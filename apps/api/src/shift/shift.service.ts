@@ -23,6 +23,8 @@ import {
     ReversalType,
     SHIFT_LIMITS,
     type ShiftListItem,
+    TERMINALS_SEEN_LIMIT,
+    type TerminalsSeenResponse,
     ShiftStatus,
     type ZReadReport,
 } from '@grocery-pos/contracts';
@@ -732,6 +734,73 @@ export class ShiftService {
     }
 
     /** Every shift, newest first; ADMIN only. */
+    /**
+     * The terminal labels seen in shifts and offline leases (#502), newest
+     * first, at most `TERMINALS_SEEN_LIMIT`. Read-only, for Store settings.
+     */
+    async terminalsSeen(): Promise<TerminalsSeenResponse> {
+        type Group = { _id: string; lastSeenAt: Date; count: number };
+        const limit = TERMINALS_SEEN_LIMIT;
+        const [shifts, leases] = await Promise.all([
+            this.model.aggregate<Group>([
+                { $match: { terminal: { $type: 'string', $ne: '' } } },
+                {
+                    $group: {
+                        _id: '$terminal',
+                        lastSeenAt: { $max: '$openedAt' },
+                        count: { $sum: 1 },
+                    },
+                },
+                { $sort: { lastSeenAt: -1, _id: 1 } },
+                { $limit: limit },
+            ]),
+            this.offlineLeases.aggregate<Group>([
+                { $match: { terminalLabel: { $type: 'string', $ne: '' } } },
+                {
+                    $group: {
+                        _id: '$terminalLabel',
+                        lastSeenAt: { $max: '$issuedAt' },
+                        count: { $sum: 1 },
+                    },
+                },
+                { $sort: { lastSeenAt: -1, _id: 1 } },
+                { $limit: limit },
+            ]),
+        ]);
+        const byLabel = new Map<
+            string,
+            { lastSeenAt: number; shifts: number; offlineLeases: number }
+        >();
+        const add = (rows: Group[], key: 'shifts' | 'offlineLeases') => {
+            for (const row of rows) {
+                const at = new Date(row.lastSeenAt).getTime();
+                const entry = byLabel.get(row._id) ?? {
+                    lastSeenAt: at,
+                    shifts: 0,
+                    offlineLeases: 0,
+                };
+                entry.lastSeenAt = Math.max(entry.lastSeenAt, at);
+                entry[key] += row.count;
+                byLabel.set(row._id, entry);
+            }
+        };
+        add(shifts, 'shifts');
+        add(leases, 'offlineLeases');
+        const terminals = [...byLabel.entries()]
+            .sort(
+                ([a, x], [b, y]) =>
+                    y.lastSeenAt - x.lastSeenAt || a.localeCompare(b),
+            )
+            .slice(0, limit)
+            .map(([label, entry]) => ({
+                label,
+                lastSeenAt: new Date(entry.lastSeenAt).toISOString(),
+                shifts: entry.shifts,
+                offlineLeases: entry.offlineLeases,
+            }));
+        return { terminals };
+    }
+
     async list(dto: ListShiftsDto): Promise<Paginated<ShiftListItem>> {
         const { page, limit, status } = dto;
         const filter = status ? { status } : {};

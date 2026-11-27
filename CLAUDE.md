@@ -1471,5 +1471,15 @@ on upstream fixes).
   significance. A single-pc LAN terminal (any hostname but `localhost`,
   `isLanTerminal`) can't open a shift until an ADMIN saved its label here
   (`hasSavedTerminalLabel`; ShiftInModal says "Ask an admin…"), client-only
-  (#399). Offline store identity uses last-known authenticated presentation;
+  (#399). Store settings has a "This terminal" card (#502, owner decision
+  2026-11-27): "Saved in this PC's browser only; set it on each terminal",
+  the device's address (localhost = the main PC), an empty field and
+  "Not set" until saved (no "Lane #1" prefill; other displays keep the
+  fallback), its own Save with a success toast and an inline error when
+  storage refuses, and a Guest/Incognito warning (best effort: a storage
+  quota under 120 MB). A read-only "Terminals seen" card lists labels from
+  shifts and offline leases (`GET /shifts/terminals`, ADMIN,
+  `TerminalsSeenResponse`, newest first, at most `TERMINALS_SEEN_LIMIT`
+  50). Every Store settings save shows a success toast.
+  Offline store identity uses last-known authenticated presentation;
   API responses are never cached by the service worker.
