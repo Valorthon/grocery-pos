@@ -1807,6 +1807,36 @@ function isInside(child, parent) {
     );
 }
 
+// Every IP address in the report: IPv6 (full or compressed, IPv4-mapped in
+// dotted or hex form, with a zone suffix), then IPv4.
+const IPV6 =
+    /(?<![\w:.%])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?::(?:\d{1,3}\.){3}\d{1,3})?)(?:%[\w.-]+)?(?![\w:.%])/gi;
+const IPV4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g;
+const KEPT_IPV6 = new Set(['::1', '::']);
+
+/**
+ * Replaces every IP address in every string of a value (check summaries,
+ * steps, details, structured `lanIp` fields) with `[ip]`, for the support
+ * export (#500). Only loopback (127/8, ::1) and unspecified (0.0.0.0, ::)
+ * addresses stay readable; keys stay.
+ */
+export function scrubIps(value) {
+    if (typeof value === 'string')
+        return value
+            .replace(IPV6, (ip) =>
+                KEPT_IPV6.has(ip.toLowerCase()) ? ip : '[ip]',
+            )
+            .replace(IPV4, (ip) =>
+                ip.startsWith('127.') || ip === '0.0.0.0' ? ip : '[ip]',
+            );
+    if (Array.isArray(value)) return value.map(scrubIps);
+    if (value && typeof value === 'object')
+        return Object.fromEntries(
+            Object.entries(value).map(([k, v]) => [k, scrubIps(v)]),
+        );
+    return value;
+}
+
 export async function supportExport(options, ctx = realContext()) {
     const paths = layout(resolve(options.dataRoot));
     const to = resolve(options.to);
@@ -1817,7 +1847,7 @@ export async function supportExport(options, ctx = realContext()) {
     const info = await stat(to).catch(() => null);
     if (!info?.isDirectory())
         throw new Error('The chosen folder does not exist.');
-    const report = await diagnose(options, ctx);
+    const report = scrubIps(await diagnose(options, ctx));
     const logs = {};
     for (const [name, files] of await logSources(ctx, paths)) {
         logs[name] = [];

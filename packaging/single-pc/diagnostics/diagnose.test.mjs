@@ -27,6 +27,7 @@ import {
     rotateReason,
     serviceStateFromStatus,
     supportExport,
+    scrubIps,
     tailFile,
     diagnose,
     isAccessDenied,
@@ -1505,4 +1506,60 @@ test('single-PC docs stop the API with -Force and restart the proxies (#457)', (
         recovery,
         /diagnose\.mjs" \^ check --data-root \S+ \^ --release /,
     );
+});
+
+describe('support export IP redaction (#500)', () => {
+    const listed = [
+        '192.168.1.8',
+        '10.0.0.7',
+        '172.20.0.1',
+        '100.64.1.2',
+        '169.254.3.4',
+        '8.8.8.8',
+        'fe80::1%12',
+        'fd00::5',
+        '2001:db8::7',
+        '::ffff:10.0.0.9',
+        '::ffff:c0a8:0109',
+    ];
+
+    test('the export keeps no IP but loopback and unspecified', async () => {
+        const out = await mkdtemp(join(tmpdir(), 'gpos-usb-'));
+        try {
+            const file = await supportExport(
+                { dataRoot: root, to: out },
+                healthy({
+                    readText: async (path) =>
+                        path === layout(root).runtimeManifest
+                            ? JSON.stringify({ lanIp: '192.168.1.8' })
+                            : readFile(path, 'utf8'),
+                    serviceStates: async () => ({
+                        ...Object.fromEntries(
+                            Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+                        ),
+                        [LAN_SERVICE]: 'RUNNING',
+                    }),
+                    listeners: async () => ['127.0.0.1', '::1', ...listed],
+                }),
+            );
+            const text = await readFile(file, 'utf8');
+            for (const ip of listed) assert.ok(!text.includes(ip), ip);
+        } finally {
+            await rm(out, { recursive: true, force: true });
+        }
+    });
+
+    test('scrubIps replaces every address but loopback and unspecified', () => {
+        const kept = ['127.0.0.1', '127.5.5.5', '::1', '0.0.0.0', '::'];
+        const value = {
+            summary: `on ${listed.join(' and ')} at 12:30:45`,
+            lanIp: '192.168.1.8',
+            list: [...listed, ...kept, 7, null],
+        };
+        assert.deepEqual(scrubIps(value), {
+            summary: `on ${listed.map(() => '[ip]').join(' and ')} at 12:30:45`,
+            lanIp: '[ip]',
+            list: [...listed.map(() => '[ip]'), ...kept, 7, null],
+        });
+    });
 });
