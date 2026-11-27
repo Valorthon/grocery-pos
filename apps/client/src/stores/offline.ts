@@ -218,7 +218,7 @@ export const useOfflineStore = defineStore('offline', () => {
                 state.value = { ...active, products: [] };
             else if (offset !== undefined)
                 // Show the fresh offset now, not after the catalogue (#505).
-                state.value = { ...state.value, clockOffset: offset };
+                state.value = { ...active, products: state.value.products };
             if (offset !== undefined) clockMeasured.value = true;
             let cursor = active.cursor;
             do {
@@ -241,6 +241,7 @@ export const useOfflineStore = defineStore('offline', () => {
                     ))
                 )
                     break;
+                if (pageOffset !== undefined) clockMeasured.value = true;
                 cursor = page.next;
             } while (cursor);
             const saved = await readOfflineState(id);
@@ -510,6 +511,9 @@ export const useOfflineStore = defineStore('offline', () => {
             );
         await sync();
         const saved = await suspendOffline(id);
+        // A focus-triggered prepare still running must not renew the lease
+        // after its release (#505).
+        await preparing?.catch(() => undefined);
         if (saved?.lease) {
             await api.post(`/offline/leases/${saved.lease._id}/release`, {
                 terminalId: saved.terminalId,

@@ -137,6 +137,20 @@ describe('SellerLayout (shift from the server, issue #2)', () => {
         expect(prepare).not.toHaveBeenCalled();
     });
 
+    it.each([
+        ['offline', () => useOfflineStore().setConnection(false)],
+        ['closing the shift', () => (useShiftStore().shiftOutOpen = true)],
+    ])('does not re-prepare on focus while %s (#505)', async (_, arrange) => {
+        api.get.mockResolvedValue({ data: { shift: SHIFT } });
+        await mountAt('/seller/register');
+        const prepare = vi
+            .spyOn(useOfflineStore(), 'prepare')
+            .mockResolvedValue(undefined);
+        arrange();
+        window.dispatchEvent(new Event('focus'));
+        expect(prepare).not.toHaveBeenCalled();
+    });
+
     it('sends the cashier to open a shift when the server has none', async () => {
         api.get.mockResolvedValue({ data: { shift: null } });
 

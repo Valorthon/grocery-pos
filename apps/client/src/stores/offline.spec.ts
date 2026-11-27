@@ -370,6 +370,29 @@ it('refuses reconciliation without admin authority and a nonblank reason', async
         'reason',
     );
 });
+it('waits for an in-flight prepare before releasing the lease (#505)', async () => {
+    let answer!: () => void;
+    vi.mocked(api.post).mockImplementation((path, data) =>
+        path === '/offline/lease'
+            ? new Promise((resolve) => {
+                  answer = () =>
+                      resolve({ data: { ...lease(), serverTime: Date.now() } });
+              })
+            : acknowledged(path, data),
+    );
+    const preparing = store.prepare(lease().shift);
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    const closing = store.beforeClose();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const paths = () => vi.mocked(api.post).mock.calls.map(([p]) => p);
+    expect(paths()).not.toContain(`/offline/leases/${LEASE}/release`);
+    answer();
+    await preparing;
+    await closing;
+    expect(paths()[paths().length - 1]).toBe(
+        `/offline/leases/${LEASE}/release`,
+    );
+});
 it('drains and suspends offline mode before releasing the exact terminal lease', async () => {
     await store.queue(body(), items());
     await store.beforeClose();
