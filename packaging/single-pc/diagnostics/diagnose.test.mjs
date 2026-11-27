@@ -1163,6 +1163,26 @@ describe('diagnose', () => {
             assert.ok(local.summary.includes(source));
             assert.deepEqual(local.steps, []);
         }
+        // Any other running type on a local source is not syncing (#508).
+        for (const syncType of ['NT5DS', 'Weird'])
+            for (const source of [
+                'Local CMOS Clock',
+                'Free-running System Clock',
+            ]) {
+                const w = await run({ ...base, syncType, source });
+                assert.equal(w.status, 'warn', `${syncType} ${source}`);
+                assert.deepEqual(w.steps, GUIDANCE.clockSync);
+            }
+        assert.equal(
+            (
+                await run({
+                    ...base,
+                    syncType: 'AllSync',
+                    source: 'Local CMOS Clock',
+                })
+            ).status,
+            'info',
+        );
         for (const facts of [
             null,
             { ...base, state: null },

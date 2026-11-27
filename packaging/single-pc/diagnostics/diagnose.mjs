@@ -1127,14 +1127,22 @@ export async function checkClockSync(ctx) {
     // on the LAN time server (`/reliable:yes`, AnnounceFlags 5) between
     // syncs. Set time automatically (Type) is the setting; a stopped
     // trigger-start service reads ok, so a running one must not warn.
-    if (state === 'RUNNING' && syncedSource(source) === false)
+    if (state === 'RUNNING' && syncedSource(source) === false) {
+        // Only NTP/AllSync retry their peer list by themselves; any other
+        // type (NT5DS: no domain controller found) on a local source is
+        // not syncing.
+        if (syncType !== 'NTP' && syncType !== 'AllSync')
+            return warn(
+                'Windows is not syncing this PC clock with a time server.',
+            );
         return result(
             'clockSync',
             title,
             'info',
-            `Set time automatically is on; Windows has not reached a time server yet (source: ${source}). It syncs by itself once the internet is available.`,
+            `Set time automatically is on, but Windows has not reached a time server yet (source: ${source}). This is normal without internet or right after the PC starts.`,
             { details },
         );
+    }
     return result(
         'clockSync',
         title,
@@ -1282,6 +1290,12 @@ export async function checkLogs(ctx, paths) {
 // ------------------------------------------------------------ report
 
 export async function diagnose(options, ctx = realContext()) {
+    // #508: one service-state read per run, shared by every check.
+    if (ctx.serviceStates) {
+        const read = ctx.serviceStates.bind(ctx);
+        let cached;
+        ctx = { ...ctx, serviceStates: () => (cached ??= read()) };
+    }
     const paths = layout(resolve(options.dataRoot));
     const now = ctx.now();
     const state = await readJson(ctx, join(paths.dirs.state, 'installer.json'));

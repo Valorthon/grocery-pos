@@ -1403,16 +1403,19 @@ on upstream fixes).
 - LAN terminals (#399): `lanNetwork` checks the LAN IP is still on an
   adapter, its network is Private, the `GroceryPOS-LAN-HTTPS` rule is on and
   a verified TLS handshake to the IP passes (unread = `unknown`).
-- Clock sync (#446): `clockSync` (always on, warn) warns when the service is
-  disabled/absent, Set time automatically is off (`W32Time\Parameters\Type`
-  NoSync) (a stopped trigger-start service is fine), step "Turn on Set
-  time automatically"; unreadable is `unknown`. A running service on a
-  local source (Local CMOS / Free-running clock: no internet, first sync
-  pending, `/reliable:yes` LAN server) is `info`, not a warning (#508). `timeServer` (LAN only) is unchanged.
-- #508: `lanNetwork` names a stopped/refusing `GroceryPOS-ProxyLan`
-  instead of the certificate; `services` counts the running ones (LAN
-  proxy included); `app.caddy` sets `servers { protocols h1 h2 }` (no
-  HTTP/3 on UDP 1443, the firewall rule is TCP only) for both sites.
+- Clock sync (#446): `clockSync` (always on, warn) warns when the service
+  is disabled/absent or Set time automatically is off
+  (`W32Time\Parameters\Type` NoSync); a stopped trigger-start service is
+  fine. Step "Turn on Set time automatically"; unreadable is `unknown`.
+  A running service on a local source (Local CMOS / Free-running clock) is
+  `info` with Type NTP/AllSync (no internet, first sync pending,
+  `/reliable:yes` LAN server) and a warning with any other Type (#508).
+  `timeServer` (LAN only) is unchanged.
+- #508: `lanNetwork` names a stopped, missing or refusing
+  `GroceryPOS-ProxyLan` instead of the certificate; `services` counts the
+  running ones (LAN proxy included); `diagnose` reads service states once
+  per run; `app.caddy` sets `servers { protocols h1 h2 }` for both sites
+  (no HTTP/3 on UDP 1443; the firewall rule is TCP only).
 
 **Single-PC upgrades** (#364, `packaging/single-pc/upgrade/`)
 

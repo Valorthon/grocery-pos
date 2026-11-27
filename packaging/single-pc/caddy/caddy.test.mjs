@@ -220,6 +220,12 @@ describe(
                 });
                 udp.close();
             }
+            const udp6 = createSocket({ type: 'udp6', ipv6Only: true });
+            await new Promise((done, fail) => {
+                udp6.once('error', fail);
+                udp6.bind(port, '::1', done);
+            });
+            udp6.close();
         });
 
         test('health is refused on the LAN site but not on localhost', async () => {
