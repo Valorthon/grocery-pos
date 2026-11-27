@@ -47,6 +47,17 @@ export function productNameError(value: unknown): string {
     );
 }
 
+/**
+ * The #483 character rule alone, for a name field's blur (#507): blank or
+ * over-long names wait for submit, so leaving an empty field says nothing.
+ */
+export function productNameCharactersError(value: unknown): string {
+    const name = typeof value === 'string' ? normalizeProductName(value) : '';
+    return name && !hasValidProductNameCharacters(name)
+        ? PRODUCT_NAME_CHARACTERS_MESSAGE
+        : '';
+}
+
 /** True when a `v-model.number` field was left blank. */
 function isBlank(value: unknown): boolean {
     return value == null || (typeof value === 'string' && value.trim() === '');

@@ -192,6 +192,21 @@ describe('Restock AddDialog (#17)', () => {
         });
     });
 
+    it('checks a new product name on blur (#507)', async () => {
+        await open();
+        await check('This is a new product', true);
+        await type('Product Name', 'QA 🍎 APPLE');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe(
+            "Use only letters, numbers, spaces and . , - & ' / ( ) %",
+        );
+        await type('Product Name', 'Piña (1/2 kg)');
+        field('Product Name').dispatchEvent(new Event('blur'));
+        await flush();
+        expect(fieldError('Product Name')).toBe('');
+    });
+
     it('adds a new product with a valid typed EAN', async () => {
         await open();
         await check('This is a new product', true);

@@ -36,6 +36,7 @@
                     :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :error="errors.name"
                     @update:model-value="errors.name = ''"
+                    @blur="onNameBlur"
                 />
                 <CategorySelect
                     v-model="category"
@@ -145,6 +146,7 @@ import {
     type UpdateProductsRequest,
 } from '@grocery-pos/contracts';
 import BaseModal from '@/components/ui/BaseModal.vue';
+import { productNameCharactersError } from '@/utils/rules';
 import BaseInput from '@/components/ui/BaseInput.vue';
 import Badge from '@/components/ui/Badge.vue';
 import InfoTooltip from '@/components/ui/InfoTooltip.vue';
@@ -237,6 +239,16 @@ watch(
     },
     { immediate: true },
 );
+/**
+ * Leaving the name field checks its characters (#507); an unchanged
+ * legacy name is not sent, so it is never flagged (#483).
+ */
+function onNameBlur() {
+    const changed = normalizeProductName(name.value) !== props.product.name;
+    if (changed && productNameCharactersError(name.value))
+        errors.name = PRODUCT_NAME_CHARACTERS_MESSAGE;
+}
+
 async function save() {
     if (saving.value) return;
     const normalized = normalizeProductName(name.value);

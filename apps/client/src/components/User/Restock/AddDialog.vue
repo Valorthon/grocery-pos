@@ -123,6 +123,7 @@
                     label="Product Name"
                     :maxlength="STRING_LIMITS.PRODUCT_NAME"
                     :error="errors.name"
+                    @blur="onNameBlur"
                 />
                 <BaseInput
                     v-model="formData.price"
@@ -154,6 +155,7 @@ import {
     EXPIRY_LIMITS,
     isExpiryDate,
     normalizeProductName,
+    PRODUCT_NAME_CHARACTERS_MESSAGE,
     UnitOfMeasure,
     unitOf,
     quantityInput,
@@ -177,6 +179,7 @@ import { Color, useUIStore } from '@/stores/ui';
 import { STRING_LIMITS, type ProductCostView } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
 import { apiErrorMessages } from '@/utils/api-error';
+import { productNameCharactersError } from '@/utils/rules';
 import { toEnsureValidQuery } from '@/utils/payloads';
 import { useProductMatches } from '@/composables/useProductMatches';
 import type { ScannedLine } from '@/composables/useBarcodeCapture';
@@ -308,6 +311,14 @@ function loadCostDefault(generation: number) {
                 ),
             ),
         );
+}
+
+/** Leaving a new product's name checks its characters (#507). */
+function onNameBlur() {
+    const message = productNameCharactersError(formData.name);
+    if (message) errors.value = { ...errors.value, name: message };
+    else if (errors.value.name === PRODUCT_NAME_CHARACTERS_MESSAGE)
+        clearError('name');
 }
 
 function clearError(...fields: string[]) {

@@ -41,7 +41,7 @@
                 label="Product Name"
                 :maxlength="STRING_LIMITS.PRODUCT_NAME"
                 :error="errors.name"
-                @blur="checkRepeats('name')"
+                @blur="onNameBlur"
             />
             <BaseButton
                 v-if="repeatOf.name"
@@ -107,11 +107,13 @@ import BaseButton from '@/components/ui/BaseButton.vue';
 import { Color, useUIStore } from '@/stores/ui';
 import {
     normalizeProductName,
+    PRODUCT_NAME_CHARACTERS_MESSAGE,
     STRING_LIMITS,
     UnitOfMeasure,
     unitLabel,
 } from '@grocery-pos/contracts';
 import { centavosToPesoInput, pesosToCentavos } from '@/utils/currency';
+import { productNameCharactersError } from '@/utils/rules';
 import { productErrors, type ProductFormInput } from './validation';
 import {
     apiErrorMessages,
@@ -215,6 +217,24 @@ const checkRepeats = (field: 'name' | 'EAN'): boolean => {
     errors.value = nextErrors;
     return !!id;
 };
+
+/** Leaving the name field checks its characters (#507), then repeats. */
+const onNameBlur = () => {
+    const message = productNameCharactersError(formData.name);
+    if (!message) {
+        if (errors.value.name === PRODUCT_NAME_CHARACTERS_MESSAGE)
+            clearNameError();
+        checkRepeats('name');
+        return;
+    }
+    errors.value = { ...errors.value, name: message };
+};
+
+function clearNameError() {
+    const next = { ...errors.value };
+    delete next.name;
+    errors.value = next;
+}
 
 const openRepeat = (draftId: string) => {
     emit('edit-draft', draftId, snapshot() !== opened);
