@@ -281,6 +281,27 @@ Rules:
   admins see every shift on `/admin/shifts`. CSV and reports are #44.
 - A non-admin reads only their own sales in their current open shift
   (none without one; others 404).
+- Terminal binding (#509, owner decision 2026-11-27): a shift is bound to
+  the browser that opened it. The client sends a stable per-browser id
+  (`utils/terminal-id.ts`, localStorage `grocery_pos_terminal_v1`, shared
+  by every cashier of that browser, kept on logout; not the offline
+  per-cashier `terminalId` nor the label) in `TERMINAL_ID_HEADER`
+  (`x-terminal-id`) on `/shifts`, `/sales` and `/offline` requests only.
+  The server stores it as `Shift.terminalId` (never on the wire) and
+  writes `POST /sales`, offline lease issuance and drawer movements with
+  a `$or: [{terminalId}, {terminalId: {$exists: false}}]` filter plus
+  `$set`, so a shift without one (opened before #509) binds to the first
+  terminal that sells, leases or moves cash on it; concurrent first uses
+  write-conflict and exactly one wins. Own close checks it in its
+  transaction (an unbound shift closes anywhere). Another terminal gets
+  409 `SHIFT_OTHER_TERMINAL` (`details.terminal` = label, message
+  `shiftOtherTerminalMessage`); a missing/malformed id on those writes is
+  400 `SHIFT_TERMINAL_REQUIRED` (reload). Idempotent sale and drawer
+  replays, offline uploads of already-collected cash, reads, ADMIN
+  force-close and void/refund payouts are unaffected. The view field
+  `onThisTerminal` drives the seller dashboard notice (owner wording) and
+  hides Go to register/End shift; the register redirects to the dashboard
+  and no offline lease is prepared there.
 
 **Errors** (#8)
 

@@ -15,7 +15,7 @@ import axios, {
     type InternalAxiosRequestConfig,
 } from 'axios';
 
-import { ErrorCode } from '@grocery-pos/contracts';
+import { ErrorCode, TERMINAL_ID_HEADER } from '@grocery-pos/contracts';
 import { apiErrorCode } from './utils/api-error';
 vi.mock('@/config/env', () => ({
     env: {
@@ -550,5 +550,43 @@ describe('refreshSession (self-rename, #106)', () => {
 
         expect(logout).toHaveBeenCalledTimes(1);
         expect(logout).toHaveBeenCalledWith('Please log in to continue');
+    });
+});
+
+describe('terminal id header (#509)', () => {
+    async function headersFor(url: string) {
+        const adapter = api.defaults.adapter;
+        let seen: Record<string, unknown> = {};
+        api.defaults.adapter = (config) => {
+            seen = { ...config.headers };
+            return Promise.resolve({
+                data: {},
+                status: 200,
+                statusText: 'OK',
+                headers: {},
+                config,
+            });
+        };
+        try {
+            await api.get(url);
+        } finally {
+            api.defaults.adapter = adapter;
+        }
+        return seen;
+    }
+
+    it('names this browser on shift, sales and offline routes only, with one stable id', async () => {
+        const { terminalId } = await import('./utils/terminal-id');
+        const id = terminalId();
+        for (const url of [
+            '/shifts/current',
+            '/sales?page=1',
+            '/offline/lease',
+        ])
+            expect((await headersFor(url))[TERMINAL_ID_HEADER]).toBe(id);
+        expect(
+            (await headersFor('/products?page=1'))[TERMINAL_ID_HEADER],
+        ).toBeUndefined();
+        expect(terminalId()).toBe(id);
     });
 });

@@ -95,7 +95,18 @@
                                     </dd>
                                 </div>
                             </dl>
-                            <p v-else class="mt-1 text-sm text-muted">
+                            <p
+                                v-if="shiftStore.otherTerminalNotice"
+                                class="mt-3 rounded-control border border-warning-border bg-warning-bg px-3 py-2 text-sm font-bold text-warning-fg"
+                                role="alert"
+                                data-testid="shift-other-terminal"
+                            >
+                                {{ shiftStore.otherTerminalNotice }}
+                            </p>
+                            <p
+                                v-else-if="!shift"
+                                class="mt-1 text-sm text-muted"
+                            >
                                 Count your opening float to start selling.
                             </p>
                         </div>
@@ -105,7 +116,7 @@
                 <div class="mt-5 flex flex-wrap gap-3">
                     <template v-if="shiftStore.loaded">
                         <BaseButton
-                            v-if="shift"
+                            v-if="shift && !shiftStore.otherTerminalNotice"
                             variant="accent"
                             size="lg"
                             class="min-h-11 min-w-11"
@@ -118,7 +129,7 @@
                             Go to register
                         </BaseButton>
                         <BaseButton
-                            v-else
+                            v-else-if="!shift"
                             variant="accent"
                             size="lg"
                             class="min-h-11 min-w-11"
@@ -131,7 +142,7 @@
                             Start shift
                         </BaseButton>
                         <BaseButton
-                            v-if="shift"
+                            v-if="shift && !shiftStore.otherTerminalNotice"
                             variant="outline"
                             size="lg"
                             class="min-h-11 min-w-11"

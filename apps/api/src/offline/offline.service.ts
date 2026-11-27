@@ -42,7 +42,12 @@ import { Sales } from '../sales/sales.schema';
 import { SalesDetails } from '../sales/sales-details.schema';
 import type { ReceiptDto } from '../sales/types/sales.dto';
 import { SalesService } from '../sales/sales.service';
-import { toCurrentView } from '../shift/shift.service';
+import {
+    otherTerminal,
+    terminalBinding,
+    toCurrentView,
+} from '../shift/shift.service';
+import { requireTerminalId } from '../shift/terminal-id';
 import {
     ConflictError,
     ForbiddenError,
@@ -152,7 +157,9 @@ export class OfflineService {
     async lease(
         actor: AuthUser,
         dto: OfflineLeaseDto,
+        terminalId?: string,
     ): Promise<OfflineLeaseView> {
+        const terminal = terminalBinding(requireTerminalId(terminalId));
         return runInTransaction(async (session) => {
             const store = await this.settings.lockContext(session);
             const user = await this.seller(actor, session);
@@ -161,12 +168,30 @@ export class OfflineService {
             // A write serializes issuance against normal and forced close.
             const shift = await this.shifts
                 .findOneAndUpdate(
-                    { cashier: actor.userId, status: ShiftStatus.OPEN },
-                    { $inc: { offlineLeaseLock: 1 } },
+                    {
+                        cashier: actor.userId,
+                        status: ShiftStatus.OPEN,
+                        ...terminal.filter,
+                    },
+                    {
+                        $inc: { offlineLeaseLock: 1 },
+                        $set: terminal.set,
+                    },
                     { new: true, session },
                 )
                 .lean();
-            if (!shift) throw reconcile();
+            if (!shift) {
+                // New offline cash only from the shift's own terminal (#509).
+                const open = await this.shifts
+                    .findOne(
+                        { cashier: actor.userId, status: ShiftStatus.OPEN },
+                        { terminal: 1 },
+                    )
+                    .session(session)
+                    .lean();
+                if (open) throw otherTerminal(open.terminal);
+                throw reconcile();
+            }
             const filter = {
                 cashier: user._id,
                 shift: shift._id,
@@ -230,7 +255,7 @@ export class OfflineService {
                 cashierName: user.name,
                 issuedAt: doc.issuedAt.toISOString(),
                 expiresAt: doc.expiresAt.toISOString(),
-                shift: toCurrentView(shift),
+                shift: toCurrentView(shift, terminalId),
                 serverTime: Date.now(),
             };
         }, this.connection);

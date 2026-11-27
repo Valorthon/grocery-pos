@@ -12,6 +12,8 @@ import {
     DrawerMovementType,
     ErrorCode,
     ShiftStatus,
+    shiftOtherTerminalMessage,
+    TERMINAL_ID_HEADER,
     type CurrentShiftView,
     type ZReadReport,
 } from '@grocery-pos/contracts';
@@ -22,6 +24,7 @@ import {
     bootAccessHarness,
     caller,
     Caller,
+    DEFAULT_TEST_TERMINAL,
 } from '../common/testing/access-harness';
 import { Sales } from '../sales/sales.schema';
 import { OfflineLease } from '../offline/offline-lease.schema';
@@ -526,6 +529,146 @@ describe('Shift routes (e2e)', () => {
             );
 
             expect(res.status).toBe(400);
+        });
+    });
+
+    describe('bound to the terminal that opened it (#509)', () => {
+        const OTHER = { [TERMINAL_ID_HEADER]: 'terminal-other-0002' };
+        const NONE = { [TERMINAL_ID_HEADER]: '' };
+
+        function drawer(shiftId: string) {
+            return {
+                shiftId,
+                idempotencyKey: randomUUID(),
+                type: DrawerMovementType.CASH_IN,
+                amount: 100,
+                reason: 'Change',
+            };
+        }
+
+        it('stores the opening terminal id and never shows it', async () => {
+            const cashier = caller(Role.Seller);
+            const shift = await open(cashier);
+
+            expect(shift.onThisTerminal).toBe(true);
+            expect(shift).not.toHaveProperty('terminalId');
+            expect(shifts.byId(shift._id)!.terminalId).toBe(
+                DEFAULT_TEST_TERMINAL,
+            );
+            const there = await harness.call(
+                cashier,
+                'GET',
+                '/shifts/current',
+                undefined,
+                OTHER,
+            );
+            expect(
+                ((await there.json()) as { shift: CurrentShiftView }).shift
+                    .onThisTerminal,
+            ).toBe(false);
+        });
+
+        it('refuses drawer movements and the close from another terminal, naming its label', async () => {
+            const cashier = caller(Role.Seller);
+            const shift = await open(cashier);
+
+            for (const [path, body] of [
+                ['/shifts/current/drawer', drawer(shift._id)],
+                ['/shifts/current/close', { counts: FLOAT_COUNTS }],
+            ] as const) {
+                const res = await harness.call(
+                    cashier,
+                    'POST',
+                    path,
+                    body,
+                    OTHER,
+                );
+                expect(res.status).toBe(409);
+                expect(await res.json()).toMatchObject({
+                    error: ErrorCode.SHIFT_OTHER_TERMINAL,
+                    message: shiftOtherTerminalMessage(shift.terminal),
+                    details: { terminal: shift.terminal },
+                });
+            }
+            expect(shifts.byId(shift._id)!.status).toBe(ShiftStatus.OPEN);
+            expect(shifts.byId(shift._id)!.movements).toEqual([]);
+
+            // The same terminal still works.
+            const cashIn = await harness.call(
+                cashier,
+                'POST',
+                '/shifts/current/drawer',
+                drawer(shift._id),
+            );
+            expect(cashIn.status).toBe(201);
+            const close = await harness.call(
+                cashier,
+                'POST',
+                '/shifts/current/close',
+                { counts: FLOAT_COUNTS },
+            );
+            expect(close.status).toBe(201);
+        });
+
+        it('refuses a write without a terminal id (an outdated tab)', async () => {
+            const cashier = caller(Role.Seller);
+            const res = await harness.call(
+                cashier,
+                'POST',
+                '/shifts',
+                { counts: FLOAT_COUNTS },
+                NONE,
+            );
+            expect(res.status).toBe(400);
+            expect(await res.json()).toMatchObject({
+                error: ErrorCode.SHIFT_TERMINAL_REQUIRED,
+            });
+            const shift = await open(cashier);
+            const move = await harness.call(
+                cashier,
+                'POST',
+                '/shifts/current/drawer',
+                drawer(shift._id),
+                NONE,
+            );
+            expect(move.status).toBe(400);
+        });
+
+        it('lets an ADMIN force-close a shift bound to any terminal', async () => {
+            const shift = await open(caller(Role.Seller));
+            const res = await harness.call(
+                caller(Role.Admin),
+                'POST',
+                `/shifts/${shift._id}/close`,
+                { counts: FLOAT_COUNTS },
+                OTHER,
+            );
+            expect(res.status).toBe(201);
+        });
+
+        it('binds a shift opened before #509 to the first terminal that uses it', async () => {
+            const cashier = caller(Role.Seller);
+            const shift = await open(cashier);
+            delete shifts.byId(shift._id)!.terminalId;
+
+            const first = await harness.call(
+                cashier,
+                'POST',
+                '/shifts/current/drawer',
+                drawer(shift._id),
+                OTHER,
+            );
+            expect(first.status).toBe(201);
+            expect(shifts.byId(shift._id)!.terminalId).toBe(
+                OTHER[TERMINAL_ID_HEADER],
+            );
+            const here = await harness.call(
+                cashier,
+                'POST',
+                '/shifts/current/drawer',
+                drawer(shift._id),
+            );
+            expect(here.status).toBe(409);
         });
     });
 });

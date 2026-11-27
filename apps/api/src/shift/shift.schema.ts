@@ -101,6 +101,15 @@ export class Shift {
     @Prop({ type: String, required: true })
     terminal!: string;
 
+    /**
+     * The stable id of the browser that opened the shift (#509); only it
+     * may sell, lease offline, move cash or close. Absent on a shift
+     * opened before #509 (or by a client that sent none): the first
+     * terminal that sells, leases or moves cash on it binds it.
+     */
+    @Prop({ type: String })
+    terminalId?: string;
+
     @Prop({
         type: String,
         enum: Object.values(ShiftStatus),

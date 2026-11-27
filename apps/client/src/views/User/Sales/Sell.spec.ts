@@ -2031,6 +2031,7 @@ describe('Sell discount (#23)', () => {
             openedAt: new Date().toISOString(),
             openingFloat: 10000,
             movements: [],
+            onThisTerminal: true,
         };
     }
     async function approve() {
@@ -3034,6 +3035,7 @@ describe('park and resume register tickets (#35)', () => {
             openedAt: new Date().toISOString(),
             openingFloat: 10000,
             movements: [],
+            onThisTerminal: true,
         };
         serve(() => Promise.resolve([]));
     }

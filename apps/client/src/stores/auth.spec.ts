@@ -297,6 +297,7 @@ describe('auth store', () => {
             openedAt: '2026-09-25T00:00:00.000Z',
             openingFloat: 100_000,
             movements: [],
+            onThisTerminal: true,
         };
         shift.loaded = true;
         shift.shiftOutOpen = true;

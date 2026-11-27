@@ -1,5 +1,5 @@
 import { terminalLabel } from '@/settings/presentation';
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { isAxiosError } from 'axios';
 import { defineStore } from 'pinia';
 import api from '@/axios';
@@ -15,6 +15,7 @@ import {
     type CurrentShiftView,
     type DrawerMovementRequest,
     ErrorCode,
+    shiftOtherTerminalMessage,
     type LastClosedResponse,
     type OpenShiftRequest,
     ShiftStatus,
@@ -76,6 +77,17 @@ export const useShiftStore = defineStore('shift', () => {
     const loaded = ref(false);
     /** True when the last shift check failed and nothing is known (#167). */
     const loadError = ref(false);
+
+    /**
+     * The open shift's refusal on this browser (#509): it is bound to the
+     * terminal that opened it, so here nothing may be sold, moved or
+     * closed. Null when the shift may be used here (or there is none).
+     */
+    const otherTerminalNotice = computed(() =>
+        activeShift.value && activeShift.value.onThisTerminal === false
+            ? shiftOtherTerminalMessage(activeShift.value.terminal)
+            : null,
+    );
 
     const shiftInOpen = ref(false);
     const drawerAction = ref<CashierDrawerMovement | null>(null);
@@ -309,6 +321,7 @@ export const useShiftStore = defineStore('shift', () => {
 
     return {
         activeShift,
+        otherTerminalNotice,
         loaded,
         loadError,
         shiftInOpen,

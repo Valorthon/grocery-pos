@@ -1,3 +1,4 @@
+import { TerminalId } from '../shift/terminal-id';
 import {
     Body,
     Controller,
@@ -82,9 +83,16 @@ export class SalesController {
         @CurrentUser() user: AuthUser,
         @Body() dto: SellDto,
         @Headers('x-manager-approval') approvalToken?: string,
+        @TerminalId() terminalId?: string,
     ): Promise<Receipt> {
         return asJson(
-            await this.service.sell(user, dto, undefined, approvalToken),
+            await this.service.sell(
+                user,
+                dto,
+                undefined,
+                approvalToken,
+                terminalId,
+            ),
         );
     }
 

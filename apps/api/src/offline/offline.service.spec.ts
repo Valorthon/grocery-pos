@@ -154,6 +154,7 @@ function fixture() {
     };
     const shifts = {
         findOneAndUpdate: jest.fn(() => new Query<typeof shift | null>(shift)),
+        findOne: jest.fn(() => new Query<{ terminal: string } | null>(null)),
         findById: jest.fn(() => new Query<typeof shift | null>(shift)),
         exists: jest.fn().mockResolvedValue({ _id: shiftId }),
         updateOne: jest.fn().mockResolvedValue({ matchedCount: 1 }),
@@ -261,7 +262,11 @@ beforeEach(() => {
 describe('offline lease and signed catalogue', () => {
     it('returns an existing terminal/shift lease with blind shift view', async () => {
         expect(
-            await f.service.lease(f.actor, { terminalId: 'terminal' }),
+            await f.service.lease(
+                f.actor,
+                { terminalId: 'terminal' },
+                'terminal-test-0001',
+            ),
         ).toMatchObject({
             _id: String(f.lease._id),
             cashier: f.actor.userId,
@@ -271,26 +276,38 @@ describe('offline lease and signed catalogue', () => {
     it('creates a lease only with an active seller, session and open shift', async () => {
         f.leases.findOne.mockReturnValue(new Query(null));
         expect(
-            await f.service.lease(f.actor, { terminalId: 'terminal' }),
+            await f.service.lease(
+                f.actor,
+                { terminalId: 'terminal' },
+                'terminal-test-0001',
+            ),
         ).toHaveProperty('_id');
         expect(f.leases.create).toHaveBeenCalled();
     });
     it('stores the saved terminal label on a new or existing lease (#454)', async () => {
         f.leases.findOne.mockReturnValue(new Query(null));
-        await f.service.lease(f.actor, {
-            terminalId: 'terminal',
-            terminalLabel: 'Counter 2',
-        });
+        await f.service.lease(
+            f.actor,
+            {
+                terminalId: 'terminal',
+                terminalLabel: 'Counter 2',
+            },
+            'terminal-test-0001',
+        );
         expect(f.leases.create).toHaveBeenCalledWith(
             [expect.objectContaining({ terminalLabel: 'Counter 2' })],
             expect.anything(),
         );
         f.leases.findOne.mockReturnValue(new Query(f.lease));
         f.leases.updateOne.mockClear();
-        await f.service.lease(f.actor, {
-            terminalId: 'terminal',
-            terminalLabel: 'Counter 3',
-        });
+        await f.service.lease(
+            f.actor,
+            {
+                terminalId: 'terminal',
+                terminalLabel: 'Counter 3',
+            },
+            'terminal-test-0001',
+        );
         expect(f.leases.updateOne).toHaveBeenCalledWith(
             { _id: f.lease._id },
             { $set: { terminalLabel: 'Counter 3' } },
@@ -300,7 +317,11 @@ describe('offline lease and signed catalogue', () => {
             new Query({ ...f.lease, terminalLabel: 'Counter 3' }),
         );
         f.leases.updateOne.mockClear();
-        await f.service.lease(f.actor, { terminalId: 'terminal' });
+        await f.service.lease(
+            f.actor,
+            { terminalId: 'terminal' },
+            'terminal-test-0001',
+        );
         expect(f.leases.updateOne).toHaveBeenCalledWith(
             { _id: f.lease._id },
             { $unset: { terminalLabel: 1 } },
@@ -309,7 +330,11 @@ describe('offline lease and signed catalogue', () => {
         // Nothing stored and nothing sent: no write.
         f.leases.findOne.mockReturnValue(new Query(f.lease));
         f.leases.updateOne.mockClear();
-        await f.service.lease(f.actor, { terminalId: 'terminal' });
+        await f.service.lease(
+            f.actor,
+            { terminalId: 'terminal' },
+            'terminal-test-0001',
+        );
         expect(f.leases.updateOne).not.toHaveBeenCalledWith(
             { _id: f.lease._id },
             expect.anything(),
@@ -334,10 +359,31 @@ describe('offline lease and signed catalogue', () => {
             f.shifts.findOneAndUpdate.mockReturnValue(new Query(null));
         if (mode === 'expired') f.lease.expiresAt = new Date(0);
         await expect(
-            f.service.lease(f.actor, { terminalId: 'terminal' }),
+            f.service.lease(
+                f.actor,
+                { terminalId: 'terminal' },
+                'terminal-test-0001',
+            ),
         ).rejects.toMatchObject({
             code: ErrorCode.OFFLINE_RECONCILIATION_REQUIRED,
         });
+    });
+    it('issues new offline cash only from the shift’s own terminal (#509)', async () => {
+        f.shifts.findOneAndUpdate.mockReturnValue(new Query(null));
+        f.shifts.findOne.mockReturnValue(new Query({ terminal: 'Lane 2' }));
+        await expect(
+            f.service.lease(
+                f.actor,
+                { terminalId: 'terminal' },
+                'terminal-other-02',
+            ),
+        ).rejects.toMatchObject({
+            code: ErrorCode.SHIFT_OTHER_TERMINAL,
+            details: { terminal: 'Lane 2' },
+        });
+        await expect(
+            f.service.lease(f.actor, { terminalId: 'terminal' }),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_TERMINAL_REQUIRED });
     });
     it('signs price/unit/owner/shift proofs and returns bounded cursor pages', async () => {
         const page = await f.service.catalog(f.actor, {

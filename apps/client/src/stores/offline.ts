@@ -189,7 +189,8 @@ export const useOfflineStore = defineStore('offline', () => {
         return operation;
     }
     async function prepareOnce(shift: CurrentShiftView): Promise<void> {
-        if (!owner.value) return;
+        // A shift bound to another terminal gets no lease here (#509).
+        if (!owner.value || shift.onThisTerminal === false) return;
         const id = owner.value;
         const gen = generation;
         try {

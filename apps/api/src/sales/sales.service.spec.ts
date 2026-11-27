@@ -370,7 +370,11 @@ describe('SalesService.sell', () => {
                 sellDto([{ product: 'p1', quantity: 1 }]),
             );
 
-            expect(chargeSale).toHaveBeenCalledWith('u1', expect.anything());
+            expect(chargeSale).toHaveBeenCalledWith(
+                'u1',
+                undefined,
+                expect.anything(),
+            );
             expect(create).toHaveBeenCalledWith(
                 [expect.objectContaining({ shift: SHIFT_ID })],
                 expect.anything(),

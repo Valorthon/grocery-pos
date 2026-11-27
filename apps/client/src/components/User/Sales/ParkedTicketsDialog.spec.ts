@@ -58,6 +58,7 @@ function setup(withTicket = true) {
         openedAt: new Date().toISOString(),
         openingFloat: 100,
         movements: [],
+        onThisTerminal: true,
     };
     const host = document.createElement('main');
     document.body.append(host);

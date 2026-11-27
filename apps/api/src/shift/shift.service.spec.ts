@@ -40,6 +40,8 @@ import {
     fakeShiftModel,
 } from './testing/fake-shift-model';
 
+const TERMINAL = 'terminal-test-0001';
+
 const ANA: AuthUser = {
     userId: new Types.ObjectId().toString(),
     username: 'ana',
@@ -101,7 +103,7 @@ function inTransaction<T>(fn: (session: ClientSession) => Promise<T>) {
 /** Rings a sale into `user`'s open shift the way SalesService does. */
 async function ring(user: AuthUser, sale: Record<string, unknown>) {
     return inTransaction(async (session) => {
-        const shift = await service.chargeSale(user.userId, session);
+        const shift = await service.chargeSale(user.userId, TERMINAL, session);
         return sales.seed({
             cashier: new Types.ObjectId(user.userId),
             status: SaleStatus.COMPLETED,
@@ -195,7 +197,7 @@ describe('ShiftService.open', () => {
 
     it('lets a cashier open a new shift once the last one closed', async () => {
         await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         await expect(service.open(ANA, FLOAT_COUNTS)).resolves.toMatchObject({
             status: ShiftStatus.OPEN,
@@ -217,15 +219,19 @@ describe('ShiftService.current (blind)', () => {
     it('shows the cashier their shift, their float and their own movements only', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         await ring(ANA, cashSale(45_000, 50_000));
-        await service.recordDrawer(ANA, {
-            shiftId:
-                (await service.current(ANA))?._id ??
-                new Types.ObjectId().toString(),
-            idempotencyKey: randomUUID(),
-            type: DrawerMovementType.CASH_DROP,
-            amount: 20_000,
-            reason: 'to safe',
-        });
+        await service.recordDrawer(
+            ANA,
+            {
+                shiftId:
+                    (await service.current(ANA))?._id ??
+                    new Types.ObjectId().toString(),
+                idempotencyKey: randomUUID(),
+                type: DrawerMovementType.CASH_DROP,
+                amount: 20_000,
+                reason: 'to safe',
+            },
+            TERMINAL,
+        );
         await inTransaction((session) =>
             service.payOutReversal(
                 {
@@ -250,6 +256,7 @@ describe('ShiftService.current (blind)', () => {
                 '_id',
                 'cashierName',
                 'movements',
+                'onThisTerminal',
                 'openedAt',
                 'openingFloat',
                 'status',
@@ -271,15 +278,19 @@ describe('ShiftService.recordDrawer', () => {
     it('records a cash in on the caller’s open shift', async () => {
         await service.open(ANA, FLOAT_COUNTS);
 
-        const view = await service.recordDrawer(ANA, {
-            shiftId:
-                (await service.current(ANA))?._id ??
-                new Types.ObjectId().toString(),
-            idempotencyKey: randomUUID(),
-            type: DrawerMovementType.CASH_IN,
-            amount: 10_000,
-            reason: 'coins',
-        });
+        const view = await service.recordDrawer(
+            ANA,
+            {
+                shiftId:
+                    (await service.current(ANA))?._id ??
+                    new Types.ObjectId().toString(),
+                idempotencyKey: randomUUID(),
+                type: DrawerMovementType.CASH_IN,
+                amount: 10_000,
+                reason: 'coins',
+            },
+            TERMINAL,
+        );
 
         expect(view.movements).toEqual([
             expect.objectContaining({
@@ -294,29 +305,37 @@ describe('ShiftService.recordDrawer', () => {
         await service.open(ANA, FLOAT_COUNTS);
 
         await expect(
-            service.recordDrawer(ANA, {
-                shiftId:
-                    (await service.current(ANA))?._id ??
-                    new Types.ObjectId().toString(),
-                idempotencyKey: randomUUID(),
-                type: DrawerMovementType.CASH_DROP,
-                amount: FLOAT * 10,
-                reason: 'safe',
-            }),
+            service.recordDrawer(
+                ANA,
+                {
+                    shiftId:
+                        (await service.current(ANA))?._id ??
+                        new Types.ObjectId().toString(),
+                    idempotencyKey: randomUUID(),
+                    type: DrawerMovementType.CASH_DROP,
+                    amount: FLOAT * 10,
+                    reason: 'safe',
+                },
+                TERMINAL,
+            ),
         ).resolves.toBeDefined();
     });
 
     it('refuses without an open shift', async () => {
         await expect(
-            service.recordDrawer(ANA, {
-                shiftId:
-                    (await service.current(ANA))?._id ??
-                    new Types.ObjectId().toString(),
-                idempotencyKey: randomUUID(),
-                type: DrawerMovementType.CASH_IN,
-                amount: 100,
-                reason: 'x',
-            }),
+            service.recordDrawer(
+                ANA,
+                {
+                    shiftId:
+                        (await service.current(ANA))?._id ??
+                        new Types.ObjectId().toString(),
+                    idempotencyKey: randomUUID(),
+                    type: DrawerMovementType.CASH_IN,
+                    amount: 100,
+                    reason: 'x',
+                },
+                TERMINAL,
+            ),
         ).rejects.toMatchObject({
             statusCode: 409,
             code: ErrorCode.SHIFT_NOT_OPEN,
@@ -329,7 +348,7 @@ describe('ShiftService.chargeSale', () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
 
         const id = await inTransaction((s) =>
-            service.chargeSale(ANA.userId, s),
+            service.chargeSale(ANA.userId, TERMINAL, s),
         );
 
         expect(String(id)).toBe(_id);
@@ -340,19 +359,53 @@ describe('ShiftService.chargeSale', () => {
         await service.open(ANA, FLOAT_COUNTS);
         const spy = jest.spyOn(shifts, 'findOneAndUpdate');
 
-        await inTransaction((s) => service.chargeSale(ANA.userId, s));
+        await inTransaction((s) => service.chargeSale(ANA.userId, TERMINAL, s));
 
         expect(spy.mock.calls[0][0]).toEqual({
             cashier: new Types.ObjectId(ANA.userId),
             status: ShiftStatus.OPEN,
+            $or: [{ terminalId: TERMINAL }, { terminalId: { $exists: false } }],
         });
+    });
+
+    it('refuses a sale from another terminal and binds an unbound shift on first use (#509)', async () => {
+        const { _id } = await service.open(
+            ANA,
+            FLOAT_COUNTS,
+            'Lane 1',
+            TERMINAL,
+        );
+
+        await expect(
+            inTransaction((s) =>
+                service.chargeSale(ANA.userId, 'terminal-other-02', s),
+            ),
+        ).rejects.toMatchObject({
+            statusCode: 409,
+            code: ErrorCode.SHIFT_OTHER_TERMINAL,
+            details: { terminal: 'Lane 1' },
+        });
+        expect(shifts.byId(_id)!.saleCount).toBe(0);
+        await expect(
+            inTransaction((s) => service.chargeSale(ANA.userId, undefined, s)),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_TERMINAL_REQUIRED });
+
+        // Opened before #509: no stored id, so the first terminal binds it.
+        delete shifts.byId(_id)!.terminalId;
+        await inTransaction((s) =>
+            service.chargeSale(ANA.userId, 'terminal-other-02', s),
+        );
+        expect(shifts.byId(_id)!.terminalId).toBe('terminal-other-02');
+        await expect(
+            service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_OTHER_TERMINAL });
     });
 
     it('refuses a sale for a cashier with no open shift', async () => {
         await service.open(BEN, FLOAT_COUNTS);
 
         await expect(
-            inTransaction((s) => service.chargeSale(ANA.userId, s)),
+            inTransaction((s) => service.chargeSale(ANA.userId, TERMINAL, s)),
         ).rejects.toMatchObject({
             statusCode: 409,
             code: ErrorCode.SHIFT_NOT_OPEN,
@@ -361,10 +414,10 @@ describe('ShiftService.chargeSale', () => {
 
     it('refuses a sale once the shift is closed', async () => {
         await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         await expect(
-            inTransaction((s) => service.chargeSale(ANA.userId, s)),
+            inTransaction((s) => service.chargeSale(ANA.userId, TERMINAL, s)),
         ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
     });
 });
@@ -373,7 +426,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
     it('returns exactly the keys of the contracts ZReadReport, section by section (#27)', async () => {
         await service.open(ANA, FLOAT_COUNTS);
         await ring(ANA, cashSale(45_000, 50_000));
-        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         const none = { missing: [], unexpected: [] };
         expect(wireShapeDiff(report, Z_READ_REPORT_SHAPE)).toEqual(none);
@@ -426,27 +479,35 @@ describe('ShiftService.closeOwn (Z-read)', () => {
                 session,
             ),
         );
-        await service.recordDrawer(ANA, {
-            shiftId:
-                (await service.current(ANA))?._id ??
-                new Types.ObjectId().toString(),
-            idempotencyKey: randomUUID(),
-            type: DrawerMovementType.CASH_IN,
-            amount: 20_000,
-            reason: 'coins',
-        });
-        await service.recordDrawer(ANA, {
-            shiftId:
-                (await service.current(ANA))?._id ??
-                new Types.ObjectId().toString(),
-            idempotencyKey: randomUUID(),
-            type: DrawerMovementType.CASH_DROP,
-            amount: 50_000,
-            reason: 'safe',
-        });
+        await service.recordDrawer(
+            ANA,
+            {
+                shiftId:
+                    (await service.current(ANA))?._id ??
+                    new Types.ObjectId().toString(),
+                idempotencyKey: randomUUID(),
+                type: DrawerMovementType.CASH_IN,
+                amount: 20_000,
+                reason: 'coins',
+            },
+            TERMINAL,
+        );
+        await service.recordDrawer(
+            ANA,
+            {
+                shiftId:
+                    (await service.current(ANA))?._id ??
+                    new Types.ObjectId().toString(),
+                idempotencyKey: randomUUID(),
+                type: DrawerMovementType.CASH_DROP,
+                amount: 50_000,
+                reason: 'safe',
+            },
+            TERMINAL,
+        );
 
         // 1,000 + 200 - 500 + (450 + 300 + 0 + 200) - 200 = 1,450; ₱10 short.
-        const report = await service.closeOwn(ANA, countsOf(144_000));
+        const report = await service.closeOwn(ANA, countsOf(144_000), TERMINAL);
 
         expect(report.drawer).toEqual({
             openingFloat: FLOAT,
@@ -488,7 +549,11 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         await service.open(ANA, FLOAT_COUNTS);
         await ring(ANA, cashSale(12_525));
 
-        const report = await service.closeOwn(ANA, countsOf(FLOAT + 12_525));
+        const report = await service.closeOwn(
+            ANA,
+            countsOf(FLOAT + 12_525),
+            TERMINAL,
+        );
 
         expect(report.drawer.expectedCash).toBe(112_525);
         expect(report.drawer.overShort).toBe(0);
@@ -499,7 +564,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         await service.open(BEN, FLOAT_COUNTS);
         await ring(BEN, cashSale(99_900));
 
-        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         expect(report.sales.count).toBe(0);
         expect(report.drawer.expectedCash).toBe(FLOAT);
@@ -509,7 +574,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         await ring(ANA, cashSale(5_000));
 
-        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         const row = shifts.byId(_id)!;
         expect(row.status).toBe(ShiftStatus.CLOSED);
@@ -526,12 +591,12 @@ describe('ShiftService.closeOwn (Z-read)', () => {
     });
 
     it('refuses without an open shift', async () => {
-        await expect(service.closeOwn(ANA, FLOAT_COUNTS)).rejects.toMatchObject(
-            {
-                statusCode: 409,
-                code: ErrorCode.SHIFT_NOT_OPEN,
-            },
-        );
+        await expect(
+            service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL),
+        ).rejects.toMatchObject({
+            statusCode: 409,
+            code: ErrorCode.SHIFT_NOT_OPEN,
+        });
     });
 
     it('refuses while a terminal lease is open, naming the admin force-close and each terminal', async () => {
@@ -590,7 +655,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
                 { terminal: 'BBBB0002', leasedAt: '2026-11-23T02:00:00.000Z' },
             ],
         };
-        const refused = service.closeOwn(ANA, FLOAT_COUNTS);
+        const refused = service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         await expect(refused).rejects.toMatchObject({
             statusCode: 409,
             code: ErrorCode.OFFLINE_PENDING,
@@ -629,7 +694,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
             .mockReturnValue({ sort } as never);
 
         await expect(
-            service.closeOwn(ANA, FLOAT_COUNTS, session),
+            service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL, session),
         ).rejects.toMatchObject({
             code: ErrorCode.OFFLINE_PENDING,
             details: {
@@ -659,7 +724,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         });
 
         await expect(
-            service.closeOwn(ANA, FLOAT_COUNTS),
+            service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL),
         ).resolves.toBeDefined();
         expect(shifts.byId(_id)!.status).toBe(ShiftStatus.CLOSED);
     });
@@ -671,9 +736,9 @@ describe('ShiftService.closeOwn (Z-read)', () => {
             new FakeModel().findOneAndUpdate({}, {}),
         );
 
-        await expect(service.closeOwn(ANA, FLOAT_COUNTS)).rejects.toMatchObject(
-            { code: ErrorCode.SHIFT_NOT_OPEN },
-        );
+        await expect(
+            service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL),
+        ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
         expect(shifts.byId(_id)!.status).toBe(ShiftStatus.OPEN);
     });
 
@@ -681,7 +746,7 @@ describe('ShiftService.closeOwn (Z-read)', () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
         const spy = jest.spyOn(shifts, 'findOneAndUpdate');
 
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         expect(spy.mock.calls[0][0]).toEqual({
             _id: new Types.ObjectId(_id),
@@ -699,11 +764,11 @@ describe('ShiftService.lastClosed', () => {
 
     it('returns the cashier’s most recently closed shift only', async () => {
         await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         const { _id: second } = await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, countsOf(1_000));
+        await service.closeOwn(ANA, countsOf(1_000), TERMINAL);
         await service.open(BEN, FLOAT_COUNTS);
-        await service.closeOwn(BEN, FLOAT_COUNTS);
+        await service.closeOwn(BEN, FLOAT_COUNTS, TERMINAL);
         // Make the order unambiguous.
         shifts.byId(second)!.closedAt = new Date(Date.now() + 60_000);
 
@@ -774,7 +839,7 @@ describe('ShiftService.closeById (admin force-close)', () => {
 
     it('refuses a closed shift with 409 SHIFT_CLOSED', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         await expect(
             service.closeById(BOSS, _id, FLOAT_COUNTS),
@@ -862,7 +927,7 @@ describe('ShiftService.payOutReversal', () => {
 
     it('leaves a closed sale shift alone for a cash-free reversal', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         const before = { ...shifts.byId(_id)! };
 
         await expect(payOut(new Types.ObjectId(_id), 0)).resolves.toBeNull();
@@ -911,7 +976,7 @@ describe('ShiftService.payOutReversal', () => {
                 approvedByName: 'owner',
             }),
         ]);
-        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         expect(report.movements).toEqual([
             expect.objectContaining({
                 byName: 'ana',
@@ -945,7 +1010,7 @@ describe('ShiftService.payOutReversal', () => {
             }),
         ]);
         expect('approvedByName' in payouts(_id)[0]).toBe(false);
-        const report = await service.closeOwn(ANA, FLOAT_COUNTS);
+        const report = await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         expect('approvedByName' in report.movements[0]).toBe(false);
     });
 
@@ -962,7 +1027,7 @@ describe('ShiftService.payOutReversal', () => {
 
     it('asks for a payout shift when the sale’s shift is closed', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         await service.open(BEN, FLOAT_COUNTS);
 
         await expect(
@@ -984,7 +1049,7 @@ describe('ShiftService.payOutReversal', () => {
 
     it('refuses when no shift at all is open', async () => {
         const { _id } = await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
 
         await expect(
             payOut(new Types.ObjectId(_id), 30_000),
@@ -998,7 +1063,11 @@ describe('ShiftService.payOutReversal', () => {
         // Ana rings ₱300 cash and closes; the refund comes during Ben's shift.
         const { _id: anaShift } = await service.open(ANA, FLOAT_COUNTS);
         const sale = await ring(ANA, cashSale(30_000));
-        const anaReport = await service.closeOwn(ANA, countsOf(130_000));
+        const anaReport = await service.closeOwn(
+            ANA,
+            countsOf(130_000),
+            TERMINAL,
+        );
         const { _id: benShift } = await service.open(BEN, FLOAT_COUNTS);
 
         const charged = await payOut(
@@ -1011,7 +1080,11 @@ describe('ShiftService.payOutReversal', () => {
         expect(String(charged)).toBe(benShift);
         expect(payouts(anaShift)).toHaveLength(0);
         // Ben's drawer handed back ₱300: ₱1,000 - ₱300 is expected.
-        const benReport = await service.closeOwn(BEN, countsOf(70_000));
+        const benReport = await service.closeOwn(
+            BEN,
+            countsOf(70_000),
+            TERMINAL,
+        );
         expect(benReport.drawer).toMatchObject({
             reversalPayouts: { count: 1, amount: 30_000 },
             expectedCash: 70_000,
@@ -1034,7 +1107,7 @@ describe('ShiftService.payOutReversal', () => {
 
     it('refuses a chosen shift that is closed', async () => {
         const { _id } = await service.open(BEN, FLOAT_COUNTS);
-        await service.closeOwn(BEN, FLOAT_COUNTS);
+        await service.closeOwn(BEN, FLOAT_COUNTS, TERMINAL);
         await service.open(ANA, FLOAT_COUNTS);
 
         await expect(payOut(null, 5_000, _id)).rejects.toMatchObject({
@@ -1055,7 +1128,7 @@ describe('ShiftService.payOutReversal', () => {
 describe('ShiftService.list and getById', () => {
     it('lists shifts newest first, paginated, open and closed', async () => {
         await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         const { _id: newest } = await service.open(BEN, FLOAT_COUNTS);
         shifts.byId(newest)!.openedAt = new Date(Date.now() + 60_000);
 
@@ -1077,7 +1150,7 @@ describe('ShiftService.list and getById', () => {
 
     it('filters by status', async () => {
         await service.open(ANA, FLOAT_COUNTS);
-        await service.closeOwn(ANA, FLOAT_COUNTS);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
         await service.open(BEN, FLOAT_COUNTS);
 
         const open = await service.list({
@@ -1216,25 +1289,31 @@ describe('drawer retry evidence (#333)', () => {
             amount: 100,
             reason: 'coins',
         } as const;
-        const first = await service.recordDrawer(ANA, request);
-        expect(await service.recordDrawer(ANA, request)).toEqual(first);
+        const first = await service.recordDrawer(ANA, request, TERMINAL);
+        expect(await service.recordDrawer(ANA, request, TERMINAL)).toEqual(
+            first,
+        );
         expect(shifts.byId(shiftId)!.movements).toHaveLength(1);
         expect(JSON.stringify(first)).not.toMatch(/idempotencyKey|requestHash/);
         await expect(
-            service.recordDrawer(ANA, { ...request, amount: 200 }),
+            service.recordDrawer(ANA, { ...request, amount: 200 }, TERMINAL),
         ).rejects.toMatchObject({
             code: ErrorCode.SHIFT_DRAWER_IDEMPOTENCY_MISMATCH,
             statusCode: 409,
         });
-        await service.closeOwn(ANA, FLOAT_COUNTS);
-        const replay = await service.recordDrawer(ANA, request);
+        await service.closeOwn(ANA, FLOAT_COUNTS, TERMINAL);
+        const replay = await service.recordDrawer(ANA, request, TERMINAL);
         expect(replay.status).toBe(ShiftStatus.CLOSED);
         expect(replay.movements).toEqual(first.movements);
         await expect(
-            service.recordDrawer(ANA, {
-                ...request,
-                idempotencyKey: randomUUID(),
-            }),
+            service.recordDrawer(
+                ANA,
+                {
+                    ...request,
+                    idempotencyKey: randomUUID(),
+                },
+                TERMINAL,
+            ),
         ).rejects.toMatchObject({ code: ErrorCode.SHIFT_NOT_OPEN });
     });
 });

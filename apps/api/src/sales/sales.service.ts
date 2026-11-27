@@ -409,6 +409,7 @@ export class SalesService {
         dto: SellDto,
         session?: ClientSession,
         approvalToken?: string,
+        terminalId?: string,
     ): Promise<ReceiptDto> {
         const requestHash = saleRequestHash(user.userId, dto);
 
@@ -427,6 +428,7 @@ export class SalesService {
                 requestHash,
                 session,
                 approvalToken,
+                terminalId,
             );
         } catch (err) {
             // Inside a caller's transaction the committed state cannot be
@@ -550,6 +552,7 @@ export class SalesService {
         requestHash: string,
         session?: ClientSession,
         approvalToken?: string,
+        terminalId?: string,
     ): Promise<ReceiptDto> {
         const { paymentType, referenceNumber, idempotencyKey } = dto;
 
@@ -571,6 +574,7 @@ export class SalesService {
                 // anything else is read or written.
                 const shift = await this.shiftService.chargeSale(
                     user.userId,
+                    terminalId,
                     session,
                 );
 

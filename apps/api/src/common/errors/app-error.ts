@@ -70,6 +70,7 @@ export class AppError extends Error {
             case ErrorCode.DB_DUPLICATE_KEY:
             case ErrorCode.DB_VALIDATION_ERROR:
             case ErrorCode.USER_PASSWORD_UNCHANGED:
+            case ErrorCode.SHIFT_TERMINAL_REQUIRED:
                 return HttpStatus.BAD_REQUEST;
             case ErrorCode.PRODUCT_NOT_FOUND:
             case ErrorCode.NOT_FOUND:
@@ -86,6 +87,7 @@ export class AppError extends Error {
             case ErrorCode.SHIFT_PAYOUT_REQUIRED:
             case ErrorCode.SHIFT_PAYOUT_NO_OPEN_SHIFT:
             case ErrorCode.SHIFT_DRAWER_IDEMPOTENCY_MISMATCH:
+            case ErrorCode.SHIFT_OTHER_TERMINAL:
             case ErrorCode.OFFLINE_INVALID:
             case ErrorCode.OFFLINE_RECONCILIATION_REQUIRED:
             case ErrorCode.OFFLINE_PENDING:
