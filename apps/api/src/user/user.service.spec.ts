@@ -100,12 +100,36 @@ describe('UserService', () => {
             expect(stepUp.assertLive).not.toHaveBeenCalled();
         });
 
-        it('reactivation needs no step-up', async () => {
+        it('a reactivation is refused without a step-up (#521)', async () => {
+            model.byId(cashier._id)!.isActive = false;
+            refuse();
+            const err = await rejection(
+                update(as(admin), [
+                    {
+                        user: manager._id.toString(),
+                        update: { name: 'm2' },
+                    },
+                    {
+                        user: cashier._id.toString(),
+                        update: { isActive: true },
+                    },
+                ]),
+            );
+            expect(err).toEqual({
+                status: 403,
+                code: ErrorCode.USER_REAUTH_REQUIRED,
+            });
+            expect(model.byId(cashier._id)?.isActive).toBe(false);
+            expect(model.byId(manager._id)?.name).toBe('manager');
+        });
+
+        it('a reactivation with a live step-up succeeds (#521)', async () => {
             model.byId(cashier._id)!.isActive = false;
             await update(as(admin), [
                 { user: cashier._id.toString(), update: { isActive: true } },
             ]);
-            expect(stepUp.assertLive).not.toHaveBeenCalled();
+            expect(stepUp.assertLive).toHaveBeenCalledTimes(1);
+            expect(model.byId(cashier._id)?.isActive).toBe(true);
         });
 
         it.each([

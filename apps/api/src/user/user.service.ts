@@ -62,7 +62,10 @@ function makeDummyHash(): Promise<string> {
     return argon.hash(randomBytes(32).toString('base64'));
 }
 
-/** Whether an update entry is a step-up-guarded change (#310). */
+/**
+ * Whether an update entry is a step-up-guarded change (#310): a password,
+ * an actual role change, or an actual deactivation or reactivation (#521).
+ */
 function isGuarded(
     target: PolicyUser,
     update: { password?: string; roles?: Role[]; isActive?: boolean },
@@ -71,7 +74,7 @@ function isGuarded(
         update.password !== undefined ||
         (update.roles !== undefined &&
             !sameRoles(update.roles, target.roles)) ||
-        (update.isActive === false && target.isActive)
+        (update.isActive !== undefined && update.isActive !== target.isActive)
     );
 }
 
@@ -184,7 +187,7 @@ export class UserService implements OnModuleInit {
                 }
 
                 // Step-up (#310): a password reset, an actual role change or
-                // an actual deactivation needs a live re-auth of this session.
+                // an actual deactivation or reactivation (#521) needs a live re-auth of this session.
                 if (
                     planned.some(({ target, update }) =>
                         isGuarded(target, update),

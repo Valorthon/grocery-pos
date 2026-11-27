@@ -1233,6 +1233,47 @@ describe('step-up re-auth (#310)', () => {
         ]);
     });
 
+    it('reactivating a user prompts, then retries the same request (#521)', async () => {
+        api.get.mockResolvedValue({
+            data: {
+                data: [{ ...USERS.data[0], isActive: false }],
+                totalItems: 1,
+            },
+        });
+        api.patch
+            .mockRejectedValueOnce(reauthRequired())
+            .mockResolvedValue({ data: {} });
+        api.post.mockResolvedValue({ data: undefined });
+        await mount();
+        await editAna();
+        const active = [...document.querySelectorAll('label')]
+            .find((l) => l.textContent?.trim() === 'Active')!
+            .querySelector('input')!;
+        expect(active.checked).toBe(false);
+        active.click();
+        await flush();
+        await click('Save');
+
+        expect(reauthOpen()).toBe(true);
+        await confirmPassword();
+
+        const body = {
+            updates: [
+                {
+                    user: 'u1',
+                    update: { isActive: true, roles: [Role.Seller] },
+                },
+            ],
+        };
+        expect(api.patch.mock.calls).toEqual([
+            ['/users', body],
+            ['/users', body],
+        ]);
+        expect(useUIStore().toasts.map((t) => t.lines)).toEqual([
+            ['User updated'],
+        ]);
+    });
+
     it('Cancel saves nothing and keeps the edit dialog with its values', async () => {
         api.get.mockResolvedValue({ data: USERS });
         api.patch.mockRejectedValueOnce(reauthRequired());

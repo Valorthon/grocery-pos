@@ -874,21 +874,66 @@ describe('Users (e2e)', () => {
             expect(res.status).toBe(200);
         });
 
-        it('reactivation needs no step-up', async () => {
-            model.byId(cashier._id)!.isActive = false;
-            const res = await call(
-                admin,
-                'PATCH',
-                '/users',
-                {
+        describe('reactivation (#521)', () => {
+            const reactivate = (session: ReturnType<typeof bare>) =>
+                call(
+                    admin,
+                    'PATCH',
+                    '/users',
+                    {
+                        updates: [
+                            { user: id(manager), update: { name: 'boss' } },
+                            { user: id(cashier), update: { isActive: true } },
+                        ],
+                    },
+                    session,
+                );
+            beforeEach(() => {
+                model.byId(cashier._id)!.isActive = false;
+            });
+
+            it('without a step-up -> 403, nothing changed or audited', async () => {
+                const res = await reactivate(bare(admin));
+                expect(res.status).toBe(403);
+                expect(res.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+                expect(model.byId(cashier._id)?.isActive).toBe(false);
+                expect(model.byId(manager._id)?.name).toBe('manager');
+                expect(audit.record).not.toHaveBeenCalled();
+            });
+
+            it('with a step-up succeeds', async () => {
+                const res = await reactivate(openSession(admin, later()));
+                expect(res.status).toBe(200);
+                expect(model.byId(cashier._id)?.isActive).toBe(true);
+            });
+
+            it('a USER_MANAGER reactivating a managed user needs one too', async () => {
+                const body = {
                     updates: [
                         { user: id(cashier), update: { isActive: true } },
                     ],
-                },
-                bare(admin),
-            );
-            expect(res.status).toBe(200);
-            expect(model.byId(cashier._id)?.isActive).toBe(true);
+                };
+                const refused = await call(
+                    manager,
+                    'PATCH',
+                    '/users',
+                    body,
+                    bare(manager),
+                );
+                expect(refused.status).toBe(403);
+                expect(refused.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+                expect(model.byId(cashier._id)?.isActive).toBe(false);
+
+                const ok = await call(
+                    manager,
+                    'PATCH',
+                    '/users',
+                    body,
+                    openSession(manager, later()),
+                );
+                expect(ok.status).toBe(200);
+                expect(model.byId(cashier._id)?.isActive).toBe(true);
+            });
         });
 
         it('a bulk PATCH with one guarded entry needs one; the rename is rolled back', async () => {

@@ -492,15 +492,15 @@ requestId}`. A 5xx never carries details or internals.
   adjustments and product lookup (#83).
 - Step-up re-auth (#310, owner decision 2026-11-12): creating any user,
   resetting another user's password, an actual role change (compared with
-  the stored roles), an actual deactivation and setting/resetting/removing a
-  manager PIN need the actor's own password re-entered via
+  the stored roles), an actual deactivation or reactivation (#521, owner decision
+  2026-11-27) and setting/resetting/removing a manager PIN need the actor's own password re-entered via
   `POST /auth/reauth` (any signed-in role, the password-change rate
   limits, 204). It records a `StepUp` `{user, sid, expiresAt}` (TTL index)
   valid `STEP_UP_TTL_S` (5 min) from the re-auth, never extended. Guarded
   writes call `StepUpService.assertLive` inside their transaction, which
   also requires the session's refresh-token family to exist; otherwise
-  403 `USER_REAUTH_REQUIRED` (never a 401). Renames, unchanged roles,
-  `isActive: true` and reactivation are unguarded; a bulk PATCH is guarded
+  403 `USER_REAUTH_REQUIRED` (never a 401). Renames, unchanged roles and
+  an unchanged `isActive` are unguarded; a bulk PATCH is guarded
   if any entry is. A token without `sid` can't step up (403 FORBIDDEN, log
   in again). Logout and every `revokeAllForUser(s)` delete the step-ups. A
   wrong password is 403 `USER_WRONG_PASSWORD`. Client: `useReauth()`

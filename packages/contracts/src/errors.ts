@@ -110,8 +110,8 @@ export enum ErrorCode {
     USER_SELF_DEACTIVATE = 'USER_007',
     /**
      * A sensitive account change (creating a user, resetting another
-     * user's password, a role change, a deactivation or a manager PIN
-     * change) needs a recent step-up: `POST /auth/reauth` with the caller's
+     * user's password, a role change, a deactivation or reactivation
+     * (#521) or a manager PIN change) needs a recent step-up: `POST /auth/reauth` with the caller's
      * own password, valid `STEP_UP_TTL_S` for this session (#310). A 403,
      * never a 401, so the client does not refresh and replay.
      */
