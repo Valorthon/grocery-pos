@@ -21,6 +21,7 @@ import {
     ShiftStatus,
 } from '@grocery-pos/contracts';
 import { Role } from '@grocery-pos/contracts';
+import { useOfflineStore } from '@/stores/offline';
 import { useShiftStore } from '@/stores/shift';
 import { useUIStore } from '@/stores/ui';
 import { stubMatchMedia } from '@/testing/match-media';
@@ -119,6 +120,21 @@ describe('SellerLayout (shift from the server, issue #2)', () => {
         expect(api.get).toHaveBeenCalledWith('/shifts/current');
         expect(useShiftStore().activeShift).toEqual(SHIFT);
         expect(router.currentRoute.value.name).toBe('Sell');
+    });
+
+    it('measures the clock again when the window regains focus (#505)', async () => {
+        api.get.mockResolvedValue({ data: { shift: SHIFT } });
+        await mountAt('/seller/register');
+        const prepare = vi
+            .spyOn(useOfflineStore(), 'prepare')
+            .mockResolvedValue(undefined);
+        window.dispatchEvent(new Event('focus'));
+        expect(prepare).toHaveBeenCalledWith(SHIFT);
+        app?.unmount();
+        app = null;
+        prepare.mockClear();
+        window.dispatchEvent(new Event('focus'));
+        expect(prepare).not.toHaveBeenCalled();
     });
 
     it('sends the cashier to open a shift when the server has none', async () => {
