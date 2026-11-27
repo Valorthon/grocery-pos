@@ -187,7 +187,7 @@ export class UserService implements OnModuleInit {
                 }
 
                 // Step-up (#310): a password reset, an actual role change or
-                // an actual deactivation needs a live re-auth of this session.
+                // an actual deactivation or reactivation (#521) needs a live re-auth of this session.
                 if (
                     planned.some(({ target, update }) =>
                         isGuarded(target, update),

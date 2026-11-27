@@ -906,6 +906,34 @@ describe('Users (e2e)', () => {
                 expect(res.status).toBe(200);
                 expect(model.byId(cashier._id)?.isActive).toBe(true);
             });
+
+            it('a USER_MANAGER reactivating a managed user needs one too', async () => {
+                const body = {
+                    updates: [
+                        { user: id(cashier), update: { isActive: true } },
+                    ],
+                };
+                const refused = await call(
+                    manager,
+                    'PATCH',
+                    '/users',
+                    body,
+                    bare(manager),
+                );
+                expect(refused.status).toBe(403);
+                expect(refused.body.error).toBe(ErrorCode.USER_REAUTH_REQUIRED);
+                expect(model.byId(cashier._id)?.isActive).toBe(false);
+
+                const ok = await call(
+                    manager,
+                    'PATCH',
+                    '/users',
+                    body,
+                    openSession(manager, later()),
+                );
+                expect(ok.status).toBe(200);
+                expect(model.byId(cashier._id)?.isActive).toBe(true);
+            });
         });
 
         it('a bulk PATCH with one guarded entry needs one; the rename is rolled back', async () => {
