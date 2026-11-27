@@ -1349,6 +1349,113 @@ describe('Sell stock warning (#422)', () => {
         expect(lineHint()).toBe('Low stock (4 pc left)');
     });
 
+    function shortStockRefusal(available: number, unit?: string) {
+        const config = { headers: new AxiosHeaders() };
+        return new AxiosError('Bad', 'ERR_BAD_REQUEST', config, null, {
+            status: 400,
+            statusText: '',
+            data: {
+                statusCode: 400,
+                error: ErrorCode.VALIDATION_INVALID_INPUT,
+                message: 'Insufficient stock for one or more products',
+                details: [
+                    {
+                        product: PRODUCTS[MILK.EAN]._id,
+                        name: 'milk',
+                        unit,
+                        requested: 2,
+                        available,
+                    },
+                ],
+            },
+            headers: {},
+            config,
+        });
+    }
+    async function chargeCash() {
+        await clickButton(buttonNamed('Tender & Charge'));
+        const amount = document.activeElement as HTMLInputElement;
+        amount.value = '500';
+        amount.dispatchEvent(new Event('input'));
+        amount.form!.dispatchEvent(
+            new Event('submit', { bubbles: true, cancelable: true }),
+        );
+        await settleTransitions();
+    }
+
+    it.each([
+        [0, 'Out of stock'],
+        [1, 'Low stock (1 pc left)'],
+    ])(
+        'updates the line hint after an insufficient-stock refusal (#504, available %i)',
+        async (available, hint) => {
+            serve(
+                () => Promise.resolve([]),
+                () =>
+                    Promise.resolve({
+                        ...PRODUCTS[MILK.EAN],
+                        stock: 2,
+                        reorderLevel: 4,
+                    }),
+            );
+            post.mockRejectedValue(shortStockRefusal(available));
+            mount();
+            await scanMilk();
+            await scanMilk();
+            expect(lineHint()).toBe('Low stock (2 pc left)');
+            await chargeCash();
+            expect(post).toHaveBeenCalled();
+            expect(lineHint()).toBe(hint);
+        },
+    );
+
+    it('warns with the refused available stock after a refusal (#504)', async () => {
+        withStock(5);
+        post.mockRejectedValue(shortStockRefusal(1));
+        mount();
+        await scanMilk();
+        await scanMilk();
+        expect(warning()).toBeUndefined();
+        await chargeCash();
+        expect(warning()).toContain('Only 1 pc of milk in stock');
+    });
+
+    it('hints a measured line in its display unit after a refusal (#504)', async () => {
+        serve(
+            () => Promise.resolve([]),
+            () =>
+                Promise.resolve({
+                    ...PRODUCTS[MILK.EAN],
+                    unit: 'KG',
+                    stock: 5000,
+                    reorderLevel: 1000,
+                }),
+        );
+        post.mockRejectedValue(shortStockRefusal(450, 'KG'));
+        mount();
+        await scanMilk();
+        expect(lineHint()).toBeNull();
+        await chargeCash();
+        expect(lineHint()).toBe('Low stock (0.450 kg left)');
+    });
+
+    it.each([
+        [0, 'Out of stock'],
+        [1, null],
+    ])(
+        'a line restored from storage hints only out of stock after a refusal (#504, available %i)',
+        async (available, hint) => {
+            withMilkOnTicket();
+            serve(() => Promise.resolve([]));
+            post.mockRejectedValue(shortStockRefusal(available));
+            mount();
+            expect(lineHint()).toBeNull();
+            await chargeCash();
+            expect(post).toHaveBeenCalled();
+            expect(lineHint()).toBe(hint);
+        },
+    );
+
     it('shows no line hint offline or without a stock (#482)', async () => {
         serve(() => Promise.resolve([]));
         mount();

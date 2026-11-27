@@ -38,8 +38,17 @@ function isShortLine(value: unknown): value is InsufficientStockLine {
 export function shortStockText(
     body: Partial<AppErrorResponse> | undefined,
 ): string | null {
-    const details: unknown = body?.details;
-    if (!Array.isArray(details)) return null;
-    const lines = details.filter(isShortLine);
+    const lines = shortStockLines(body);
     return lines.length ? insufficientStockText(lines) : null;
+}
+
+/**
+ * The well-formed short lines an insufficient-stock refusal names in its
+ * `details` (#422), or none. The register updates their stock hints (#504).
+ */
+export function shortStockLines(
+    body: Partial<AppErrorResponse> | undefined,
+): InsufficientStockLine[] {
+    const details: unknown = body?.details;
+    return Array.isArray(details) ? details.filter(isShortLine) : [];
 }
