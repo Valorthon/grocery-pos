@@ -123,31 +123,12 @@ describe('SellerLayout (shift from the server, issue #2)', () => {
         expect(router.currentRoute.value.name).toBe('Sell');
     });
 
-    it('measures the clock again when the window regains focus (#505)', async () => {
+    it('does not renew the lease on focus; OfflineStatus re-measures the clock (#533)', async () => {
         api.get.mockResolvedValue({ data: { shift: SHIFT } });
         await mountAt('/seller/register');
         const prepare = vi
             .spyOn(useOfflineStore(), 'prepare')
             .mockResolvedValue(undefined);
-        window.dispatchEvent(new Event('focus'));
-        expect(prepare).toHaveBeenCalledWith(SHIFT);
-        app?.unmount();
-        app = null;
-        prepare.mockClear();
-        window.dispatchEvent(new Event('focus'));
-        expect(prepare).not.toHaveBeenCalled();
-    });
-
-    it.each([
-        ['offline', () => useOfflineStore().setConnection(false)],
-        ['closing the shift', () => (useShiftStore().shiftOutOpen = true)],
-    ])('does not re-prepare on focus while %s (#505)', async (_, arrange) => {
-        api.get.mockResolvedValue({ data: { shift: SHIFT } });
-        await mountAt('/seller/register');
-        const prepare = vi
-            .spyOn(useOfflineStore(), 'prepare')
-            .mockResolvedValue(undefined);
-        arrange();
         window.dispatchEvent(new Event('focus'));
         expect(prepare).not.toHaveBeenCalled();
     });

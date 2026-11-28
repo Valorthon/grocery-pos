@@ -261,7 +261,15 @@ watch(
         else stopTimer();
     },
 );
+// Coming back to the window or tab (e.g. after fixing the clock) measures
+// the offset again, so a fixed clock clears its warning (#505, #533).
+const remeasure = () => {
+    if (document.visibilityState === 'hidden' || !auth.user) return;
+    void status.remeasureClock();
+};
 onMounted(() => {
+    window.addEventListener('focus', remeasure);
+    document.addEventListener('visibilitychange', remeasure);
     window.addEventListener('offline', offline);
     window.addEventListener('online', online);
     // Learn the API's state once now rather than waiting for the timer.
@@ -269,6 +277,8 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
     stopped = true;
+    window.removeEventListener('focus', remeasure);
+    document.removeEventListener('visibilitychange', remeasure);
     window.removeEventListener('offline', offline);
     window.removeEventListener('online', online);
     stopTimer();

@@ -25,6 +25,7 @@ import {
     saveOfflineState,
 } from '@/offline/database';
 import {
+    CLOCK_REMEASURE_MS,
     PROBE_TIMEOUT_MS,
     offlineRefusalBlocks,
     useOfflineStore,
@@ -946,4 +947,51 @@ it('sends the saved terminal label with the lease, never the default (#454)', as
         localStorage.clear();
         refreshSavedTerminalLabel();
     }
+});
+it('clears a fixed clock warning on re-measure without renewing the lease (#533)', async () => {
+    vi.mocked(api.get).mockResolvedValueOnce({
+        data: { products: [], next: null, serverTime: Date.now() + 120_000 },
+    });
+    await store.remeasureClock();
+    expect(store.clockWarning).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+    vi.mocked(api.get).mockClear();
+    // Throttled: a second focus right away sends nothing.
+    await store.remeasureClock();
+    expect(api.get).not.toHaveBeenCalled();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() + CLOCK_REMEASURE_MS);
+    vi.mocked(api.get).mockResolvedValueOnce({
+        data: { products: [], next: null, serverTime: Date.now() },
+    });
+    await store.remeasureClock();
+    vi.useRealTimers();
+    expect(api.get).toHaveBeenCalledWith('/offline/catalog', {
+        params: { lease: LEASE },
+    });
+    expect(store.clockWarning).toBe(false);
+    expect(
+        Math.abs((await readOfflineState(USER))?.clockOffset ?? 1e9),
+    ).toBeLessThan(1000);
+});
+it('skips re-measuring while offline or logged out and drops stale answers (#533)', async () => {
+    store.setConnection(false);
+    await store.remeasureClock();
+    expect(api.get).not.toHaveBeenCalled();
+    store.setConnection(true);
+    let answer!: (value: unknown) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((resolve) => (answer = resolve)) as never,
+    );
+    const late = store.remeasureClock();
+    store.reset();
+    answer({
+        data: { products: [], next: null, serverTime: Date.now() + 120_000 },
+    });
+    await late;
+    expect(store.clockWarning).toBe(false);
+    expect(store.state).toBeNull();
+    vi.mocked(api.get).mockClear();
+    await store.remeasureClock();
+    expect(api.get).not.toHaveBeenCalled();
 });
