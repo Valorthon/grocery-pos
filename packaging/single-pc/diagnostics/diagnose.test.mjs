@@ -1780,6 +1780,47 @@ describe('support export IP redaction (#500)', () => {
         }
     });
 
+    test('scrubIps removes a private IPv4 ending a sentence in any field (#530)', () => {
+        const lan = '192.168.1.8';
+        const report = {
+            checks: [
+                {
+                    id: 'ports',
+                    status: 'ok',
+                    summary: `Listening on loopback, and the LAN terminals' service also on ${lan}.`,
+                    steps: [
+                        `Check ${lan}.`,
+                        `(${lan}), 10.0.0.5; 172.16.4.2: 169.254.9.9!`,
+                    ],
+                    details: {
+                        listeners: [{ address: `${lan}:1443` }],
+                        note: `ip ${lan}. via fe80::1. and fd12::8.`,
+                    },
+                },
+                {
+                    id: 'lanNetwork',
+                    details: { lanIp: lan, nested: [[`at ${lan}.`]] },
+                },
+            ],
+            version: '1.2.3.4.5',
+            kept: 'API on 127.0.0.1.',
+        };
+        const out = JSON.stringify(scrubIps(report));
+        for (const ip of [
+            lan,
+            '10.0.0.5',
+            '172.16.4.2',
+            '169.254.9.9',
+            'fe80::1',
+            'fd12::8',
+        ])
+            assert.ok(!out.includes(ip), ip);
+        assert.ok(!/\b(?:10|172|192|169)\.\d+\.\d+\.\d+/.test(out), out);
+        assert.ok(out.includes('also on [ip].'));
+        assert.ok(out.includes('1.2.3.4.5'));
+        assert.ok(out.includes('API on 127.0.0.1.'));
+    });
+
     test('scrubIps replaces every address but loopback and unspecified', () => {
         const kept = ['127.0.0.1', '127.5.5.5', '::1', '0.0.0.0', '::'];
         const value = {

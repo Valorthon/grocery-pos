@@ -1925,8 +1925,12 @@ function isInside(child, parent) {
 // Every IP address in the report: IPv6 (full or compressed, IPv4-mapped in
 // dotted or hex form, with a zone suffix), then IPv4.
 const IPV6 =
-    /(?<![\w:.%])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?::(?:\d{1,3}\.){3}\d{1,3})?)(?:%[\w.-]+)?(?![\w:.%])/gi;
-const IPV4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g;
+    /(?<![\w:.%])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?::(?:\d{1,3}\.){3}\d{1,3})?)(?:%[\w.-]+)?(?![\w:%]|\.\d)/gi;
+// A trailing sentence period ("… on 192.168.1.8.") still ends the address
+// (#530); only a following digit-dot run or word character continues it.
+// Deliberately left alone: an address joined to a word character or preceded
+// by '.' (part of a longer token such as a version string).
+const IPV4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\d)/g;
 const KEPT_IPV6 = new Set(['::1', '::']);
 
 /**
