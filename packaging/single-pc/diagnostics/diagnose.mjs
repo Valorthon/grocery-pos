@@ -1926,7 +1926,9 @@ function isInside(child, parent) {
 // dotted or hex form, with a zone suffix), then IPv4.
 const IPV6 =
     /(?<![\w:.%])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?::(?:\d{1,3}\.){3}\d{1,3})?)(?:%[\w.-]+)?(?![\w:.%])/gi;
-const IPV4 = /(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])/g;
+// A trailing sentence period ("… on 192.168.1.8.") still ends the address
+// (#530); only a following digit-dot run or word character continues it.
+const IPV4 = /(?<![\w.]|\d\.)(?:\d{1,3}\.){3}\d{1,3}(?!\w|\.\d)/g;
 const KEPT_IPV6 = new Set(['::1', '::']);
 
 /**
