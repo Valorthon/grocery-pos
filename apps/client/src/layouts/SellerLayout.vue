@@ -83,8 +83,6 @@ onBeforeUnmount(() => {
     uiStore.toastPlacement = 'top-right';
 });
 
-// Coming back to the window re-measures the clock in OfflineStatus (#533).
-
 /**
  * The register needs an open shift, and the server is the judge (issue #2):
  * once it has answered and there is none, the cashier is sent to the

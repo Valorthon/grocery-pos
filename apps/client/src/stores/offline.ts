@@ -190,6 +190,8 @@ export const useOfflineStore = defineStore('offline', () => {
     }
     function prepare(shift: CurrentShiftView): Promise<void> {
         if (preparing) return preparing;
+        // A newer prepare measures too: a re-measure in flight writes nothing.
+        measurement++;
         const operation = prepareOnce(shift);
         preparing = operation;
         void operation.finally(() => {
@@ -582,26 +584,32 @@ export const useOfflineStore = defineStore('offline', () => {
      * committed cursor (#533), so a clock fixed while the window was away
      * clears its warning on focus without renewing the lease. Throttled to
      * one per CLOCK_REMEASURE_MS; skipped while offline, logged out,
-     * suspended or without a lease. An answer that outlived a logout, a
-     * lease change or a newer measurement writes nothing.
+     * suspended or without a lease (throttled on the monotonic clock).
+     * It waits for a running prepare first. The answer is one catalogue
+     * page, applied through applyOfflinePage like any page (so it may
+     * advance the cursor by that page; a cursor that moved meanwhile is
+     * refused). An answer that outlived a logout, a lease change, a newer
+     * measurement or a newer prepare writes nothing.
      */
-    function remeasureClock(): Promise<void> {
-        const current = state.value;
-        if (
-            !owner.value ||
-            !connected.value ||
-            !current?.lease ||
-            current.suspended
-        )
-            return Promise.resolve();
-        if (Date.now() - lastRemeasure < CLOCK_REMEASURE_MS)
-            return Promise.resolve();
-        lastRemeasure = Date.now();
-        const id = owner.value;
+    async function remeasureClock(): Promise<void> {
+        const usable = () =>
+            !!owner.value &&
+            connected.value &&
+            !!state.value?.lease &&
+            !state.value.suspended;
+        if (!usable()) return;
+        // Monotonic: a clock set backwards must not stall the throttle.
+        if (performance.now() - lastRemeasure < CLOCK_REMEASURE_MS) return;
+        lastRemeasure = performance.now();
         const gen = generation;
         const seq = ++measurement;
-        const lease = current.lease._id;
-        const cursor = current.cursor;
+        // Measure after a running prepare, never under it (its cursor and
+        // possibly older offset would otherwise race this one).
+        await preparing?.catch(() => undefined);
+        if (gen !== generation || seq !== measurement || !usable()) return;
+        const id = owner.value!;
+        const lease = state.value!.lease!._id;
+        const cursor = state.value!.cursor;
         return timed(() =>
             api.get<OfflineCatalogPage>('/offline/catalog', {
                 params: { lease, ...(cursor ? { after: cursor } : {}) },
