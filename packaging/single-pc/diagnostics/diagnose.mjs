@@ -415,9 +415,14 @@ export async function checkServices(ctx, paths) {
     }
     // #529: with LAN terminals configured the LAN proxy is one of the
     // services; down, it is a warning (selling on this PC still works).
-    const { lanIp } = await lanConfig(ctx, paths);
+    // Unreadable settings (not elevated, #499): the installer registers the
+    // LAN service only with a LAN IP, so an installed one means configured.
+    const { lanIp, denied } = await lanConfig(ctx, paths);
     const lanState = states[LAN_SERVICE];
-    if (lanIp && lanServiceDown(lanState)) {
+    const lanConfigured =
+        Boolean(lanIp) ||
+        (denied && lanState !== undefined && lanState !== 'absent');
+    if (lanConfigured && lanServiceDown(lanState)) {
         const total = Object.values(SERVICES).length + 1;
         const word =
             lanState === 'absent'
@@ -458,12 +463,6 @@ const PORT_NAMES = [
     ['proxy', 'Browser address', PORTS.proxy, [LOOPBACK, '::1']],
 ];
 
-/**
- * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
- * and only if it is a private IPv4 address. Never for the API or MongoDB.
- * #499: also whether the manifest was refused (not elevated), so callers
- * report `unknown` instead of "no LAN terminals".
- */
 /** #529: the LAN service is known to be stopped or missing (not starting). */
 function lanServiceDown(state) {
     return (
@@ -473,6 +472,12 @@ function lanServiceDown(state) {
     );
 }
 
+/**
+ * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
+ * and only if it is a private IPv4 address. Never for the API or MongoDB.
+ * #499: also whether the manifest was refused (not elevated), so callers
+ * report `unknown` instead of "no LAN terminals".
+ */
 async function lanConfig(ctx, paths) {
     if (!paths) return { lanIp: null, denied: false };
     let manifest;
@@ -507,12 +512,12 @@ export async function checkPorts(ctx, paths) {
     const states = configured || denied ? await ctx.serviceStates() : null;
     // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
     // under SCM recovery) may hold the LAN listener.
-    const lanServiceDown =
+    const lanListenerFree =
         states &&
         (states[LAN_SERVICE] === 'STOPPED' ||
             states[LAN_SERVICE] === 'absent' ||
             states[LAN_SERVICE] === undefined);
-    const lanIp = lanServiceDown ? null : configured;
+    const lanIp = lanListenerFree ? null : configured;
     const details = {};
     const closed = [];
     const exposed = [];
@@ -532,7 +537,7 @@ export async function checkPorts(ctx, paths) {
         let foreign = (listening ?? []).filter((a) => !allowed(a));
         // Only while the LAN service may run, and only one address: a
         // single LAN IP can be configured.
-        if (key === 'proxy' && denied && states && !lanServiceDown) {
+        if (key === 'proxy' && denied && states && !lanListenerFree) {
             const maybeLan = foreign.filter((a) =>
                 isPrivateIpv4(a.toLowerCase().replace(/^::ffff:/, '')),
             );
@@ -762,9 +767,11 @@ export async function checkLanNetwork(ctx, paths) {
         flag(
             'warn',
             `the LAN proxy service (${LAN_SERVICE}) is ${lanServiceWord(lanState)}`,
-            lanServiceDown(lanState)
-                ? GUIDANCE.lanServiceStopped
-                : GUIDANCE.lanProxy,
+            lanState === 'absent'
+                ? GUIDANCE.lanProxyMissing
+                : lanServiceDown(lanState)
+                  ? GUIDANCE.lanServiceStopped
+                  : GUIDANCE.lanProxy,
         );
     else if (tls?.error)
         flag(
@@ -1676,8 +1683,9 @@ export function serviceStateFromStatus(text) {
 }
 
 /** Every service whose state is read: the three, plus the LAN proxy (#396),
- *  reported as `absent` without LAN terminals. checkServices reads only
- *  SERVICES; checkPorts and checkLanProxy read LAN_SERVICE. */
+ *  reported as `absent` without LAN terminals. checkServices reads
+ *  SERVICES and, when LAN terminals are configured, LAN_SERVICE (#529);
+ *  checkPorts, checkLanProxy and checkLanNetwork read LAN_SERVICE. */
 export const QUERIED_SERVICES = Object.freeze([
     ...Object.values(SERVICES),
     LAN_SERVICE,

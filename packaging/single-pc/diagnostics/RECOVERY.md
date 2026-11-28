@@ -141,17 +141,22 @@ Signs: Chrome shows "Your connection is not private" on
 ## LAN terminals cannot connect
 
 Signs: the other tills cannot open Grocery POS, while this PC still can;
-the check shows **LAN terminals** WARN.
+the check shows **LAN terminals** WARN (and **Services** WARN, "3 of 4
+services are running", when the LAN service is stopped).
 
 1. Keep selling on this PC: its own register does not depend on the
    network. Terminals with offline cash ready can keep taking cash.
-2. Check the network cable or Wi-Fi of this PC and that the router or
+2. If the check says GroceryPOS-ProxyLan is stopped: open Services
+   (`services.msc`), right-click **GroceryPOS-ProxyLan** and choose
+   **Start**, or restart the PC. If it stays stopped, the vendor runs
+   **repair**.
+3. Otherwise check the network cable or Wi-Fi of this PC and that the router or
    switch is on. This PC must have its fixed LAN address back; the LAN
    service (GroceryPOS-ProxyLan) retries by itself within a minute.
-3. Still down once the network is back: restart the PC. If the check then
+4. Still down once the network is back: restart the PC. If the check then
    shows **LAN terminals** FAIL ("not installed"), the vendor runs
    **repair**.
-4. **LAN network** WARN names the cause: the fixed address is gone (next
+5. **LAN network** WARN names the cause: the fixed address is gone (next
    section), the network is Public (set it to Private in Windows Settings >
    Network & internet), the firewall rule is missing (vendor **repair**), the
    LAN proxy service (GroceryPOS-ProxyLan) is stopped or not answering

@@ -475,6 +475,46 @@ describe('diagnose', () => {
         assert.match(missing.summary, /GroceryPOS-ProxyLan is not installed/);
         assert.deepEqual(missing.steps, GUIDANCE.lanProxyMissing);
 
+        // #529: unreadable LAN settings (not elevated): an installed LAN
+        // service still means LAN terminals are configured.
+        const denied = async (lan) =>
+            byId(
+                await diagnose(
+                    { dataRoot: root },
+                    healthy({
+                        serviceStates: async () => ({
+                            ...states,
+                            [LAN_SERVICE]: lan,
+                        }),
+                        readText: async (path) => {
+                            if (path === paths.runtimeManifest)
+                                throw Object.assign(new Error('EPERM'), {
+                                    code: 'EPERM',
+                                });
+                            return (await import('node:fs/promises')).readFile(
+                                path,
+                                'utf8',
+                            );
+                        },
+                    }),
+                ),
+                'services',
+            );
+        const deniedStopped = await denied('STOPPED');
+        assert.equal(deniedStopped.status, 'warn');
+        assert.match(
+            deniedStopped.summary,
+            new RegExp(`${total - 1} of ${total}`),
+        );
+        assert.equal(
+            (await denied('RUNNING')).summary,
+            `All ${total} services are running.`,
+        );
+        assert.equal(
+            (await denied('absent')).summary,
+            `All ${total - 1} services are running.`,
+        );
+
         const up = byId(await run('RUNNING'), 'services');
         assert.equal(up.status, 'ok');
         assert.equal(up.summary, `All ${total} services are running.`);
@@ -578,9 +618,11 @@ describe('diagnose', () => {
             assert.doesNotMatch(down.summary, /certificate/);
             assert.deepEqual(
                 down.steps,
-                state === 'STOPPED' || state === 'absent'
-                    ? GUIDANCE.lanServiceStopped
-                    : GUIDANCE.lanProxy,
+                state === 'absent'
+                    ? GUIDANCE.lanProxyMissing
+                    : state === 'STOPPED'
+                      ? GUIDANCE.lanServiceStopped
+                      : GUIDANCE.lanProxy,
             );
         }
         // A stopped service with another handshake error is still the service.
