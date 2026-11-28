@@ -1521,10 +1521,11 @@ on upstream fixes).
   "Not set" until saved (no "Lane #1" prefill; other displays keep the
   fallback), its own Save with a success toast and an inline error when
   storage refuses, and a Guest/Incognito warning (best effort: a storage
-  quota under 4 GiB, or under 2x the JS heap limit where Chromium reports
-  it, for older RAM-capped quotas; or quota minus usage in [8, 10) GiB for
-  Chromium's predictable quota, where a normal profile reads exactly
-  usage + 10 GiB (#532); no estimate, no warning). A read-only "Terminals seen" card lists labels from
+  quota under 2x the JS heap limit where Chromium reports it, else under
+  120 MB; no estimate, no warning; Chrome M148+ reports usage + 10 GiB in
+  every profile on purpose, so only older browsers are caught: owner
+  decision 2026-11-28, #532, best effort only; the README/RECOVERY "normal
+  profile, never Guest/Incognito" advice is the real safeguard). A read-only "Terminals seen" card lists labels from
   shifts and offline leases (`GET /shifts/terminals`, ADMIN,
   `TerminalsSeenResponse`, newest first, at most `TERMINALS_SEEN_LIMIT`
   50; counts recounted over both sources for the final labels; the

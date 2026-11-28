@@ -198,7 +198,7 @@ it('reads a cache saved before the expiry window existed as 7 days (#213)', () =
     expect(store.settings.storeName).toBe('Grocery POS');
 });
 
-it('guesses Guest/Incognito from a small storage quota (#502)', async () => {
+it('guesses Guest/Incognito only from a small storage quota (#502)', async () => {
     const quota = (value: number) => ({
         estimate: () => Promise.resolve({ quota: value }),
     });
@@ -215,40 +215,7 @@ it('guesses Guest/Incognito from a small storage quota (#502)', async () => {
     // Heap-relative where Chromium reports the JS heap limit.
     const heap = 4 * 1024 ** 3;
     expect(await looksEphemeralBrowser(quota(6 * 1024 ** 3), heap)).toBe(true);
-    expect(await looksEphemeralBrowser(quota(12 * 1024 ** 3), heap)).toBe(
-        false,
-    );
-    expect(await looksEphemeralBrowser(undefined, heap)).toBe(false);
-});
-
-it('guesses Guest/Incognito under predictable quota reporting (#532)', async () => {
-    const GIB = 1024 ** 3;
-    const est = (quota: number, usage?: number) => ({
-        estimate: () => Promise.resolve({ quota, usage }),
-    });
-    const heap = 4 * GIB;
-    // Old RAM-capped Guest/Incognito quotas (a few hundred MB to ~2 GiB).
-    expect(await looksEphemeralBrowser(est(1.5 * GIB, 0), heap)).toBe(true);
-    expect(await looksEphemeralBrowser(est(300 * 1024 ** 2), undefined)).toBe(
-        true,
-    );
-    // Incognito/Guest under predictable quota: usage + about 9 GiB.
-    expect(await looksEphemeralBrowser(est(9 * GIB + 5e6, 5e6), heap)).toBe(
-        true,
-    );
-    expect(await looksEphemeralBrowser(est(9 * GIB), undefined)).toBe(true);
-    // Normal profile: usage + exactly 10 GiB, or 60% of a large disk.
-    expect(await looksEphemeralBrowser(est(10 * GIB + 7e6, 7e6), heap)).toBe(
-        false,
-    );
-    expect(await looksEphemeralBrowser(est(10 * GIB), undefined)).toBe(false);
-    expect(await looksEphemeralBrowser(est(140 * GIB, 2e8), heap)).toBe(false);
-    // Unknown: no quota.
-    expect(
-        await looksEphemeralBrowser({
-            estimate: () => Promise.resolve({ usage: 1 }),
-        }),
-    ).toBe(false);
+    expect(await looksEphemeralBrowser(quota(9 * 1024 ** 3), heap)).toBe(false);
     expect(await looksEphemeralBrowser(undefined, heap)).toBe(false);
     expect(
         await looksEphemeralBrowser({} as Pick<StorageManager, 'estimate'>),
