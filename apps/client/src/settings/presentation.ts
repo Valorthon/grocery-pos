@@ -38,17 +38,31 @@ const savedTerminal = ref(readSavedTerminal());
 export const terminalLabel = ref(savedTerminal.value || DEFAULT_TERMINAL);
 /** The saved label itself, '' while none is saved ("Not set", #502). */
 export const savedTerminalLabel = readonly(savedTerminal);
+const GIB = 1024 ** 3;
 /**
- * Fallback threshold (#502): below this storage quota the browser is most
- * likely a Guest or Incognito window, whose storage ends when it closes.
- * Used only where the JS heap limit is unknown.
+ * Older Chromium caps a Guest/Incognito (in-memory) profile's quota at a
+ * fraction of RAM, a few hundred MB to about 2 GiB, while a normal profile
+ * gets about 60% of the disk (tens to hundreds of GiB). Below this the
+ * window is most likely Guest/Incognito (#502, #532).
  */
-export const EPHEMERAL_QUOTA_BYTES = 120 * 1024 * 1024;
+export const EPHEMERAL_QUOTA_BYTES = 4 * GIB;
 /**
- * Best-effort guess that this is a Guest/Incognito window (#502). Chromium
- * caps such a profile's quota near its memory budget, so where
- * `performance.memory` exists a quota under twice the JS heap limit counts;
- * elsewhere a quota under `EPHEMERAL_QUOTA_BYTES`. No estimate is false.
+ * Newer Chromium ("predictable reported storage quota", default from about
+ * M147) reports a normal profile's quota as usage + exactly 10 GiB, so the
+ * RAM cap above no longer shows (this is why #502's rule missed a real
+ * Guest window, #532). Reports put Guest/Incognito a little lower, about
+ * usage + 9 GiB, so headroom in [8, 10) GiB counts as ephemeral too.
+ */
+export const PREDICTABLE_HEADROOM_BYTES = 10 * GIB;
+export const EPHEMERAL_HEADROOM_MIN_BYTES = 8 * GIB;
+/**
+ * Best-effort guess that this is a Guest/Incognito window (#502, #532).
+ * True when the reported quota is under `EPHEMERAL_QUOTA_BYTES` or, where
+ * `performance.memory` exists, under twice the JS heap limit (old RAM-based
+ * caps); or when quota - usage is in [8, 10) GiB (new predictable quota).
+ * A normal profile (huge disk quota, or exactly usage + 10 GiB) is false,
+ * and so is no estimate. Chromium may hide the difference entirely in a
+ * future release; the warning then simply doesn't show.
  */
 export async function looksEphemeralBrowser(
     storage: Pick<StorageManager, 'estimate'> | undefined = typeof navigator ===
@@ -63,13 +77,23 @@ export async function looksEphemeralBrowser(
 ): Promise<boolean> {
     if (!storage || typeof storage.estimate !== 'function') return false;
     try {
-        const quota = (await storage.estimate())?.quota;
+        const estimate = await storage.estimate();
+        const quota = estimate?.quota;
         if (typeof quota !== 'number' || quota <= 0) return false;
-        const threshold =
-            typeof heapLimit === 'number' && heapLimit > 0
-                ? 2 * heapLimit
-                : EPHEMERAL_QUOTA_BYTES;
-        return quota < threshold;
+        const usage =
+            typeof estimate.usage === 'number' && estimate.usage > 0
+                ? estimate.usage
+                : 0;
+        const headroom = quota - usage;
+        if (
+            headroom >= EPHEMERAL_HEADROOM_MIN_BYTES &&
+            headroom < PREDICTABLE_HEADROOM_BYTES
+        )
+            return true;
+        if (quota < EPHEMERAL_QUOTA_BYTES) return true;
+        return typeof heapLimit === 'number' && heapLimit > 0
+            ? quota < 2 * heapLimit && headroom < EPHEMERAL_HEADROOM_MIN_BYTES
+            : false;
     } catch {
         return false;
     }
