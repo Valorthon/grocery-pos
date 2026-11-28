@@ -81,19 +81,7 @@ watchEffect(() => {
 });
 onBeforeUnmount(() => {
     uiStore.toastPlacement = 'top-right';
-    window.removeEventListener('focus', remeasureClock);
 });
-
-// Coming back to the window (e.g. after fixing the clock) measures the
-// offset again rather than waiting for a timer (#505).
-// Skipped while offline (OfflineStatus's probe owns reconnecting) and
-// while the shift is being closed.
-function remeasureClock() {
-    const offline = useOfflineStore();
-    if (shiftStore.activeShift && offline.connected && !shiftStore.shiftOutOpen)
-        void offline.prepare(shiftStore.activeShift);
-}
-window.addEventListener('focus', remeasureClock);
 
 /**
  * The register needs an open shift, and the server is the judge (issue #2):

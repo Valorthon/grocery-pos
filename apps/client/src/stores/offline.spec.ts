@@ -25,6 +25,7 @@ import {
     saveOfflineState,
 } from '@/offline/database';
 import {
+    CLOCK_REMEASURE_MS,
     PROBE_TIMEOUT_MS,
     offlineRefusalBlocks,
     useOfflineStore,
@@ -946,4 +947,115 @@ it('sends the saved terminal label with the lease, never the default (#454)', as
         localStorage.clear();
         refreshSavedTerminalLabel();
     }
+});
+it('skips re-measuring while offline or logged out and drops stale answers (#533)', async () => {
+    store.setConnection(false);
+    await store.remeasureClock();
+    expect(api.get).not.toHaveBeenCalled();
+    store.setConnection(true);
+    let answer!: (value: unknown) => void;
+    vi.mocked(api.get).mockReturnValueOnce(
+        new Promise((resolve) => (answer = resolve)) as never,
+    );
+    const late = store.remeasureClock();
+    store.reset();
+    answer({
+        data: { products: [], next: null, serverTime: Date.now() + 120_000 },
+    });
+    await late;
+    expect(store.clockWarning).toBe(false);
+    expect(store.state).toBeNull();
+    vi.mocked(api.get).mockClear();
+    await store.remeasureClock();
+    expect(api.get).not.toHaveBeenCalled();
+});
+const page = (serverTime = Date.now()) => ({
+    data: { products: [], next: null, serverTime },
+});
+function deferred() {
+    let resolve!: (value: unknown) => void;
+    const promise = new Promise((r) => (resolve = r));
+    return { promise, resolve };
+}
+it('clears a fixed clock warning on re-measure, throttled on the monotonic clock (#533)', async () => {
+    let mono = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => mono);
+    // The terminal runs two minutes ahead of the main PC.
+    vi.mocked(api.get).mockResolvedValueOnce(page(Date.now() - 120_000));
+    await store.remeasureClock();
+    expect(store.clockWarning).toBe(true);
+    expect(api.post).not.toHaveBeenCalled();
+    vi.mocked(api.get).mockClear();
+    // Throttled: a second focus right away sends nothing.
+    await store.remeasureClock();
+    expect(api.get).not.toHaveBeenCalled();
+    // The clock is fixed by setting it back two minutes.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.now() - 120_000);
+    mono += CLOCK_REMEASURE_MS;
+    vi.mocked(api.get).mockResolvedValueOnce(page(Date.now()));
+    await store.remeasureClock();
+    vi.useRealTimers();
+    expect(api.get).toHaveBeenCalledWith('/offline/catalog', {
+        params: { lease: LEASE },
+    });
+    expect(store.clockWarning).toBe(false);
+    expect(
+        Math.abs((await readOfflineState(USER))?.clockOffset ?? 1e9),
+    ).toBeLessThan(1000);
+    vi.mocked(performance.now).mockRestore();
+});
+it('drops an older re-measure once a newer one answered (#533)', async () => {
+    let mono = 1000;
+    vi.spyOn(performance, 'now').mockImplementation(() => mono);
+    const first = deferred();
+    vi.mocked(api.get)
+        .mockReturnValueOnce(first.promise as never)
+        .mockResolvedValueOnce(page());
+    const older = store.remeasureClock();
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
+    mono += CLOCK_REMEASURE_MS;
+    await store.remeasureClock();
+    first.resolve(page(Date.now() + 120_000));
+    await older;
+    expect(store.clockWarning).toBe(false);
+    expect(
+        Math.abs((await readOfflineState(USER))?.clockOffset ?? 1e9),
+    ).toBeLessThan(1000);
+    vi.mocked(performance.now).mockRestore();
+});
+it('drops a re-measure whose lease changed meanwhile (#533)', async () => {
+    const answer = deferred();
+    vi.mocked(api.get).mockReturnValueOnce(answer.promise as never);
+    const late = store.remeasureClock();
+    await new Promise((r) => setTimeout(r, 0));
+    const saved = (await readOfflineState(USER))!;
+    await saveOfflineState({
+        ...saved,
+        lease: { ...lease(), _id: '555555555555555555555555' },
+    });
+    answer.resolve(page(Date.now() + 120_000));
+    await late;
+    expect(store.clockWarning).toBe(false);
+    expect((await readOfflineState(USER))?.clockOffset).toBeUndefined();
+});
+it('waits for a running prepare before re-measuring (#533)', async () => {
+    const prepared = deferred();
+    vi.mocked(api.get)
+        .mockReturnValueOnce(prepared.promise as never)
+        .mockResolvedValueOnce(page());
+    const preparing = store.prepare(lease().shift);
+    await vi.waitFor(() => expect(api.get).toHaveBeenCalledTimes(1));
+    const measuring = store.remeasureClock();
+    await new Promise((r) => setTimeout(r, 0));
+    // Nothing is read under the prepare.
+    expect(api.get).toHaveBeenCalledTimes(1);
+    prepared.resolve(page(Date.now() + 120_000));
+    await preparing;
+    await measuring;
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(store.clockWarning).toBe(false);
+    expect(
+        Math.abs((await readOfflineState(USER))?.clockOffset ?? 1e9),
+    ).toBeLessThan(1000);
 });

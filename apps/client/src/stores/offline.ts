@@ -67,6 +67,8 @@ const networkFailure = (error: unknown) =>
     isAxiosError(error) && !error.response;
 /** How long an availability probe may take before the API counts as down. */
 export const PROBE_TIMEOUT_MS = 5000;
+/** At most one focus-triggered clock measurement per this many ms (#533). */
+export const CLOCK_REMEASURE_MS = 5000;
 
 /**
  * Whether a refused upload needs admin review (it stays stored, marked
@@ -103,6 +105,9 @@ export const useOfflineStore = defineStore('offline', () => {
     let probing: Promise<boolean> | undefined;
     // Bumped by every connection verdict, so an older probe can't undo it.
     let verdict = 0;
+    // Clock re-measurement on focus (#533): its throttle and newest request.
+    let lastRemeasure = -Infinity;
+    let measurement = 0;
     const offline = computed(() => !connected.value);
     /** Server minus terminal clock (ms); 0 until a lease answer was seen. */
     const clockOffset = computed(() => state.value?.clockOffset ?? 0);
@@ -145,6 +150,8 @@ export const useOfflineStore = defineStore('offline', () => {
         admin.value = roles.includes(Role.Admin);
         state.value = null;
         clockMeasured.value = false;
+        lastRemeasure = -Infinity;
+        measurement++;
         pending.value = [];
         error.value = '';
         try {
@@ -166,6 +173,8 @@ export const useOfflineStore = defineStore('offline', () => {
         owner.value = null;
         state.value = null;
         clockMeasured.value = false;
+        lastRemeasure = -Infinity;
+        measurement++;
         pending.value = [];
         admin.value = false;
         pendingOpen.value = false;
@@ -181,6 +190,8 @@ export const useOfflineStore = defineStore('offline', () => {
     }
     function prepare(shift: CurrentShiftView): Promise<void> {
         if (preparing) return preparing;
+        // A newer prepare measures too: a re-measure in flight writes nothing.
+        measurement++;
         const operation = prepareOnce(shift);
         preparing = operation;
         void operation.finally(() => {
@@ -568,6 +579,55 @@ export const useOfflineStore = defineStore('offline', () => {
         probing = operation;
         return operation;
     }
+    /**
+     * Measures the clock offset again with one catalogue read from the
+     * committed cursor (#533), so a clock fixed while the window was away
+     * clears its warning on focus without renewing the lease. Throttled to
+     * one per CLOCK_REMEASURE_MS; skipped while offline, logged out,
+     * suspended or without a lease (throttled on the monotonic clock).
+     * It waits for a running prepare first. The answer is one catalogue
+     * page, applied through applyOfflinePage like any page (so it may
+     * advance the cursor by that page; a cursor that moved meanwhile is
+     * refused). An answer that outlived a logout, a lease change, a newer
+     * measurement or a newer prepare writes nothing.
+     */
+    async function remeasureClock(): Promise<void> {
+        const usable = () =>
+            !!owner.value &&
+            connected.value &&
+            !!state.value?.lease &&
+            !state.value.suspended;
+        if (!usable()) return;
+        // Monotonic: a clock set backwards must not stall the throttle.
+        if (performance.now() - lastRemeasure < CLOCK_REMEASURE_MS) return;
+        lastRemeasure = performance.now();
+        const gen = generation;
+        const seq = ++measurement;
+        // Measure after a running prepare, never under it (its cursor and
+        // possibly older offset would otherwise race this one).
+        await preparing?.catch(() => undefined);
+        if (gen !== generation || seq !== measurement || !usable()) return;
+        const id = owner.value!;
+        const lease = state.value!.lease!._id;
+        const cursor = state.value!.cursor;
+        return timed(() =>
+            api.get<OfflineCatalogPage>('/offline/catalog', {
+                params: { lease, ...(cursor ? { after: cursor } : {}) },
+            }),
+        )
+            .then(async ({ data: page, offset }) => {
+                if (offset === undefined) return;
+                if (gen !== generation || seq !== measurement) return;
+                if (!(await applyOfflinePage(id, lease, cursor, page, offset)))
+                    return;
+                const saved = await readOfflineState(id);
+                if (gen !== generation || seq !== measurement) return;
+                if (!saved || saved.lease?._id !== lease) return;
+                state.value = saved;
+                clockMeasured.value = true;
+            })
+            .catch(() => undefined);
+    }
     function setConnection(value: boolean) {
         verdict++;
         connected.value = value;
@@ -598,6 +658,7 @@ export const useOfflineStore = defineStore('offline', () => {
         reconcileEntry,
         beforeClose,
         probe,
+        remeasureClock,
         setConnection,
     };
 });

@@ -40,6 +40,7 @@ function fixture() {
         sync: vi.fn().mockResolvedValue(undefined),
         refreshPending: vi.fn().mockResolvedValue(undefined),
         reconcileEntry: vi.fn().mockResolvedValue(undefined),
+        remeasureClock: vi.fn().mockResolvedValue(undefined),
     });
 }
 let status: ReturnType<typeof fixture>;
@@ -365,4 +366,28 @@ it('shows the id while a lease exists before the catalogue is ready (#454)', () 
     expect(
         root.querySelector('[data-testid="offline-terminal-id"]')?.textContent,
     ).toBe('Your terminal id 12CD34EF');
+});
+
+it('measures the clock again on focus and when the tab becomes visible (#533)', () => {
+    mount();
+    window.dispatchEvent(new Event('focus'));
+    expect(status.remeasureClock).toHaveBeenCalledTimes(1);
+    const visibility = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(status.remeasureClock).toHaveBeenCalledTimes(1);
+    visibility.mockReturnValue('visible');
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(status.remeasureClock).toHaveBeenCalledTimes(2);
+    mock.auth.user = null as never;
+    window.dispatchEvent(new Event('focus'));
+    expect(status.remeasureClock).toHaveBeenCalledTimes(2);
+    visibility.mockRestore();
+});
+it('stops measuring on focus after unmount (#533)', () => {
+    mount();
+    app.unmount();
+    window.dispatchEvent(new Event('focus'));
+    expect(status.remeasureClock).not.toHaveBeenCalled();
 });
