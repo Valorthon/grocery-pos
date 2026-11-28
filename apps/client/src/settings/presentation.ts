@@ -49,6 +49,13 @@ export const EPHEMERAL_QUOTA_BYTES = 120 * 1024 * 1024;
  * caps such a profile's quota near its memory budget, so where
  * `performance.memory` exists a quota under twice the JS heap limit counts;
  * elsewhere a quota under `EPHEMERAL_QUOTA_BYTES`. No estimate is false.
+ *
+ * Only older browsers can be caught (#532, owner decision 2026-11-28: best
+ * effort only). Chrome M148+ reports `quota` as usage + 10 GiB in Incognito,
+ * Guest and normal profiles alike, on purpose, so such windows can't be
+ * detected (blink-dev PSA "Predictable reported storage quota",
+ * chromestatus.com/feature/4977371751645184). The real safeguard is the
+ * README/RECOVERY advice: a normal profile, never Guest/Incognito.
  */
 export async function looksEphemeralBrowser(
     storage: Pick<StorageManager, 'estimate'> | undefined = typeof navigator ===
