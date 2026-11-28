@@ -60,7 +60,7 @@ const routes: RouteRecordRaw[] = [
                 meta: {
                     title: 'Sales history',
                     description:
-                        "Your shift's sales; find any sale from the last 30 days by its number. Voids and refunds need a manager.",
+                        'With a shift open: its sales, or any sale of the last 30 days by number. Voids and refunds need a manager.',
                 },
             },
         ],

@@ -108,6 +108,14 @@
                     >
                 </p>
                 <p
+                    v-if="needsOpenShift"
+                    role="status"
+                    data-testid="sales-no-shift-notice"
+                    class="px-5 py-3 text-sm text-muted"
+                >
+                    {{ NO_SHIFT_NOTICE }}
+                </p>
+                <p
                     v-if="linkNotice"
                     role="status"
                     data-testid="sale-link-notice"
@@ -129,7 +137,9 @@
                     :items="serverItems"
                     :loading="loading"
                     :error="loadError"
-                    empty-text="No orders found"
+                    :empty-text="
+                        needsOpenShift ? 'No open shift' : 'No orders found'
+                    "
                     :items-length="totalItems"
                     row-click
                     row-hint="Press Enter to open the sale details"
@@ -812,6 +822,16 @@ const {
 
 const uiStore = useUIStore();
 const shiftStore = useShiftStore();
+
+/**
+ * A non-admin without an open shift reads no sales, not even by number
+ * (#526): say why the list is empty instead of "No orders found" (#531).
+ */
+const NO_SHIFT_NOTICE =
+    'Open a shift to see your sales or find a sale by its number.';
+const needsOpenShift = computed(
+    () => !authStore.isAdmin && shiftStore.loaded && !shiftStore.activeShift,
+);
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
