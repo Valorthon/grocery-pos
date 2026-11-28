@@ -196,6 +196,12 @@ export const GUIDANCE = Object.freeze({
         'Check the network cable or Wi-Fi and that the router is on: this PC must have its fixed LAN address back. The LAN service retries by itself.',
         'Still down after the network is back: restart the PC. See RECOVERY.md "LAN terminals cannot connect".',
     ],
+    // #529: the LAN service itself is stopped (the network may be fine).
+    lanServiceStopped: [
+        'LAN terminals cannot connect; this PC keeps working at https://localhost:1443.',
+        'Start the LAN service: open Services (services.msc), right-click GroceryPOS-ProxyLan and choose Start, or restart the PC.',
+        'If it stays stopped or is not installed, ask your vendor to run the installer in repair mode. See RECOVERY.md "LAN terminals cannot connect".',
+    ],
     lanAddressGone: [
         "This PC no longer has its fixed LAN address, so terminals cannot reach it. Check the cable or Wi-Fi, then check the router's address reservation (or the PC's static IP) still gives this PC the same address.",
         'If the address had to change, every terminal must be joined again. See RECOVERY.md "LAN address changed".',
@@ -373,7 +379,7 @@ export async function checkVersions(ctx, paths, release) {
     );
 }
 
-export async function checkServices(ctx) {
+export async function checkServices(ctx, paths) {
     const states = await ctx.serviceStates();
     if (!states) {
         return result(
@@ -407,6 +413,30 @@ export async function checkServices(ctx) {
             { details: states, steps: GUIDANCE.serviceStopped },
         );
     }
+    // #529: with LAN terminals configured the LAN proxy is one of the
+    // services; down, it is a warning (selling on this PC still works).
+    const { lanIp } = await lanConfig(ctx, paths);
+    const lanState = states[LAN_SERVICE];
+    if (lanIp && lanServiceDown(lanState)) {
+        const total = Object.values(SERVICES).length + 1;
+        const word =
+            lanState === 'absent'
+                ? 'not installed'
+                : `not running (${lanState})`;
+        return result(
+            'services',
+            'Services',
+            'warn',
+            `${total - 1} of ${total} services are running: ${LAN_SERVICE} is ${word}, so LAN terminals cannot connect; selling on this PC still works.`,
+            {
+                details: states,
+                steps:
+                    word === 'not installed'
+                        ? GUIDANCE.lanProxyMissing
+                        : GUIDANCE.lanServiceStopped,
+            },
+        );
+    }
     // #508: counted, so a running LAN proxy (#396) is included.
     const running =
         Object.values(SERVICES).length +
@@ -434,6 +464,15 @@ const PORT_NAMES = [
  * #499: also whether the manifest was refused (not elevated), so callers
  * report `unknown` instead of "no LAN terminals".
  */
+/** #529: the LAN service is known to be stopped or missing (not starting). */
+function lanServiceDown(state) {
+    return (
+        state !== undefined &&
+        state !== null &&
+        !['RUNNING', 'START_PENDING', 'UNKNOWN'].includes(state)
+    );
+}
+
 async function lanConfig(ctx, paths) {
     if (!paths) return { lanIp: null, denied: false };
     let manifest;
@@ -588,7 +627,9 @@ export async function checkLanProxy(ctx, paths) {
             `LAN terminals cannot connect to ${lanIp}; this PC still works.`,
             {
                 details: { ...details, listening: answering },
-                steps: GUIDANCE.lanProxy,
+                steps: lanServiceDown(state)
+                    ? GUIDANCE.lanServiceStopped
+                    : GUIDANCE.lanProxy,
             },
         );
     return result(
@@ -721,7 +762,9 @@ export async function checkLanNetwork(ctx, paths) {
         flag(
             'warn',
             `the LAN proxy service (${LAN_SERVICE}) is ${lanServiceWord(lanState)}`,
-            GUIDANCE.lanProxy,
+            lanServiceDown(lanState)
+                ? GUIDANCE.lanServiceStopped
+                : GUIDANCE.lanProxy,
         );
     else if (tls?.error)
         flag(
@@ -1304,7 +1347,7 @@ export async function diagnose(options, ctx = realContext()) {
     const programDir = release ? dirname(dirname(release)) : undefined;
     const checks = [
         await checkVersions(ctx, paths, options.release),
-        await checkServices(ctx),
+        await checkServices(ctx, paths),
         await checkPorts(ctx, paths),
         await checkDatabase(ctx, apiDir),
         await checkApi(ctx),

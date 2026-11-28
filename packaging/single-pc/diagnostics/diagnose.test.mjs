@@ -423,6 +423,63 @@ describe('diagnose', () => {
             );
     });
 
+    test('services: a configured LAN proxy that is down is counted and warned (#529)', async () => {
+        const paths = layout(root);
+        const states = Object.fromEntries(
+            Object.values(SERVICES).map((n) => [n, 'RUNNING']),
+        );
+        const run = async (lan) =>
+            diagnose(
+                { dataRoot: root },
+                healthy({
+                    readText: async (path) =>
+                        path === paths.runtimeManifest
+                            ? JSON.stringify({ lanIp: '192.168.1.10' })
+                            : (await import('node:fs/promises')).readFile(
+                                  path,
+                                  'utf8',
+                              ),
+                    serviceStates: async () => ({
+                        ...states,
+                        [LAN_SERVICE]: lan,
+                    }),
+                    listeners: async (p) =>
+                        p === 1443 && lan === 'RUNNING'
+                            ? ['127.0.0.1', '::1', '192.168.1.10']
+                            : ['127.0.0.1', '::1'],
+                }),
+            );
+        const total = Object.values(SERVICES).length + 1;
+        const stopped = await run('STOPPED');
+        const svc = byId(stopped, 'services');
+        assert.equal(svc.status, 'warn');
+        assert.equal(
+            svc.summary,
+            `${total - 1} of ${total} services are running: GroceryPOS-ProxyLan is not running (STOPPED), so LAN terminals cannot connect; selling on this PC still works.`,
+        );
+        assert.deepEqual(svc.steps, GUIDANCE.lanServiceStopped);
+        assert.match(svc.steps.join(' '), /choose Start, or restart the PC/);
+        assert.match(svc.steps.join(' '), /repair mode/);
+        assert.deepEqual(
+            byId(stopped, 'lanProxy').steps,
+            GUIDANCE.lanServiceStopped,
+        );
+        assert.doesNotMatch(
+            byId(stopped, 'lanProxy').steps.join(' '),
+            /network cable/,
+        );
+        assert.notEqual(stopped.overall, 'fail');
+
+        const missing = byId(await run('absent'), 'services');
+        assert.equal(missing.status, 'warn');
+        assert.match(missing.summary, /GroceryPOS-ProxyLan is not installed/);
+        assert.deepEqual(missing.steps, GUIDANCE.lanProxyMissing);
+
+        const up = byId(await run('RUNNING'), 'services');
+        assert.equal(up.status, 'ok');
+        assert.equal(up.summary, `All ${total} services are running.`);
+    });
+
     test('LAN network: address, profile, firewall rule and certificate (#399)', async () => {
         const paths = layout(root);
         const rootPem =
@@ -519,7 +576,12 @@ describe('diagnose', () => {
             assert.equal(down.status, 'warn', String(state));
             assert.match(down.summary, word);
             assert.doesNotMatch(down.summary, /certificate/);
-            assert.deepEqual(down.steps, GUIDANCE.lanProxy);
+            assert.deepEqual(
+                down.steps,
+                state === 'STOPPED' || state === 'absent'
+                    ? GUIDANCE.lanServiceStopped
+                    : GUIDANCE.lanProxy,
+            );
         }
         // A stopped service with another handshake error is still the service.
         const stoppedTimeout = await run(
@@ -743,9 +805,14 @@ describe('diagnose', () => {
             ),
         );
         assert.equal(byId(down, 'lanProxy').status, 'warn');
-        assert.deepEqual(byId(down, 'lanProxy').steps, GUIDANCE.lanProxy);
-        for (const id of ['services', 'ports', 'api'])
+        assert.deepEqual(
+            byId(down, 'lanProxy').steps,
+            GUIDANCE.lanServiceStopped,
+        );
+        for (const id of ['ports', 'api'])
             assert.equal(byId(down, id).status, 'ok', id);
+        // #529: Services counts the configured LAN proxy, as a warning.
+        assert.equal(byId(down, 'services').status, 'warn');
         // Running but not listening on the IP is the same warning.
         const deaf = await diagnose(
             { dataRoot: root },
