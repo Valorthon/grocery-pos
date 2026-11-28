@@ -1517,3 +1517,59 @@ describe('sale details receipt (#218)', () => {
         ).not.toBeNull();
     });
 });
+
+describe('a cashier without an open shift (#531)', () => {
+    const NOTICE =
+        'Open a shift to see your sales or find a sale by its number.';
+    async function mountPage(shift: object | null, roles: Role[]) {
+        useAuthStore().user = { username: 'ana', roles };
+        const store = useShiftStore();
+        store.activeShift = shift as never;
+        store.loaded = true;
+        api.get.mockImplementation(() =>
+            Promise.resolve({ data: { data: [], totalItems: 0 } }),
+        );
+        const host = document.createElement('div');
+        document.body.appendChild(host);
+        app = createApp(Index);
+        app.use(pinia);
+        app.mount(host);
+        await flush();
+        return host;
+    }
+    const notice = (host: Element) =>
+        host.querySelector('[data-testid="sales-no-shift-notice"]');
+
+    it('says a shift is needed instead of only "No orders found"', async () => {
+        const host = await mountPage(null, [Role.Seller]);
+        expect(notice(host)?.textContent?.trim()).toBe(NOTICE);
+        expect(host.textContent).toContain('No open shift');
+        expect(host.textContent).not.toContain('No orders found');
+    });
+
+    it('shows no notice with an open shift', async () => {
+        const host = await mountPage(
+            {
+                _id: OWN_SHIFT,
+                status: ShiftStatus.OPEN,
+                cashierName: 'ana',
+                terminal: 'Lane 1',
+                openedAt: '2026-09-25T00:00:00.000Z',
+                openingFloat: 100_000,
+                movements: [],
+                onThisTerminal: true,
+            },
+            [Role.Seller],
+        );
+        expect(notice(host)).toBeNull();
+        expect(host.textContent).not.toContain('No open shift');
+        expect(host.textContent).toContain('No orders found');
+    });
+
+    it('never shows it to an admin, who reads every sale', async () => {
+        const host = await mountPage(null, [Role.Admin]);
+        expect(notice(host)).toBeNull();
+        expect(host.textContent).not.toContain('No open shift');
+        expect(api.get).not.toHaveBeenCalledWith('/shifts/current');
+    });
+});

@@ -832,10 +832,6 @@ const NO_SHIFT_NOTICE =
 const needsOpenShift = computed(
     () => !authStore.isAdmin && shiftStore.loaded && !shiftStore.activeShift,
 );
-if (!authStore.isAdmin && !shiftStore.loaded) {
-    // Only for the notice; a failed read just shows none.
-    shiftStore.fetchCurrent().catch(() => undefined);
-}
 const canSell = computed(() => authStore.hasRole(Role.Seller));
 
 const router = useRouter();
