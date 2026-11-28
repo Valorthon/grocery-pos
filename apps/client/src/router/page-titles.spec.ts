@@ -91,7 +91,7 @@ describe('route summaries (#262)', () => {
         const seller = routeDescription(router.resolve('/seller/orders'));
         expect(admin).toMatch(/void or refund/);
         expect(seller).toMatch(
-            /^Your shift's sales; find any sale from the last 30 days/,
+            /^With a shift open: its sales, or any sale of the last 30 days/,
         );
     });
 
