@@ -196,6 +196,12 @@ export const GUIDANCE = Object.freeze({
         'Check the network cable or Wi-Fi and that the router is on: this PC must have its fixed LAN address back. The LAN service retries by itself.',
         'Still down after the network is back: restart the PC. See RECOVERY.md "LAN terminals cannot connect".',
     ],
+    // #529: the LAN service itself is stopped (the network may be fine).
+    lanServiceStopped: [
+        'LAN terminals cannot connect; this PC keeps working at https://localhost:1443.',
+        'Start the LAN service: open Services (services.msc), right-click GroceryPOS-ProxyLan and choose Start, or restart the PC.',
+        'If it stays stopped or is not installed, ask your vendor to run the installer in repair mode. See RECOVERY.md "LAN terminals cannot connect".',
+    ],
     lanAddressGone: [
         "This PC no longer has its fixed LAN address, so terminals cannot reach it. Check the cable or Wi-Fi, then check the router's address reservation (or the PC's static IP) still gives this PC the same address.",
         'If the address had to change, every terminal must be joined again. See RECOVERY.md "LAN address changed".',
@@ -373,7 +379,7 @@ export async function checkVersions(ctx, paths, release) {
     );
 }
 
-export async function checkServices(ctx) {
+export async function checkServices(ctx, paths) {
     const states = await ctx.serviceStates();
     if (!states) {
         return result(
@@ -407,6 +413,35 @@ export async function checkServices(ctx) {
             { details: states, steps: GUIDANCE.serviceStopped },
         );
     }
+    // #529: with LAN terminals configured the LAN proxy is one of the
+    // services; down, it is a warning (selling on this PC still works).
+    // Unreadable settings (not elevated, #499): the installer registers the
+    // LAN service only with a LAN IP, so an installed one means configured.
+    const { lanIp, denied } = await lanConfig(ctx, paths);
+    const lanState = states[LAN_SERVICE];
+    const lanConfigured =
+        Boolean(lanIp) ||
+        (denied && lanState !== undefined && lanState !== 'absent');
+    if (lanConfigured && lanServiceDown(lanState)) {
+        const total = Object.values(SERVICES).length + 1;
+        const word =
+            lanState === 'absent'
+                ? 'not installed'
+                : `not running (${lanState})`;
+        return result(
+            'services',
+            'Services',
+            'warn',
+            `${total - 1} of ${total} services are running: ${LAN_SERVICE} is ${word}, so LAN terminals cannot connect; selling on this PC still works.`,
+            {
+                details: states,
+                steps:
+                    word === 'not installed'
+                        ? GUIDANCE.lanProxyMissing
+                        : GUIDANCE.lanServiceStopped,
+            },
+        );
+    }
     // #508: counted, so a running LAN proxy (#396) is included.
     const running =
         Object.values(SERVICES).length +
@@ -427,6 +462,15 @@ const PORT_NAMES = [
     ['api', 'Application', PORTS.api, [LOOPBACK]],
     ['proxy', 'Browser address', PORTS.proxy, [LOOPBACK, '::1']],
 ];
+
+/** #529: the LAN service is known to be stopped or missing (not starting). */
+function lanServiceDown(state) {
+    return (
+        state !== undefined &&
+        state !== null &&
+        !['RUNNING', 'START_PENDING', 'UNKNOWN'].includes(state)
+    );
+}
 
 /**
  * The LAN IP the proxy may also listen on (#396): the runtime manifest's,
@@ -468,12 +512,12 @@ export async function checkPorts(ctx, paths) {
     const states = configured || denied ? await ctx.serviceStates() : null;
     // Any state but STOPPED/absent (e.g. START_PENDING, or a restart
     // under SCM recovery) may hold the LAN listener.
-    const lanServiceDown =
+    const lanListenerFree =
         states &&
         (states[LAN_SERVICE] === 'STOPPED' ||
             states[LAN_SERVICE] === 'absent' ||
             states[LAN_SERVICE] === undefined);
-    const lanIp = lanServiceDown ? null : configured;
+    const lanIp = lanListenerFree ? null : configured;
     const details = {};
     const closed = [];
     const exposed = [];
@@ -493,7 +537,7 @@ export async function checkPorts(ctx, paths) {
         let foreign = (listening ?? []).filter((a) => !allowed(a));
         // Only while the LAN service may run, and only one address: a
         // single LAN IP can be configured.
-        if (key === 'proxy' && denied && states && !lanServiceDown) {
+        if (key === 'proxy' && denied && states && !lanListenerFree) {
             const maybeLan = foreign.filter((a) =>
                 isPrivateIpv4(a.toLowerCase().replace(/^::ffff:/, '')),
             );
@@ -588,7 +632,9 @@ export async function checkLanProxy(ctx, paths) {
             `LAN terminals cannot connect to ${lanIp}; this PC still works.`,
             {
                 details: { ...details, listening: answering },
-                steps: GUIDANCE.lanProxy,
+                steps: lanServiceDown(state)
+                    ? GUIDANCE.lanServiceStopped
+                    : GUIDANCE.lanProxy,
             },
         );
     return result(
@@ -721,7 +767,11 @@ export async function checkLanNetwork(ctx, paths) {
         flag(
             'warn',
             `the LAN proxy service (${LAN_SERVICE}) is ${lanServiceWord(lanState)}`,
-            GUIDANCE.lanProxy,
+            lanState === 'absent'
+                ? GUIDANCE.lanProxyMissing
+                : lanServiceDown(lanState)
+                  ? GUIDANCE.lanServiceStopped
+                  : GUIDANCE.lanProxy,
         );
     else if (tls?.error)
         flag(
@@ -1304,7 +1354,7 @@ export async function diagnose(options, ctx = realContext()) {
     const programDir = release ? dirname(dirname(release)) : undefined;
     const checks = [
         await checkVersions(ctx, paths, options.release),
-        await checkServices(ctx),
+        await checkServices(ctx, paths),
         await checkPorts(ctx, paths),
         await checkDatabase(ctx, apiDir),
         await checkApi(ctx),
@@ -1633,8 +1683,9 @@ export function serviceStateFromStatus(text) {
 }
 
 /** Every service whose state is read: the three, plus the LAN proxy (#396),
- *  reported as `absent` without LAN terminals. checkServices reads only
- *  SERVICES; checkPorts and checkLanProxy read LAN_SERVICE. */
+ *  reported as `absent` without LAN terminals. checkServices reads
+ *  SERVICES and, when LAN terminals are configured, LAN_SERVICE (#529);
+ *  checkPorts, checkLanProxy and checkLanNetwork read LAN_SERVICE. */
 export const QUERIED_SERVICES = Object.freeze([
     ...Object.values(SERVICES),
     LAN_SERVICE,

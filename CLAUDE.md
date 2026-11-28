@@ -1455,7 +1455,9 @@ on upstream fixes).
   `timeServer` (LAN only) is unchanged.
 - #508: `lanNetwork` names a stopped, missing or refusing
   `GroceryPOS-ProxyLan` instead of the certificate; `services` counts the
-  running ones (LAN proxy included); `diagnose` reads service states once
+  running ones (LAN proxy included; #529: a configured LAN proxy that is
+  stopped or missing is counted, "3 of 4", and is a WARN naming it, also
+  when unelevated, with start-it/Repair steps); `diagnose` reads service states once
   per run; `app.caddy` sets `servers { protocols h1 h2 }` for both sites
   (no HTTP/3 on UDP 1443; the firewall rule is TCP only).
 
