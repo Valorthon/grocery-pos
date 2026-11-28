@@ -1794,7 +1794,7 @@ describe('support export IP redaction (#500)', () => {
                     ],
                     details: {
                         listeners: [{ address: `${lan}:1443` }],
-                        note: `ip ${lan}.`,
+                        note: `ip ${lan}. via fe80::1. and fd12::8.`,
                     },
                 },
                 {
@@ -1806,7 +1806,14 @@ describe('support export IP redaction (#500)', () => {
             kept: 'API on 127.0.0.1.',
         };
         const out = JSON.stringify(scrubIps(report));
-        for (const ip of [lan, '10.0.0.5', '172.16.4.2', '169.254.9.9'])
+        for (const ip of [
+            lan,
+            '10.0.0.5',
+            '172.16.4.2',
+            '169.254.9.9',
+            'fe80::1',
+            'fd12::8',
+        ])
             assert.ok(!out.includes(ip), ip);
         assert.ok(!/\b(?:10|172|192|169)\.\d+\.\d+\.\d+/.test(out), out);
         assert.ok(out.includes('also on [ip].'));
