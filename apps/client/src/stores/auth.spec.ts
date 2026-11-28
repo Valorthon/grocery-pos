@@ -518,6 +518,59 @@ describe('auth store', () => {
             ).toBeNull();
         });
 
+        it.each(['forced', 'requested'] as const)(
+            'keeps a parked ticket for the same cashier across a %s logout and login, never for another (#540)',
+            async (kind) => {
+                localStorage.setItem('user', JSON.stringify(ANA));
+                setDummyCookie(true);
+                const api = (await import('@/axios')).default;
+                // The server ends the session cookie on logout.
+                vi.mocked(api.post).mockImplementation((url: string) => {
+                    if (url === '/auth/logout') setDummyCookie(false);
+                    return Promise.resolve({ data: {} });
+                });
+                vi.mocked(api.get).mockResolvedValue({ data: ANA });
+                const store = await loadStore();
+                const { useCartStore } = await import('./cart');
+                const cart = useCartStore();
+                cart.add({
+                    product: 'p1',
+                    EAN: '2000000000015',
+                    name: 'milk',
+                    unitPrice: 9500,
+                });
+                cart.park('Customer A', 's1');
+                expect(cart.parked).toHaveLength(1);
+
+                if (kind === 'forced') await store.logout();
+                else expect(await store.requestLogout()).toBe(true);
+                expect(cart.owner).toBeNull();
+                expect(cart.parked).toEqual([]);
+                expect(
+                    localStorage.getItem('grocery_pos_cart_v1:u-ana'),
+                ).not.toBeNull();
+
+                // Another cashier logs in at this browser: nothing of Ana's.
+                setDummyCookie(true);
+                vi.mocked(api.get).mockResolvedValue({
+                    data: {
+                        userId: 'u-ben',
+                        username: 'ben',
+                        roles: [Role.Seller],
+                    },
+                });
+                await store.login('ben', 'password1');
+                expect(cart.parked).toEqual([]);
+                await store.logout();
+
+                // Ana again, in the same browser: her parked ticket is back.
+                vi.mocked(api.get).mockResolvedValue({ data: ANA });
+                await store.login('ana', 'password1');
+                expect(cart.owner).toBe('u-ana');
+                expect(cart.parked.map((t) => t.label)).toEqual(['Customer A']);
+            },
+        );
+
         it('is removed on logout', async () => {
             localStorage.setItem('user', JSON.stringify(ANA));
             localStorage.setItem('grocery_pos_cart_v1:u-ana', BASKET);
